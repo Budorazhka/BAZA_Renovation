@@ -18,6 +18,7 @@ import { OutboxModule } from '../outbox/outbox.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
@@ -34,6 +35,10 @@ import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
     AuthorizationModule,
     PublicationModule,
     IdempotencyModule,
+    // OrganizationsService.getOrganizationById — только застройщик
+    // (organization.type === 'developer') может создавать/публиковать ЖК
+    // (см. DevelopmentsService.requireDeveloperOrganization).
+    OrganizationsModule,
   ],
   controllers: [DevelopmentsController],
   providers: [

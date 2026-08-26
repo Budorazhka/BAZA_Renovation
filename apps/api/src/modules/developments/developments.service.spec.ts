@@ -11,6 +11,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../outbox/outbox.service';
 import type { PublicationService } from '../publication/publication.service';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+import type { OrganizationsService } from '../organizations/organizations.service';
 
 function makeMockConnection() {
   return {
@@ -32,6 +33,7 @@ function makeService(overrides: {
   outboxService?: Partial<OutboxService>;
   publicationService?: Partial<PublicationService>;
   idempotencyService?: Partial<IdempotencyService>;
+  organizationsService?: Partial<OrganizationsService>;
 } = {}) {
   return new DevelopmentsService(
     makeMockConnection() as never,
@@ -44,9 +46,127 @@ function makeService(overrides: {
     (overrides.auditService ?? { append: jest.fn().mockResolvedValue(undefined) }) as AuditService,
     (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as OutboxService,
     (overrides.publicationService ?? {}) as PublicationService,
-    (overrides.idempotencyService ?? { record: jest.fn().mockResolvedValue(undefined) }) as IdempotencyService,
+    (overrides.idempotencyService ??
+      { record: jest.fn().mockResolvedValue(undefined), checkReplay: jest.fn().mockResolvedValue(null) }) as IdempotencyService,
+    // Дефолт — organization.type:'developer', чтобы существующие тесты
+    // createDevelopment/publishDevelopment (не про эту проверку) не ломались
+    // новым гейтом; тесты именно на organization.type переопределяют явно.
+    (overrides.organizationsService ??
+      { getOrganizationById: jest.fn().mockResolvedValue({ type: 'developer' }) }) as OrganizationsService,
   );
 }
+
+describe('DevelopmentsService — только organization.type:developer создаёт/публикует ЖК', () => {
+  /**
+   * permission-matrix.md: default grants дают development.edit owner/
+   * director НЕЗАВИСИМО от organization.type — PolicyEvaluatorService не
+   * знает о domain-атрибутах ресурса (её собственный docstring делегирует
+   * это вызывающему command handler'у). Без явной server-side проверки
+   * agency (или independent_realtor) с обычной owner/director-ролью могла
+   * бы через API создавать и публиковать ЖК наравне с застройщиком.
+   */
+  it('createDevelopment отклоняет organization.type:agency', async () => {
+    const organizationId = new Types.ObjectId();
+    const createSpy = jest.fn();
+
+    const service = makeService({
+      organizationsService: { getOrganizationById: jest.fn().mockResolvedValue({ type: 'agency' }) },
+      developmentRepository: { create: createSpy },
+    });
+
+    await expect(
+      service.createDevelopment({
+        organizationId,
+        name: 'ЖК Нелегальный',
+        location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
+        contact: { phone: '+995500000000' },
+      }),
+    ).rejects.toMatchObject({ code: 'DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION' });
+
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('createDevelopment отклоняет organization.type:independent_realtor', async () => {
+    const service = makeService({
+      organizationsService: { getOrganizationById: jest.fn().mockResolvedValue({ type: 'independent_realtor' }) },
+    });
+
+    await expect(
+      service.createDevelopment({
+        organizationId: new Types.ObjectId(),
+        name: 'ЖК Нелегальный',
+        location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
+        contact: { phone: '+995500000000' },
+      }),
+    ).rejects.toMatchObject({ code: 'DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION' });
+  });
+
+  it('createDevelopment разрешает organization.type:developer', async () => {
+    const createSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+    const service = makeService({
+      organizationsService: { getOrganizationById: jest.fn().mockResolvedValue({ type: 'developer' }) },
+      developmentRepository: { create: createSpy },
+    });
+
+    await service.createDevelopment({
+      organizationId: new Types.ObjectId(),
+      name: 'ЖК Легальный',
+      location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
+      contact: { phone: '+995500000000' },
+    });
+
+    expect(createSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishDevelopment отклоняет organization.type:agency ДО начала транзакции/idempotency-проверки', async () => {
+    const findByIdForOrganizationSpy = jest.fn();
+    const checkReplaySpy = jest.fn();
+
+    const service = makeService({
+      organizationsService: { getOrganizationById: jest.fn().mockResolvedValue({ type: 'agency' }) },
+      developmentRepository: { findByIdForOrganization: findByIdForOrganizationSpy },
+      idempotencyService: { checkReplay: checkReplaySpy, record: jest.fn() },
+    });
+
+    await expect(
+      service.publishDevelopment({
+        id: new Types.ObjectId(),
+        organizationId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        idempotencyKey: 'agency-publish-key',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject({ code: 'DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION' });
+
+    // Не должно быть попытки прочитать/записать Development или idempotency —
+    // отказ происходит ДО транзакции, не тратит её впустую.
+    expect(findByIdForOrganizationSpy).not.toHaveBeenCalled();
+    expect(checkReplaySpy).not.toHaveBeenCalled();
+  });
+
+  it('publishDevelopment разрешает organization.type:developer (существующее поведение не сломано)', async () => {
+    const service = makeService({
+      organizationsService: { getOrganizationById: jest.fn().mockResolvedValue({ type: 'developer' }) },
+      developmentRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ status: 'draft' }),
+        updateStatus: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      },
+      publicationService: {
+        requestPublication: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'publication_pending' }),
+      },
+    });
+
+    const result = await service.publishDevelopment({
+      id: new Types.ObjectId(),
+      organizationId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      idempotencyKey: 'developer-publish-key',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result.status).toBe('publication_pending');
+  });
+});
 
 describe('DevelopmentsService — tenant isolation on child entity creation', () => {
   it('createBuilding отклоняет, если development не найден в организации', async () => {
@@ -571,31 +691,69 @@ describe('DevelopmentsService.updateUnitStatus — матрица допусти
     expect(outboxPublishSpy).not.toHaveBeenCalled();
   });
 
-  it('sold→hidden разрешён явно матрицей', async () => {
+  it('sold — терминальный статус: sold→hidden отклоняется как запрещённый переход', async () => {
     const unitId = new Types.ObjectId();
-    const updateStatusSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const auditAppendSpy = jest.fn();
+    const outboxPublishSpy = jest.fn();
 
     const service = makeService({
-      unitRepository: { updateStatusWithVersionCheck: updateStatusSpy },
+      unitRepository: {
+        updateStatusWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: unitId, status: 'sold', version: 3 }),
+      },
+      auditService: { append: auditAppendSpy },
+      outboxService: { publish: outboxPublishSpy },
     });
 
-    await service.updateUnitStatus({
-      unitId,
-      organizationId: new Types.ObjectId(),
-      expectedVersion: 3,
-      status: 'hidden',
-      actorIdentityId: new Types.ObjectId(),
-      correlationId: 'test-correlation-id',
+    await expect(
+      service.updateUnitStatus({
+        unitId,
+        organizationId: new Types.ObjectId(),
+        expectedVersion: 3,
+        status: 'hidden',
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject({ code: 'UNIT_INVALID_STATUS_TRANSITION' });
+
+    expect(auditAppendSpy).not.toHaveBeenCalled();
+    expect(outboxPublishSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Точный обход, найденный ревью: sold→hidden запрещён напрямую, но если
+   * hidden→available остаётся разрешён, тот же результат (проданный лот
+   * снова available) достижим за ДВА обычных PATCH-запроса. Раньше
+   * sold→hidden был явно в матрице ("модерационный статус, переход не
+   * ограничивается") — теперь sold полностью терминален (allowedTargets:
+   * []), первый шаг цепочки отклоняется, обход невозможен.
+   */
+  it('обход через цепочку sold→hidden→available невозможен: первый шаг уже отклонён', async () => {
+    const unitId = new Types.ObjectId();
+
+    const service = makeService({
+      unitRepository: {
+        updateStatusWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: unitId, status: 'sold', version: 5 }),
+      },
     });
 
-    expect(updateStatusSpy).toHaveBeenCalledWith(
-      unitId,
-      expect.anything(),
-      3,
-      'hidden',
-      expect.arrayContaining(['sold']),
-      expect.anything(),
-    );
+    // Шаг 1: sold→hidden — должен быть отклонён (это и есть защита от обхода).
+    await expect(
+      service.updateUnitStatus({
+        unitId,
+        organizationId: new Types.ObjectId(),
+        expectedVersion: 5,
+        status: 'hidden',
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject({ code: 'UNIT_INVALID_STATUS_TRANSITION' });
+
+    // hidden→available сам по себе намеренно остаётся разрешён (hidden —
+    // модерационный статус, не часть sale-цикла) — защита от обхода целиком
+    // держится на том, что шаг 1 (sold→hidden) не проходит, а не на запрете
+    // шага 2.
   });
 
   it('устаревшая version на легальном переходе даёт ConflictException, а не invalid-transition', async () => {
@@ -710,7 +868,7 @@ describe('DevelopmentsService.publishDevelopment', () => {
       correlationId: 'test-correlation-id',
     });
 
-    expect(updateStatusSpy).toHaveBeenCalledWith(developmentId, organizationId, 'active', expect.anything());
+    expect(updateStatusSpy).toHaveBeenCalledWith(developmentId, organizationId, 'draft', 'active', expect.anything());
     expect(requestPublicationSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         sourceType: 'development',
@@ -735,11 +893,15 @@ describe('DevelopmentsService.publishDevelopment', () => {
     expect(recordParams.responseStatus).toBe(202);
   });
 
-  it('бросает ConflictException при конкурентном изменении статуса между findByIdForOrganization и updateStatus', async () => {
+  it('бросает ConflictException при конкурентном изменении статуса БЕЗ существующего idempotency record (реальный конфликт, не гонка ретрая)', async () => {
     const service = makeService({
       developmentRepository: {
         findByIdForOrganization: jest.fn().mockResolvedValue({ status: 'draft' }),
         updateStatus: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      },
+      idempotencyService: {
+        checkReplay: jest.fn().mockResolvedValue(null),
+        record: jest.fn().mockResolvedValue(undefined),
       },
     });
 
@@ -749,6 +911,111 @@ describe('DevelopmentsService.publishDevelopment', () => {
         organizationId: new Types.ObjectId(),
         actorIdentityId: new Types.ObjectId(),
         idempotencyKey: 'test-idempotency-key',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  /**
+   * Точный баг-репорт: два параллельных publish с ТЕМ ЖЕ Idempotency-Key.
+   * checkReplay ДО транзакции (в контроллере) не ловит гонку — оба запроса
+   * проходят его одновременно, пока record ещё не написан. Один выигрывает
+   * updateStatus и коммитит + пишет record; второй теряет атомарный
+   * updateStatus (modifiedCount:0) — раньше это безусловно превращалось в
+   * ConflictException, ломая смысл идемпотентности при двойном клике/ретрае.
+   * Теперь сервис сам делает checkReplay на этой ветке: если конкурент уже
+   * закоммитил ровно ЭТУ попытку (record с тем же key существует), второй
+   * запрос должен получить тот же сохранённый результат, а не ошибку.
+   */
+  it('гонка двух параллельных publish с одним Idempotency-Key: проигравший updateStatus возвращает replay, а не Conflict', async () => {
+    const developmentId = new Types.ObjectId();
+    const savedReplay = {
+      responseStatus: 202,
+      responseBody: { id: 'pub-1', sourceType: 'development', sourceId: developmentId.toString(), status: 'publication_pending' },
+    };
+    const checkReplaySpy = jest.fn().mockResolvedValue(savedReplay);
+    const recordSpy = jest.fn();
+
+    const service = makeService({
+      developmentRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ status: 'draft' }),
+        updateStatus: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      },
+      idempotencyService: { checkReplay: checkReplaySpy, record: recordSpy },
+    });
+
+    const result = await service.publishDevelopment({
+      id: developmentId,
+      organizationId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      idempotencyKey: 'race-key',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result.replay).toEqual(savedReplay);
+    expect(checkReplaySpy).toHaveBeenCalledWith(
+      expect.objectContaining({ operation: 'publishDevelopment', key: 'race-key' }),
+    );
+    // Проигравший НЕ должен пытаться записать ещё один record — единственная
+    // запись уже сделана победителем гонки (иначе duplicate key error).
+    expect(recordSpy).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Второй, отдельный путь к той же гонке: withTransaction ретраит ВЕСЬ
+   * callback при WriteConflict (не только модифицирует modifiedCount) — на
+   * ретрае findByIdForOrganization уже видит status:'active' конкурента,
+   * выполнение никогда не доходит до updateStatus, попадает в "status !==
+   * draft" ветку В НАЧАЛЕ метода. Без checkOwnReplay() и в этой ветке тоже
+   * — интеграционный HTTP-тест (два app.inject() параллельно) поймал именно
+   * это: unit-тест на modifiedCount:0 в одиночку не гарантировал закрытие
+   * гонки, реальный ретрай MongoDB транзакции идёт другим путём.
+   */
+  it('гонка: ретрай транзакции видит уже-active статус (не modifiedCount:0) — тоже возвращает replay, а не Conflict', async () => {
+    const developmentId = new Types.ObjectId();
+    const savedReplay = {
+      responseStatus: 202,
+      responseBody: { id: 'pub-1', sourceType: 'development', sourceId: developmentId.toString(), status: 'publication_pending' },
+    };
+    const checkReplaySpy = jest.fn().mockResolvedValue(savedReplay);
+    const updateStatusSpy = jest.fn();
+
+    const service = makeService({
+      developmentRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ status: 'active' }),
+        updateStatus: updateStatusSpy,
+      },
+      idempotencyService: { checkReplay: checkReplaySpy, record: jest.fn() },
+    });
+
+    const result = await service.publishDevelopment({
+      id: developmentId,
+      organizationId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      idempotencyKey: 'race-key-retry',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result.replay).toEqual(savedReplay);
+    // updateStatus не должен вызываться вообще — статус уже не draft,
+    // ветка на верхней проверке возвращает replay раньше.
+    expect(updateStatusSpy).not.toHaveBeenCalled();
+  });
+
+  it('status !== draft БЕЗ существующего idempotency record — обычный ConflictException (реально другая публикация/админ)', async () => {
+    const service = makeService({
+      developmentRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ status: 'archived' }),
+      },
+      idempotencyService: { checkReplay: jest.fn().mockResolvedValue(null), record: jest.fn() },
+    });
+
+    await expect(
+      service.publishDevelopment({
+        id: new Types.ObjectId(),
+        organizationId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        idempotencyKey: 'unrelated-key',
         correlationId: 'test-correlation-id',
       }),
     ).rejects.toBeInstanceOf(ConflictException);

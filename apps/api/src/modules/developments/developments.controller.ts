@@ -185,6 +185,17 @@ export class DevelopmentsController {
       correlationId: req.correlationId,
     });
 
+    // Гонка двух параллельных publish с одним Idempotency-Key (см.
+    // DevelopmentsService.publishDevelopment): второй запрос теряет
+    // атомарный updateStatus, но сервис сам нашёл record, который только
+    // что записал конкурент-победитель — это replay ЭТОЙ попытки, не новая
+    // публикация. Возвращаем сохранённый ответ как есть, не 202 с "новым"
+    // телом (тот же принцип, что checkReplay ДО транзакции выше).
+    if (result.replay) {
+      reply.status(result.replay.responseStatus);
+      return result.replay.responseBody;
+    }
+
     reply.status(202);
     return {
       id: result.publicationId.toString(),

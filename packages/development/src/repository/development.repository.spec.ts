@@ -63,6 +63,49 @@ describe('DevelopmentRepository', () => {
     });
   });
 
+  describe('updateStatus', () => {
+    /**
+     * Найдено реальным integration-тестом (два параллельных HTTP publish с
+     * одним Idempotency-Key): фильтр раньше был {_id, organizationId} БЕЗ
+     * условия на текущий status — не настоящий compare-and-swap. Обе
+     * конкурентные транзакции проходили updateOne, обе получали
+     * modifiedCount:1, обе пытались записать idempotency record — второй
+     * insert падал duplicate key error. status:fromStatus в фильтре делает
+     * его реальным атомарным CAS.
+     */
+    it('условие фильтра включает fromStatus (compare-and-swap, не просто {_id, organizationId})', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { updateOne: updateOneSpy };
+
+      const repository = new DevelopmentRepository(mockModel as never);
+      await repository.updateStatus(id, organizationId, 'draft', 'active');
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, status: 'draft' },
+        { $set: { status: 'active' }, $inc: { version: 1 } },
+        { session: undefined },
+      );
+    });
+
+    it('возвращает modifiedCount:0, если текущий status не совпадает с fromStatus (конкурент уже сменил статус)', async () => {
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+      const mockModel = { updateOne: jest.fn().mockReturnValue({ exec: execSpy }) };
+
+      const repository = new DevelopmentRepository(mockModel as never);
+      const result = await repository.updateStatus(
+        new Types.ObjectId(),
+        new Types.ObjectId(),
+        'draft',
+        'active',
+      );
+
+      expect(result).toEqual({ modifiedCount: 0 });
+    });
+  });
+
   describe('listForOrganization', () => {
     it('без cursor фильтрует только по organizationId', async () => {
       const organizationId = new Types.ObjectId();

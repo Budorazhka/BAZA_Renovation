@@ -8,7 +8,7 @@ import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PublicationService } from '../publication/publication.service';
-import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { DevelopmentRepository } from '@baza/development';
 import type { DevelopmentDocument, DevelopmentLocation, DevelopmentContact } from '@baza/development';
 import { BuildingRepository } from './repository/building.repository';
@@ -16,6 +16,7 @@ import { SectionRepository } from './repository/section.repository';
 import { FloorRepository } from './repository/floor.repository';
 import { FloorPlanRepository } from './repository/floor-plan.repository';
 import { UnitRepository } from './repository/unit.repository';
+import { OrganizationsService } from '../organizations/organizations.service';
 import type { BuildingDocument, GeoPolygon } from './schemas/building.schema';
 import type { FloorDocument } from './schemas/floor.schema';
 import type { FloorPlanDocument, GeoPolygon2D } from './schemas/floor-plan.schema';
@@ -25,13 +26,21 @@ import type { UnitDocument, UnitKind, UnitStatus } from './schemas/unit.schema';
  * Явная матрица допустимых переходов статуса Unit (source → allowed targets)
  * — PATCH /units/:id/status без неё позволял бы поставить любой статус при
  * подходящей version (напр. sold→available вручную), что портит остатки/
- * шахматку. hidden — модерационный статус вне продажного цикла, переход в/
- * из него не ограничивается здесь намеренно.
+ * шахматку. hidden — модерационный статус вне продажного цикла, переход в
+ * него из available/reserved и обратно не ограничивается здесь намеренно.
+ *
+ * sold — ТЕРМИНАЛЬНЫЙ статус в этой generic-матрице: нет исходящих
+ * переходов вообще, включая sold→hidden. Раньше sold→hidden был разрешён,
+ * а hidden→available тоже разрешён — это давало обход прямого запрета
+ * sold→available за два обычных PATCH-запроса (продано → скрыто → снова
+ * доступно). Отмена продажи — если когда-то понадобится — должна быть
+ * отдельной командой с причиной, отдельным правом и audit-записью, а не
+ * дырой в универсальном status-патче.
  */
 const UNIT_STATUS_TRANSITIONS: Record<UnitStatus, readonly UnitStatus[]> = {
   available: ['reserved', 'sold', 'hidden'],
   reserved: ['available', 'sold', 'hidden'],
-  sold: ['hidden'],
+  sold: [],
   hidden: ['available', 'reserved', 'sold'],
 };
 
@@ -76,7 +85,33 @@ export class DevelopmentsService {
     private readonly outboxService: OutboxService,
     private readonly publicationService: PublicationService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly organizationsService: OrganizationsService,
   ) {}
+
+  /**
+   * permission-matrix.md: только организации-застройщики создают/публикуют
+   * ЖК. DEFAULT_ROLE_GRANTS сам по себе этого не проверяет — owner/director
+   * ЛЮБОЙ организации (включая agency/independent_realtor) получает
+   * development.edit одинаково, PermissionGuard/PolicyEvaluatorService не
+   * знают о domain-атрибутах ресурса (см. PolicyEvaluatorService.evaluate
+   * docstring: "конкретное сужение — ответственность вызывающего command
+   * handler'а"). Тот же паттерн, что AdminAccountService.requireSuperAdmin —
+   * доменное правило проверяется в сервисе, не в generic guard'е.
+   *
+   * Через OrganizationsService, НЕ через OrganizationRepository напрямую —
+   * ADR-001 модульная граница (test/architecture/module-boundaries.test.ts
+   * запрещает прямой cross-module импорт *.repository.ts, поймано этим же
+   * тестом при первой попытке).
+   */
+  private async requireDeveloperOrganization(organizationId: Types.ObjectId): Promise<void> {
+    const organization = await this.organizationsService.getOrganizationById(organizationId);
+    if (!organization || organization.type !== 'developer') {
+      throw new AppException(
+        ErrorCode.DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION,
+        'Только организации типа developer могут создавать и публиковать ЖК',
+      );
+    }
+  }
 
   async createDevelopment(params: {
     organizationId: Types.ObjectId;
@@ -88,6 +123,7 @@ export class DevelopmentsService {
     completionDate?: Date;
     description?: string;
   }): Promise<DevelopmentDocument> {
+    await this.requireDeveloperOrganization(params.organizationId);
     return this.developmentRepository.create(params);
   }
 
@@ -190,6 +226,31 @@ export class DevelopmentsService {
    * начиная транзакцию заново. Запись результата — ВНУТРИ этой же
    * транзакции, последним шагом, после успешного requestPublication (ADR-006:
    * "запись создаётся в той же транзакции, что и сама бизнес-операция").
+   *
+   * ИСПРАВЛЕНО 26.08.2026 (гонка двух параллельных publish с одним
+   * Idempotency-Key, найдено integration-тестом через реальный HTTP + два
+   * параллельных app.inject()): controller'ский checkReplay ДО транзакции
+   * не ловит гонку — оба запроса могут пройти его одновременно (record ещё
+   * не написан). Два independent-фикса понадобились вместе, один без
+   * другого не закрывал гонку:
+   *   1. DevelopmentRepository.updateStatus раньше матчил только
+   *      {_id, organizationId}, БЕЗ условия на текущий status — не был
+   *      настоящим compare-and-swap. Обе конкурентные транзакции проходили
+   *      его успешно, обе пытались писать idempotency record с одним и тем
+   *      же (identityId, operation, key) → duplicate key error наружу как
+   *      unhandled 500. Добавлен fromStatus в фильтр (см. её докстринг).
+   *   2. С исправленным CAS одна из транзакций либо получает
+   *      modifiedCount:0 (проиграла updateOne), либо (при WriteConflict,
+   *      если её updateOne столкнулся с ещё не закоммиченной записью
+   *      конкурента) withTransaction ретраит весь callback — на ретрае
+   *      findByIdForOrganization уже видит status:'active' конкурента,
+   *      выполнение попадает в "status !== draft" ветку НАЧАЛА функции, не
+   *      в modifiedCount:0 ветку. Обе ветки поэтому теперь одинаково делают
+   *      checkOwnReplay() ПЕРЕД тем как бросить ConflictException — если
+   *      найден record с ЭТИМ ЖЕ (identity, operation, key), это replay
+   *      своей же попытки, не независимый конфликт; если записи нет — это
+   *      действительно другой конфликт (напр. чужая публикация или админ
+   *      вручную сменил статус) — ConflictException как раньше.
    */
   async publishDevelopment(params: {
     id: Types.ObjectId;
@@ -197,8 +258,33 @@ export class DevelopmentsService {
     actorIdentityId: Types.ObjectId;
     idempotencyKey: string;
     correlationId: string;
-  }): Promise<{ publicationId: Types.ObjectId; status: string }> {
+  }): Promise<{ publicationId: Types.ObjectId; status: string; replay?: IdempotentReplay }> {
+    // ДО транзакции и ДО idempotency-бухгалтерии — organization.type
+    // отклоняет запрос целиком, нет смысла открывать транзакцию/писать
+    // idempotency record для попытки, которая в принципе не может пройти.
+    await this.requireDeveloperOrganization(params.organizationId);
+
     return runInTransaction(this.connection, async (session) => {
+      // Общий helper для ОБЕИХ conflict-веток ниже: MongoDB транзакция,
+      // проигравшая гонку конкурентному publish, не обязательно видит
+      // modifiedCount:0 — если её updateOne реально столкнулся с записью
+      // конкурента (WriteConflict), withTransaction ретраит весь callback
+      // целиком; на ретрае findByIdForOrganization УЖЕ видит status:'active'
+      // (конкурент успел закоммититься между ретраями), значит выполнение
+      // никогда не доходит до updateStatus вообще — попадает в "status !==
+      // draft" ветку, которая раньше безусловно бросала ConflictException,
+      // даже когда "другая" публикация — это ЭТА ЖЕ попытка (тот же
+      // Idempotency-Key), просто увиденная после ретрая. Обе ветки поэтому
+      // должны одинаково сначала проверить, не является ли "конфликт"
+      // replay'ем собственной попытки.
+      const checkOwnReplay = () =>
+        this.idempotencyService.checkReplay({
+          identityId: params.actorIdentityId,
+          operation: 'publishDevelopment',
+          key: params.idempotencyKey,
+          requestBody: { developmentId: params.id.toString() },
+        });
+
       const development = await this.developmentRepository.findByIdForOrganization(
         params.id,
         params.organizationId,
@@ -207,6 +293,10 @@ export class DevelopmentsService {
         throw new NotFoundException('Development not found');
       }
       if (development.status !== 'draft') {
+        const replay = await checkOwnReplay();
+        if (replay) {
+          return { publicationId: params.id, status: development.status, replay };
+        }
         throw new ConflictException(
           `Development status is '${development.status}', only 'draft' can be published`,
         );
@@ -215,10 +305,18 @@ export class DevelopmentsService {
       const { modifiedCount } = await this.developmentRepository.updateStatus(
         params.id,
         params.organizationId,
+        'draft',
         'active',
         session,
       );
       if (modifiedCount === 0) {
+        // Гонка с параллельным идентичным publish (см. docstring выше): если
+        // конкурент с ТЕМ ЖЕ (identity, operation, key) уже закоммитил и
+        // записал idempotency record, это replay ЭТОЙ попытки, не конфликт.
+        const replay = await checkOwnReplay();
+        if (replay) {
+          return { publicationId: params.id, status: development.status, replay };
+        }
         // Конкурентный publish/update изменил статус между findByIdForOrganization
         // выше и этим updateOne — реальная гонка, не гипотетическая (та же
         // категория, что уже проверялась для confirmUpload через Promise.all

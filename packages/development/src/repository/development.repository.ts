@@ -100,14 +100,35 @@ export class DevelopmentRepository {
     return { modifiedCount: result.modifiedCount };
   }
 
+  /**
+   * fromStatus — compare-and-swap источника: фильтр раньше проверял только
+   * {_id, organizationId}, БЕЗ условия на текущий status — не был реальным
+   * атомарным CAS. Найдено реальным integration-тестом (два параллельных
+   * HTTP publish с одним Idempotency-Key, MongoDB transaction snapshot
+   * isolation): обе конкурентные транзакции читают status:'draft' в СВОИХ
+   * снапшотах ДО того, как любая из них закоммитит, затем ОБЕ проходят этот
+   * updateOne (фильтр без status ничего не отсекает), обе получают
+   * modifiedCount:1, обе идут дальше писать idempotency record с одним и
+   * тем же (identityId, operation, key) — второй insert падает E11000,
+   * который DevelopmentsService.publishDevelopment не ловил (ожидал
+   * modifiedCount:0 как единственный сигнал гонки, тут его не было).
+   * Явный status:fromStatus в фильтре делает победителя гонки единственным
+   * (проигравший теперь корректно получает modifiedCount:0, что уже
+   * обрабатывается веткой checkReplay/ConflictException выше по стеку).
+   */
   async updateStatus(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
-    status: 'draft' | 'active' | 'archived',
+    fromStatus: 'draft' | 'active' | 'archived',
+    toStatus: 'draft' | 'active' | 'archived',
     session?: ClientSession,
   ): Promise<{ modifiedCount: number }> {
     const result = await this.model
-      .updateOne({ _id: id, organizationId }, { $set: { status }, $inc: { version: 1 } }, { session })
+      .updateOne(
+        { _id: id, organizationId, status: fromStatus },
+        { $set: { status: toStatus }, $inc: { version: 1 } },
+        { session },
+      )
       .exec();
     return { modifiedCount: result.modifiedCount };
   }

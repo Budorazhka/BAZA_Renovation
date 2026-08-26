@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -44,8 +45,28 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
     await replSet.waitUntilRunning();
     const uri = replSet.getUri();
 
+    // ConfigModule (ДОБАВЛЕНО): DevelopmentsModule теперь импортирует
+    // OrganizationsModule (requireDeveloperOrganization — только developer
+    // создаёт/публикует ЖК), которое транзитивно тянет MediaModule →
+    // MediaStorageService, а тот требует ConfigService в конструкторе
+    // (реальный S3Client). В полном AppModule ConfigModule.forRoot({isGlobal:true})
+    // уже есть (app-module-boot.integration-spec.ts), здесь модульный граф
+    // собирается вручную без AppModule — нужно явно. MINIO_* — синтаксически
+    // валидные фиктивные значения (тот же паттерн, что app-module-boot),
+    // ни один реальный S3-вызов в этом тесте не выполняется.
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+
     const moduleRef = await Test.createTestingModule({
-      imports: [MongooseModule.forRoot(uri), DevelopmentsModule, AdminModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        MongooseModule.forRoot(uri),
+        DevelopmentsModule,
+        AdminModule,
+      ],
     }).compile();
 
     connection = moduleRef.get<Connection>(getConnectionToken());
@@ -71,7 +92,26 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
     await connection.collection('outbox_events').deleteMany({});
     await connection.collection('marketplace_publications').deleteMany({});
     await connection.collection('idempotency_records').deleteMany({});
+    await connection.collection('organizations').deleteMany({});
   });
+
+  /**
+   * requireDeveloperOrganization (DevelopmentsService.createDevelopment/
+   * publishDevelopment) требует реальный organizations-документ с
+   * type:'developer' — organizationId в этом файле раньше был "голым"
+   * ObjectId, ни на что реально не ссылающимся (тесты здесь бьют
+   * DevelopmentRepository напрямую, минуя createDevelopment). Тесты,
+   * вызывающие publishDevelopment, должны явно сидировать организацию.
+   */
+  async function seedDeveloperOrganization(organizationId: Types.ObjectId): Promise<void> {
+    await connection.collection('organizations').insertOne({
+      _id: organizationId,
+      type: 'developer',
+      name: 'Интеграционный застройщик',
+      status: 'active',
+      createdAt: new Date(),
+    });
+  }
 
   async function seedUnit(organizationId: Types.ObjectId) {
     const development = await developmentRepository.create({
@@ -294,6 +334,7 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
      */
     it('перевыпускает PublicationRequested (rebuild), если публикация сейчас published', async () => {
       const organizationId = new Types.ObjectId();
+      await seedDeveloperOrganization(organizationId);
       const development = await developmentRepository.create({
         organizationId,
         name: 'Исходное имя',
@@ -365,6 +406,7 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
 
     it('НЕ перевыпускает PublicationRequested, если публикация была unpublished вручную (не обходит admin unpublish)', async () => {
       const organizationId = new Types.ObjectId();
+      await seedDeveloperOrganization(organizationId);
       const development = await developmentRepository.create({
         organizationId,
         name: 'Опубликован затем скрыт',
@@ -420,6 +462,7 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
      */
     it('конкурентный admin unpublish + updateDevelopment (rebuild) на одной published-публикации: unpublish никогда не обходится гонкой', async () => {
       const organizationId = new Types.ObjectId();
+      await seedDeveloperOrganization(organizationId);
       const development = await developmentRepository.create({
         organizationId,
         name: 'Гонка unpublish vs rebuild',

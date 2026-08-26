@@ -15,7 +15,7 @@ import { PolicyEvaluatorService } from '../authorization/policy-evaluator.servic
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { DEFAULT_ROLE_GRANTS } from './default-role-grants';
-import type { OrganizationType } from './schemas/organization.schema';
+import type { OrganizationDocument, OrganizationType } from './schemas/organization.schema';
 import type { FixedRole } from './schemas/position.schema';
 import type { PermissionScope } from '../authorization/schemas/permission-grant.schema';
 
@@ -65,6 +65,17 @@ export class OrganizationsService {
         scope: grant.scope,
       })),
     );
+  }
+
+  /**
+   * Единственный способ для ДРУГИХ модулей узнать organization.type/status —
+   * ADR-001 модульная граница запрещает импортировать OrganizationRepository
+   * напрямую (test/architecture/module-boundaries.test.ts). Например,
+   * DevelopmentsService.requireDeveloperOrganization (только застройщики
+   * создают/публикуют ЖК).
+   */
+  async getOrganizationById(id: Types.ObjectId): Promise<OrganizationDocument | null> {
+    return this.organizationRepository.findById(id);
   }
 
   /**
