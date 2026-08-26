@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.tsbuildinfo
+
+# apps/erp-web — отдельный git-репозиторий (свой .git, origin
+# github.com/Berega-team/bz26-client-erp, ветка Nazarov), не поддерево
+# этого монорепо. Коммиты для него делаются внутри apps/erp-web отдельно.
+/apps/erp-web/
+
+# Локальные артефакты инструмента second-opinion — не часть проекта.
+/.second-opinion/

@@ -1,0 +1,53 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
+
+export type PermissionSubjectType = 'position' | 'admin_account';
+export type PermissionScope =
+  | 'own'
+  | 'position'
+  | 'team'
+  | 'organization'
+  | 'project'
+  | 'city'
+  | 'global'
+  | 'assigned'
+  | 'domain';
+
+/**
+ * docs/architecture/domain-model.md Модуль 3 / docs/security/permission-matrix.md.
+ * Единая структура для ERP-organization grants (subjectType: 'position') и
+ * Admin grants (subjectType: 'admin_account') — ADR-009.
+ */
+@Schema({ collection: 'permission_grants', timestamps: { createdAt: 'createdAt', updatedAt: false } })
+export class PermissionGrantDocument extends Document {
+  declare _id: Types.ObjectId;
+
+  @Prop({ required: true, enum: ['position', 'admin_account'] })
+  subjectType!: PermissionSubjectType;
+
+  @Prop({ required: true, type: Types.ObjectId })
+  subjectId!: Types.ObjectId;
+
+  @Prop({ required: true })
+  resource!: string;
+
+  @Prop({ required: true })
+  action!: string;
+
+  @Prop({
+    required: true,
+    enum: ['own', 'position', 'team', 'organization', 'project', 'city', 'global', 'assigned', 'domain'],
+  })
+  scope!: PermissionScope;
+
+  @Prop()
+  scopeValue?: string;
+
+  declare createdAt: Date;
+}
+
+export const PermissionGrantSchema = SchemaFactory.createForClass(PermissionGrantDocument);
+
+// mongodb-schema.md: {subjectType, subjectId} — основной authorization-запрос
+// на каждый API-вызов ("все права этого subject").
+PermissionGrantSchema.index({ subjectType: 1, subjectId: 1 });

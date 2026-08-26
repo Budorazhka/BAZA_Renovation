@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@nestjs/core': true
+  argon2: true
+  core-js: true
+  esbuild: true
+  mongodb-memory-server: true

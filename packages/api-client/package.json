@@ -1,0 +1,26 @@
+{
+  "name": "@baza/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../../docs/api/v1-first-vertical-slice.yaml -o ./src/schema.ts",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node ./scripts/check-stale.mjs",
+    "check:stale": "node ./scripts/check-stale.mjs",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "openapi-typescript": "^7.5.2",
+    "@baza/tsconfig": "workspace:*",
+    "@baza/eslint-config": "workspace:*",
+    "eslint": "^9.17.0"
+  }
+}
