@@ -1,0 +1,19 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /workspace
+ENV COREPACK_HOME=/tmp/corepack
+
+RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm exec turbo run build --filter=@baza/api...
+
+FROM node:20-bookworm-slim AS runtime
+
+WORKDIR /workspace
+ENV NODE_ENV=production
+
+COPY --from=build /workspace /workspace
+EXPOSE 3000
+HEALTHCHECK --interval=5s --timeout=5s --retries=20 CMD node -e "fetch('http://127.0.0.1:3000/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+CMD ["node", "apps/api/dist/main.api.js"]

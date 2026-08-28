@@ -1,0 +1,17 @@
+FROM node:20-bookworm-slim AS build
+
+WORKDIR /workspace
+ENV COREPACK_HOME=/tmp/corepack
+
+RUN corepack enable && corepack prepare pnpm@11.23.0 --activate
+COPY . .
+RUN pnpm install --frozen-lockfile
+RUN pnpm exec turbo run build --filter=@baza/worker...
+
+FROM node:20-bookworm-slim AS runtime
+
+WORKDIR /workspace
+ENV NODE_ENV=production
+
+COPY --from=build /workspace /workspace
+CMD ["node", "apps/worker/dist/main.worker.js"]

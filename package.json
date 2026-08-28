@@ -14,6 +14,12 @@
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
     "test:e2e": "turbo run test:e2e",
+    "runtime:config": "docker compose -f infrastructure/compose/compose.runtime.yml config",
+    "runtime:up": "docker compose -f infrastructure/compose/compose.runtime.yml up -d --build --wait",
+    "runtime:down": "docker compose -f infrastructure/compose/compose.runtime.yml down",
+    "runtime:ps": "docker compose -f infrastructure/compose/compose.runtime.yml ps",
+    "runtime:logs": "docker compose -f infrastructure/compose/compose.runtime.yml logs -f --tail=100",
+    "runtime:verify": "node scripts/runtime/verify-runtime.mjs",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {

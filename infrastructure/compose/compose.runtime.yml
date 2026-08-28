@@ -1,0 +1,171 @@
+name: baza-runtime
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["--replSet", "${MONGO_REPLICA_SET_NAME:-rs0}", "--bind_ip_all", "--wiredTigerCacheSizeGB=1.25"]
+    mem_limit: 2.5g
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodb_runtime_data:/data/db
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval
+          "try { rs.status().ok } catch (e) { rs.initiate({_id:'${MONGO_REPLICA_SET_NAME:-rs0}',members:[{_id:0,host:'mongodb:27017'}]}).ok }"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-dev_redis_password}"]
+    mem_limit: 0.3g
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_runtime_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD:-dev_redis_password}' ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    mem_limit: 0.5g
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-dev_minio_access}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-dev_minio_secret}
+    volumes:
+      - minio_runtime_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set local http://minio:9000 "${MINIO_ACCESS_KEY:-dev_minio_access}" "${MINIO_SECRET_KEY:-dev_minio_secret}" &&
+        mc mb --ignore-existing "local/${MINIO_BUCKET_PRIVATE:-baza-private}" &&
+        mc mb --ignore-existing "local/${MINIO_BUCKET_PUBLIC:-baza-public}"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: 3000
+      MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
+      CORS_ALLOWED_ORIGIN_MARKETPLACE: ${CORS_ALLOWED_ORIGIN_MARKETPLACE:-http://localhost:4173}
+      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-http://localhost:4174}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${API_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/health/ready').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.worker
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+  erp-web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.erp-web
+      args:
+        VITE_PLATFORM_API_BASE_URL: ${VITE_PLATFORM_API_BASE_URL:-/api/v1}
+        VITE_CRM_API_BASE_URL: ${VITE_CRM_API_BASE_URL:-/api/v1}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ERP_WEB_PORT:-4174}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  marketplace-web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.marketplace-web
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${MARKETPLACE_WEB_PORT:-4173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  mongodb_runtime_data:
+  redis_runtime_data:
+  minio_runtime_data:
