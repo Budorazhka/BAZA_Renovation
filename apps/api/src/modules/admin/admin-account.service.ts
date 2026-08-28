@@ -113,6 +113,46 @@ export class AdminAccountService {
     });
   }
 
+  /**
+   * GET /admin/accounts (admin-web "manage admin accounts" screen) —
+   * super_admin-only, тот же self-escalation принцип, что create/grant
+   * выше: обычный scoped admin не должен уметь перечислить весь состав
+   * админов (ADR-009 — Admin accounts management целиком в руках
+   * super_admin, не отдельное read-право).
+   */
+  async listAdminAccounts(
+    requestedBy: AdminContext,
+    params: { cursor?: Types.ObjectId; limit: number },
+  ): Promise<Array<{ id: Types.ObjectId; identityId: Types.ObjectId; isSuperAdmin: boolean; status: string; createdAt: Date }>> {
+    this.requireSuperAdmin(requestedBy);
+    const rows = await this.adminAccountRepository.list(params);
+    return rows.map((row) => ({
+      id: row._id,
+      identityId: row.identityId,
+      isSuperAdmin: row.isSuperAdmin,
+      status: row.status,
+      createdAt: row.createdAt,
+    }));
+  }
+
+  /**
+   * GET /admin/accounts/:id/grants — просмотр текущих grants аккаунта.
+   * Тот же super_admin-only принцип, что listAdminAccounts: обычный
+   * scoped admin не должен уметь читать чужие grants, только свои
+   * (косвенно, через собственный список публикаций).
+   */
+  async listGrants(
+    requestedBy: AdminContext,
+    adminAccountId: Types.ObjectId,
+  ): Promise<Array<{ resource: string; action: string; scope: PermissionScope; scopeValue?: string }>> {
+    this.requireSuperAdmin(requestedBy);
+    const target = await this.adminAccountRepository.findById(adminAccountId);
+    if (!target) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'AdminAccount not found');
+    }
+    return this.policyEvaluator.listGrantsForSubject('admin_account', adminAccountId);
+  }
+
   private requireSuperAdmin(requestedBy: AdminContext): void {
     if (!requestedBy.isSuperAdmin) {
       throw new AppException(

@@ -212,6 +212,41 @@ describe('PolicyEvaluatorService.grant', () => {
   });
 });
 
+describe('PolicyEvaluatorService.listGrantsForSubject', () => {
+  /**
+   * admin-web accounts screen: единственный способ прочитать полный
+   * список grants аккаунта без нарушения границы модуля (module-boundaries
+   * запрещает импорт PermissionGrantRepository напрямую из admin-модуля).
+   */
+  it('возвращает grants subject в плоской форме без mongoose-обёртки документа', async () => {
+    const subjectId = new Types.ObjectId();
+    const mockRepository = {
+      findForSubject: jest.fn().mockResolvedValue([
+        makeGrant({ resource: 'development', action: 'read', scope: 'city', scopeValue: 'batumi' }),
+        makeGrant({ resource: 'listing', action: 'unpublish', scope: 'global' }),
+      ]),
+    } as unknown as PermissionGrantRepository;
+    const evaluator = new PolicyEvaluatorService(mockRepository);
+
+    const result = await evaluator.listGrantsForSubject('admin_account', subjectId);
+
+    expect(mockRepository.findForSubject).toHaveBeenCalledWith('admin_account', subjectId);
+    expect(result).toEqual([
+      { resource: 'development', action: 'read', scope: 'city', scopeValue: 'batumi' },
+      { resource: 'listing', action: 'unpublish', scope: 'global', scopeValue: undefined },
+    ]);
+  });
+
+  it('subject без единого гранта — пустой массив', async () => {
+    const mockRepository = { findForSubject: jest.fn().mockResolvedValue([]) } as unknown as PermissionGrantRepository;
+    const evaluator = new PolicyEvaluatorService(mockRepository);
+
+    const result = await evaluator.listGrantsForSubject('admin_account', new Types.ObjectId());
+
+    expect(result).toEqual([]);
+  });
+});
+
 describe('PolicyEvaluatorService.grantMany', () => {
   /**
    * grantDefaultRolePermissions (organizations.service.ts) — один insertMany

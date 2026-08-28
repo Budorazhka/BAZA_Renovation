@@ -109,6 +109,26 @@ export class PolicyEvaluatorService {
   }
 
   /**
+   * Admin accounts screen (apps/admin-web): просмотр текущих grants
+   * аккаунта в UI требует read-доступа к полному списку, не только
+   * evaluate() одного resource+action. Тот же принцип границы модуля, что
+   * grant() выше — вызывающий код (AdminAccountService) не должен
+   * импортировать PermissionGrantRepository напрямую.
+   */
+  async listGrantsForSubject(
+    subjectType: PermissionSubjectType,
+    subjectId: Types.ObjectId,
+  ): Promise<Array<{ resource: string; action: string; scope: PermissionScope; scopeValue?: string }>> {
+    const grants = await this.permissionGrantRepository.findForSubject(subjectType, subjectId);
+    return grants.map((grant) => ({
+      resource: grant.resource,
+      action: grant.action,
+      scope: grant.scope,
+      scopeValue: grant.scopeValue,
+    }));
+  }
+
+  /**
    * grantDefaultRolePermissions (organizations.service.ts) — один
    * insertMany вместо N последовательных grant() (second-opinion ревью).
    */

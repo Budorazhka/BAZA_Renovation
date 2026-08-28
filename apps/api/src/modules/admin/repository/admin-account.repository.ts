@@ -32,4 +32,16 @@ export class AdminAccountRepository {
     const [account] = await this.model.create([params], { session });
     return account!;
   }
+
+  /**
+   * GET /admin/accounts (admin-web accounts screen) — тот же
+   * cursor+limit+1 паттерн, что MarketplacePublicationRepository.listForAdmin
+   * (admin-publication.service.ts), для единообразия пагинации по всему
+   * Admin API. Сортировка по _id (монотонно растёт с созданием) — тот же
+   * принцип, что публикации.
+   */
+  async list(params: { cursor?: Types.ObjectId; limit: number }): Promise<AdminAccountDocument[]> {
+    const filter = params.cursor ? { _id: { $gt: params.cursor } } : {};
+    return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
+  }
 }
