@@ -81,3 +81,97 @@ button:disabled { cursor: progress; opacity: 0.6; }
 @media (max-width: 900px) { .development-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .catalogue-intro, .detail-hero { grid-template-columns: minmax(0, 1fr); } .catalogue-intro { gap: var(--space-8); } }
 @media (max-width: 560px) { .app-shell { padding: 0 var(--space-4); } .site-header { min-height: 68px; } .header-caption { display: none; } .catalogue-intro { padding: var(--space-12) 0 var(--space-10); } .city-form__control { align-items: stretch; flex-direction: column; } .city-form__control button { width: 100%; } .development-grid { grid-template-columns: minmax(0, 1fr); } .section-heading { align-items: flex-start; flex-direction: column; } .detail-facts { grid-template-columns: minmax(0, 1fr); } .detail-page { padding-top: var(--space-6); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 150ms !important; scroll-behavior: auto !important; } }
+
+
+/* Catalogue Tabs & Filters */
+.catalogue-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+}
+.catalogue-tab-btn {
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
+  border: var(--rule) solid var(--color-line);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+}
+.catalogue-tab-btn.is-active {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+}
+.catalogue-subfilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.filter-chip {
+  background: var(--color-paper-raised);
+  color: var(--color-ink-muted);
+  border: var(--rule) solid var(--color-line);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  border-radius: 999px;
+}
+.filter-chip.is-active {
+  background: var(--color-ink);
+  color: var(--color-paper);
+  border-color: var(--color-ink);
+}
+
+/* Listing card & details */
+.listing-card-price {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--color-accent);
+  margin: 0;
+}
+.listing-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.listing-chip {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.listing-badge {
+  display: inline-block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--color-accent);
+}
+.detail-price-box {
+  background: var(--color-paper-raised);
+  border: var(--rule) solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.detail-price-main {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 600;
+  color: var(--color-accent);
+  line-height: 1.1;
+  margin: 0 0 var(--space-2);
+}
+.contact-disclaimer {
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  margin-top: var(--space-6);
+  line-height: 1.5;
+}

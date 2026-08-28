@@ -37,3 +37,50 @@ export interface CatalogueQuery {
   /** D-04A: карта (MKT-SCR-005) Figma-blocked — data-layer готов, UI-потребителя пока нет. */
   bbox?: BoundingBox
 }
+
+export type ListingDealType = 'sale' | 'rent_long' | 'rent_short'
+export type ListingPropertyType = 'apartment' | 'house' | 'land' | 'commercial'
+
+export interface PublicListingPrice {
+  amountMinorUnits?: number
+  currency?: string
+}
+
+export interface PublicListingCharacteristics {
+  area?: number
+  rooms?: number
+  floor?: number
+  totalFloors?: number
+}
+
+export interface PublicListingCard {
+  slug?: string
+  dealType?: ListingDealType
+  price?: PublicListingPrice
+  propertyType?: ListingPropertyType
+  commercialSubtype?: string
+  location?: PublicLocation
+  characteristics?: PublicListingCharacteristics
+  seo?: {
+    title?: string
+    description?: string
+    canonicalUrl?: string
+    structuredData?: Record<string, unknown>
+  }
+}
+
+export interface PublicListingList {
+  items: PublicListingCard[]
+  nextCursor: string | null
+}
+
+export interface ListingCatalogueQuery {
+  city?: string
+  dealType?: ListingDealType
+  propertyType?: ListingPropertyType
+  commercialSubtype?: string
+  cursor?: string
+  limit?: number
+  bbox?: BoundingBox
+}
+

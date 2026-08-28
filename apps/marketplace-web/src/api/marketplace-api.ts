@@ -1,4 +1,11 @@
-import type { CatalogueQuery, PublicDevelopmentCard, PublicDevelopmentList } from '../types/marketplace'
+import type {
+  CatalogueQuery,
+  PublicDevelopmentCard,
+  PublicDevelopmentList,
+  ListingCatalogueQuery,
+  PublicListingCard,
+  PublicListingList,
+} from '../types/marketplace'
 
 type Fetcher = typeof fetch
 
@@ -50,6 +57,32 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
         headers: { Accept: 'application/json' },
       })
       return parseResponse<PublicDevelopmentCard>(response)
+    },
+
+    async listListings(query: ListingCatalogueQuery = {}): Promise<PublicListingList> {
+      const params = new URLSearchParams()
+      if (query.city?.trim()) params.set('city', query.city.trim())
+      if (query.dealType) params.set('dealType', query.dealType)
+      if (query.propertyType) params.set('propertyType', query.propertyType)
+      if (query.commercialSubtype) params.set('commercialSubtype', query.commercialSubtype)
+      if (query.bbox) {
+        const { minLng, minLat, maxLng, maxLat } = query.bbox
+        params.set('bbox', `${minLng},${minLat},${maxLng},${maxLat}`)
+      }
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      const response = await fetcher(`${apiBaseUrl}/public/listings${suffix}`, {
+        headers: { Accept: 'application/json' },
+      })
+      return parseResponse<PublicListingList>(response)
+    },
+
+    async getListing(slug: string): Promise<PublicListingCard> {
+      const response = await fetcher(`${apiBaseUrl}/public/listings/${encodeURIComponent(slug)}`, {
+        headers: { Accept: 'application/json' },
+      })
+      return parseResponse<PublicListingCard>(response)
     },
   }
 }

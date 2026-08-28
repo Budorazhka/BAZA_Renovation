@@ -21,6 +21,50 @@ describe('Marketplace API client', () => {
     )
   })
 
+  it('passes listing filters and returns listings from /public/listings', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [{ slug: 'batumi-flat-1', dealType: 'sale', price: { amountMinorUnits: 5000000, currency: 'USD' } }],
+          nextCursor: null,
+        }),
+        { status: 200 },
+      ),
+    )
+    const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await expect(
+      api.listListings({ city: 'Batumi', dealType: 'sale', propertyType: 'apartment', limit: 12 }),
+    ).resolves.toEqual({
+      items: [{ slug: 'batumi-flat-1', dealType: 'sale', price: { amountMinorUnits: 5000000, currency: 'USD' } }],
+      nextCursor: null,
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.example.test/api/v1/public/listings?city=Batumi&dealType=sale&propertyType=apartment&limit=12',
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    )
+  })
+
+  it('fetches single listing by slug via /public/listings/:slug', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ slug: 'batumi-flat-1', dealType: 'sale' }),
+        { status: 200 },
+      ),
+    )
+    const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await expect(api.getListing('batumi-flat-1')).resolves.toEqual({
+      slug: 'batumi-flat-1',
+      dealType: 'sale',
+    })
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.example.test/api/v1/public/listings/batumi-flat-1',
+      expect.objectContaining({ headers: { Accept: 'application/json' } }),
+    )
+  })
+
   it('throws a human-readable API error on a failed public request', async () => {
     const api = createMarketplaceApi({
       baseUrl: 'https://api.example.test/api/v1',
@@ -44,9 +88,6 @@ describe('Marketplace API client', () => {
     )
   })
 
-  // D-04A: невалидный фильтр не должен молча превращаться в пустой каталог
-  // — 400 от backend-валидации остаётся видимой MarketplaceApiError, как
-  // любая другая HTTP-ошибка, не глотается на уровне клиента.
   it('surfaces a 400 validation response as MarketplaceApiError, not a silently empty result', async () => {
     const api = createMarketplaceApi({
       baseUrl: 'https://api.example.test/api/v1',
@@ -60,9 +101,6 @@ describe('Marketplace API client', () => {
     expect((error as MarketplaceApiError).status).toBe(400)
   })
 
-  // Network failure (fetcher rejects, e.g. TypeError: Failed to fetch) — не
-  // то же самое, что resolve с плохим статусом. parseResponse не должен
-  // глушить этот путь молча.
   it('propagates a network failure (rejected fetcher) instead of swallowing it', async () => {
     const api = createMarketplaceApi({
       baseUrl: 'https://api.example.test/api/v1',
