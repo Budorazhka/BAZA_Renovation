@@ -288,6 +288,34 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       expect(candidateDoc?.status).toBe('detected');
     });
 
+    it('GET /property-assets/:assetId/duplicate-candidates возвращает кандидатов для актива и 404 для чужого актива', async () => {
+      const orgA = await ownerCookie('dedupe-list-cand-a');
+      const orgB = await ownerCookie('dedupe-list-cand-b');
+      const orgC = await ownerCookie('dedupe-list-cand-c');
+      const phone = '+995500444888';
+
+      const assetA = await createAsset(orgA, { phone, address: 'Org A List Candidates Address' });
+      const assetB = await createAsset(orgB, { phone, address: 'Org B List Candidates Address' });
+
+      const listResponseA = await app.inject({
+        method: 'GET',
+        url: `/api/v1/property-assets/${assetA._id}/duplicate-candidates`,
+        headers: { cookie: orgA.cookie },
+      });
+      expect(listResponseA.statusCode).toBe(200);
+      const candidatesA = JSON.parse(listResponseA.body) as Array<{ id: string; status: string; signals: { phoneMatch: boolean } }>;
+      expect(candidatesA.length).toBe(1);
+      expect(candidatesA[0]?.signals.phoneMatch).toBe(true);
+      expect(candidatesA[0]?.status).toBe('detected');
+
+      const listResponseC = await app.inject({
+        method: 'GET',
+        url: `/api/v1/property-assets/${assetA._id}/duplicate-candidates`,
+        headers: { cookie: orgC.cookie },
+      });
+      expect(listResponseC.statusCode).toBe(404);
+    });
+
     it('не создаёт дублирующую DuplicateCandidate запись при повторном createAsset-скане той же пары (unique index на паре)', async () => {
       const orgA = await ownerCookie('dedupe-m');
       const orgB = await ownerCookie('dedupe-n');

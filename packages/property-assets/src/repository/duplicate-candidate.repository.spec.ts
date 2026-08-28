@@ -73,6 +73,21 @@ describe('DuplicateCandidateRepository', () => {
     });
   });
 
+  describe('findCandidatesForAsset', () => {
+    it('ищет всех кандидатов по обеим сторонам пары без фильтра по статусу', async () => {
+      const find = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue([]) });
+      const model = { find } as never;
+      const repository = new DuplicateCandidateRepository(model);
+      const assetId = new Types.ObjectId();
+
+      await repository.findCandidatesForAsset(assetId);
+
+      expect(find).toHaveBeenCalledWith({
+        $or: [{ propertyAssetIdA: assetId }, { propertyAssetIdB: assetId }],
+      });
+    });
+  });
+
   describe('override', () => {
     it('CAS-фильтр требует status:detected — не даёт override уже confirmed_duplicate', async () => {
       const updateOne = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) });

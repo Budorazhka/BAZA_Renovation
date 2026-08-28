@@ -81,6 +81,14 @@ export class DuplicateCandidateRepository {
       .exec();
   }
 
+  async findCandidatesForAsset(propertyAssetId: Types.ObjectId): Promise<DuplicateCandidateDocument[]> {
+    return this.model
+      .find({
+        $or: [{ propertyAssetIdA: propertyAssetId }, { propertyAssetIdB: propertyAssetId }],
+      })
+      .exec();
+  }
+
   async findById(id: Types.ObjectId): Promise<DuplicateCandidateDocument | null> {
     return this.model.findOne({ _id: id }).exec();
   }

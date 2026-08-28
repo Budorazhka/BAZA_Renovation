@@ -215,6 +215,22 @@ export class PropertyAssetsController {
     );
   }
 
+  @Get(':assetId/duplicate-candidates')
+  @RequirePermission('listing', 'read')
+  async getDuplicateCandidates(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
+    const tenant = requireTenantContext(req);
+    await this.service.getAsset(objectId(assetId, 'assetId'), new Types.ObjectId(tenant.organizationId));
+    const candidates = await this.dedupeService.getCandidatesForAsset(objectId(assetId, 'assetId'));
+    return candidates.map((c) => ({
+      id: c._id.toString(),
+      status: c.status,
+      signals: c.signals,
+      overrideReason: c.overrideReason,
+      overrideAt: c.overrideAt ? c.overrideAt.toISOString() : undefined,
+      detectedAt: c.detectedAt ? c.detectedAt.toISOString() : undefined,
+    }));
+  }
+
   /**
    * DEDUPE-001: owner override (xlsx #70) — "Я ПОДТВЕРЖДАЮ ЧТО ЭТО НЕ
    * ДУБЛЬ". DedupeService.overrideDuplicate проверяет, что организация

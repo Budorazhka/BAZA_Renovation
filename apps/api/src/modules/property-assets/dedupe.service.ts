@@ -86,6 +86,10 @@ export class DedupeService {
     }
   }
 
+  async getCandidatesForAsset(assetId: Types.ObjectId) {
+    return this.duplicateCandidateRepository.findCandidatesForAsset(assetId);
+  }
+
   /**
    * Owner override (xlsx #70) — CAS на status:'detected', reason
    * обязателен (DTO-уровень), audit-запись в ТОЙ ЖЕ транзакции, что

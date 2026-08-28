@@ -243,6 +243,144 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/property-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список PropertyAsset организации */
+        get: operations["listPropertyAssets"];
+        put?: never;
+        /** Создать PropertyAsset организации */
+        post: operations["createPropertyAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить PropertyAsset по ID (tenant-scoped) */
+        get: operations["getPropertyAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список Listing для PropertyAsset */
+        get: operations["listListings"];
+        put?: never;
+        /** Создать Listing для PropertyAsset */
+        post: operations["createListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Активировать Listing (draft -> active) */
+        patch: operations["activateListing"];
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/actuality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить состояние актуальности Listing */
+        get: operations["getListingActuality"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/confirm-actuality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Подтвердить актуальность Listing (сброс таймера) */
+        patch: operations["confirmListingActuality"];
+        trace?: never;
+    };
+    "/property-assets/{assetId}/duplicate-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить список кандидатов-дублей для PropertyAsset */
+        get: operations["getDuplicateCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/duplicate-candidates/{duplicateCandidateId}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Owner override дубль-блокировки (подтверждение «это не дубль») */
+        post: operations["overrideDuplicateCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/property-assets/{assetId}/listings/{listingId}/publish": {
         parameters: {
             query?: never;
@@ -516,6 +654,94 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        CreatePropertyAssetRequest: {
+            /** @enum {string} */
+            propertyType: "apartment" | "house" | "land" | "commercial";
+            /** @enum {string} */
+            commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose";
+            location: {
+                country: string;
+                city: string;
+                address: string;
+                geo: {
+                    /** @enum {string} */
+                    type: "Point";
+                    coordinates: number[];
+                };
+            };
+            characteristics: {
+                area: number;
+                rooms?: number;
+                floor?: number;
+                totalFloors?: number;
+            };
+            representativePhone: string;
+        };
+        PropertyAsset: {
+            _id?: string;
+            publisherScope?: Record<string, never>;
+            /** @enum {string} */
+            propertyType?: "apartment" | "house" | "land" | "commercial";
+            /** @enum {string} */
+            commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose";
+            location?: Record<string, never>;
+            characteristics?: Record<string, never>;
+            representativePhone?: string;
+            version?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        CreateListingRequest: {
+            /** @enum {string} */
+            dealType: "sale" | "rent_long" | "rent_short";
+            price: components["schemas"]["MoneyAmount"];
+        };
+        Listing: {
+            _id?: string;
+            propertyAssetId?: string;
+            publisherScope?: Record<string, never>;
+            /** @enum {string} */
+            dealType?: "sale" | "rent_long" | "rent_short";
+            price?: components["schemas"]["MoneyAmount"];
+            /** @enum {string} */
+            status?: "draft" | "active" | "expired" | "archived";
+            version?: number;
+            /** Format: date-time */
+            lastConfirmedAt?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ListingActuality: {
+            status?: string;
+            category?: string;
+            thresholds?: {
+                warningDays?: number;
+                overdueDays?: number;
+            };
+            /** Format: date-time */
+            lastConfirmedAt?: string;
+            /** @enum {string|null} */
+            state?: "fresh" | "warning" | "overdue" | null;
+        };
+        DuplicateCandidate: {
+            id?: string;
+            /** @enum {string} */
+            status?: "detected" | "confirmed_duplicate" | "override_not_duplicate";
+            signals?: {
+                phoneMatch?: boolean;
+                addressMatch?: boolean;
+                roomsAreaFloorMatch?: boolean;
+            };
+            overrideReason?: string;
+            /** Format: date-time */
+            overrideAt?: string;
+            /** Format: date-time */
+            detectedAt?: string;
         };
     };
     responses: {
@@ -969,6 +1195,285 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description FORBIDDEN / ADMIN_SCOPE_INSUFFICIENT */
             403: components["responses"]["Error"];
+        };
+    };
+    listPropertyAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список PropertyAsset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createPropertyAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePropertyAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description PropertyAsset создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getPropertyAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PropertyAsset найден */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listListings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список Listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateListingRequest"];
+            };
+        };
+        responses: {
+            /** @description Listing создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    activateListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Listing активирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Уже есть активный listing для этого dealType или статус не draft */
+            409: components["responses"]["Error"];
+        };
+    };
+    getListingActuality: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние актуальности */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingActuality"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    confirmListingActuality: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Актуальность подтверждена, возвращает обновлённое состояние актуальности */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingActuality"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Version conflict / Listing is not active or expired */
+            409: components["responses"]["Error"];
+        };
+    };
+    getDuplicateCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список кандидатов-дублей */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateCandidate"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    overrideDuplicateCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                duplicateCandidateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Дубль снят (status override_not_duplicate) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "override_not_duplicate";
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Duplicate candidate status is not 'detected' */
+            409: components["responses"]["Error"];
         };
     };
     publishListing: {

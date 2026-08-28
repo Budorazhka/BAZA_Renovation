@@ -192,6 +192,21 @@ export class MarketplacePropertyAssetsController {
     );
   }
 
+  @Get(':assetId/duplicate-candidates')
+  async getDuplicateCandidates(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
+    const account = requireMarketplaceAccountContext(req);
+    await this.service.getAsset(objectId(assetId, 'assetId'), new Types.ObjectId(account.identityId));
+    const candidates = await this.dedupeService.getCandidatesForAsset(objectId(assetId, 'assetId'));
+    return candidates.map((c) => ({
+      id: c._id.toString(),
+      status: c.status,
+      signals: c.signals,
+      overrideReason: c.overrideReason,
+      overrideAt: c.overrideAt ? c.overrideAt.toISOString() : undefined,
+      detectedAt: c.detectedAt ? c.detectedAt.toISOString() : undefined,
+    }));
+  }
+
   /**
    * DEDUPE-001: owner override — DedupeService.overrideDuplicate проверяет,
    * что marketplace-аккаунт владеет хотя бы одной из сторон candidate
