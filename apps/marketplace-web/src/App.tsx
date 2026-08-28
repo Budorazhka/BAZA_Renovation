@@ -14,6 +14,7 @@ import { useCatalogue } from './hooks/useCatalogue'
 import { useDevelopmentDetail } from './hooks/useDevelopmentDetail'
 import { useListingsCatalogue } from './hooks/useListingsCatalogue'
 import { useListingDetail } from './hooks/useListingDetail'
+import { ListingContactForm } from './components/ListingContactForm'
 import type {
   PublicDevelopmentCard,
   PublicListingCard,
@@ -399,9 +400,7 @@ function ListingDetailPage() {
                 {state.item.seo?.description?.trim() ||
                   'Объект проверен и опубликован через систему управления недвижимостью BAZA.'}
               </p>
-              <div className="contact-disclaimer">
-                Для связи по данному объекту и организации просмотра обратитесь к ответственному риелтору или в отдел продаж BAZA.
-              </div>
+              <ListingContactForm slug={slug!} />
             </section>
           </>
         ) : null}

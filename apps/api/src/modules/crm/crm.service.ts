@@ -3,6 +3,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository, type DevelopmentContact } from '@baza/development';
+import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -64,6 +65,8 @@ export class CrmService {
     @InjectConnection() private readonly connection: Connection,
     private readonly publicationRepository: MarketplacePublicationRepository,
     private readonly developmentRepository: DevelopmentRepository,
+    private readonly listingRepository: ListingRepository,
+    private readonly propertyAssetRepository: PropertyAssetRepository,
     private readonly contactRepository: ContactRepository,
     private readonly leadRepository: LeadRepository,
     private readonly leadEventRepository: LeadEventRepository,
@@ -201,6 +204,97 @@ export class CrmService {
       leadId,
     };
   }
+
+  /**
+   * MKT-002 / LEAD-001: slug → published MarketplacePublication (sourceType: 'listing')
+   * → canonical Listing (по sourceId) → canonical PropertyAsset (по propertyAssetId)
+   * → PropertyAsset.publisherScope.organizationId (для Lead/Contact)
+   * + PropertyAsset.representativePhone (для публичного ответа).
+   *
+   * Для отсутствующего slug, unpublished publication, publication другого sourceType,
+   * отсутствующего Listing, отсутствующего PropertyAsset или не-organization владельца
+   * возвращает единый 404 (non-disclosure).
+   *
+   * Транзакционно: Contact (создан или найден по phone) + Lead(route: `/listings/${slug}`)
+   * + LeadEvent(stage: 'new', changedBy: 'system') + audit-запись ('lead.create_from_reveal').
+   */
+  async revealListingContact(params: {
+    slug: string;
+    requesterName?: string;
+    requesterPhone?: string;
+    utm?: Record<string, string>;
+    referrer?: string;
+    correlationId: string;
+  }): Promise<{ phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId }> {
+    const publication = await this.publicationRepository.findBySlug(params.slug);
+    if (!publication || publication.sourceType !== 'listing') {
+      throw new NotFoundException('Publication not found');
+    }
+
+    const listing = await this.listingRepository.findById(publication.sourceId);
+    if (!listing) {
+      throw new NotFoundException('Publication not found');
+    }
+
+    const propertyAsset = await this.propertyAssetRepository.findById(listing.propertyAssetId);
+    if (!propertyAsset) {
+      throw new NotFoundException('Publication not found');
+    }
+
+    if (propertyAsset.publisherScope.type !== 'organization' || !propertyAsset.publisherScope.organizationId) {
+      throw new NotFoundException('Publication not found');
+    }
+
+    const organizationId = propertyAsset.publisherScope.organizationId;
+
+    const leadId = await runInTransaction(this.connection, async (session) => {
+      const contact = await this.resolveContact(organizationId, params, session);
+
+      const lead = await this.leadRepository.create(
+        {
+          organizationId,
+          contactId: contact._id,
+          source: {
+            route: `/listings/${params.slug}`,
+            publicationId: publication._id,
+            utm: params.utm,
+            referrer: params.referrer,
+          },
+        },
+        session,
+      );
+
+      await this.leadEventRepository.append(
+        {
+          leadId: lead._id,
+          organizationId,
+          stage: 'new' as LeadStage,
+          changedBy: { type: 'system' },
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'system' },
+          action: 'lead.create_from_reveal',
+          resource: 'lead',
+          resourceId: lead._id,
+          after: { contactId: contact._id.toString(), publicationSlug: params.slug },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return lead._id;
+    });
+
+    return {
+      phone: propertyAsset.representativePhone,
+      leadId,
+    };
+  }
+
 
   /**
    * OpenAPI `assignLead` / permission-matrix.md `lead.assign.organization`.

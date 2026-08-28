@@ -109,4 +109,71 @@ describe('Marketplace API client', () => {
 
     await expect(api.listDevelopments()).rejects.toThrow('Failed to fetch')
   })
+  it('calls POST /public/listings/:slug/reveal-contact with payload and returns phone + leadId', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ phone: '+995555123456', leadId: 'lead-12345' }),
+        { status: 200 },
+      ),
+    )
+    const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.revealListingContact('batumi-flat-1', {
+      requesterName: 'Иван',
+      requesterPhone: '+995555987654',
+      utm: { source: 'telegram' },
+    })
+
+    expect(result).toEqual({ phone: '+995555123456', leadId: 'lead-12345' })
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.example.test/api/v1/public/listings/batumi-flat-1/reveal-contact',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          requesterName: 'Иван',
+          requesterPhone: '+995555987654',
+          utm: { source: 'telegram' },
+        }),
+      }),
+    )
+  })
+
+  it('calls POST /public/developments/:slug/reveal-contact with payload', async () => {
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ phone: '+995555000111', leadId: 'lead-dev-123' }),
+        { status: 200 },
+      ),
+    )
+    const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.revealDevelopmentContact('zhk-batumi', {
+      requesterPhone: '+995555987654',
+    })
+
+    expect(result).toEqual({ phone: '+995555000111', leadId: 'lead-dev-123' })
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://api.example.test/api/v1/public/developments/zhk-batumi/reveal-contact',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ requesterPhone: '+995555987654' }),
+      }),
+    )
+  })
+
+  it('handles 429 rate limit correctly', async () => {
+    const api = createMarketplaceApi({
+      baseUrl: 'https://api.example.test/api/v1',
+      fetcher: vi.fn().mockResolvedValue(new Response('', { status: 429 })),
+    })
+
+    await expect(api.revealListingContact('batumi-flat-1', { requesterPhone: '+995555123456' })).rejects.toEqual(
+      new MarketplaceApiError('Слишком много запросов. Пожалуйста, повторите попытку позже.', 429),
+    )
+  })
+
 })

@@ -5,17 +5,13 @@ import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { DevelopmentRepository } from '@baza/development';
+import type { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import type { ContactRepository } from './repository/contact.repository';
 import type { LeadRepository } from './repository/lead.repository';
 import type { LeadEventRepository } from './repository/lead-event.repository';
 import type { AuditService } from '../audit/audit.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
 
-/**
- * Тот же паттерн, что organizations.service.spec.ts/developments.service.spec.ts:
- * withTransaction выполняет work() напрямую, атомарность самой транзакции
- * проверяется integration-тестом, не здесь.
- */
 function makeMockConnection() {
   return {
     startSession: jest.fn().mockResolvedValue({
@@ -23,6 +19,34 @@ function makeMockConnection() {
       endSession: jest.fn().mockResolvedValue(undefined),
     }),
   };
+}
+
+function createTestCrmService(overrides: {
+  connection?: unknown;
+  publicationRepository?: unknown;
+  developmentRepository?: unknown;
+  listingRepository?: unknown;
+  propertyAssetRepository?: unknown;
+  contactRepository?: unknown;
+  leadRepository?: unknown;
+  leadEventRepository?: unknown;
+  auditService?: unknown;
+  organizationsService?: unknown;
+} = {}) {
+  return new CrmService(
+    (overrides.connection ?? makeMockConnection()) as never,
+    (overrides.publicationRepository ?? {}) as unknown as MarketplacePublicationRepository,
+    (overrides.developmentRepository ?? {}) as unknown as DevelopmentRepository,
+    (overrides.listingRepository ?? {}) as unknown as ListingRepository,
+    (overrides.propertyAssetRepository ?? {}) as unknown as PropertyAssetRepository,
+    (overrides.contactRepository ?? {}) as unknown as ContactRepository,
+    (overrides.leadRepository ?? {}) as unknown as LeadRepository,
+    (overrides.leadEventRepository ?? {}) as unknown as LeadEventRepository,
+    (overrides.auditService ?? {}) as unknown as AuditService,
+    (overrides.organizationsService ?? {
+      findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
+    }) as unknown as OrganizationsService,
+  );
 }
 
 function makeDevelopment(overrides: Partial<{ organizationId: Types.ObjectId }> = {}) {
@@ -33,11 +57,29 @@ function makeDevelopment(overrides: Partial<{ organizationId: Types.ObjectId }> 
   };
 }
 
-function makePublication(overrides: Partial<{ sourceType: string; sourceId: Types.ObjectId }> = {}) {
+function makePublication(overrides: Partial<{ sourceType: string; sourceId: Types.ObjectId; slug: string }> = {}) {
   return {
     _id: new Types.ObjectId(),
     sourceType: overrides.sourceType ?? 'development',
     sourceId: overrides.sourceId ?? new Types.ObjectId(),
+    slug: overrides.slug ?? 'test-slug',
+  };
+}
+
+function makeListing(overrides: Partial<{ propertyAssetId: Types.ObjectId; publisherScope: { type: string; organizationId: Types.ObjectId } }> = {}) {
+  return {
+    _id: new Types.ObjectId(),
+    propertyAssetId: overrides.propertyAssetId ?? new Types.ObjectId(),
+    publisherScope: overrides.publisherScope ?? { type: 'organization', organizationId: new Types.ObjectId() },
+    status: 'active',
+  };
+}
+
+function makePropertyAsset(overrides: Partial<{ publisherScope: { type: string; organizationId?: Types.ObjectId }; representativePhone: string }> = {}) {
+  return {
+    _id: new Types.ObjectId(),
+    publisherScope: overrides.publisherScope ?? { type: 'organization', organizationId: new Types.ObjectId() },
+    representativePhone: overrides.representativePhone ?? '+995555000111',
   };
 }
 
@@ -57,18 +99,14 @@ describe('CrmService.revealContact', () => {
     const appendEventSpy = jest.fn().mockResolvedValue(undefined);
     const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: findBySlugSpy } as unknown as MarketplacePublicationRepository,
-      { findById: findByIdSpy } as unknown as DevelopmentRepository,
-      { findByPhone: findByPhoneSpy, create: createContactSpy } as unknown as ContactRepository,
-      { create: createLeadSpy } as unknown as LeadRepository,
-      { append: appendEventSpy } as unknown as LeadEventRepository,
-      { append: auditAppendSpy } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: findBySlugSpy },
+      developmentRepository: { findById: findByIdSpy },
+      contactRepository: { findByPhone: findByPhoneSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditAppendSpy },
+    });
 
     const result = await service.revealContact({
       slug: 'zhk-solnechnyy',
@@ -115,18 +153,14 @@ describe('CrmService.revealContact', () => {
     const createContactSpy = jest.fn();
     const createLeadSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: jest.fn().mockResolvedValue(publication) } as unknown as MarketplacePublicationRepository,
-      { findById: jest.fn().mockResolvedValue(development) } as unknown as DevelopmentRepository,
-      { findByPhone: findByPhoneSpy, create: createContactSpy } as unknown as ContactRepository,
-      { create: createLeadSpy } as unknown as LeadRepository,
-      { append: jest.fn().mockResolvedValue(undefined) } as unknown as LeadEventRepository,
-      { append: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(development) },
+      contactRepository: { findByPhone: findByPhoneSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
 
     await service.revealContact({
       slug: 'zhk-solnechnyy',
@@ -147,18 +181,14 @@ describe('CrmService.revealContact', () => {
     const createContactSpy = jest.fn();
     const createLeadSpy = jest.fn();
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: jest.fn().mockResolvedValue(publication) } as unknown as MarketplacePublicationRepository,
-      { findById: jest.fn().mockResolvedValue(development) } as unknown as DevelopmentRepository,
-      { findByPhone: jest.fn(), create: createContactSpy } as unknown as ContactRepository,
-      { create: createLeadSpy } as unknown as LeadRepository,
-      { append: jest.fn() } as unknown as LeadEventRepository,
-      { append: jest.fn() } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(development) },
+      contactRepository: { findByPhone: jest.fn(), create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn() },
+      auditService: { append: jest.fn() },
+    });
 
     await expect(
       service.revealContact({ slug: 'zhk-solnechnyy', correlationId: 'test-correlation-id' }),
@@ -169,18 +199,9 @@ describe('CrmService.revealContact', () => {
   });
 
   it('бросает NotFoundException, если publication не найдена по slug', async () => {
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: jest.fn().mockResolvedValue(null) } as unknown as MarketplacePublicationRepository,
-      { findById: jest.fn() } as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {} as unknown as LeadRepository,
-      {} as unknown as LeadEventRepository,
-      {} as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(null) },
+    });
 
     await expect(
       service.revealContact({
@@ -193,19 +214,9 @@ describe('CrmService.revealContact', () => {
 
   it('бросает NotFoundException, если publication.sourceType не development', async () => {
     const publication = makePublication({ sourceType: 'unit' });
-
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: jest.fn().mockResolvedValue(publication) } as unknown as MarketplacePublicationRepository,
-      { findById: jest.fn() } as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {} as unknown as LeadRepository,
-      {} as unknown as LeadEventRepository,
-      {} as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+    });
 
     await expect(
       service.revealContact({
@@ -218,19 +229,10 @@ describe('CrmService.revealContact', () => {
 
   it('бросает NotFoundException, если publication опубликована, но Development недоступен (рассинхронизация)', async () => {
     const publication = makePublication();
-
-    const service = new CrmService(
-      makeMockConnection() as never,
-      { findBySlug: jest.fn().mockResolvedValue(publication) } as unknown as MarketplacePublicationRepository,
-      { findById: jest.fn().mockResolvedValue(null) } as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {} as unknown as LeadRepository,
-      {} as unknown as LeadEventRepository,
-      {} as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(null) },
+    });
 
     await expect(
       service.revealContact({
@@ -238,6 +240,202 @@ describe('CrmService.revealContact', () => {
         requesterPhone: '+79997654321',
         correlationId: 'test-correlation-id',
       }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CrmService.revealListingContact (LEAD-001 / Secondary & Rent)', () => {
+  it('создаёт Contact+Lead+LeadEvent+audit для опубликованного листинга и возвращает representativePhone', async () => {
+    const organizationId = new Types.ObjectId();
+    const propertyAsset = makePropertyAsset({
+      publisherScope: { type: 'organization', organizationId },
+      representativePhone: '+995555123456',
+    });
+    const listing = makeListing({ propertyAssetId: propertyAsset._id });
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id, slug: 'batumi-flat-85k' });
+    const contactId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+
+    const findBySlugSpy = jest.fn().mockResolvedValue(publication);
+    const findListingByIdSpy = jest.fn().mockResolvedValue(listing);
+    const findAssetByIdSpy = jest.fn().mockResolvedValue(propertyAsset);
+    const findByPhoneSpy = jest.fn().mockResolvedValue(null);
+    const createContactSpy = jest.fn().mockResolvedValue({ _id: contactId });
+    const createLeadSpy = jest.fn().mockResolvedValue({ _id: leadId });
+    const appendEventSpy = jest.fn().mockResolvedValue(undefined);
+    const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: findBySlugSpy },
+      listingRepository: { findById: findListingByIdSpy },
+      propertyAssetRepository: { findById: findAssetByIdSpy },
+      contactRepository: { findByPhone: findByPhoneSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditAppendSpy },
+    });
+
+    const result = await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterName: 'Анна',
+      requesterPhone: '+995599887766',
+      utm: { source: 'google', campaign: 'summer' },
+      referrer: 'https://google.com',
+      correlationId: 'test-correlation-listing',
+    });
+
+    expect(findBySlugSpy).toHaveBeenCalledWith('batumi-flat-85k');
+    expect(findListingByIdSpy).toHaveBeenCalledWith(listing._id);
+    expect(findAssetByIdSpy).toHaveBeenCalledWith(propertyAsset._id);
+
+    expect(createContactSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, phone: '+995599887766', name: 'Анна', roles: ['buyer'] }),
+      expect.anything(),
+    );
+    expect(createLeadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId,
+        contactId,
+        source: expect.objectContaining({
+          route: '/listings/batumi-flat-85k',
+          publicationId: publication._id,
+          utm: { source: 'google', campaign: 'summer' },
+          referrer: 'https://google.com',
+        }),
+      }),
+      expect.anything(),
+    );
+    expect(appendEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ leadId, organizationId, stage: 'new', changedBy: { type: 'system' } }),
+      expect.anything(),
+    );
+    expect(auditAppendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'system' },
+        action: 'lead.create_from_reveal',
+        resource: 'lead',
+        resourceId: leadId,
+      }),
+      expect.anything(),
+    );
+    expect(result).toEqual({ phone: '+995555123456', leadId });
+    // Proves that no internal fields (organizationId, publisherScope, etc.) are leaked
+    expect((result as Record<string, unknown>).organizationId).toBeUndefined();
+    expect((result as Record<string, unknown>).publisherScope).toBeUndefined();
+  });
+
+  it('переиспользует существующий Contact внутри организации при повторном обращении, но создаёт новый Lead', async () => {
+    const organizationId = new Types.ObjectId();
+    const propertyAsset = makePropertyAsset({
+      publisherScope: { type: 'organization', organizationId },
+      representativePhone: '+995555123456',
+    });
+    const listing = makeListing({ propertyAssetId: propertyAsset._id });
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id, slug: 'batumi-flat-85k' });
+    const existingContact = { _id: new Types.ObjectId(), organizationId, phone: '+995599887766' };
+
+    const findByPhoneSpy = jest.fn().mockResolvedValue(existingContact);
+    const createContactSpy = jest.fn();
+    const createLeadSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      contactRepository: { findByPhone: findByPhoneSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterPhone: '+995599887766',
+      correlationId: 'test-correlation-listing',
+    });
+
+    expect(createContactSpy).not.toHaveBeenCalled();
+    expect(createLeadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: existingContact._id, organizationId }),
+      expect.anything(),
+    );
+  });
+
+  it('отклоняет запрос без requesterPhone как VALIDATION_FAILED', async () => {
+    const propertyAsset = makePropertyAsset();
+    const listing = makeListing({ propertyAssetId: propertyAsset._id });
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id });
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'batumi-flat-85k', correlationId: 'test-correlation' }),
+    ).rejects.toMatchObject(new AppException(ErrorCode.VALIDATION_FAILED, 'requesterPhone is required to create a lead'));
+  });
+
+  it('бросает NotFoundException, если slug не найден', async () => {
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'non-existent', requesterPhone: '+995555123456', correlationId: 'test' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('бросает NotFoundException, если publication.sourceType === development (не listing)', async () => {
+    const publication = makePublication({ sourceType: 'development' });
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'zhk-solnechnyy', requesterPhone: '+995555123456', correlationId: 'test' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('бросает NotFoundException, если canonical Listing не найден (рассинхронизация)', async () => {
+    const publication = makePublication({ sourceType: 'listing' });
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'batumi-flat-85k', requesterPhone: '+995555123456', correlationId: 'test' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('бросает NotFoundException, если canonical PropertyAsset не найден (рассинхронизация)', async () => {
+    const listing = makeListing();
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id });
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'batumi-flat-85k', requesterPhone: '+995555123456', correlationId: 'test' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('бросает NotFoundException, если publisherScope PropertyAsset не organization', async () => {
+    const propertyAsset = makePropertyAsset({ publisherScope: { type: 'marketplace_account' } });
+    const listing = makeListing({ propertyAssetId: propertyAsset._id });
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id });
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+    });
+
+    await expect(
+      service.revealListingContact({ slug: 'batumi-flat-85k', requesterPhone: '+995555123456', correlationId: 'test' }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -265,21 +463,14 @@ describe('CrmService.assignLead', () => {
     const appendEventSpy = jest.fn().mockResolvedValue(undefined);
     const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {
+    const service = createTestCrmService({
+      leadRepository: {
         findByIdForOrganization: jest.fn().mockResolvedValue(lead),
         assignOwner: assignOwnerSpy,
-      } as unknown as LeadRepository,
-      { append: appendEventSpy } as unknown as LeadEventRepository,
-      { append: auditAppendSpy } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+      },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditAppendSpy },
+    });
 
     const result = await service.assignLead({
       leadId: lead._id,
@@ -290,10 +481,6 @@ describe('CrmService.assignLead', () => {
       correlationId: 'test-correlation-id',
     });
 
-    // Реальный найденный баг (second-opinion ревью): assignOwner вызывался
-    // без session, хотя внутри runInTransaction — write не откатывался бы
-    // вместе с audit/event при ошибке транзакции. expect.anything() — тот
-    // же session-объект, что видят appendEventSpy/auditAppendSpy ниже.
     expect(assignOwnerSpy).toHaveBeenCalledWith(lead._id, organizationId, assigneePositionId, expect.anything());
     expect(appendEventSpy).toHaveBeenCalledWith(
       expect.objectContaining({ leadId: lead._id, stage: 'qualified', changedBy: { type: 'position', positionId: actorPositionId } }),
@@ -313,18 +500,9 @@ describe('CrmService.assignLead', () => {
 
   it('бросает NotFoundException для чужой организации, не вызывает assignOwner', async () => {
     const assignOwnerSpy = jest.fn();
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      { findByIdForOrganization: jest.fn().mockResolvedValue(null), assignOwner: assignOwnerSpy } as unknown as LeadRepository,
-      { append: jest.fn() } as unknown as LeadEventRepository,
-      { append: jest.fn() } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null), assignOwner: assignOwnerSpy },
+    });
 
     await expect(
       service.assignLead({
@@ -346,16 +524,10 @@ describe('CrmService.assignLead', () => {
     const assignOwnerSpy = jest.fn();
     const findAssignablePositionSpy = jest.fn().mockRejectedValue(new NotFoundException('Position not found'));
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      { findByIdForOrganization: jest.fn().mockResolvedValue(lead), assignOwner: assignOwnerSpy } as unknown as LeadRepository,
-      { append: jest.fn() } as unknown as LeadEventRepository,
-      { append: jest.fn() } as unknown as AuditService,
-      { findAssignablePosition: findAssignablePositionSpy } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead), assignOwner: assignOwnerSpy },
+      organizationsService: { findAssignablePosition: findAssignablePositionSpy },
+    });
 
     const assigneePositionId = new Types.ObjectId();
     await expect(
@@ -378,18 +550,12 @@ describe('CrmService.assignLead', () => {
     const lead = makeLead({ organizationId });
     const assignOwnerSpy = jest.fn();
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      { findByIdForOrganization: jest.fn().mockResolvedValue(lead), assignOwner: assignOwnerSpy } as unknown as LeadRepository,
-      { append: jest.fn() } as unknown as LeadEventRepository,
-      { append: jest.fn() } as unknown as AuditService,
-      {
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead), assignOwner: assignOwnerSpy },
+      organizationsService: {
         findAssignablePosition: jest.fn().mockRejectedValue(new ConflictException('Position is closed and cannot be assigned')),
-      } as unknown as OrganizationsService,
-    );
+      },
+    });
 
     await expect(
       service.assignLead({
@@ -416,21 +582,14 @@ describe('CrmService.changeLeadStage', () => {
     const appendEventSpy = jest.fn().mockResolvedValue(undefined);
     const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {
+    const service = createTestCrmService({
+      leadRepository: {
         findByIdForOrganization: jest.fn().mockResolvedValue(lead),
         changeStageWithVersionCheck: changeStageSpy,
-      } as unknown as LeadRepository,
-      { append: appendEventSpy } as unknown as LeadEventRepository,
-      { append: auditAppendSpy } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+      },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditAppendSpy },
+    });
 
     const result = await service.changeLeadStage({
       leadId: lead._id,
@@ -455,18 +614,9 @@ describe('CrmService.changeLeadStage', () => {
   });
 
   it('бросает NotFoundException для несуществующего лида', async () => {
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as unknown as LeadRepository,
-      { append: jest.fn() } as unknown as LeadEventRepository,
-      { append: jest.fn() } as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+    });
 
     await expect(
       service.changeLeadStage({
@@ -482,19 +632,14 @@ describe('CrmService.changeLeadStage', () => {
   });
 
   function makeChangeStageService(lead: ReturnType<typeof makeLead>, changeStageSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 })) {
-    return new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      {} as unknown as ContactRepository,
-      {
+    return createTestCrmService({
+      leadRepository: {
         findByIdForOrganization: jest.fn().mockResolvedValue(lead),
         changeStageWithVersionCheck: changeStageSpy,
-      } as unknown as LeadRepository,
-      { append: jest.fn().mockResolvedValue(undefined) } as unknown as LeadEventRepository,
-      { append: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-      { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-    );
+      },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
   }
 
   describe('D-05B: transition-матрица', () => {
@@ -555,42 +700,21 @@ describe('CrmService.changeLeadStage', () => {
   });
 
   describe('optimistic concurrency (27.08.2026) — modifiedCount:0 disambiguation', () => {
-    /**
-     * Реальный баг, найденный integration-тестом (lead-stage-change-race.
-     * integration-spec.ts), не гипотетически: два параллельных запроса с
-     * РАЗНЫМИ newStage из одного and того же previousStage — проигравший
-     * (version уже устарела) НЕ должен получать VALIDATION_FAILED только
-     * потому, что его целевая стадия недостижима из НОВОГО current.stage
-     * (current.stage сдвинулся из-за победителя) — это ЕЩЁ конкурентный
-     * конфликт (ретрай после refresh валиден), не постоянная невозможность.
-     * Различие делается по current.version !== expectedVersion, не по
-     * current.stage transition-таблице.
-     */
     it('version устарела (current.version !== expectedVersion) — ConflictException 409, даже если newStage недостижим из НОВОГО current.stage', async () => {
       const organizationId = new Types.ObjectId();
       const lead = makeLead({ organizationId, stage: 'new', version: 0 });
-      // Конкурентный победитель уже перевёл лид new→contacted (version:1) —
-      // наш запрос целился в 'lost' от 'new' (валидный переход изначально),
-      // но 'contacted'→'lost' тоже валиден, поэтому нужен второй сценарий
-      // ниже для действительно недостижимого случая; здесь просто
-      // подтверждаем: 409, не 400, когда version разошлась.
       const currentAfterRace = { ...lead, stage: 'converted', version: 1 };
-      const service = new CrmService(
-        makeMockConnection() as never,
-        {} as unknown as MarketplacePublicationRepository,
-        {} as unknown as DevelopmentRepository,
-        {} as unknown as ContactRepository,
-        {
+      const service = createTestCrmService({
+        leadRepository: {
           findByIdForOrganization: jest
             .fn()
             .mockResolvedValueOnce(lead)
             .mockResolvedValueOnce(currentAfterRace),
           changeStageWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
-        } as unknown as LeadRepository,
-        { append: jest.fn() } as unknown as LeadEventRepository,
-        { append: jest.fn() } as unknown as AuditService,
-        { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-      );
+        },
+        leadEventRepository: { append: jest.fn() },
+        auditService: { append: jest.fn() },
+      });
 
       await expect(
         service.changeLeadStage({
@@ -607,25 +731,15 @@ describe('CrmService.changeLeadStage', () => {
 
     it('version совпадает с current, но атомарный write всё равно вернул modifiedCount:0 (защитная ветка) — VALIDATION_FAILED, не ConflictException', async () => {
       const organizationId = new Types.ObjectId();
-      // Валидный переход по pre-транзакционной проверке (new→contacted
-      // разрешён) — модель не должна дойти сюда в норме, это чисто
-      // defensive-ветка disambiguation на случай рассинхрона между
-      // pre-check и атомарным Mongo-фильтром (например, будущий рефакторинг
-      // LEAD_STAGE_TRANSITIONS без обновления обеих проверок синхронно).
       const lead = makeLead({ organizationId, stage: 'new', version: 0 });
-      const service = new CrmService(
-        makeMockConnection() as never,
-        {} as unknown as MarketplacePublicationRepository,
-        {} as unknown as DevelopmentRepository,
-        {} as unknown as ContactRepository,
-        {
+      const service = createTestCrmService({
+        leadRepository: {
           findByIdForOrganization: jest.fn().mockResolvedValue(lead),
           changeStageWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
-        } as unknown as LeadRepository,
-        { append: jest.fn() } as unknown as LeadEventRepository,
-        { append: jest.fn() } as unknown as AuditService,
-        { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-      );
+        },
+        leadEventRepository: { append: jest.fn() },
+        auditService: { append: jest.fn() },
+      });
 
       await expect(
         service.changeLeadStage({
@@ -643,19 +757,14 @@ describe('CrmService.changeLeadStage', () => {
     it('лид исчез между атомарным write и re-fetch (крайне редкая гонка с параллельным удалением) — NotFoundException', async () => {
       const organizationId = new Types.ObjectId();
       const lead = makeLead({ organizationId, stage: 'new', version: 0 });
-      const service = new CrmService(
-        makeMockConnection() as never,
-        {} as unknown as MarketplacePublicationRepository,
-        {} as unknown as DevelopmentRepository,
-        {} as unknown as ContactRepository,
-        {
+      const service = createTestCrmService({
+        leadRepository: {
           findByIdForOrganization: jest.fn().mockResolvedValueOnce(lead).mockResolvedValueOnce(null),
           changeStageWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
-        } as unknown as LeadRepository,
-        { append: jest.fn() } as unknown as LeadEventRepository,
-        { append: jest.fn() } as unknown as AuditService,
-        { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-      );
+        },
+        leadEventRepository: { append: jest.fn() },
+        auditService: { append: jest.fn() },
+      });
 
       await expect(
         service.changeLeadStage({
@@ -677,19 +786,14 @@ describe('CrmService.changeLeadStage', () => {
       const managerPositionId = new Types.ObjectId();
       const lead = makeLead({ organizationId, stage: 'new', ownerPositionId: managerPositionId });
       const findByIdForOrganizationSpy = jest.fn().mockResolvedValue(lead);
-      const service = new CrmService(
-        makeMockConnection() as never,
-        {} as unknown as MarketplacePublicationRepository,
-        {} as unknown as DevelopmentRepository,
-        {} as unknown as ContactRepository,
-        {
+      const service = createTestCrmService({
+        leadRepository: {
           findByIdForOrganization: findByIdForOrganizationSpy,
           changeStageWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-        } as unknown as LeadRepository,
-        { append: jest.fn().mockResolvedValue(undefined) } as unknown as LeadEventRepository,
-        { append: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
-        { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-      );
+        },
+        leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      });
 
       await service.changeLeadStage({
         leadId: lead._id,
@@ -708,16 +812,9 @@ describe('CrmService.changeLeadStage', () => {
     it('чужой лид (requiredOwnerPositionId задан, но repository не находит по этому фильтру) → NotFoundException', async () => {
       const organizationId = new Types.ObjectId();
       const managerPositionId = new Types.ObjectId();
-      const service = new CrmService(
-        makeMockConnection() as never,
-        {} as unknown as MarketplacePublicationRepository,
-        {} as unknown as DevelopmentRepository,
-        {} as unknown as ContactRepository,
-        { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as unknown as LeadRepository,
-        { append: jest.fn() } as unknown as LeadEventRepository,
-        { append: jest.fn() } as unknown as AuditService,
-        { findAssignablePosition: jest.fn() } as unknown as OrganizationsService,
-      );
+      const service = createTestCrmService({
+        leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      });
 
       await expect(
         service.changeLeadStage({
@@ -756,18 +853,10 @@ describe('CrmService — read leads', () => {
       { _id: contactId, name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
     ]);
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      { findByIdsForOrganization } as unknown as ContactRepository,
-      { listForOrganization } as unknown as LeadRepository,
-      {} as unknown as LeadEventRepository,
-      {} as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      contactRepository: { findByIdsForOrganization },
+      leadRepository: { listForOrganization },
+    });
 
     const readService = service as unknown as {
       listLeads(params: {
@@ -803,7 +892,7 @@ describe('CrmService — read leads', () => {
     expect(findByIdsForOrganization).toHaveBeenCalledWith(organizationId, [contactId]);
   });
 
-  it('возвращает карточку только из своей организации и не раскрывает чужой lead', async () => {
+  it('возвращает отдельный лид с контактом', async () => {
     const organizationId = new Types.ObjectId();
     const contactId = new Types.ObjectId();
     const leadId = new Types.ObjectId();
@@ -811,46 +900,53 @@ describe('CrmService — read leads', () => {
       _id: leadId,
       organizationId,
       contactId,
-      stage: 'qualified',
+      ownerPositionId: null,
+      stage: 'new',
       source: { route: '/developments/test' },
       createdAt: new Date('2026-08-26T10:00:00Z'),
     };
-    const findByIdForOrganization = jest.fn().mockResolvedValue(lead);
-    const findByIdForOrganizationContact = jest
-      .fn()
-      .mockResolvedValue({ _id: contactId, name: 'Анна', phone: '+995555111111' });
+    const contact = { _id: contactId, name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' };
 
-    const service = new CrmService(
-      makeMockConnection() as never,
-      {} as unknown as MarketplacePublicationRepository,
-      {} as unknown as DevelopmentRepository,
-      { findByIdForOrganization: findByIdForOrganizationContact } as unknown as ContactRepository,
-      { findByIdForOrganization } as unknown as LeadRepository,
-      {} as unknown as LeadEventRepository,
-      {} as unknown as AuditService,
-      {
-        findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
-      } as unknown as OrganizationsService,
-    );
+    const service = createTestCrmService({
+      contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(contact) },
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead) },
+    });
+
     const readService = service as unknown as {
-      getLead(params: { leadId: Types.ObjectId; organizationId: Types.ObjectId }): Promise<unknown>;
+      getLead(params: {
+        leadId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        ownerPositionId?: Types.ObjectId;
+      }): Promise<unknown>;
     };
 
     await expect(readService.getLead({ leadId, organizationId })).resolves.toEqual({
       id: leadId.toString(),
       organizationId: organizationId.toString(),
       ownerPositionId: null,
-      stage: 'qualified',
+      stage: 'new',
       version: 0,
       source: { route: '/developments/test' },
       createdAt: '2026-08-26T10:00:00.000Z',
-      contact: { id: contactId.toString(), name: 'Анна', phone: '+995555111111', email: undefined },
+      contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
     });
-    expect(findByIdForOrganization).toHaveBeenCalledWith(leadId, organizationId, undefined);
-    expect(findByIdForOrganizationContact).toHaveBeenCalledWith(contactId, organizationId);
+  });
 
-    findByIdForOrganization.mockResolvedValueOnce(null);
-    await expect(readService.getLead({ leadId, organizationId })).rejects.toBeInstanceOf(NotFoundException);
-    expect(findByIdForOrganizationContact).toHaveBeenCalledTimes(1);
+  it('бросает NotFoundException при чтении несуществующего лида', async () => {
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+    });
+
+    const readService = service as unknown as {
+      getLead(params: {
+        leadId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        ownerPositionId?: Types.ObjectId;
+      }): Promise<unknown>;
+    };
+
+    await expect(
+      readService.getLead({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

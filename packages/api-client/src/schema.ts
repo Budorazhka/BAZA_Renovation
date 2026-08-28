@@ -466,6 +466,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/listings/{slug}/reveal-contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Раскрытие контакта для листинга вторички/аренды — отдельная rate-limited команда, создаёт Lead и Contact в организации-владельце PropertyAsset (тот же паттерн, что /public/developments/{slug}/reveal-contact) */
+        post: operations["revealListingContact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1616,6 +1633,38 @@ export interface operations {
             };
             /** @description PUBLICATION_NOT_FOUND */
             404: components["responses"]["Error"];
+        };
+    };
+    revealListingContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealContactRequest"];
+            };
+        };
+        responses: {
+            /** @description Контакт раскрыт, Lead создан в организации-владельце листинга */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealContactResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — requesterPhone обязателен для создания лида */
+            400: components["responses"]["Error"];
+            /** @description PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом */
+            404: components["responses"]["Error"];
+            /** @description RATE_LIMITED */
+            429: components["responses"]["Error"];
         };
     };
 }
