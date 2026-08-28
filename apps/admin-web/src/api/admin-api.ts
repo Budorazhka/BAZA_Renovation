@@ -1,0 +1,129 @@
+import type {
+  AdminAccountList,
+  AdminMe,
+  AdminPublicationList,
+  AdminPublicationListQuery,
+  PermissionGrant,
+  PermissionScope,
+  UnpublishResult,
+} from '../types/admin'
+
+type Fetcher = typeof fetch
+
+/**
+ * error.code — стабильный ErrorCode с сервера (apps/api
+ * shared/errors/error-codes.ts), не HTTP-статус-текст — вызывающий код
+ * (useAdminAuth, экраны) различает 403 FORBIDDEN (нет активного
+ * AdminContext — веди на /login) от 403 ADMIN_SCOPE_INSUFFICIENT/
+ * SELF_ESCALATION_BLOCKED (вошёл, но нет прав — показывай отказ, не login).
+ */
+export class AdminApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string,
+  ) {
+    super(message)
+    this.name = 'AdminApiError'
+  }
+}
+
+function normalizedBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '')
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
+  if (!response.ok) {
+    let code = 'UNKNOWN_ERROR'
+    let message = 'Не удалось выполнить запрос. Попробуйте ещё раз.'
+    try {
+      const body = (await response.json()) as { error?: { code?: string; message?: string } }
+      if (body.error?.code) code = body.error.code
+      if (body.error?.message) message = body.error.message
+    } catch {
+      // Тело не JSON (например, сеть/прокси-ошибка вне контроля API) —
+      // остаёмся с generic-сообщением, не роняем UI на парсинге.
+    }
+    throw new AdminApiError(message, response.status, code)
+  }
+  if (response.status === 204) return undefined as T
+  return response.json() as Promise<T>
+}
+
+export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; fetcher?: Fetcher }) {
+  const apiBaseUrl = normalizedBaseUrl(baseUrl)
+
+  // credentials:'include' на каждый запрос — сессия admin-web живёт в
+  // httpOnly `baza_session` cookie, выставленной сервером на /auth/login
+  // (ADR-004 host-only cookie). Без этого браузер не отправит cookie на
+  // cross-origin запрос к API (dev: разные порты Vite/Nest).
+  async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await fetcher(`${apiBaseUrl}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    })
+    return parseResponse<T>(response)
+  }
+
+  return {
+    async login(params: { login: string; password: string }): Promise<{ identityId: string; requires2fa: boolean }> {
+      return request('/auth/login', { method: 'POST', body: JSON.stringify(params) })
+    },
+
+    async me(): Promise<AdminMe> {
+      return request('/admin/me')
+    },
+
+    async listPublications(query: AdminPublicationListQuery = {}): Promise<AdminPublicationList> {
+      const params = new URLSearchParams()
+      if (query.sourceType) params.set('sourceType', query.sourceType)
+      if (query.city?.trim()) params.set('city', query.city.trim())
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/publications${suffix}`)
+    },
+
+    async unpublish(publicationId: string, reason: string): Promise<UnpublishResult> {
+      return request(`/admin/publications/${encodeURIComponent(publicationId)}/unpublish`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async listAdminAccounts(params: { cursor?: string; limit?: number } = {}): Promise<AdminAccountList> {
+      const search = new URLSearchParams()
+      if (params.cursor) search.set('cursor', params.cursor)
+      if (params.limit) search.set('limit', String(params.limit))
+      const suffix = search.size > 0 ? `?${search.toString()}` : ''
+      return request(`/admin/accounts${suffix}`)
+    },
+
+    async createAdminAccount(params: { identityId: string; isSuperAdmin: boolean }): Promise<{
+      id: string
+      identityId: string
+      isSuperAdmin: boolean
+    }> {
+      return request('/admin/accounts', { method: 'POST', body: JSON.stringify(params) })
+    },
+
+    async grantPermission(
+      adminAccountId: string,
+      params: { resource: string; action: string; scope: PermissionScope; scopeValue?: string },
+    ): Promise<{ granted: true }> {
+      return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/grants`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      })
+    },
+
+    async listGrants(adminAccountId: string): Promise<{ items: PermissionGrant[] }> {
+      return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/grants`)
+    },
+  }
+}
+
+export const adminApi = createAdminApi({
+  baseUrl: import.meta.env.VITE_API_BASE_URL ?? '/api/v1',
+})
