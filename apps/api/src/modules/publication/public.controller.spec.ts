@@ -1,0 +1,87 @@
+import { Types } from 'mongoose';
+import type { MarketplacePublicationRepository } from '@baza/publication';
+import { PublicController } from './public.controller';
+import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
+
+/**
+ * D-04A: явный regression-тест на whitelist-границу toPublicCard. Требование
+ * пользователя (после review) — если denormalizedFields когда-либо (по
+ * ошибке worker-side mapper'а) содержит internal-поле, public HTTP response
+ * его не содержит НЕЗАВИСИМО от worker'а — это отдельная, вторая граница
+ * защиты, не просто развёртка уже "доверенной" структуры.
+ */
+describe('PublicController — whitelist границы public response', () => {
+  const LEAKED_FIELDS = ['organizationId', 'sourceId', 'version', 'contact', 'internalNotes', 'publisherScope', 'randomArbitraryField'];
+
+  function makeContaminatedPublication(overrides?: { slug?: string }) {
+    return {
+      _id: new Types.ObjectId(),
+      slug: overrides?.slug ?? 'zhk-test',
+      status: 'published' as const,
+      // Симулирует ошибку worker-side mapper'а — internal-поля случайно
+      // попали в denormalizedFields, которого по контракту быть не должно.
+      denormalizedFields: {
+        name: 'ЖК Тест',
+        location: { country: 'Georgia', city: 'Batumi', address: 'ул. Тестовая, 1' },
+        classType: 'business',
+        startDate: '2026-01-01',
+        completionDate: '2027-01-01',
+        description: 'Описание',
+        organizationId: new Types.ObjectId().toString(),
+        sourceId: new Types.ObjectId().toString(),
+        version: 3,
+        contact: { phone: '+995500000000', whatsapp: '+995500000001' },
+        internalNotes: 'Секретная заметка для менеджера, не для публики',
+        publisherScope: { type: 'organization', organizationId: new Types.ObjectId().toString() },
+        randomArbitraryField: 'что угодно, чего worker не должен был класть',
+      },
+      seo: { title: 'ЖК Тест', description: 'Описание', canonicalUrl: '/developments/zhk-test', structuredData: {} },
+    };
+  }
+
+  function assertNoLeakedFields(body: Record<string, unknown>) {
+    for (const field of LEAKED_FIELDS) {
+      expect(body).not.toHaveProperty(field);
+    }
+  }
+
+  function makeController(listPublishedResult: unknown[], findBySlugResult: unknown) {
+    const repository = {
+      listPublished: jest.fn().mockResolvedValue(listPublishedResult),
+      findBySlug: jest.fn().mockResolvedValue(findBySlugResult),
+    } as unknown as MarketplacePublicationRepository;
+    return new PublicController(repository);
+  }
+
+  describe('GET /public/developments (list)', () => {
+    it('загрязнённый denormalizedFields не протекает в список — только whitelist-поля', async () => {
+      const contaminated = makeContaminatedPublication();
+      const controller = makeController([contaminated], null);
+      const query = Object.assign(new SearchPublicDevelopmentsQueryDto(), { limit: 20 });
+
+      const result = await controller.searchPublicDevelopments(query);
+
+      expect(result.items).toHaveLength(1);
+      assertNoLeakedFields(result.items[0] as Record<string, unknown>);
+      // Whitelist-поля при этом реально присутствуют — не пустой объект.
+      expect(result.items[0]).toMatchObject({
+        slug: 'zhk-test',
+        name: 'ЖК Тест',
+        location: { country: 'Georgia', city: 'Batumi', address: 'ул. Тестовая, 1' },
+        classType: 'business',
+      });
+    });
+  });
+
+  describe('GET /public/developments/:slug (detail)', () => {
+    it('загрязнённый denormalizedFields не протекает в detail — только whitelist-поля', async () => {
+      const contaminated = makeContaminatedPublication();
+      const controller = makeController([], contaminated);
+
+      const result = (await controller.getPublicDevelopment('zhk-test')) as Record<string, unknown>;
+
+      assertNoLeakedFields(result);
+      expect(result).toMatchObject({ slug: 'zhk-test', name: 'ЖК Тест' });
+    });
+  });
+});

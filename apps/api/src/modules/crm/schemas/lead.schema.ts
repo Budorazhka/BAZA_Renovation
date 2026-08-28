@@ -65,6 +65,18 @@ export class LeadDocument extends Document {
   @Prop({ required: true, enum: LEAD_STAGES, default: 'new' })
   stage!: LeadStage;
 
+  /**
+   * conventions.md разд.5 — optimistic concurrency (409 VERSION_CONFLICT),
+   * тот же паттерн, что UnitDocument.version. Добавлено 27.08.2026 — до
+   * этого changeStage делал безусловный updateOne({_id,organizationId}),
+   * два параллельных PATCH .../stage оба проходили stage-transition-проверку
+   * против одного и того же прочитанного состояния и оба безусловно
+   * записывали (lost update, "последний write выигрывает" без сигнала
+   * конфликта ни одному из вызывающих).
+   */
+  @Prop({ required: true, default: 0 })
+  version!: number;
+
   declare createdAt: Date;
 }
 

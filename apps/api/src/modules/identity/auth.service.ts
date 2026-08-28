@@ -1,5 +1,5 @@
 import { ConflictException, Injectable } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import * as argon2 from 'argon2';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
@@ -8,6 +8,7 @@ import { ProductAccessRepository } from './repository/product-access.repository'
 import { SessionService } from './session.service';
 import type { ProductAudience } from './schemas/session.schema';
 import type { ProductAccessProduct } from './schemas/product-access.schema';
+import type { IdentityDocument } from './schemas/identity.schema';
 
 /**
  * OpenAPI `/auth/login` + ADR-004. Единый auth-модуль для всех трёх
@@ -31,14 +32,17 @@ export class AuthService {
    * нет доступа к этому продукту" — та же non-disclosure логика, что уже
    * применяется к cross-tenant существованию в error-catalog.md).
    */
-  async login(params: {
-    login: string;
-    password: string;
-    audience: ProductAudience;
-    ipAddress?: string;
-    userAgent?: string;
-  }): Promise<{ identityId: Types.ObjectId; requires2fa: boolean; sessionToken: string; sessionExpiresAt: Date }> {
-    const normalizedLogin = params.login.trim().toLowerCase();
+  /**
+   * Общий префикс login()/registerOrganizationOwner (OrganizationsService):
+   * найти активную Identity по логину и проверить пароль — БЕЗ проверки
+   * ProductAccess/2FA/audience (та часть специфична каждому вызывающему
+   * flow). Вынесено отдельно 27.08.2026 — organizations.controller
+   * онбординг для нового пользователя должен повторно подтвердить владение
+   * Identity (между /auth/register и созданием организации сессии ещё нет),
+   * не дублируя anti-enumeration логику login() второй раз.
+   */
+  private async verifyCredentials(login: string, password: string): Promise<IdentityDocument> {
+    const normalizedLogin = login.trim().toLowerCase();
     const identity = await this.identityRepository.findByNormalizedLoginWithPasswordHash(normalizedLogin);
 
     if (!identity || identity.status !== 'active' || !identity.passwordHash) {
@@ -52,10 +56,36 @@ export class AuthService {
       throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS, 'Invalid login or password');
     }
 
-    const passwordValid = await argon2.verify(identity.passwordHash, params.password);
+    const passwordValid = await argon2.verify(identity.passwordHash, password);
     if (!passwordValid) {
       throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS, 'Invalid login or password');
     }
+
+    return identity;
+  }
+
+  /**
+   * OrganizationsController онбординг (новая identity ещё без организации):
+   * подтверждает владение Identity паролем и возвращает identityId — сам
+   * flow создания организации+owner+ProductAccess+сессии реализован в
+   * OrganizationsService.registerOrganizationOwner (composite-команда,
+   * ADR-001 модульная граница — Organizations-модуль не должен напрямую
+   * трогать identityRepository/argon2, тот же принцип, что уже применён к
+   * findByIds/grantErpAccess).
+   */
+  async verifyCredentialsForOnboarding(login: string, password: string): Promise<Types.ObjectId> {
+    const identity = await this.verifyCredentials(login, password);
+    return identity._id;
+  }
+
+  async login(params: {
+    login: string;
+    password: string;
+    audience: ProductAudience;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<{ identityId: Types.ObjectId; requires2fa: boolean; sessionToken: string; sessionExpiresAt: Date }> {
+    const identity = await this.verifyCredentials(params.login, params.password);
 
     if (params.audience !== 'marketplace') {
       const hasAccess = await this.productAccessRepository.hasActiveAccess(
@@ -137,6 +167,16 @@ export class AuthService {
    */
   async grantErpAccess(identityId: Types.ObjectId): Promise<void> {
     await this.productAccessRepository.grantIfNotActive(identityId, 'erp');
+  }
+
+  /**
+   * ADR-004: Admin — отдельный product audience, поэтому AdminAccount сам
+   * по себе недостаточен для входа. Вызывается только из
+   * AdminAccountService внутри его транзакции: account + ProductAccess +
+   * audit должны коммититься либо откатываться вместе.
+   */
+  async grantAdminAccess(identityId: Types.ObjectId, session: ClientSession): Promise<void> {
+    await this.productAccessRepository.grantIfNotActive(identityId, 'admin', session);
   }
 
   /**

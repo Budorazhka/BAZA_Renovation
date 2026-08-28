@@ -109,6 +109,74 @@ describe('PolicyEvaluatorService', () => {
   });
 });
 
+describe('PolicyEvaluatorService.resolveListScope', () => {
+  function makeEvaluator(grants: PermissionGrantDocument[]): PolicyEvaluatorService {
+    const mockRepository = { findForSubject: jest.fn().mockResolvedValue(grants) } as unknown as PermissionGrantRepository;
+    return new PolicyEvaluatorService(mockRepository);
+  }
+
+  it('deny-by-default: subject без единого гранта — global:false, scopeValues:[]', async () => {
+    const evaluator = makeEvaluator([]);
+    const result = await evaluator.resolveListScope({
+      subjectType: 'admin_account',
+      subjectId: new Types.ObjectId(),
+      resource: 'development',
+      action: 'read',
+    });
+    expect(result).toEqual({ global: false, scopeValues: [] });
+  });
+
+  it('grant на другой resource/action не попадает в результат', async () => {
+    const evaluator = makeEvaluator([
+      makeGrant({ resource: 'unit', action: 'read', scope: 'global' }),
+      makeGrant({ resource: 'development', action: 'unpublish', scope: 'global' }),
+    ]);
+    const result = await evaluator.resolveListScope({
+      subjectType: 'admin_account',
+      subjectId: new Types.ObjectId(),
+      resource: 'development',
+      action: 'read',
+    });
+    expect(result).toEqual({ global: false, scopeValues: [] });
+  });
+
+  it('scope:global grant → global:true', async () => {
+    const evaluator = makeEvaluator([makeGrant({ resource: 'development', action: 'read', scope: 'global' })]);
+    const result = await evaluator.resolveListScope({
+      subjectType: 'admin_account',
+      subjectId: new Types.ObjectId(),
+      resource: 'development',
+      action: 'read',
+    });
+    expect(result).toEqual({ global: true, scopeValues: [] });
+  });
+
+  it('несколько scope:city grants на один resource+action агрегируются в scopeValues[]', async () => {
+    const evaluator = makeEvaluator([
+      makeGrant({ resource: 'development', action: 'read', scope: 'city', scopeValue: 'batumi' }),
+      makeGrant({ resource: 'development', action: 'read', scope: 'city', scopeValue: 'tbilisi' }),
+    ]);
+    const result = await evaluator.resolveListScope({
+      subjectType: 'admin_account',
+      subjectId: new Types.ObjectId(),
+      resource: 'development',
+      action: 'read',
+    });
+    expect(result).toEqual({ global: false, scopeValues: ['batumi', 'tbilisi'] });
+  });
+
+  it('scope:organization/own/team не попадает в scopeValues (только city агрегируется здесь)', async () => {
+    const evaluator = makeEvaluator([makeGrant({ resource: 'development', action: 'read', scope: 'organization' })]);
+    const result = await evaluator.resolveListScope({
+      subjectType: 'admin_account',
+      subjectId: new Types.ObjectId(),
+      resource: 'development',
+      action: 'read',
+    });
+    expect(result).toEqual({ global: false, scopeValues: [] });
+  });
+});
+
 describe('PolicyEvaluatorService.grant', () => {
   /**
    * Единственная точка ЗАПИСИ PermissionGrant для внешних модулей

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import type { AdminContext } from '../../shared/admin/admin-context';
@@ -8,6 +9,8 @@ import { PolicyEvaluatorService } from '../authorization/policy-evaluator.servic
 import { AuditService } from '../audit/audit.service';
 import type { PermissionScope } from '../authorization/schemas/permission-grant.schema';
 import type { AdminAccountDocument } from './schemas/admin-account.schema';
+import { AuthService } from '../identity/auth.service';
+import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 
 /**
  * ADR-009: "Только super_admin создаёт AdminAccount и настраивает доступы"
@@ -22,41 +25,43 @@ import type { AdminAccountDocument } from './schemas/admin-account.schema';
 @Injectable()
 export class AdminAccountService {
   constructor(
+    @InjectConnection() private readonly connection: Connection,
     private readonly adminAccountRepository: AdminAccountRepository,
     private readonly policyEvaluator: PolicyEvaluatorService,
     private readonly auditService: AuditService,
+    private readonly authService: AuthService,
   ) {}
 
   /**
-   * audit-запись (ДОБАВЛЕНО 26.08.2026, honest gap закрыт — d06-admin-
-   * operation.md "изменения статуса/прав/блокировок" явно в scope audit-
-   * требования, permission-matrix.md разд.4). Без session — этот метод не
-   * многодокументная транзакция (единственная запись через repository.create),
-   * тот же паттерн, что AuditService.append допускает для некритичных/
-   * нетранзакционных путей; создание AdminAccount само по себе — critical
-   * action по духу раздела 4 (управление доступами), но не требует
-   * multi-document атомарности с audit здесь.
+   * Account, ProductAccess('admin') и audit — одна critical-операция. Без
+   * общей транзакции можно было бы создать AdminAccount, который физически
+   * не может войти в Admin (AuthService.login требует ProductAccess), либо
+   * выдать доступ без audit-записи.
    */
   async createAdminAccount(
     requestedBy: AdminContext,
     params: { identityId: Types.ObjectId; isSuperAdmin: boolean; correlationId: string },
   ): Promise<AdminAccountDocument> {
     this.requireSuperAdmin(requestedBy);
-    const account = await this.adminAccountRepository.create({
-      identityId: params.identityId,
-      isSuperAdmin: params.isSuperAdmin,
+    return runInTransaction(this.connection, async (session) => {
+      const account = await this.adminAccountRepository.create(
+        { identityId: params.identityId, isSuperAdmin: params.isSuperAdmin },
+        session,
+      );
+      await this.authService.grantAdminAccess(params.identityId, session);
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: new Types.ObjectId(requestedBy.adminAccountId) },
+          action: 'admin_account.create',
+          resource: 'admin_account',
+          resourceId: account._id,
+          after: { identityId: params.identityId.toString(), isSuperAdmin: params.isSuperAdmin },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+      return account;
     });
-
-    await this.auditService.append({
-      actor: { type: 'admin_account', id: new Types.ObjectId(requestedBy.adminAccountId) },
-      action: 'admin_account.create',
-      resource: 'admin_account',
-      resourceId: account._id,
-      after: { identityId: params.identityId.toString(), isSuperAdmin: params.isSuperAdmin },
-      correlationId: params.correlationId,
-    });
-
-    return account;
   }
 
   /**

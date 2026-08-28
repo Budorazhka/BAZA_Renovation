@@ -248,6 +248,60 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
       const outboxCount = await connection.collection('outbox_events').countDocuments({ aggregateId: unit._id });
       expect(outboxCount).toBe(1);
     });
+
+    /**
+     * D-02 COMPLETE: прямая проверка tenant isolation против реальной БД
+     * для команды над Unit — тот же принцип, что уже проверен для
+     * updateDevelopment ниже ("НЕ обновляет Development другой
+     * организации") и media-confirm-upload.integration-spec.ts.
+     */
+    it('НЕ меняет цену Unit другой организации (реальная БД-проверка organizationId)', async () => {
+      const actualOwnerOrgId = new Types.ObjectId();
+      const attackerOrgId = new Types.ObjectId();
+      const { unit } = await seedUnit(actualOwnerOrgId);
+
+      await expect(
+        developmentsService.updateUnitPrice({
+          unitId: unit._id,
+          organizationId: attackerOrgId,
+          expectedVersion: 0,
+          price: { amountMinorUnits: 1, currency: 'USD' },
+          actorIdentityId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toThrow();
+
+      const unitDoc = await connection.collection('units').findOne({ _id: unit._id });
+      expect(unitDoc?.price).toMatchObject({ amountMinorUnits: 10000000, currency: 'USD' });
+      expect(unitDoc?.version).toBe(0);
+
+      const auditCount = await connection.collection('audit_events').countDocuments({ resourceId: unit._id });
+      expect(auditCount).toBe(0);
+    });
+  });
+
+  describe('updateUnitStatus', () => {
+    it('НЕ меняет статус Unit другой организации (реальная БД-проверка organizationId)', async () => {
+      const actualOwnerOrgId = new Types.ObjectId();
+      const attackerOrgId = new Types.ObjectId();
+      const { unit } = await seedUnit(actualOwnerOrgId);
+
+      await expect(
+        developmentsService.updateUnitStatus({
+          unitId: unit._id,
+          organizationId: attackerOrgId,
+          expectedVersion: 0,
+          status: 'reserved',
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toThrow();
+
+      const unitDoc = await connection.collection('units').findOne({ _id: unit._id });
+      expect(unitDoc?.status).toBe('available');
+      expect(unitDoc?.version).toBe(0);
+    });
   });
 
   describe('updateDevelopment', () => {

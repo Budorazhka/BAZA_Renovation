@@ -93,4 +93,45 @@ describe('UnitRepository', () => {
       );
     });
   });
+
+  describe('listForBuilding', () => {
+    /**
+     * Регрессия на IDOR: старая сигнатура listForBuilding(buildingId, filter)
+     * не принимала organizationId вообще — units чужой организации с
+     * подходящим buildingId были бы возвращены. organizationId теперь часть
+     * самого Mongo-фильтра, не post-fetch проверка.
+     */
+    it('фильтр включает organizationId, buildingId и опциональные kind/status', async () => {
+      const buildingId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new UnitRepository(mockModel as never);
+      await repository.listForBuilding(buildingId, organizationId, { kind: 'apartment', status: 'available', limit: 100 });
+
+      expect(findSpy).toHaveBeenCalledWith({ buildingId, organizationId, kind: 'apartment', status: 'available' });
+      expect(sortSpy).toHaveBeenCalledWith({ _id: 1 });
+      expect(limitSpy).toHaveBeenCalledWith(100);
+    });
+
+    it('без kind/status фильтрует только по buildingId+organizationId', async () => {
+      const buildingId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new UnitRepository(mockModel as never);
+      await repository.listForBuilding(buildingId, organizationId, { limit: 50 });
+
+      expect(findSpy).toHaveBeenCalledWith({ buildingId, organizationId });
+      expect(limitSpy).toHaveBeenCalledWith(50);
+    });
+  });
 });

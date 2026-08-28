@@ -5,6 +5,14 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import type { AdminContext } from '../../shared/admin/admin-context';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 
+/** ADR-005: MarketplacePublication generic по трём sourceType. */
+type PublicationSourceType = 'unit' | 'development' | 'listing';
+
+export interface PublicationReadScope {
+  global: boolean;
+  cities: string[];
+}
+
 /**
  * `[technical decision — 25.08.2026]`, не owner decision: PermissionGuard
  * (authorization/permission.guard.ts) проверяет статичный resource+action,
@@ -75,5 +83,41 @@ export class AdminPolicyService {
     if (!reason || reason.trim().length < 10) {
       throw new AppException(ErrorCode.ADMIN_REASON_REQUIRED, 'Reason обязателен и должен содержать не менее 10 символов');
     }
+  }
+
+  /**
+   * D-06: "Admin может найти publication только в разрешённом scope"
+   * (мастер-план) — агрегирует read-grants admin'а по КАЖДОМУ из трёх
+   * sourceType (resource=sourceType, тот же принцип резолвинга, что
+   * unpublish уже использует), не по одному запрошенному. super_admin —
+   * bypass, тот же принцип, что requireGrant. Возвращает 'all' вместо Map,
+   * когда ограничений нет вообще — вызывающий код (buildPublicationScopeFilter)
+   * не обязан отличать "супер-админ" от "обычный админ с global-грантом на
+   * все три sourceType", но 'all' короче и не требует трёх evaluate-вызовов
+   * для самого частого случая (super_admin).
+   */
+  async resolvePublicationReadScope(
+    adminContext: AdminContext,
+  ): Promise<Map<PublicationSourceType, PublicationReadScope> | 'all'> {
+    if (adminContext.isSuperAdmin) {
+      return 'all';
+    }
+
+    const sourceTypes: PublicationSourceType[] = ['development', 'unit', 'listing'];
+    const result = new Map<PublicationSourceType, PublicationReadScope>();
+
+    for (const sourceType of sourceTypes) {
+      const scope = await this.policyEvaluator.resolveListScope({
+        subjectType: 'admin_account',
+        subjectId: new Types.ObjectId(adminContext.adminAccountId),
+        resource: sourceType,
+        action: 'read',
+      });
+      if (scope.global || scope.scopeValues.length > 0) {
+        result.set(sourceType, { global: scope.global, cities: scope.scopeValues });
+      }
+    }
+
+    return result;
   }
 }

@@ -42,11 +42,19 @@ export class UnitRepository {
     return this.model.findOne({ _id: id, organizationId }).exec();
   }
 
+  /**
+   * organizationId — часть фильтра, не post-fetch проверка: тот же принцип,
+   * что DevelopmentRepository.listForOrganization. limit обязателен (не
+   * имеет собственного дефолта на этом уровне) — вычисляется в
+   * ListUnitsQueryDto, единственный источник истины про дефолт/максимум.
+   */
   async listForBuilding(
     buildingId: Types.ObjectId,
-    filter: { kind?: UnitKind; status?: UnitStatus } = {},
+    organizationId: Types.ObjectId,
+    filter: { kind?: UnitKind; status?: UnitStatus; limit: number },
   ): Promise<UnitDocument[]> {
-    return this.model.find({ buildingId, ...filter }).sort({ _id: 1 }).exec();
+    const { limit, ...rest } = filter;
+    return this.model.find({ buildingId, organizationId, ...rest }).sort({ _id: 1 }).limit(limit).exec();
   }
 
   /**

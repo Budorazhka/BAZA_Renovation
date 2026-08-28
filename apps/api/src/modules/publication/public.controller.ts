@@ -1,9 +1,8 @@
 import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
-
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 100;
+import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
+import { parseBboxOrThrow } from './dto/parse-bbox';
 
 /**
  * D-04/OpenAPI v1-first-vertical-slice.yaml: публичные marketplace
@@ -23,26 +22,28 @@ export class PublicController {
   constructor(private readonly publicationRepository: MarketplacePublicationRepository) {}
 
   @Get()
-  async searchPublicDevelopments(
-    @Query('cursor') cursor?: string,
-    @Query('limit') limitParam?: string,
-    @Query('city') city?: string,
-    @Query('bbox') bboxParam?: string,
-  ) {
-    const limit = Math.min(limitParam ? Number(limitParam) : DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
-    const bbox = bboxParam ? parseBbox(bboxParam) : undefined;
+  async searchPublicDevelopments(@Query() query: SearchPublicDevelopmentsQueryDto) {
+    // bbox уже провалидирован ValidationPipe (IsBboxConstraint) на входе в
+    // метод — parseBboxOrThrow безопасно вызывать без повторной проверки.
+    const bbox = query.bbox ? parseBboxOrThrow(query.bbox) : undefined;
 
+    // limit+1 паттерн: если пришло limit+1 записей — есть следующая
+    // страница, обрезаем лишнюю и её _id становится nextCursor. Раньше
+    // (items.length === limit) было двусмысленно — тот же результат давал
+    // "есть следующая страница", даже когда реальных оставшихся записей
+    // ровно limit (следующий запрос вернул бы пустую страницу впустую).
     const items = await this.publicationRepository.listPublished({
-      cursor: cursor ? new Types.ObjectId(cursor) : undefined,
-      limit,
-      city,
+      cursor: query.cursor ? new Types.ObjectId(query.cursor) : undefined,
+      limit: query.limit + 1,
+      city: query.city,
       bbox,
     });
-
-    const nextCursor = items.length === limit ? items[items.length - 1]!._id.toString() : null;
+    const hasMore = items.length > query.limit;
+    const pageItems = hasMore ? items.slice(0, query.limit) : items;
+    const nextCursor = hasMore ? pageItems[pageItems.length - 1]!._id.toString() : null;
 
     return {
-      items: items.map(toPublicCard),
+      items: pageItems.map(toPublicCard),
       nextCursor,
     };
   }
@@ -57,32 +58,47 @@ export class PublicController {
   }
 }
 
+interface PublicLocation {
+  country?: unknown;
+  city?: unknown;
+  address?: unknown;
+}
+
 /**
- * ADR-005: только whitelist-поля, никогда внутренние комиссии/notes/
- * tenant-only контакты — но здесь МАППЕР УЖЕ ПРИМЕНЁН worker'ом на этапе
- * сборки денормализованной проекции (denormalizedFields содержит только
- * то, что worker явно туда положил через свой whitelist mapper), эта
- * функция просто разворачивает уже безопасную структуру документа
- * MarketplacePublication в HTTP response форму, не решает заново, что
- * публично, а что нет.
+ * Public API — ОТДЕЛЬНАЯ граница безопасности от worker'а, не просто
+ * развёртка уже собранного worker'ом denormalizedFields. Раньше здесь стоял
+ * `...publication.denormalizedFields` — это доверяло worker'у как
+ * единственной линии защиты: если бы worker когда-либо по ошибке положил
+ * туда internal-поле (organizationId, sourceId, version, contact,
+ * internalNotes — что угодно), HTTP-эндпоинт немедленно отдал бы его любому
+ * анонимному запросу, ничего в этом файле не заметило бы утечку. Явный
+ * whitelist здесь — второй, независимый рубеж (defense-in-depth): даже если
+ * worker-side mapper (development-publication.mapper.ts) когда-нибудь
+ * сломается, эта функция физически не может пропустить поле, которого нет в
+ * её собственном перечислении ниже.
+ *
+ * Список полей — ровно то, что сейчас кладёт worker
+ * (mapDevelopmentToDenormalizedFields): name/location/classType/startDate/
+ * completionDate/description. Расширение публичного набора требует явной
+ * правки ОБЕИХ границ (worker mapper И этой функции), не может произойти
+ * случайно через spread.
  */
 function toPublicCard(publication: {
   slug?: string;
   denormalizedFields: Record<string, unknown>;
   seo?: { title: string; description: string; canonicalUrl: string; structuredData: Record<string, unknown> };
 }) {
+  const fields = publication.denormalizedFields;
+  const location = fields.location as PublicLocation | undefined;
+
   return {
     slug: publication.slug,
-    ...publication.denormalizedFields,
+    name: fields.name,
+    location: location ? { country: location.country, city: location.city, address: location.address } : undefined,
+    classType: fields.classType,
+    startDate: fields.startDate,
+    completionDate: fields.completionDate,
+    description: fields.description,
     seo: publication.seo,
   };
-}
-
-function parseBbox(raw: string): { minLng: number; minLat: number; maxLng: number; maxLat: number } | undefined {
-  const parts = raw.split(',').map(Number);
-  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
-    return undefined;
-  }
-  const [minLng, minLat, maxLng, maxLat] = parts as [number, number, number, number];
-  return { minLng, minLat, maxLng, maxLat };
 }

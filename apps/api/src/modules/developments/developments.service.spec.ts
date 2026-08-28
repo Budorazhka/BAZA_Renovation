@@ -10,6 +10,7 @@ import type { UnitRepository } from './repository/unit.repository';
 import type { AuditService } from '../audit/audit.service';
 import type { OutboxService } from '../outbox/outbox.service';
 import type { PublicationService } from '../publication/publication.service';
+import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
 
@@ -32,6 +33,7 @@ function makeService(overrides: {
   auditService?: Partial<AuditService>;
   outboxService?: Partial<OutboxService>;
   publicationService?: Partial<PublicationService>;
+  publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   organizationsService?: Partial<OrganizationsService>;
 } = {}) {
@@ -46,6 +48,7 @@ function makeService(overrides: {
     (overrides.auditService ?? { append: jest.fn().mockResolvedValue(undefined) }) as AuditService,
     (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as OutboxService,
     (overrides.publicationService ?? {}) as PublicationService,
+    (overrides.publicationRepository ?? {}) as MarketplacePublicationRepository,
     (overrides.idempotencyService ??
       { record: jest.fn().mockResolvedValue(undefined), checkReplay: jest.fn().mockResolvedValue(null) }) as IdempotencyService,
     // Дефолт — organization.type:'developer', чтобы существующие тесты
@@ -1019,5 +1022,279 @@ describe('DevelopmentsService.publishDevelopment', () => {
         correlationId: 'test-correlation-id',
       }),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+});
+
+describe('DevelopmentsService — read hierarchy tenant isolation', () => {
+  it('listBuildingsForDevelopment отклоняет, если development не найден в организации', async () => {
+    const listForDevelopmentSpy = jest.fn();
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      buildingRepository: { listForDevelopment: listForDevelopmentSpy },
+    });
+
+    await expect(
+      service.listBuildingsForDevelopment(new Types.ObjectId(), new Types.ObjectId()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(listForDevelopmentSpy).not.toHaveBeenCalled();
+  });
+
+  it('listBuildingsForDevelopment делегирует в buildingRepository.listForDevelopment с organizationId', async () => {
+    const developmentId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const buildings = [{ _id: new Types.ObjectId() }];
+    const listForDevelopmentSpy = jest.fn().mockResolvedValue(buildings);
+
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+      buildingRepository: { listForDevelopment: listForDevelopmentSpy },
+    });
+
+    const result = await service.listBuildingsForDevelopment(developmentId, organizationId);
+
+    expect(listForDevelopmentSpy).toHaveBeenCalledWith(developmentId, organizationId);
+    expect(result).toBe(buildings);
+  });
+
+  it('listSectionsForBuilding отклоняет, если building не найден в организации', async () => {
+    const listForBuildingSpy = jest.fn();
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      sectionRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    await expect(
+      service.listSectionsForBuilding(new Types.ObjectId(), new Types.ObjectId()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(listForBuildingSpy).not.toHaveBeenCalled();
+  });
+
+  it('listSectionsForBuilding делегирует в sectionRepository.listForBuilding с organizationId', async () => {
+    const buildingId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const sections = [{ _id: new Types.ObjectId() }];
+    const listForBuildingSpy = jest.fn().mockResolvedValue(sections);
+
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: buildingId }) },
+      sectionRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    const result = await service.listSectionsForBuilding(buildingId, organizationId);
+
+    expect(listForBuildingSpy).toHaveBeenCalledWith(buildingId, organizationId);
+    expect(result).toBe(sections);
+  });
+
+  it('listFloorsForBuilding отклоняет, если building не найден в организации', async () => {
+    const listForBuildingSpy = jest.fn();
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      floorRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    await expect(
+      service.listFloorsForBuilding(new Types.ObjectId(), new Types.ObjectId()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(listForBuildingSpy).not.toHaveBeenCalled();
+  });
+
+  it('listFloorsForBuilding делегирует в floorRepository.listForBuilding с organizationId', async () => {
+    const buildingId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const floors = [{ _id: new Types.ObjectId() }];
+    const listForBuildingSpy = jest.fn().mockResolvedValue(floors);
+
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: buildingId }) },
+      floorRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    const result = await service.listFloorsForBuilding(buildingId, organizationId);
+
+    expect(listForBuildingSpy).toHaveBeenCalledWith(buildingId, organizationId);
+    expect(result).toBe(floors);
+  });
+
+  it('listFloorPlansForBuilding отклоняет, если building не найден в организации', async () => {
+    const listForBuildingSpy = jest.fn();
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      floorPlanRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    await expect(
+      service.listFloorPlansForBuilding(new Types.ObjectId(), new Types.ObjectId()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(listForBuildingSpy).not.toHaveBeenCalled();
+  });
+
+  it('listFloorPlansForBuilding делегирует в floorPlanRepository.listForBuilding с organizationId', async () => {
+    const buildingId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const floorPlans = [{ _id: new Types.ObjectId() }];
+    const listForBuildingSpy = jest.fn().mockResolvedValue(floorPlans);
+
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: buildingId }) },
+      floorPlanRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    const result = await service.listFloorPlansForBuilding(buildingId, organizationId);
+
+    expect(listForBuildingSpy).toHaveBeenCalledWith(buildingId, organizationId);
+    expect(result).toBe(floorPlans);
+  });
+
+  it('listUnitsForBuilding отклоняет, если building не найден в организации', async () => {
+    const listForBuildingSpy = jest.fn();
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      unitRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    await expect(
+      service.listUnitsForBuilding(new Types.ObjectId(), new Types.ObjectId(), { limit: 100 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(listForBuildingSpy).not.toHaveBeenCalled();
+  });
+
+  it('listUnitsForBuilding делегирует в unitRepository.listForBuilding с organizationId и фильтром', async () => {
+    const buildingId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const units = [{ _id: new Types.ObjectId() }];
+    const listForBuildingSpy = jest.fn().mockResolvedValue(units);
+
+    const service = makeService({
+      buildingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: buildingId }) },
+      unitRepository: { listForBuilding: listForBuildingSpy },
+    });
+
+    const filter = { kind: 'apartment' as const, status: 'available' as const, limit: 50 };
+    const result = await service.listUnitsForBuilding(buildingId, organizationId, filter);
+
+    expect(listForBuildingSpy).toHaveBeenCalledWith(buildingId, organizationId, filter);
+    expect(result).toBe(units);
+  });
+});
+
+describe('DevelopmentsService.getPublicationStatus', () => {
+  it('отклоняет, если development не найден в организации (единый 404, не раскрывает существование чужого)', async () => {
+    const findBySourceSpy = jest.fn();
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      publicationRepository: { findBySource: findBySourceSpy },
+    });
+
+    await expect(
+      service.getPublicationStatus(new Types.ObjectId(), new Types.ObjectId()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(findBySourceSpy).not.toHaveBeenCalled();
+  });
+
+  it('отклоняет с PUBLICATION_NOT_FOUND, если Development существует, но публикация никогда не запускалась (всё ещё draft)', async () => {
+    const developmentId = new Types.ObjectId();
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+      publicationRepository: { findBySource: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.getPublicationStatus(developmentId, new Types.ObjectId()),
+    ).rejects.toMatchObject({ code: 'PUBLICATION_NOT_FOUND' });
+  });
+
+  it('делегирует в publicationRepository.findBySource с sourceType:development и developmentId', async () => {
+    const developmentId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const findBySourceSpy = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId(),
+      status: 'publication_pending',
+      version: 1,
+    });
+
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+      publicationRepository: { findBySource: findBySourceSpy },
+    });
+
+    await service.getPublicationStatus(developmentId, organizationId);
+
+    expect(findBySourceSpy).toHaveBeenCalledWith('development', developmentId);
+  });
+
+  it('возвращает узкий whitelist-объект без внутренних полей публикации (не весь документ)', async () => {
+    const publicationId = new Types.ObjectId();
+    const publishedAt = new Date('2026-08-27T00:00:00.000Z');
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      publicationRepository: {
+        findBySource: jest.fn().mockResolvedValue({
+          _id: publicationId,
+          status: 'published',
+          slug: 'malibu-residence-batumi',
+          version: 2,
+          publishedAt,
+          // Внутренние поля реального документа — НЕ должны попасть в ответ.
+          organizationId: new Types.ObjectId(),
+          publisherScope: { type: 'organization', organizationId: new Types.ObjectId() },
+          sourceId: new Types.ObjectId(),
+          searchProjection: { city: 'Batumi' },
+          denormalizedFields: { name: 'Malibu Residence' },
+        }),
+      },
+    });
+
+    const result = await service.getPublicationStatus(new Types.ObjectId(), new Types.ObjectId());
+
+    expect(result).toEqual({
+      publicationId: publicationId.toString(),
+      status: 'published',
+      slug: 'malibu-residence-batumi',
+      version: 2,
+      publishedAt: publishedAt.toISOString(),
+      unpublishedAt: undefined,
+      buildError: undefined,
+    });
+  });
+
+  it('status:build_failed возвращает константный безопасный buildError текст (не реальную причину сборки)', async () => {
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      publicationRepository: {
+        findBySource: jest.fn().mockResolvedValue({
+          _id: new Types.ObjectId(),
+          status: 'build_failed',
+          version: 1,
+        }),
+      },
+    });
+
+    const result = await service.getPublicationStatus(new Types.ObjectId(), new Types.ObjectId());
+
+    expect(result.buildError).toBe('Не удалось опубликовать. Обратитесь в поддержку.');
+  });
+
+  it('status !== build_failed НЕ включает buildError', async () => {
+    const service = makeService({
+      developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      publicationRepository: {
+        findBySource: jest.fn().mockResolvedValue({
+          _id: new Types.ObjectId(),
+          status: 'publication_pending',
+          version: 0,
+        }),
+      },
+    });
+
+    const result = await service.getPublicationStatus(new Types.ObjectId(), new Types.ObjectId());
+
+    expect(result.buildError).toBeUndefined();
   });
 });

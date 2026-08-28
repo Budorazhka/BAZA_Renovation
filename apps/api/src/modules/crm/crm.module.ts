@@ -17,6 +17,7 @@ import { CrmController } from './crm.controller';
 import { LeadController } from './lead.controller';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AuthorizationModule } from '../authorization/authorization.module';
     ]),
     AuditModule,
     AuthorizationModule,
+    OrganizationsModule,
   ],
   controllers: [CrmController, LeadController],
   providers: [

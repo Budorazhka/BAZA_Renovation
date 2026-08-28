@@ -100,6 +100,85 @@ describe('IdempotencyService.checkReplay', () => {
   });
 });
 
+/**
+ * MKT-002-IDEMP-RACE-001: awaitReplay — bounded-retry поверх checkReplay,
+ * закрывает окно между "наш CAS проиграл" и "соперник с тем же ключом ещё
+ * не закоммитил свою запись". Юнит-тесты бьют реальный setTimeout с
+ * минимальным delayMs, не мокают таймер — интервалы малы (см. дефолт в
+ * сервисе), полный набор укладывается в единицы миллисекунд без fake timers.
+ */
+describe('IdempotencyService.awaitReplay', () => {
+  it('запись появляется сразу — возвращает replay с первой попытки, без лишних вызовов', async () => {
+    const requestBody = { listingId: 'l-1' };
+    const { createHash } = await import('node:crypto');
+    const matchingHash = createHash('sha256').update(JSON.stringify(requestBody)).digest('hex');
+    const findByKeySpy = jest.fn().mockResolvedValue({
+      requestHash: matchingHash,
+      responseStatus: 202,
+      responseBody: { id: 'pub-1' },
+    });
+    const service = new IdempotencyService({ findByKey: findByKeySpy } as unknown as IdempotencyRecordRepository);
+
+    const result = await service.awaitReplay(
+      { identityId: new Types.ObjectId(), operation: 'publishListing', key: 'race-key', requestBody },
+      { attempts: 5, delayMs: 1 },
+    );
+
+    expect(result).toEqual({ responseStatus: 202, responseBody: { id: 'pub-1' } });
+    expect(findByKeySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('запись появляется через несколько попыток (имитация задержки commit соперника) — возвращает replay, не null', async () => {
+    const requestBody = { listingId: 'l-2' };
+    const { createHash } = await import('node:crypto');
+    const matchingHash = createHash('sha256').update(JSON.stringify(requestBody)).digest('hex');
+    const findByKeySpy = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ requestHash: matchingHash, responseStatus: 202, responseBody: { id: 'pub-2' } });
+    const service = new IdempotencyService({ findByKey: findByKeySpy } as unknown as IdempotencyRecordRepository);
+
+    const result = await service.awaitReplay(
+      { identityId: new Types.ObjectId(), operation: 'publishListing', key: 'race-key', requestBody },
+      { attempts: 5, delayMs: 1 },
+    );
+
+    expect(result).toEqual({ responseStatus: 202, responseBody: { id: 'pub-2' } });
+    expect(findByKeySpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('запись так и не появляется в течение окна — возвращает null (честный timeout, не бесконечный polling)', async () => {
+    const findByKeySpy = jest.fn().mockResolvedValue(null);
+    const service = new IdempotencyService({ findByKey: findByKeySpy } as unknown as IdempotencyRecordRepository);
+
+    const result = await service.awaitReplay(
+      { identityId: new Types.ObjectId(), operation: 'publishListing', key: 'race-key', requestBody: { listingId: 'l-3' } },
+      { attempts: 4, delayMs: 1 },
+    );
+
+    expect(result).toBeNull();
+    expect(findByKeySpy).toHaveBeenCalledTimes(4);
+  });
+
+  it('запись с другим requestHash — пробрасывает IDEMPOTENCY_KEY_CONFLICT немедленно, не проглатывает как "не найдено"', async () => {
+    const findByKeySpy = jest.fn().mockResolvedValue({
+      requestHash: 'completely-different-hash',
+      responseStatus: 202,
+      responseBody: {},
+    });
+    const service = new IdempotencyService({ findByKey: findByKeySpy } as unknown as IdempotencyRecordRepository);
+
+    await expect(
+      service.awaitReplay(
+        { identityId: new Types.ObjectId(), operation: 'publishListing', key: 'race-key', requestBody: { listingId: 'l-4' } },
+        { attempts: 5, delayMs: 1 },
+      ),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.IDEMPOTENCY_KEY_CONFLICT }));
+    expect(findByKeySpy).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('IdempotencyService.record', () => {
   it('вычисляет requestHash и передаёт всё в repository.create вместе с session', async () => {
     const identityId = new Types.ObjectId();

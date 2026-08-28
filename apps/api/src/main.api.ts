@@ -8,6 +8,7 @@ import { AppExceptionFilter } from './shared/errors/app-exception.filter';
 import { CorrelationIdMiddleware } from './shared/errors/correlation-id.middleware';
 import { TenantContextMiddleware } from './shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from './shared/admin/admin-context.middleware';
+import { MarketplaceAccountContextMiddleware } from './shared/marketplace-account/marketplace-account-context.middleware';
 
 /**
  * ADR-001: API-процесс — один из двух entrypoint'ов одного кодового
@@ -30,6 +31,7 @@ async function bootstrap(): Promise<void> {
   const correlationIdMiddleware = app.get(CorrelationIdMiddleware);
   const tenantContextMiddleware = app.get(TenantContextMiddleware);
   const adminContextMiddleware = app.get(AdminContextMiddleware);
+  const marketplaceAccountContextMiddleware = app.get(MarketplaceAccountContextMiddleware);
 
   // /health и /health/ready — публичные liveness/readiness endpoints без
   // setGlobalPrefix (main.api.ts exclude ниже), опрашиваются оркестратором
@@ -54,6 +56,10 @@ async function bootstrap(): Promise<void> {
   fastifyInstance.addHook('onRequest', async (req, reply) => {
     if (isHealthCheckPath(req.url)) return;
     await adminContextMiddleware.use(req, reply, () => {});
+  });
+  fastifyInstance.addHook('onRequest', async (req, reply) => {
+    if (isHealthCheckPath(req.url)) return;
+    await marketplaceAccountContextMiddleware.use(req, reply, () => {});
   });
 
   app.useGlobalFilters(new AppExceptionFilter());

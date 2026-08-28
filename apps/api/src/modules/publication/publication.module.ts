@@ -7,6 +7,7 @@ import {
 } from '@baza/publication';
 import { PublicationService } from './publication.service';
 import { PublicController } from './public.controller';
+import { PublicListingsController } from './public-listings.controller';
 import { AuditModule } from '../audit/audit.module';
 import { OutboxModule } from '../outbox/outbox.module';
 
@@ -18,7 +19,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     AuditModule,
     OutboxModule,
   ],
-  controllers: [PublicController],
+  controllers: [PublicController, PublicListingsController],
   providers: [MarketplacePublicationRepository, PublicationService],
   exports: [PublicationService, MarketplacePublicationRepository],
 })

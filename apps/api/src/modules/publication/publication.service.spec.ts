@@ -39,6 +39,7 @@ describe('PublicationService.requestPublication', () => {
         eventType: 'PublicationRequested',
         aggregateType: 'development',
         aggregateId: sourceId,
+        payload: expect.objectContaining({ version: 1 }),
         deduplicationKey: expect.stringContaining('v1'),
       }),
       fakeSession,
@@ -82,6 +83,7 @@ describe('PublicationService.rebuildIfCurrentlyPublished', () => {
       expect.objectContaining({
         eventType: 'PublicationRequested',
         aggregateId: sourceId,
+        payload: expect.objectContaining({ version: 2 }),
         deduplicationKey: expect.stringContaining('v2'),
       }),
       fakeSession,

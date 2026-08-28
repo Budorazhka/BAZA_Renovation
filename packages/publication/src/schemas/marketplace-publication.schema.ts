@@ -110,4 +110,10 @@ export const MarketplacePublicationSchema = SchemaFactory.createForClass(Marketp
 MarketplacePublicationSchema.index({ sourceType: 1, sourceId: 1 }, { unique: true });
 MarketplacePublicationSchema.index({ slug: 1 }, { unique: true, sparse: true });
 MarketplacePublicationSchema.index({ status: 1 });
+// D-04A: обслуживает listPublished — {status:'published', _id:{$gt:cursor}}
+// + sort({_id:1}) одним индексом (equality+range на compound), а не
+// equality-only через {status:1} с последующим in-memory сортом по _id.
+// Одиночный {status:1} не убираю — им пользуются другие consumers
+// (markPendingIfPublished, admin listing), которым compound не нужен.
+MarketplacePublicationSchema.index({ status: 1, _id: 1 });
 MarketplacePublicationSchema.index({ 'searchProjection.geo': '2dsphere' });

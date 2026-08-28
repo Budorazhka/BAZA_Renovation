@@ -62,6 +62,13 @@ export class PublicationService {
           publicationId: publication._id.toString(),
           sourceType: params.sourceType,
           sourceId: params.sourceId.toString(),
+          // D-03: version — worker сверяет его атомарно в markPublished
+          // (CAS-фильтр), не только использует для дедупликации ключа ниже —
+          // защита от того, что более старое событие, обработанное worker'ом
+          // ПОСЛЕ более нового (publish, затем rebuild — порядок обработки
+          // батча не гарантированно совпадает с порядком создания), затрёт
+          // уже актуальную проекцию устаревшими данными.
+          version: publication.version,
         },
         // Версия — часть ключа: повторный publish того же source (rebuild)
         // должен породить НОВОЕ событие сборки, не схлопнуться под тем же
@@ -118,6 +125,7 @@ export class PublicationService {
           publicationId: publication._id.toString(),
           sourceType: params.sourceType,
           sourceId: params.sourceId.toString(),
+          version: publication.version,
         },
         deduplicationKey: `${params.sourceType}:${params.sourceId.toString()}:PublicationRequested:v${publication.version}`,
       },
@@ -133,14 +141,21 @@ export class PublicationService {
    * сокрытие уже существующей проекции дёшево, один update по
    * индексированному ключу). reason обязателен (permission-matrix.md
    * раздел 4: critical admin action требует reason).
+   *
+   * ACT-001: `actorType: 'system'` добавлен для автоматического unpublish
+   * просроченного listing (ActualityService.expireOverdueListings) — тот
+   * же actor-тип, что уже используется в D-05 revealContact (гость без
+   * идентичности создаёт Lead через system actor). `actorId` опционален
+   * ТОЛЬКО для этого типа (AuditActorType уже поддерживал `system` без id
+   * на уровне схемы, PublicationService раньше сужал типы до
+   * identity/admin_account без причины, специфичной именно для publication).
    */
   async unpublish(
     params: {
       sourceType: PublicationSourceType;
       sourceId: Types.ObjectId;
       reason: string;
-      actorType: 'identity' | 'admin_account';
-      actorId: Types.ObjectId;
+    } & ({ actorType: 'identity' | 'admin_account'; actorId: Types.ObjectId } | { actorType: 'system'; actorId?: Types.ObjectId }) & {
       correlationId: string;
     },
     session: ClientSession,

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
@@ -7,10 +7,50 @@ import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
+import { OrganizationsService } from '../organizations/organizations.service';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
 import type { LeadStage } from './schemas/lead.schema';
+
+export interface CrmLeadReadModel {
+  id: string;
+  organizationId: string;
+  ownerPositionId: string | null;
+  stage: LeadStage;
+  version: number;
+  source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
+  createdAt: string;
+  contact: { id: string; name: string; phone: string; email?: string } | null;
+}
+
+/**
+ * D-05B: технически решение (не owner decision — тот же статус, что сам
+ * LEAD_STAGES список, зафиксированный в lead-stage.ts), явный список
+ * допустимых переходов воронки, тот же паттерн, что UNIT_STATUS_TRANSITIONS
+ * в developments.service.ts. Раньше ChangeLeadStageDto разрешал любой→любой
+ * переход из LEAD_STAGES без проверки последовательности (lost→qualified
+ * не блокировался).
+ *
+ * converted — терминален (сделка совершена, дальше нет "стадии лида").
+ * Любой активный stage может уйти в lost (выпадение из воронки на любом
+ * этапе квалификации — стандартная B2C-семантика, не искусственно
+ * ограничена конкретными source-стадиями). lost→new — единственный
+ * reentry-путь: восстановление начинается заново с нуля воронки, не с того
+ * же места, где лид "потерялся" (lost→qualified было бы восстановлением
+ * прогресса задним числом без повторной квалификации). Версионировано
+ * (27.08.2026, LeadDocument.version) — changeLeadStage атомарно проверяет
+ * И version, И допустимость перехода в одном Mongo-фильтре, не read-then-
+ * write (см. LeadRepository.changeStageWithVersionCheck). assignOwner
+ * остаётся невersioned намеренно — вне scope этого фикса.
+ */
+const LEAD_STAGE_TRANSITIONS: Record<LeadStage, readonly LeadStage[]> = {
+  new: ['contacted', 'lost'],
+  contacted: ['qualified', 'lost'],
+  qualified: ['converted', 'lost'],
+  converted: [],
+  lost: ['new'],
+};
 
 /**
  * D-05: master plan "Контакты отсутствуют в list/search HTML/JSON. Reveal
@@ -28,7 +68,51 @@ export class CrmService {
     private readonly leadRepository: LeadRepository,
     private readonly leadEventRepository: LeadEventRepository,
     private readonly auditService: AuditService,
+    private readonly organizationsService: OrganizationsService,
   ) {}
+
+  /**
+   * ERP CRM read-path. ownerPositionId передаётся только для own/assigned
+   * grants; organization-wide роли получают undefined и видят весь tenant.
+   * Нельзя реализовывать это фильтрацией уже после чтения: repository
+   * обязан получить ownerPositionId прямо в Mongo-фильтре.
+   */
+  async listLeads(params: {
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    stage?: LeadStage;
+    limit: number;
+  }): Promise<{ items: CrmLeadReadModel[] }> {
+    const leads = await this.leadRepository.listForOrganization(params.organizationId, {
+      ownerPositionId: params.ownerPositionId,
+      stage: params.stage,
+      limit: params.limit,
+    });
+    const contactIds = [...new Map(leads.map((lead) => [lead.contactId.toString(), lead.contactId])).values()];
+    const contacts = await this.contactRepository.findByIdsForOrganization(params.organizationId, contactIds);
+    const contactsById = new Map(contacts.map((contact) => [contact._id.toString(), contact]));
+
+    return { items: leads.map((lead) => toLeadReadModel(lead, contactsById.get(lead.contactId.toString()))) };
+  }
+
+  async getLead(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+  }): Promise<CrmLeadReadModel> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      // Одна реакция для "нет такого" и "не ваш own lead" — не раскрываем
+      // менеджеру существование/статус чужого обращения.
+      throw new NotFoundException('Lead not found');
+    }
+    const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
+    return toLeadReadModel(lead, contact);
+  }
 
   /**
    * ADR-005/D-05: slug → published MarketplacePublication → Development
@@ -147,6 +231,15 @@ export class CrmService {
     }
 
     return runInTransaction(this.connection, async (session) => {
+      // D-05B: assigneePositionId должен реально существовать, принадлежать
+      // ЭТОЙ организации и не быть closed — раньше assignOwner молча
+      // назначал лид на чужую/несуществующую/закрытую позицию без ошибки.
+      await this.organizationsService.findAssignablePosition(
+        params.assigneePositionId,
+        params.expectedOrganizationId,
+        session,
+      );
+
       const { modifiedCount } = await this.leadRepository.assignOwner(
         params.leadId,
         params.expectedOrganizationId,
@@ -204,27 +297,85 @@ export class CrmService {
   async changeLeadStage(params: {
     leadId: Types.ObjectId;
     newStage: LeadStage;
+    expectedVersion: number;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     expectedOrganizationId: Types.ObjectId;
+    /**
+     * D-05B: manager имеет grant lead.changeStage только со scope 'own' —
+     * LeadController передаёт свою позицию сюда в этом случае, undefined
+     * для organization/global scope (owner/director/rop). Без этого
+     * сужения manager с новым grant мог бы менять stage ЛЮБОГО лида
+     * организации, не только своего — PermissionGuard сам по себе не
+     * проверяет scope, только наличие гранта (см. PolicyEvaluatorService).
+     */
+    requiredOwnerPositionId?: Types.ObjectId;
     correlationId: string;
   }) {
-    const lead = await this.leadRepository.findByIdForOrganization(params.leadId, params.expectedOrganizationId);
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.expectedOrganizationId,
+      params.requiredOwnerPositionId,
+    );
     if (!lead) {
+      // Единый код и для "не существует", и для "не ваш own lead" — не
+      // раскрываем manager'у существование чужого лида (тот же принцип,
+      // что getLead с ownerFilterForRead).
       throw new NotFoundException('Lead not found');
     }
 
     const previousStage = lead.stage;
+    const allowedFromStages = LEAD_STAGE_TRANSITIONS[previousStage];
+
+    if (!allowedFromStages.includes(params.newStage)) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `Cannot transition lead stage from "${previousStage}" to "${params.newStage}"`,
+        { from: previousStage, to: params.newStage },
+      );
+    }
 
     return runInTransaction(this.connection, async (session) => {
-      const { modifiedCount } = await this.leadRepository.changeStage(
+      // conventions.md разд.5 optimistic concurrency (тот же паттерн, что
+      // updateUnitStatus): version+stage-transition проверяются АТОМАРНО в
+      // одном Mongo-фильтре, не read-then-write — два параллельных
+      // changeLeadStage не могут оба пройти на одном и том же previousStage.
+      const { modifiedCount } = await this.leadRepository.changeStageWithVersionCheck(
         params.leadId,
         params.expectedOrganizationId,
+        params.expectedVersion,
         params.newStage,
+        [previousStage],
         session,
       );
       if (modifiedCount === 0) {
-        throw new NotFoundException('Lead not found');
+        const current = await this.leadRepository.findByIdForOrganization(
+          params.leadId,
+          params.expectedOrganizationId,
+          params.requiredOwnerPositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Lead not found');
+        }
+        // Различаем "версия устарела" (конкурентный запрос уже изменил
+        // lead — ретрай после refresh валиден, ДАЖЕ если params.newStage
+        // не достижим из НОВОГО current.stage: клиент не мог знать об этом
+        // в момент своего запроса, это не его ошибка) от "переход запрещён
+        // при АКТУАЛЬНОЙ версии" (version совпадает, но сам переход
+        // невозможен — ретрай с той же version не поможет). Проверка
+        // version первой — тот же принцип, что updateUnitStatus, но там
+        // version/status всегда меняются синхронно, здесь дополнительно
+        // важно не спутать "стадия ушла дальше" с "переход в принципе
+        // недопустим", иначе гонка A→contacted vs A→lost ошибочно вернула
+        // бы 400 проигравшему вместо честного 409 (найдено этим же тестом).
+        if (current.version !== params.expectedVersion) {
+          throw new ConflictException('Lead was modified by another request — refresh and retry');
+        }
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot transition lead stage from "${current.stage}" to "${params.newStage}"`,
+          { from: current.stage, to: params.newStage },
+        );
       }
 
       await this.leadEventRepository.append(
@@ -256,6 +407,7 @@ export class CrmService {
         contactId: lead.contactId.toString(),
         ownerPositionId: lead.ownerPositionId?.toString() ?? null,
         stage: params.newStage,
+        version: params.expectedVersion + 1,
         source: lead.source,
       };
     });
@@ -300,4 +452,31 @@ function extractContactChannels(contact: DevelopmentContact): {
   telegram?: string;
 } {
   return { phone: contact.phone, whatsapp: contact.whatsapp, telegram: contact.telegram };
+}
+
+function toLeadReadModel(
+  lead: {
+    _id: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    contactId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    stage: LeadStage;
+    version?: number;
+    source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
+    createdAt: Date;
+  },
+  contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
+): CrmLeadReadModel {
+  return {
+    id: lead._id.toString(),
+    organizationId: lead.organizationId.toString(),
+    ownerPositionId: lead.ownerPositionId?.toString() ?? null,
+    stage: lead.stage,
+    version: lead.version ?? 0,
+    source: lead.source,
+    createdAt: lead.createdAt.toISOString(),
+    contact: contact
+      ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
+      : null,
+  };
 }

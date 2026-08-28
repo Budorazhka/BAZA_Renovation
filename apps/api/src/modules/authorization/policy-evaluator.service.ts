@@ -49,6 +49,18 @@ export class PolicyEvaluatorService {
   }
 
   /**
+   * Query-handler использует scope не для нового разрешения, а чтобы
+   * сузить уже разрешённое чтение до own/assigned. Guard по-прежнему
+   * остаётся единственной точкой allow/deny; этот метод не обходит его.
+   */
+  async matchingScopes(request: Omit<PermissionCheckRequest, 'requestedScopeValue'>): Promise<PermissionScope[]> {
+    const grants = await this.permissionGrantRepository.findForSubject(request.subjectType, request.subjectId);
+    return grants
+      .filter((grant) => grant.resource === request.resource && grant.action === request.action)
+      .map((grant) => grant.scope);
+  }
+
+  /**
    * Единственная точка ЗАПИСИ PermissionGrant для внешних модулей (ADR-002
    * требование 2/architecture module-boundaries тест — repository этого
    * модуля не должен импортироваться напрямую другими модулями). AdminAccountService
@@ -68,6 +80,32 @@ export class PolicyEvaluatorService {
     scopeValue?: string;
   }): Promise<void> {
     await this.permissionGrantRepository.create(params);
+  }
+
+  /**
+   * D-06: обратная операция к evaluate() — не "разрешено ли ЭТО одно
+   * действие", а "агрегируй ВСЕ grants subject'а по этому resource+action
+   * в форму, годную для построения list-фильтра". Не строит Mongo-фильтр
+   * сам (не знает про конкретную коллекцию/domain-модель ресурса) — тот же
+   * уровень абстракции, что matchingScopes() выше, только для read-listing
+   * вместо ERP query-сужения. Несколько city-grants на один resource+action
+   * агрегируются в один scopeValues[] — вызывающий код сам решает, как их
+   * использовать ($in одним условием, не N отдельных).
+   */
+  async resolveListScope(request: {
+    subjectType: PermissionSubjectType;
+    subjectId: Types.ObjectId;
+    resource: string;
+    action: string;
+  }): Promise<{ global: boolean; scopeValues: string[] }> {
+    const grants = await this.permissionGrantRepository.findForSubject(request.subjectType, request.subjectId);
+    const matching = grants.filter((grant) => grant.resource === request.resource && grant.action === request.action);
+    return {
+      global: matching.some((grant) => grant.scope === 'global'),
+      scopeValues: matching
+        .filter((grant): grant is typeof grant & { scopeValue: string } => grant.scope === 'city' && grant.scopeValue !== undefined)
+        .map((grant) => grant.scopeValue),
+    };
   }
 
   /**

@@ -3,6 +3,14 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { MediaAssetDocument, MediaAssetSchema, MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 import { DevelopmentDocument, DevelopmentSchema, DevelopmentRepository } from '@baza/development';
 import {
+  PropertyAssetDocument,
+  PropertyAssetSchema,
+  PropertyAssetRepository,
+  ListingDocument,
+  ListingSchema,
+  ListingRepository,
+} from '@baza/property-assets';
+import {
   MarketplacePublicationDocument,
   MarketplacePublicationSchema,
   MarketplacePublicationRepository,
@@ -25,6 +33,8 @@ import { ImageVariantService } from './image-variant.service';
     MongooseModule.forFeature([
       { name: MediaAssetDocument.name, schema: MediaAssetSchema },
       { name: DevelopmentDocument.name, schema: DevelopmentSchema },
+      { name: PropertyAssetDocument.name, schema: PropertyAssetSchema },
+      { name: ListingDocument.name, schema: ListingSchema },
       { name: MarketplacePublicationDocument.name, schema: MarketplacePublicationSchema },
     ]),
   ],
@@ -33,6 +43,8 @@ import { ImageVariantService } from './image-variant.service';
     MediaStorageService,
     ImageVariantService,
     DevelopmentRepository,
+    PropertyAssetRepository,
+    ListingRepository,
     MarketplacePublicationRepository,
     MediaVerifiedHandler,
     PositionOccupantAssignedHandler,

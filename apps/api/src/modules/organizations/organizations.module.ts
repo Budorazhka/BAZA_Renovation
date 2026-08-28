@@ -14,6 +14,7 @@ import { PositionAssignmentService } from './position-assignment.service';
 import { OrganizationsService } from './organizations.service';
 import { TeamService } from './team.service';
 import { OrganizationsController } from './organizations.controller';
+import { OrganizationOnboardingController } from './organization-onboarding.controller';
 import { TeamController } from './team.controller';
 import { InvitationController } from './invitation.controller';
 import { IdentityModule } from '../identity/identity.module';
@@ -37,7 +38,7 @@ import { MediaModule } from '../media/media.module';
     AuthorizationModule,
     MediaModule,
   ],
-  controllers: [OrganizationsController, TeamController, InvitationController],
+  controllers: [OrganizationsController, OrganizationOnboardingController, TeamController, InvitationController],
   providers: [
     OrganizationRepository,
     PositionRepository,

@@ -35,7 +35,15 @@ export class BuildingRepository {
     return this.model.findOne({ _id: id, organizationId }).exec();
   }
 
-  async listForDevelopment(developmentId: Types.ObjectId): Promise<BuildingDocument[]> {
-    return this.model.find({ developmentId }).sort({ _id: 1 }).exec();
+  /**
+   * organizationId — часть фильтра, не post-fetch проверка: find() без
+   * tenant-фильтра вернул бы buildings любой организации по developmentId
+   * (IDOR), тот же принцип, что DevelopmentRepository.listForOrganization.
+   */
+  async listForDevelopment(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<BuildingDocument[]> {
+    return this.model.find({ developmentId, organizationId }).sort({ _id: 1 }).exec();
   }
 }

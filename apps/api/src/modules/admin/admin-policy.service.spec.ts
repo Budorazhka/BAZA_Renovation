@@ -86,3 +86,60 @@ describe('AdminPolicyService.requireReason', () => {
     expect(() => service.requireReason('           ')).toThrow(AppException);
   });
 });
+
+describe('AdminPolicyService.resolvePublicationReadScope', () => {
+  it("super_admin → 'all' без единого обращения к PolicyEvaluatorService", async () => {
+    const resolveListScopeSpy = jest.fn();
+    const service = new AdminPolicyService({ resolveListScope: resolveListScopeSpy } as unknown as PolicyEvaluatorService);
+
+    const result = await service.resolvePublicationReadScope(makeAdminContext({ isSuperAdmin: true }));
+
+    expect(result).toBe('all');
+    expect(resolveListScopeSpy).not.toHaveBeenCalled();
+  });
+
+  it('обычный admin — вызывает resolveListScope по каждому из трёх sourceType с action:read', async () => {
+    const adminContext = makeAdminContext();
+    const resolveListScopeSpy = jest.fn().mockResolvedValue({ global: false, scopeValues: [] });
+    const service = new AdminPolicyService({ resolveListScope: resolveListScopeSpy } as unknown as PolicyEvaluatorService);
+
+    await service.resolvePublicationReadScope(adminContext);
+
+    expect(resolveListScopeSpy).toHaveBeenCalledTimes(3);
+    for (const sourceType of ['development', 'unit', 'listing']) {
+      expect(resolveListScopeSpy).toHaveBeenCalledWith({
+        subjectType: 'admin_account',
+        subjectId: new Types.ObjectId(adminContext.adminAccountId),
+        resource: sourceType,
+        action: 'read',
+      });
+    }
+  });
+
+  it('sourceType без единого grant (global:false, cities:[]) — не попадает в итоговый Map', async () => {
+    const resolveListScopeSpy = jest.fn().mockImplementation(({ resource }) =>
+      Promise.resolve(resource === 'development' ? { global: true, scopeValues: [] } : { global: false, scopeValues: [] }),
+    );
+    const service = new AdminPolicyService({ resolveListScope: resolveListScopeSpy } as unknown as PolicyEvaluatorService);
+
+    const result = await service.resolvePublicationReadScope(makeAdminContext());
+
+    expect(result).not.toBe('all');
+    const map = result as Map<string, { global: boolean; cities: string[] }>;
+    expect(map.has('development')).toBe(true);
+    expect(map.has('unit')).toBe(false);
+    expect(map.has('listing')).toBe(false);
+  });
+
+  it('несколько city-grants на один sourceType агрегируются в cities[]', async () => {
+    const resolveListScopeSpy = jest.fn().mockImplementation(({ resource }) =>
+      Promise.resolve(resource === 'development' ? { global: false, scopeValues: ['batumi', 'tbilisi'] } : { global: false, scopeValues: [] }),
+    );
+    const service = new AdminPolicyService({ resolveListScope: resolveListScopeSpy } as unknown as PolicyEvaluatorService);
+
+    const result = await service.resolvePublicationReadScope(makeAdminContext());
+
+    const map = result as Map<string, { global: boolean; cities: string[] }>;
+    expect(map.get('development')).toEqual({ global: false, cities: ['batumi', 'tbilisi'] });
+  });
+});

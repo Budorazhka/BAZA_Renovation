@@ -1,7 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { randomBytes, createHash } from 'node:crypto';
-import { Connection, Types } from 'mongoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { OrganizationRepository } from './repository/organization.repository';
 import { PositionRepository } from './repository/position.repository';
@@ -16,7 +16,7 @@ import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { DEFAULT_ROLE_GRANTS } from './default-role-grants';
 import type { OrganizationDocument, OrganizationType } from './schemas/organization.schema';
-import type { FixedRole } from './schemas/position.schema';
+import type { FixedRole, PositionDocument } from './schemas/position.schema';
 import type { PermissionScope } from '../authorization/schemas/permission-grant.schema';
 
 const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -79,6 +79,34 @@ export class OrganizationsService {
   }
 
   /**
+   * D-05B: единственный способ для ДРУГИХ модулей (CrmService.assignLead)
+   * проверить, что Position — реальный, tenant-scoped, назначаемый
+   * получатель (не чужая организация, не closed) — тот же boundary-принцип,
+   * что getOrganizationById выше. NotFoundException — единый non-disclosure
+   * код для "не существует" И "чужая организация" (тот же принцип, что
+   * assignOccupant/findByIdForOrganization). vacant/occupied — оба
+   * допустимы (занятая позиция — нормальный получатель лида), только
+   * closed блокирует — ConflictException, не NotFoundException: позиция
+   * реально найдена, просто не в подходящем состоянии (тот же паттерн,
+   * что "Position is not vacant"/"Only a vacant position can be closed"
+   * ниже по этому файлу).
+   */
+  async findAssignablePosition(
+    positionId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<PositionDocument> {
+    const position = await this.positionRepository.findByIdForOrganization(positionId, organizationId, session);
+    if (!position) {
+      throw new NotFoundException('Position not found');
+    }
+    if (position.status === 'closed') {
+      throw new ConflictException('Position is closed and cannot be assigned');
+    }
+    return position;
+  }
+
+  /**
    * Регистрация организации сразу с owner-позицией, занятой создающей
    * identity — типичный onboarding flow (ERP-002 traceability, вопрос
    * open-decisions.md #1: заявка с ручным одобрением для агентства,
@@ -86,12 +114,23 @@ export class OrganizationsService {
    * это только техническая механика создания org+position+assignment
    * атомарно, командой более высокого уровня оборачивается при
    * реализации approval-очереди на Этапе 8).
+   *
+   * fixedRole первой позиции зависит от OrganizationType (ADR-016,
+   * 27.08.2026, владелец подтвердил): `type:'developer'` → `fixedRole:
+   * 'developer'`, иначе (agency/independent_realtor) → `fixedRole:'owner'`
+   * как раньше. До этого фикса ЛЮБАЯ организация (включая developer)
+   * получала владельца с `fixedRole:'owner'` — фронтенд-гейт
+   * (dashboard-rail.tsx) уже требовал `role==='developer'` для раздела
+   * «Девелопмент», значит ни один такой владелец не мог реально попасть в
+   * свой собственный раздел через настоящий backend-путь.
    */
   async createOrganizationWithOwner(params: {
     type: OrganizationType;
     name: string;
     ownerIdentityId: Types.ObjectId;
   }): Promise<{ organizationId: Types.ObjectId; positionId: Types.ObjectId }> {
+    const ownerFixedRole: FixedRole = params.type === 'developer' ? 'developer' : 'owner';
+
     const result = await runInTransaction(this.connection, async (session) => {
       const organization = await this.organizationRepository.create(
         { type: params.type, name: params.name },
@@ -99,7 +138,7 @@ export class OrganizationsService {
       );
 
       const ownerPosition = await this.positionRepository.create(
-        { organizationId: organization._id, fixedRole: 'owner' },
+        { organizationId: organization._id, fixedRole: ownerFixedRole },
         session,
       );
 
@@ -123,9 +162,73 @@ export class OrganizationsService {
     // путём, иначе не сможет залогиниться в собственный только что
     // созданный ERP.
     await this.authService.grantErpAccess(params.ownerIdentityId);
-    await this.grantDefaultRolePermissions(result.positionId, 'owner');
+    await this.grantDefaultRolePermissions(result.positionId, ownerFixedRole);
 
     return result;
+  }
+
+  /**
+   * POST /organizations/register (публичный, OrganizationOnboardingController) —
+   * реальный HTTP-путь для самостоятельной регистрации организации, которого
+   * раньше не существовало (createOrganizationWithOwner вызывался ТОЛЬКО из
+   * unit-тестов, найдено реальным E2E-прогоном D-07). Composite-команда:
+   * (1) подтверждает владение уже существующей Identity паролем — между
+   * POST /auth/register и этим вызовом сессии ещё нет (login с audience:'erp'
+   * невозможен без ProductAccess, который этот же вызов и выдаёт), (2)
+   * создаёт organization+owner-position+assignment+grants (уже существующая,
+   * протестированная createOrganizationWithOwner, транзакционная логика не
+   * дублируется), (3) сразу создаёт ERP-сессию — тот же tail, что
+   * AuthService.login(), чтобы не заставлять клиента звать /auth/login
+   * третьим отдельным шагом сразу после того, как ProductAccess только что
+   * появился.
+   *
+   * Двойная регистрация той же identity (уже есть активный
+   * PositionAssignment где-то) — явная, честная проверка ДО транзакции
+   * (не полагается только на partial unique index в createAssignment,
+   * который тоже сработал бы, но с менее понятным сообщением для этого
+   * конкретного вызывающего сценария).
+   */
+  async registerOrganizationOwner(params: {
+    login: string;
+    password: string;
+    type: OrganizationType;
+    name: string;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<{
+    organizationId: Types.ObjectId;
+    positionId: Types.ObjectId;
+    identityId: Types.ObjectId;
+    sessionToken: string;
+    sessionExpiresAt: Date;
+  }> {
+    const identityId = await this.authService.verifyCredentialsForOnboarding(params.login, params.password);
+
+    const existingAssignment = await this.positionAssignmentRepository.findActiveByIdentity(identityId);
+    if (existingAssignment) {
+      throw new ConflictException('This identity already belongs to an organization');
+    }
+
+    const { organizationId, positionId } = await this.createOrganizationWithOwner({
+      type: params.type,
+      name: params.name,
+      ownerIdentityId: identityId,
+    });
+
+    const session = await this.sessionService.createSession({
+      identityId,
+      productAudience: 'erp',
+      ipAddress: params.ipAddress,
+      userAgent: params.userAgent,
+    });
+
+    return {
+      organizationId,
+      positionId,
+      identityId,
+      sessionToken: session.token,
+      sessionExpiresAt: session.expiresAt,
+    };
   }
 
   /**

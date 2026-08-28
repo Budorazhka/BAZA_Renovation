@@ -45,8 +45,8 @@ describe('LeadRepository', () => {
     });
   });
 
-  describe('changeStage', () => {
-    it('фильтр включает organizationId, не только _id — tenant-escape защита', async () => {
+  describe('changeStageWithVersionCheck', () => {
+    it('фильтр включает organizationId, version и allowedFromStages — tenant-escape + optimistic concurrency защита', async () => {
       const id = new Types.ObjectId();
       const organizationId = new Types.ObjectId();
       const fakeSession = {} as never;
@@ -54,11 +54,11 @@ describe('LeadRepository', () => {
       const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
       const repository = new LeadRepository({ updateOne: updateOneSpy } as never);
 
-      await repository.changeStage(id, organizationId, 'qualified', fakeSession);
+      await repository.changeStageWithVersionCheck(id, organizationId, 3, 'qualified', ['contacted'], fakeSession);
 
       expect(updateOneSpy).toHaveBeenCalledWith(
-        { _id: id, organizationId },
-        { $set: { stage: 'qualified' } },
+        { _id: id, organizationId, version: 3, stage: { $in: ['contacted'] } },
+        { $set: { stage: 'qualified' }, $inc: { version: 1 } },
         { session: fakeSession },
       );
     });

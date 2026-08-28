@@ -1,10 +1,11 @@
-import { Body, Controller, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { AdminGuard } from '../../shared/admin/admin.guard';
 import { requireAdminContext } from '../../shared/admin/admin-context.middleware';
 import { AdminPublicationService } from './admin-publication.service';
 import { UnpublishRequestDto } from './dto/unpublish-request.dto';
+import { ListPublicationsQueryDto } from './dto/list-publications-query.dto';
 
 /**
  * OpenAPI v1-first-vertical-slice.yaml `adminUnpublish`. AdminGuard здесь —
@@ -18,6 +19,19 @@ import { UnpublishRequestDto } from './dto/unpublish-request.dto';
 @UseGuards(AdminGuard)
 export class AdminPublicationController {
   constructor(private readonly adminPublicationService: AdminPublicationService) {}
+
+  /**
+   * D-06: "Admin может найти publication только в разрешённом scope"
+   * (мастер-план) — до этого метода не было HTTP-пути найти publication,
+   * только unpublish по уже известному ID. Permission-проверка — та же
+   * in-service дисциплина, что unpublish (AdminGuard здесь только
+   * аутентификация).
+   */
+  @Get()
+  async list(@Req() req: FastifyRequest, @Query() dto: ListPublicationsQueryDto) {
+    const adminContext = requireAdminContext(req);
+    return this.adminPublicationService.list(adminContext, dto);
+  }
 
   @Post(':publicationId/unpublish')
   @HttpCode(200)

@@ -137,15 +137,98 @@ export class MarketplacePublicationRepository {
   }
 
   /**
+   * MKT-002: тот же паттерн, что listPublished, дополнительно параметризован
+   * sourceType и listing-специфичными полями searchProjection
+   * (dealType/propertyType/commercialSubtype — buildListingSearchProjection,
+   * apps/worker/src/handlers/listing-publication.mapper.ts). Не расширяет
+   * listPublished напрямую — тот метод специфичен под Development-caller'ов
+   * (public.controller.ts), у которых нет и не должно быть этих полей в
+   * фильтре; отдельный метод явно документирует, какие поля relevant для
+   * какого sourceType, вместо одного "универсального" метода с растущим
+   * списком опциональных полей на все source-типы сразу.
+   */
+  async listPublishedByFilter(params: {
+    sourceType: PublicationSourceType;
+    cursor?: Types.ObjectId;
+    limit: number;
+    city?: string;
+    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    dealType?: string;
+    propertyType?: string;
+    commercialSubtype?: string;
+  }): Promise<MarketplacePublicationDocument[]> {
+    const filter: Record<string, unknown> = { status: 'published', sourceType: params.sourceType };
+    if (params.cursor) {
+      filter._id = { $gt: params.cursor };
+    }
+    if (params.city) {
+      filter['searchProjection.city'] = params.city;
+    }
+    if (params.dealType) {
+      filter['searchProjection.dealType'] = params.dealType;
+    }
+    if (params.propertyType) {
+      filter['searchProjection.propertyType'] = params.propertyType;
+    }
+    if (params.commercialSubtype) {
+      filter['searchProjection.commercialSubtype'] = params.commercialSubtype;
+    }
+    if (params.bbox) {
+      filter['searchProjection.geo'] = {
+        $geoWithin: {
+          $box: [
+            [params.bbox.minLng, params.bbox.minLat],
+            [params.bbox.maxLng, params.bbox.maxLat],
+          ],
+        },
+      };
+    }
+    return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
+  }
+
+  /**
+   * D-06: admin-listing — НЕ ограничено status:'published' (в отличие от
+   * listPublished выше) — admin должен находить publication_pending/
+   * unpublished/build_failed тоже, иначе не сможет разобраться в том, что
+   * нужно проверить/снять. scopeFilter приходит уже построенным вызывающим
+   * кодом (apps/api AdminPublicationService через buildPublicationScopeFilter)
+   * — этот repository не знает про PermissionGrant/AdminContext, только
+   * исполняет уже готовое Mongo-условие (модульная граница: packages/publication
+   * не зависит от authorization-модуля apps/api).
+   */
+  async listForAdmin(params: {
+    scopeFilter: Record<string, unknown>;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<MarketplacePublicationDocument[]> {
+    const filter: Record<string, unknown> = { ...params.scopeFilter };
+    if (params.cursor) {
+      filter._id = { $gt: params.cursor };
+    }
+    return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
+  }
+
+  /**
    * ADR-005 worker-сторона: успешная сборка полной проекции. Условие
    * status:'publication_pending' в фильтре — worker не должен затирать
    * уже unpublished (синхронный API-путь опережает асинхронный worker)
    * документ обратно в published, если unpublish случился, пока событие
    * PublicationRequested ещё обрабатывалось.
+   *
+   * D-03: version — тоже часть CAS-фильтра, не post-hoc сравнение в
+   * handler'е (тот же принцип, что markPendingIfPublished/unpublish —
+   * атомарное условие в самом updateOne). Защищает от другой гонки: два
+   * последовательных PublicationRequested события (например publish, затем
+   * rebuild) могут быть обработаны worker'ом не в порядке создания — без
+   * version в фильтре более старое событие, обработанное ПОСЛЕ более
+   * нового, затёрло бы уже актуальную проекцию устаревшими данными.
+   * expectedVersion не совпал → modifiedCount:0, тот же код-путь, что уже
+   * обрабатывает unpublish-гонку.
    */
   async markPublished(
     id: Types.ObjectId,
     params: {
+      expectedVersion: number;
       slug: string;
       seo: PublicationSeo;
       denormalizedFields: Record<string, unknown>;
@@ -154,7 +237,7 @@ export class MarketplacePublicationRepository {
   ): Promise<{ modifiedCount: number }> {
     const result = await this.model
       .updateOne(
-        { _id: id, status: 'publication_pending' },
+        { _id: id, status: 'publication_pending', version: params.expectedVersion },
         {
           $set: {
             status: 'published',

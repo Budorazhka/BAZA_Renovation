@@ -19,6 +19,7 @@ import { CreateFloorPlanDto } from './dto/create-floor-plan.dto';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitPriceDto } from './dto/update-unit-price.dto';
 import { UpdateUnitStatusDto } from './dto/update-unit-status.dto';
+import { ListUnitsQueryDto } from './dto/list-units-query.dto';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -223,6 +224,110 @@ export class DevelopmentsController {
       startDate: dto.startDate ? new Date(dto.startDate) : undefined,
       completionDate: dto.completionDate ? new Date(dto.completionDate) : undefined,
     });
+  }
+
+  /**
+   * D-02 COMPLETE: read-side дочерней иерархии — @RequirePermission('development','read')
+   * на каждом (то же resource/action, что getDevelopment/listDevelopments
+   * выше). organizationId только из TenantContext, никогда от клиента.
+   * Единый 404 (NotFoundException) для "не существует" и "чужая
+   * организация" — та же tenant isolation, что write-команды.
+   */
+  @Get('developments/:developmentId/buildings')
+  @RequirePermission('development', 'read')
+  async listBuildings(@Req() req: FastifyRequest, @Param('developmentId') developmentId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.listBuildingsForDevelopment(
+      new Types.ObjectId(developmentId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+  }
+
+  @Get('buildings/:buildingId/sections')
+  @RequirePermission('development', 'read')
+  async listSections(@Req() req: FastifyRequest, @Param('buildingId') buildingId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.listSectionsForBuilding(
+      new Types.ObjectId(buildingId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+  }
+
+  @Get('buildings/:buildingId/floors')
+  @RequirePermission('development', 'read')
+  async listFloors(@Req() req: FastifyRequest, @Param('buildingId') buildingId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.listFloorsForBuilding(
+      new Types.ObjectId(buildingId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+  }
+
+  @Get('buildings/:buildingId/floor-plans')
+  @RequirePermission('development', 'read')
+  async listFloorPlans(@Req() req: FastifyRequest, @Param('buildingId') buildingId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.listFloorPlansForBuilding(
+      new Types.ObjectId(buildingId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+  }
+
+  /**
+   * kind?/status?/limit(максимум 500, ListUnitsQueryDto @Max) — единственные
+   * принимаемые query-фильтры. Никакого произвольного Mongo-фильтра:
+   * глобальный ValidationPipe({whitelist,forbidNonWhitelisted}) отклоняет
+   * любое неизвестное поле (включая organizationId) с 400 до входа сюда.
+   */
+  @Get('buildings/:buildingId/units')
+  @RequirePermission('development', 'read')
+  async listUnits(
+    @Req() req: FastifyRequest,
+    @Param('buildingId') buildingId: string,
+    @Query() dto: ListUnitsQueryDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.listUnitsForBuilding(
+      new Types.ObjectId(buildingId),
+      new Types.ObjectId(tenantContext.organizationId),
+      { kind: dto.kind, status: dto.status, limit: dto.limit },
+    );
+  }
+
+  @Get('units/:unitId')
+  @RequirePermission('development', 'read')
+  async getUnit(@Req() req: FastifyRequest, @Param('unitId') unitId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.getUnitForOrganization(
+      new Types.ObjectId(unitId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+  }
+
+  /**
+   * D-03: ERP polling после publish — читает РЕАЛЬНЫЙ статус
+   * MarketplacePublication (publication_pending/published/unpublished/
+   * build_failed), не canonical Development.status (тот меняется
+   * синхронно до того, как worker вообще начал строить проекцию). Единый
+   * 404 для "Development не существует/чужой" и "публикация никогда не
+   * запускалась" — тот же tenant isolation паттерн, что остальные
+   * read-методы этого контроллера.
+   */
+  @Get('developments/:developmentId/publication-status')
+  @RequirePermission('development', 'read')
+  async getPublicationStatus(@Req() req: FastifyRequest, @Param('developmentId') developmentId: string) {
+    const tenantContext = requireTenantContext(req);
+
+    return this.developmentsService.getPublicationStatus(
+      new Types.ObjectId(developmentId),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
   }
 
   /**

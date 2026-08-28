@@ -11,6 +11,7 @@ import { AdminAccountController } from './admin-account.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { AuditModule } from '../audit/audit.module';
+import { IdentityModule } from '../identity/identity.module';
 
 /**
  * PermissionGrantRepository НЕ импортируется/регистрируется здесь напрямую
@@ -37,6 +38,7 @@ import { AuditModule } from '../audit/audit.module';
     AuthorizationModule,
     PublicationModule,
     AuditModule,
+    IdentityModule,
   ],
   controllers: [AdminPublicationController, AdminAccountController],
   providers: [AdminAccountRepository, AdminPolicyService, AdminAccountService, AdminPublicationService],

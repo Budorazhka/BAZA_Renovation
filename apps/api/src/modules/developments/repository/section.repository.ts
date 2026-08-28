@@ -27,7 +27,15 @@ export class SectionRepository {
     return this.model.findOne({ _id: id, organizationId }).exec();
   }
 
-  async listForBuilding(buildingId: Types.ObjectId): Promise<SectionDocument[]> {
-    return this.model.find({ buildingId }).sort({ _id: 1 }).exec();
+  /**
+   * organizationId — часть фильтра, не post-fetch проверка: тот же принцип,
+   * что DevelopmentRepository.listForOrganization и
+   * BuildingRepository.listForDevelopment.
+   */
+  async listForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<SectionDocument[]> {
+    return this.model.find({ buildingId, organizationId }).sort({ _id: 1 }).exec();
   }
 }

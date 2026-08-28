@@ -15,6 +15,8 @@ import { HealthController } from './shared/health/health.controller';
 import { CorrelationIdMiddleware } from './shared/errors/correlation-id.middleware';
 import { TenantContextMiddleware } from './shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from './shared/admin/admin-context.middleware';
+import { MarketplaceAccountContextMiddleware } from './shared/marketplace-account/marketplace-account-context.middleware';
+import { PropertyAssetsModule } from './modules/property-assets/property-assets.module';
 
 @Module({
   imports: [
@@ -42,6 +44,7 @@ import { AdminContextMiddleware } from './shared/admin/admin-context.middleware'
     DevelopmentsModule,
     CrmModule,
     AdminModule,
+    PropertyAssetsModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы
@@ -66,6 +69,6 @@ import { AdminContextMiddleware } from './shared/admin/admin-context.middleware'
   // app.getHttpAdapter().getInstance().addHook(...)) — тот hook получает тот
   // же объект, что видят Guards. Классы остаются здесь как providers, их
   // .use() вызывается из hook-обёртки в main.ts, не из NestModule.configure().
-  providers: [CorrelationIdMiddleware, TenantContextMiddleware, AdminContextMiddleware],
+  providers: [CorrelationIdMiddleware, TenantContextMiddleware, AdminContextMiddleware, MarketplaceAccountContextMiddleware],
 })
 export class AppModule {}

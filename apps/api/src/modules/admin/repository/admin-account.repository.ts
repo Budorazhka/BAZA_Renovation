@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { AdminAccountDocument } from '../schemas/admin-account.schema';
 
 /**
@@ -25,7 +25,11 @@ export class AdminAccountRepository {
     return this.model.findOne({ _id: id }).exec();
   }
 
-  async create(params: { identityId: Types.ObjectId; isSuperAdmin: boolean }): Promise<AdminAccountDocument> {
-    return this.model.create(params);
+  async create(
+    params: { identityId: Types.ObjectId; isSuperAdmin: boolean },
+    session?: ClientSession,
+  ): Promise<AdminAccountDocument> {
+    const [account] = await this.model.create([params], { session });
+    return account!;
   }
 }

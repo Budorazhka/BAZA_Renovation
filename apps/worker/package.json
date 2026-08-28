@@ -16,6 +16,7 @@
     "@baza/development": "workspace:*",
     "@baza/domain-events": "workspace:*",
     "@baza/media-storage": "workspace:*",
+    "@baza/property-assets": "workspace:*",
     "@baza/publication": "workspace:*",
     "@baza/tenant-scope": "workspace:*",
     "@nestjs/common": "^10.4.0",

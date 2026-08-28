@@ -19,6 +19,7 @@
     "@baza/domain-events": "workspace:*",
     "@baza/media-storage": "workspace:*",
     "@baza/observability": "workspace:*",
+    "@baza/property-assets": "workspace:*",
     "@baza/publication": "workspace:*",
     "@baza/tenant-scope": "workspace:*",
     "@fastify/cookie": "^9.4.0",

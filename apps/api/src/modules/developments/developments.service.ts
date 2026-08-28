@@ -8,6 +8,7 @@ import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PublicationService } from '../publication/publication.service';
+import { MarketplacePublicationRepository } from '@baza/publication';
 import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { DevelopmentRepository } from '@baza/development';
 import type { DevelopmentDocument, DevelopmentLocation, DevelopmentContact } from '@baza/development';
@@ -18,6 +19,7 @@ import { FloorPlanRepository } from './repository/floor-plan.repository';
 import { UnitRepository } from './repository/unit.repository';
 import { OrganizationsService } from '../organizations/organizations.service';
 import type { BuildingDocument, GeoPolygon } from './schemas/building.schema';
+import type { SectionDocument } from './schemas/section.schema';
 import type { FloorDocument } from './schemas/floor.schema';
 import type { FloorPlanDocument, GeoPolygon2D } from './schemas/floor-plan.schema';
 import type { UnitDocument, UnitKind, UnitStatus } from './schemas/unit.schema';
@@ -84,6 +86,7 @@ export class DevelopmentsService {
     private readonly auditService: AuditService,
     private readonly outboxService: OutboxService,
     private readonly publicationService: PublicationService,
+    private readonly publicationRepository: MarketplacePublicationRepository,
     private readonly idempotencyService: IdempotencyService,
     private readonly organizationsService: OrganizationsService,
   ) {}
@@ -697,5 +700,119 @@ export class DevelopmentsService {
     correlationId: string;
   }): Promise<void> {
     return this.updateUnitStatus({ ...params, status: 'available' });
+  }
+
+  /**
+   * D-02 COMPLETE: read-side дочерней иерархии — тот же принцип tenant
+   * isolation, что write-команды выше: parent проверяется по фактической
+   * organizationId из БД перед возвратом списка дочерних сущностей (единый
+   * NOT_FOUND и для "не существует", и для "чужая организация"). Без
+   * transaction/audit/outbox — это read, не write.
+   */
+  async listBuildingsForDevelopment(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<BuildingDocument[]> {
+    const development = await this.developmentRepository.findByIdForOrganization(developmentId, organizationId);
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+    return this.buildingRepository.listForDevelopment(developmentId, organizationId);
+  }
+
+  async listSectionsForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<SectionDocument[]> {
+    const building = await this.buildingRepository.findByIdForOrganization(buildingId, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    return this.sectionRepository.listForBuilding(buildingId, organizationId);
+  }
+
+  async listFloorsForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<FloorDocument[]> {
+    const building = await this.buildingRepository.findByIdForOrganization(buildingId, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    return this.floorRepository.listForBuilding(buildingId, organizationId);
+  }
+
+  async listFloorPlansForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<FloorPlanDocument[]> {
+    const building = await this.buildingRepository.findByIdForOrganization(buildingId, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    return this.floorPlanRepository.listForBuilding(buildingId, organizationId);
+  }
+
+  async listUnitsForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    filter: { kind?: UnitKind; status?: UnitStatus; limit: number },
+  ): Promise<UnitDocument[]> {
+    const building = await this.buildingRepository.findByIdForOrganization(buildingId, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    return this.unitRepository.listForBuilding(buildingId, organizationId, filter);
+  }
+
+  /**
+   * D-03: read-status для ERP polling после publish. Development.status
+   * (draft/active/archived) меняется СИНХРОННО в publishDevelopment, ДО
+   * того как worker вообще начал строить проекцию — не отражает готовность
+   * marketplace-проекции. Этот метод читает РЕАЛЬНЫЙ MarketplacePublication.
+   * status (publication_pending/published/unpublished/build_failed), тот
+   * же принцип tenant isolation, что остальные read-методы: parent
+   * (Development) проверяется по фактической organizationId из БД ПЕРЕД
+   * чтением дочерней публикации, единый 404 и для "Development не
+   * существует/чужой", и для "публикация никогда не запускалась" (publish
+   * ни разу не вызывался — Development всё ещё draft).
+   *
+   * buildError — константный безопасный текст, не реальная причина сборки:
+   * MarketplacePublication физически не хранит текст ошибки (только
+   * status:'build_failed'), соответствует требованию "ошибка записывается
+   * безопасно и не содержит секретов" буквально — нечему утечь, раз
+   * реального текста нигде нет.
+   */
+  async getPublicationStatus(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<{
+    publicationId: string;
+    status: 'publication_pending' | 'published' | 'unpublished' | 'build_failed';
+    slug?: string;
+    version: number;
+    publishedAt?: string;
+    unpublishedAt?: string;
+    buildError?: string;
+  }> {
+    const development = await this.developmentRepository.findByIdForOrganization(developmentId, organizationId);
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    const publication = await this.publicationRepository.findBySource('development', developmentId);
+    if (!publication) {
+      throw new AppException(ErrorCode.PUBLICATION_NOT_FOUND, 'Publication not found for this development');
+    }
+
+    return {
+      publicationId: publication._id.toString(),
+      status: publication.status,
+      slug: publication.slug,
+      version: publication.version,
+      publishedAt: publication.publishedAt?.toISOString(),
+      unpublishedAt: publication.unpublishedAt?.toISOString(),
+      buildError: publication.status === 'build_failed' ? 'Не удалось опубликовать. Обратитесь в поддержку.' : undefined,
+    };
   }
 }

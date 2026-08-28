@@ -209,6 +209,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin находит publication только в разрешённом scope (мастер-план D-06) — deny-by-default: sourceType/city read-grant'ы admin'а определяют, что видно, sourceType/city query-параметры дополнительно СУЖАЮТ уже разрешённый набор, не расширяют его */
+        get: operations["adminListPublications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/publications/{publicationId}/unpublish": {
         parameters: {
             query?: never;
@@ -220,6 +237,91 @@ export interface paths {
         put?: never;
         /** Admin снимает публикацию с публичного каталога — синхронная транзакция (ADR-005 патч), обязательный reason (permission-matrix.md разд.4) */
         post: operations["adminUnpublish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** MKT-002: публикация Listing (active → publication_pending, синхронная транзакция + асинхронная projection, ADR-005) — тот же паттерн, что publishDevelopment. Listing.status не меняется этой командой (в отличие от Development draft→active); повторный publish уже published/publication_pending listing отклоняется 409 (не создаёт дублирующую publication/version) — используйте unpublish, затем publish заново. */
+        post: operations["publishListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** MKT-002: owner снимает Listing с публичного каталога — синхронная транзакция (тот же PublicationService.unpublish, что D-06 admin unpublish использует, actorType:identity вместо admin_account) */
+        post: operations["unpublishListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/listings/{listingId}/publication-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ERP polling после publish — читает РЕАЛЬНЫЙ статус MarketplacePublication, не canonical Listing.status (тот же паттерн, что D-03 getPublicationStatus для Development) */
+        get: operations["getListingPublicationStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** MKT-002: публичный поиск вторички/аренды (гость, каталог/карта) — тот же паттерн, что searchPublicDevelopments, дополнительно фильтруется по dealType/propertyType/commercialSubtype */
+        get: operations["searchPublicListings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/listings/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Публичная карточка Listing по slug (только status=published). Единый 404 для "не существует" и "slug принадлежит Development/Unit, не Listing" (non-disclosure, тот же принцип, что getPublicDevelopment) */
+        get: operations["getPublicListing"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -385,6 +487,36 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        PublicListingList: {
+            items?: components["schemas"]["PublicListingCard"][];
+            nextCursor?: string | null;
+        };
+        /** @description MKT-002: только whitelist-поля из MarketplacePublication.denormalizedFields (ADR-005, apps/worker/src/handlers/listing-publication.mapper.ts) — никогда organizationId/publisherScope/contact/duplicate signals/audit/ commission. media намеренно отсутствует — PropertyAsset/Listing схема не содержит media-поля в этом проходе (PROP-001 не включал). */
+        PublicListingCard: {
+            slug?: string;
+            /** @enum {string} */
+            dealType?: "sale" | "rent_long" | "rent_short";
+            price?: components["schemas"]["MoneyAmount"];
+            /** @enum {string} */
+            propertyType?: "apartment" | "house" | "land" | "commercial";
+            /** @enum {string|null} */
+            commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose" | null;
+            location?: Record<string, never>;
+            characteristics?: {
+                area?: number;
+                rooms?: number | null;
+                floor?: number | null;
+                totalFloors?: number | null;
+            };
+            seo?: {
+                title?: string;
+                description?: string;
+                canonicalUrl?: string;
+                structuredData?: {
+                    [key: string]: unknown;
+                };
+            };
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -401,6 +533,8 @@ export interface components {
         Cursor: string;
         Limit: number;
         DevelopmentId: string;
+        AssetId: string;
+        ListingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
     };
@@ -678,6 +812,8 @@ export interface operations {
                     "application/json": components["schemas"]["PublicDevelopmentList"];
                 };
             };
+            /** @description VALIDATION_FAILED — невалидный cursor/limit/bbox или неизвестный query-параметр (D-04A) */
+            400: components["responses"]["Error"];
         };
     };
     getPublicDevelopment: {
@@ -762,6 +898,47 @@ export interface operations {
             403: components["responses"]["Error"];
         };
     };
+    adminListPublications: {
+        parameters: {
+            query?: {
+                sourceType?: "development" | "unit" | "listing";
+                city?: string;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список publication в разрешённом scope, ЛЮБОЙ статус (не только published — admin должен видеть publication_pending/unpublished/ build_failed тоже) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: {
+                            id?: string;
+                            sourceType?: string;
+                            sourceId?: string;
+                            organizationId?: string | null;
+                            status?: string;
+                            slug?: string | null;
+                            publishedAt?: string | null;
+                            unpublishedAt?: string | null;
+                            unpublishReason?: string | null;
+                            city?: string | null;
+                        }[];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+        };
+    };
     adminUnpublish: {
         parameters: {
             query?: never;
@@ -792,6 +969,148 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description FORBIDDEN / ADMIN_SCOPE_INSUFFICIENT */
             403: components["responses"]["Error"];
+        };
+    };
+    publishListing: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Publication принята, статус publication_pending */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            /** @description Listing не найден / чужая организация (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+            /** @description Listing status не 'active' (draft/expired/archived) ИЛИ публикация уже существует в статусе, отличном от unpublished/build_failed */
+            409: components["responses"]["Error"];
+        };
+    };
+    unpublishListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Публикация скрыта немедленно (синхронно) — 201, не 200 (Nest default для POST без явного @HttpCode, задокументировано как фактическое поведение, не переопределено этим проходом) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            404: components["responses"]["Error"];
+            /** @description Publication уже не в статусе published */
+            409: components["responses"]["Error"];
+        };
+    };
+    getListingPublicationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Publication status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            /** @description Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+        };
+    };
+    searchPublicListings: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+                /** @description bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat */
+                bbox?: string;
+                city?: string;
+                dealType?: "sale" | "rent_long" | "rent_short";
+                propertyType?: "apartment" | "house" | "land" | "commercial";
+                commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список публичных карточек (whitelist-поля из MarketplacePublication, ADR-005) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicListingList"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный cursor/limit/bbox/enum-значение или неизвестный query-параметр */
+            400: components["responses"]["Error"];
+        };
+    };
+    getPublicListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Публичная карточка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicListingCard"];
+                };
+            };
+            /** @description PUBLICATION_NOT_FOUND */
+            404: components["responses"]["Error"];
         };
     };
 }

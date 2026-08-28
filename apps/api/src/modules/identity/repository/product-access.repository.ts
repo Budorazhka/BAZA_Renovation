@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { ProductAccessDocument, type ProductAccessProduct } from '../schemas/product-access.schema';
 
 /**
@@ -17,10 +17,15 @@ export class ProductAccessRepository {
    * ADR-004 login-flow: "есть ли у X активный доступ к ERP/Admin" —
    * revokedAt отсутствует означает грант всё ещё активен.
    */
-  async hasActiveAccess(identityId: Types.ObjectId, product: ProductAccessProduct): Promise<boolean> {
+  async hasActiveAccess(
+    identityId: Types.ObjectId,
+    product: ProductAccessProduct,
+    session?: ClientSession,
+  ): Promise<boolean> {
     const existing = await this.model
       .findOne({ identityId, product, revokedAt: { $exists: false } })
       .select('_id')
+      .session(session ?? null)
       .exec();
     return existing !== null;
   }
@@ -30,10 +35,14 @@ export class ProductAccessRepository {
    * (например, повторное назначение после vacate/re-hire) — не создаёт
    * дубликат активного гранта, если уже есть незакрытый.
    */
-  async grantIfNotActive(identityId: Types.ObjectId, product: ProductAccessProduct): Promise<void> {
-    const alreadyActive = await this.hasActiveAccess(identityId, product);
+  async grantIfNotActive(
+    identityId: Types.ObjectId,
+    product: ProductAccessProduct,
+    session?: ClientSession,
+  ): Promise<void> {
+    const alreadyActive = await this.hasActiveAccess(identityId, product, session);
     if (alreadyActive) return;
-    await this.model.create({ identityId, product, grantedAt: new Date() });
+    await this.model.create([{ identityId, product, grantedAt: new Date() }], { session });
   }
 
   async revokeAllForIdentity(identityId: Types.ObjectId, product: ProductAccessProduct): Promise<void> {

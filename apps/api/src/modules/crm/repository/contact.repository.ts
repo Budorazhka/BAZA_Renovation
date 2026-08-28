@@ -32,4 +32,18 @@ export class ContactRepository {
   ): Promise<ContactDocument | null> {
     return this.model.findOne({ _id: id, organizationId }).exec();
   }
+
+  /**
+   * CRM list read-model: contacts всегда выбираются вместе с тем же
+   * organizationId, даже когда id уже пришли из tenant-scoped leads. Это
+   * не избыточная проверка: не даёт превратить ошибочную ссылку contactId
+   * в утечку контакта другой организации.
+   */
+  async findByIdsForOrganization(
+    organizationId: Types.ObjectId,
+    ids: Types.ObjectId[],
+  ): Promise<ContactDocument[]> {
+    if (ids.length === 0) return [];
+    return this.model.find({ _id: { $in: ids }, organizationId }).exec();
+  }
 }

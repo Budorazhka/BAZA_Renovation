@@ -39,6 +39,7 @@ describe('MarketplacePublicationRepository', () => {
 
       const repository = new MarketplacePublicationRepository(mockModel as never);
       await repository.markPublished(id, {
+        expectedVersion: 0,
         slug: 'test-development',
         seo: { title: 'T', description: 'D', canonicalUrl: 'https://x', structuredData: {} },
         denormalizedFields: { name: 'X' },
@@ -49,12 +50,56 @@ describe('MarketplacePublicationRepository', () => {
       expect(filter.status).toBe('publication_pending');
     });
 
+    /**
+     * D-03 race-fix: version — тоже часть CAS-фильтра, не post-hoc сравнение
+     * — защита от гонки между двумя последовательными PublicationRequested
+     * событиями (например publish, затем rebuild), обработанными worker'ом
+     * не в порядке создания.
+     */
+    it('условие фильтра включает version:expectedVersion', async () => {
+      const id = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { updateOne: updateOneSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      await repository.markPublished(id, {
+        expectedVersion: 5,
+        slug: 'test-development',
+        seo: { title: 'T', description: 'D', canonicalUrl: 'https://x', structuredData: {} },
+        denormalizedFields: { name: 'X' },
+        searchProjection: { city: 'Tbilisi' },
+      });
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        { _id: id, status: 'publication_pending', version: 5 },
+        expect.anything(),
+      );
+    });
+
     it('возвращает modifiedCount:0, если документ уже не в publication_pending (unpublish опередил worker)', async () => {
       const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
       const mockModel = { updateOne: jest.fn().mockReturnValue({ exec: execSpy }) };
 
       const repository = new MarketplacePublicationRepository(mockModel as never);
       const result = await repository.markPublished(new Types.ObjectId(), {
+        expectedVersion: 0,
+        slug: 'x',
+        seo: { title: 'T', description: 'D', canonicalUrl: 'https://x', structuredData: {} },
+        denormalizedFields: {},
+        searchProjection: {},
+      });
+
+      expect(result).toEqual({ modifiedCount: 0 });
+    });
+
+    it('возвращает modifiedCount:0, если version не совпадает (более новое событие обработано раньше)', async () => {
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+      const mockModel = { updateOne: jest.fn().mockReturnValue({ exec: execSpy }) };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const result = await repository.markPublished(new Types.ObjectId(), {
+        expectedVersion: 1, // устаревшая версия — реальный документ уже на version:2+
         slug: 'x',
         seo: { title: 'T', description: 'D', canonicalUrl: 'https://x', structuredData: {} },
         denormalizedFields: {},
@@ -130,6 +175,65 @@ describe('MarketplacePublicationRepository', () => {
       expect(filter['searchProjection.geo']).toEqual({
         $geoWithin: { $box: [[44, 41], [45, 42]] },
       });
+    });
+  });
+
+  describe('listForAdmin', () => {
+    it('НЕ добавляет status:published — admin видит publication в любом статусе', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      await repository.listForAdmin({ scopeFilter: { sourceType: 'development' }, limit: 20 });
+
+      const [filter] = findSpy.mock.calls[0] as [Record<string, unknown>];
+      expect(filter).not.toHaveProperty('status');
+      expect(filter.sourceType).toBe('development');
+    });
+
+    it('исполняет scopeFilter как есть (не знает про PermissionGrant, только про Mongo-условие)', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const scopeFilter = { $or: [{ sourceType: 'development' }, { sourceType: 'unit' }] };
+      await repository.listForAdmin({ scopeFilter, limit: 20 });
+
+      expect(findSpy).toHaveBeenCalledWith(expect.objectContaining(scopeFilter));
+    });
+
+    it('cursor добавляет _id:{$gt:cursor} поверх scopeFilter', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+      const cursor = new Types.ObjectId();
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      await repository.listForAdmin({ scopeFilter: { sourceType: 'development' }, cursor, limit: 20 });
+
+      expect(findSpy).toHaveBeenCalledWith({ sourceType: 'development', _id: { $gt: cursor } });
+    });
+
+    it('limit передаётся в .limit() как есть (limit+1 паттерн — забота вызывающего кода)', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      await repository.listForAdmin({ scopeFilter: {}, limit: 21 });
+
+      expect(limitSpy).toHaveBeenCalledWith(21);
+      expect(sortSpy).toHaveBeenCalledWith({ _id: 1 });
     });
   });
 });

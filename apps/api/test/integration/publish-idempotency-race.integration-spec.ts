@@ -9,9 +9,6 @@ import { AppExceptionFilter } from '../../src/shared/errors/app-exception.filter
 import { CorrelationIdMiddleware } from '../../src/shared/errors/correlation-id.middleware';
 import { TenantContextMiddleware } from '../../src/shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.middleware';
-import { AuthService } from '../../src/modules/identity/auth.service';
-import { SessionService } from '../../src/modules/identity/session.service';
-import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
 import { DevelopmentRepository } from '@baza/development';
 
 /**
@@ -39,9 +36,6 @@ describe('POST /developments/:id/publish — гонка параллельных
   let replSet: MongoMemoryReplSet;
   let app: NestFastifyApplication;
   let connection: Connection;
-  let authService: AuthService;
-  let sessionService: SessionService;
-  let organizationsService: OrganizationsService;
   let developmentRepository: DevelopmentRepository;
 
   beforeAll(async () => {
@@ -83,9 +77,6 @@ describe('POST /developments/:id/publish — гонка параллельных
     await app.getHttpAdapter().getInstance().ready();
 
     connection = moduleRef.get<Connection>(getConnectionToken());
-    authService = moduleRef.get(AuthService);
-    sessionService = moduleRef.get(SessionService);
-    organizationsService = moduleRef.get(OrganizationsService);
     developmentRepository = moduleRef.get(DevelopmentRepository);
   }, 120_000);
 
@@ -109,27 +100,27 @@ describe('POST /developments/:id/publish — гонка параллельных
   });
 
   /**
-   * registerIdentity + createOrganizationWithOwner (тип 'developer' —
-   * иначе requireDeveloperOrganization отклонит publish раньше, чем гонка
-   * вообще успеет проявиться) + createSession напрямую через сервисы, минуя
-   * HTTP /auth/login — этот тест проверяет гонку publish, не сам login-флоу,
-   * createOrganizationWithOwner уже сама выдаёт default owner-grants
-   * (включая development.edit), см. её докстринг.
+   * Реальный HTTP onboarding-flow: POST /auth/register → POST /organizations/register
+   * (developer-организация возвращает сессию с ролью developer).
    */
   async function seedAuthenticatedDeveloperOwner(): Promise<{ cookie: string; organizationId: Types.ObjectId }> {
     const login = `owner-${new Types.ObjectId().toString()}@example.test`;
-    const identityId = await authService.registerIdentity({ login, password: 'correct horse battery staple' });
-
-    // createOrganizationWithOwner уже вызывает grantErpAccess(ownerIdentityId)
-    // сама (см. её докстринг) — не дублируем здесь.
-    const { organizationId } = await organizationsService.createOrganizationWithOwner({
-      type: 'developer',
-      name: 'Гоночный застройщик',
-      ownerIdentityId: identityId,
+    const password = 'correct horse battery staple';
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      payload: { login, password },
     });
-
-    const session = await sessionService.createSession({ identityId, productAudience: 'erp' });
-    return { cookie: `${SessionService.COOKIE_NAME}=${session.token}`, organizationId };
+    const orgRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/organizations/register',
+      payload: { login, password, type: 'developer', name: 'Гоночный застройщик' },
+    });
+    expect(orgRes.statusCode).toBe(201);
+    const raw = orgRes.headers['set-cookie'];
+    const cookie = (Array.isArray(raw) ? raw[0] : raw)?.match(/baza_session=[^;]+/)?.[0];
+    if (!cookie) throw new Error('session cookie missing');
+    return { cookie, organizationId: new Types.ObjectId(orgRes.json().organizationId as string) };
   }
 
   it('два параллельных publish с одним Idempotency-Key: один и тот же 202-ответ, ровно одна публикация', async () => {

@@ -45,6 +45,16 @@ export interface DefaultGrant {
  * explicit per-position toggle (owner decision xlsx #53/#24), не default.
  * `crm.stages.configure` намеренно отсутствует у всех ролей (xlsx #108).
  *
+ * `lead.changeStage` (D-05B) — НОВЫЙ resource.action, отсутствует в
+ * permission-matrix.md как отдельная строка (техническое решение, не owner
+ * decision, подтверждено владельцем явно в диалоге при реализации D-05B:
+ * "конечно менеджер может менять стадию своих лидов"). Раньше PATCH
+ * /leads/:id/stage переиспользовал `lead.assign` (только owner/director/
+ * rop, organization-wide) — это физически не позволяло manager'у менять
+ * стадию даже собственного лида. Новый грант со scope 'own' у manager
+ * закрывает это, не добавляя новую роль/fixedRole — только новое действие
+ * в уже существующей ролевой модели.
+ *
  * Найдено реальным E2E-прогоном (не гипотетически): без этого маппинга ни
  * один PermissionGrant никогда не создаётся ни для одной Position — deny-
  * by-default PolicyEvaluatorService отклоняет ЛЮБОЙ authenticated ERP-запрос
@@ -55,10 +65,17 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
+    { resource: 'lead', action: 'changeStage', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
+    { resource: 'property_asset', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'create', scope: 'organization' },
+    { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'listing', action: 'read', scope: 'organization' },
+    { resource: 'listing', action: 'create', scope: 'organization' },
+    { resource: 'listing', action: 'edit', scope: 'organization' },
     { resource: 'unit', action: 'price.update', scope: 'organization' },
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
@@ -78,11 +95,18 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
+    { resource: 'lead', action: 'changeStage', scope: 'organization' },
     { resource: 'lead', action: 'reassign', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
+    { resource: 'property_asset', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'create', scope: 'organization' },
+    { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'listing', action: 'read', scope: 'organization' },
+    { resource: 'listing', action: 'create', scope: 'organization' },
+    { resource: 'listing', action: 'edit', scope: 'organization' },
     { resource: 'unit', action: 'price.update', scope: 'organization' },
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
@@ -101,10 +125,17 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
+    { resource: 'lead', action: 'changeStage', scope: 'organization' },
     { resource: 'lead', action: 'reassign', scope: 'team' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'create', scope: 'organization' },
+    { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'listing', action: 'read', scope: 'organization' },
+    { resource: 'listing', action: 'create', scope: 'organization' },
+    { resource: 'listing', action: 'edit', scope: 'organization' },
     { resource: 'unit', action: 'price.update', scope: 'organization' },
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
@@ -117,8 +148,19 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   manager: [
     { resource: 'lead', action: 'read', scope: 'own' },
     { resource: 'lead', action: 'create', scope: 'organization' },
+    // D-05B: manager ведёт своих лидов по воронке — очевидная возможность,
+    // scope 'own' сужает до лидов, где ownerPositionId === своя Position
+    // (ownerFilterForAction в LeadController, не автоматически — deny-by-
+    // default guard проверяет только наличие гранта, не scope).
+    { resource: 'lead', action: 'changeStage', scope: 'own' },
     { resource: 'contact', action: 'read', scope: 'own' },
     { resource: 'development', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'create', scope: 'organization' },
+    { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'listing', action: 'read', scope: 'organization' },
+    { resource: 'listing', action: 'create', scope: 'organization' },
+    { resource: 'listing', action: 'edit', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
   ],
@@ -135,5 +177,39 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   marketer: [
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
+  ],
+  // 27.08.2026 (владелец подтвердил, D-07 vertical E2E): developer-организация
+  // публикует свои ЖК на marketplace и получает лиды через reveal-contact на
+  // собственные публикации (MarketplaceService создаёт Lead с ownerPositionId
+  // = организация публикации) — lead.read/assign/changeStage нужны, чтобы
+  // owner+команда developer-организации видели и вели эти лиды в своём ERP,
+  // тот же набор, что у agency owner.
+  developer: [
+    { resource: 'lead', action: 'read', scope: 'organization' },
+    { resource: 'lead', action: 'create', scope: 'organization' },
+    { resource: 'lead', action: 'assign', scope: 'organization' },
+    { resource: 'lead', action: 'changeStage', scope: 'organization' },
+    { resource: 'contact', action: 'read', scope: 'organization' },
+    { resource: 'development', action: 'read', scope: 'organization' },
+    { resource: 'development', action: 'edit', scope: 'organization' },
+    { resource: 'property_asset', action: 'read', scope: 'organization' },
+    { resource: 'property_asset', action: 'create', scope: 'organization' },
+    { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'listing', action: 'read', scope: 'organization' },
+    { resource: 'listing', action: 'create', scope: 'organization' },
+    { resource: 'listing', action: 'edit', scope: 'organization' },
+    { resource: 'unit', action: 'price.update', scope: 'organization' },
+    { resource: 'unit', action: 'status.update', scope: 'organization' },
+    { resource: 'chessboard', action: 'export', scope: 'organization' },
+    { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'confirm', scope: 'own' },
+    { resource: 'booking', action: 'cancel', scope: 'organization' },
+    { resource: 'booking', action: 'extend', scope: 'organization' },
+    { resource: 'position', action: 'create', scope: 'organization' },
+    { resource: 'position', action: 'assign_occupant', scope: 'organization' },
+    { resource: 'position', action: 'vacate', scope: 'organization' },
+    { resource: 'personal_access', action: 'grant', scope: 'position' },
+    { resource: 'finance', action: 'read', scope: 'organization' },
+    { resource: 'export', action: 'run', scope: 'organization' },
   ],
 };

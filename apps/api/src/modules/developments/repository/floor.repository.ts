@@ -33,7 +33,14 @@ export class FloorRepository {
     return this.model.findOne({ _id: id, organizationId }).exec();
   }
 
-  async listForBuilding(buildingId: Types.ObjectId): Promise<FloorDocument[]> {
-    return this.model.find({ buildingId }).sort({ floorNumber: 1 }).exec();
+  /**
+   * organizationId — часть фильтра, не post-fetch проверка: тот же принцип,
+   * что DevelopmentRepository.listForOrganization.
+   */
+  async listForBuilding(
+    buildingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<FloorDocument[]> {
+    return this.model.find({ buildingId, organizationId }).sort({ floorNumber: 1 }).exec();
   }
 }

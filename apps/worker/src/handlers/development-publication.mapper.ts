@@ -13,9 +13,17 @@ import type { PublicationSeo } from '@baza/publication';
  * проход — требует агрегации минимальной цены по Unit-коллекции модуля
  * developments (apps/api), к которой worker пока не имеет доступа
  * (мигрирован в @baza/development только Development, не вся иерархия
- * Building/Floor/Unit — осознанное сужение scope D-03, см.
- * docs/operations/d03-publication-projection.md "Не покрыто"). Явно
- * зафиксировано как отсутствующее поле, не молча опущено.
+ * Building/Floor/Unit — осознанное сужение scope). Явно зафиксировано как
+ * отсутствующее поле, не молча опущено.
+ *
+ * contact (D-03) НАМЕРЕННО НЕ включён — явного reveal-flow механизма (кто,
+ * когда, при каком действии покупателя получает контакт застройщика) в
+ * проекте пока нет. Публикация телефона напрямую в открытую проекцию,
+ * доступную ЛЮБОМУ анонимному посетителю без reveal-барьера, была бы
+ * регрессом безопасности, а не соответствием формулировке "contact только
+ * согласно принятому reveal-flow" — единственный способ соответствовать ей
+ * буквально сейчас — не публиковать. Добавление contact сюда — отдельная
+ * задача, требующая сначала спроектировать сам reveal-механизм.
  */
 export function mapDevelopmentToDenormalizedFields(development: DevelopmentDocument): Record<string, unknown> {
   return {
@@ -26,8 +34,11 @@ export function mapDevelopmentToDenormalizedFields(development: DevelopmentDocum
       address: development.location.address,
     },
     classType: development.classType,
+    startDate: development.startDate,
     completionDate: development.completionDate,
+    description: development.description,
     // priceFrom: намеренно отсутствует, см. комментарий функции выше.
+    // contact: намеренно НЕ включён, см. комментарий функции выше.
   };
 }
 

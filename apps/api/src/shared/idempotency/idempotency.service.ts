@@ -68,6 +68,48 @@ export class IdempotencyService {
     return { responseStatus: existing.responseStatus, responseBody: existing.responseBody };
   }
 
+  /**
+   * MKT-002-IDEMP-RACE-001: закрывает реальную гонку между двумя ДЕЙСТВИТЕЛЬНО
+   * одновременными запросами с одним Idempotency-Key. checkReplay() сам по
+   * себе видит только уже ЗАКОММИЧЕННУЮ запись — единственный `record()`
+   * читается снаружи транзакции (findByKey не принимает session), поэтому
+   * технически способен увидеть запись соперника сразу после commit, но НЕ
+   * раньше. Если оба запроса проходят earlyReplay почти синхронно (ключа
+   * ещё нет), один выигрывает CAS на бизнес-сущности (markPublishing/
+   * markPublishingForIdentity), другой сразу после проигрыша делает ОДИН
+   * checkReplay() — и это гонка с фактическим временем commit транзакции
+   * победителя, не гарантия. Воспроизведено интеграционным тестом:
+   * единственный повторный checkReplay() после CAS-провала успевает не
+   * всегда (см. mkt-002-listing-publication.integration-spec.ts, ERP-путь
+   * без повторной проверки вообще, marketplace-путь с одной попыткой — оба
+   * давали ложный 409 VERSION_CONFLICT вместо идемпотентного replay).
+   *
+   * awaitReplay() вызывается ТОЛЬКО из ветки "CAS-запись бизнес-сущности
+   * провалилась" (modifiedCount:0), ПОСЛЕ выхода из своей собственной
+   * транзакции (см. вызывающий код в PropertyAssetsService/
+   * MarketplacePropertyAssetsService) — короткий bounded-retry с backoff,
+   * не бесконечный polling: если запись соперника до сих пор не
+   * закоммичена спустя разумное окно, это означает, что либо это
+   * действительно ДРУГОЙ конкурентный запрос (другой ключ или его нет), либо
+   * соперник упал/откатился до commit (crash-сценарий) — в обоих случаях
+   * honest ConflictException вызывающей стороне лучше, чем зависание.
+   */
+  async awaitReplay(
+    params: { identityId: Types.ObjectId; operation: string; key: string; requestBody: Record<string, unknown> },
+    options: { attempts: number; delayMs: number } = { attempts: 8, delayMs: 25 },
+  ): Promise<IdempotentReplay | null> {
+    for (let attempt = 0; attempt < options.attempts; attempt += 1) {
+      const replay = await this.checkReplay(params);
+      if (replay) {
+        return replay;
+      }
+      if (attempt < options.attempts - 1) {
+        await sleep(options.delayMs);
+      }
+    }
+    return null;
+  }
+
   async record(
     params: {
       identityId: Types.ObjectId;
@@ -95,4 +137,8 @@ export class IdempotencyService {
 
 function hashRequestBody(requestBody: Record<string, unknown>): string {
   return createHash('sha256').update(JSON.stringify(requestBody)).digest('hex');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
