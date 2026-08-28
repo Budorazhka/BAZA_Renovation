@@ -237,6 +237,80 @@ describe('AdminAccountService — audit', () => {
  * admin-сессии. Создание аккаунта обязано выдавать оба доступа как одну
  * бизнес-операцию.
  */
+/**
+ * ADR-009: только super_admin управляет составом Admin accounts —
+ * listAdminAccounts/listGrants те же self-escalation-prevention гарантии,
+ * что create/grant выше, теперь для READ-путей (обычный scoped admin не
+ * должен уметь перечислить весь состав админов или чужие grants).
+ */
+describe('AdminAccountService — listAdminAccounts', () => {
+  it('отклоняет вызов от НЕ-super_admin как SELF_ESCALATION_BLOCKED, не читает repository', async () => {
+    const listSpy = jest.fn();
+    const service = makeService({ list: listSpy });
+
+    await expect(
+      service.listAdminAccounts(makeAdminContext({ isSuperAdmin: false }), { limit: 20 }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
+
+    expect(listSpy).not.toHaveBeenCalled();
+  });
+
+  it('для super_admin возвращает плоские DTO из repository.list', async () => {
+    const row = {
+      _id: new Types.ObjectId(),
+      identityId: new Types.ObjectId(),
+      isSuperAdmin: false,
+      status: 'active',
+      createdAt: new Date('2026-08-01T00:00:00.000Z'),
+    };
+    const listSpy = jest.fn().mockResolvedValue([row]);
+    const service = makeService({ list: listSpy });
+
+    const result = await service.listAdminAccounts(makeAdminContext({ isSuperAdmin: true }), { limit: 20 });
+
+    expect(listSpy).toHaveBeenCalledWith({ limit: 20 });
+    expect(result).toEqual([
+      { id: row._id, identityId: row.identityId, isSuperAdmin: false, status: 'active', createdAt: row.createdAt },
+    ]);
+  });
+});
+
+describe('AdminAccountService — listGrants', () => {
+  it('отклоняет вызов от НЕ-super_admin как SELF_ESCALATION_BLOCKED, не читает target', async () => {
+    const findByIdSpy = jest.fn();
+    const service = makeService({ findById: findByIdSpy });
+
+    await expect(
+      service.listGrants(makeAdminContext({ isSuperAdmin: false }), new Types.ObjectId()),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
+
+    expect(findByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('бросает NOT_FOUND, если target AdminAccount не существует', async () => {
+    const service = makeService({ findById: jest.fn().mockResolvedValue(null) });
+
+    await expect(
+      service.listGrants(makeAdminContext({ isSuperAdmin: true }), new Types.ObjectId()),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('для существующего target возвращает grants из PolicyEvaluatorService.listGrantsForSubject', async () => {
+    const targetId = new Types.ObjectId();
+    const grants = [{ resource: 'development', action: 'read', scope: 'city' as const, scopeValue: 'batumi' }];
+    const listGrantsForSubjectSpy = jest.fn().mockResolvedValue(grants);
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: targetId }) },
+      { listGrantsForSubject: listGrantsForSubjectSpy },
+    );
+
+    const result = await service.listGrants(makeAdminContext({ isSuperAdmin: true }), targetId);
+
+    expect(listGrantsForSubjectSpy).toHaveBeenCalledWith('admin_account', targetId);
+    expect(result).toBe(grants);
+  });
+});
+
 describe('AdminAccountService — product access', () => {
   it('при создании AdminAccount выдаёт identity доступ к продукту admin', async () => {
     const accountId = new Types.ObjectId();

@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { AdminGuard } from '../../shared/admin/admin.guard';
@@ -6,6 +6,7 @@ import { requireAdminContext } from '../../shared/admin/admin-context.middleware
 import { AdminAccountService } from './admin-account.service';
 import { CreateAdminAccountDto } from './dto/create-admin-account.dto';
 import { CreatePermissionGrantDto } from './dto/create-permission-grant.dto';
+import { ListAdminAccountsQueryDto } from './dto/list-admin-accounts-query.dto';
 
 /**
  * НЕ в узкой OpenAPI-спеке (v1-first-vertical-slice.yaml специфицирует
@@ -25,6 +26,34 @@ import { CreatePermissionGrantDto } from './dto/create-permission-grant.dto';
 @UseGuards(AdminGuard)
 export class AdminAccountController {
   constructor(private readonly adminAccountService: AdminAccountService) {}
+
+  /**
+   * admin-web accounts screen: без этого endpoint'а render нечего —
+   * AdminAccountRepository.list() существовал только на уровне репозитория
+   * до этого прохода. super_admin-only enforced внутри сервиса, тот же
+   * принцип, что create/grant выше.
+   */
+  @Get()
+  async list(@Req() req: FastifyRequest, @Query() dto: ListAdminAccountsQueryDto) {
+    const adminContext = requireAdminContext(req);
+    const rows = await this.adminAccountService.listAdminAccounts(adminContext, {
+      cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      limit: dto.limit,
+    });
+    const hasMore = rows.length > dto.limit;
+    const pageRows = hasMore ? rows.slice(0, dto.limit) : rows;
+    const nextCursor = hasMore ? pageRows[pageRows.length - 1]!.id.toString() : null;
+    return {
+      items: pageRows.map((row) => ({
+        id: row.id.toString(),
+        identityId: row.identityId.toString(),
+        isSuperAdmin: row.isSuperAdmin,
+        status: row.status,
+        createdAt: row.createdAt.toISOString(),
+      })),
+      nextCursor,
+    };
+  }
 
   @Post()
   async create(@Req() req: FastifyRequest, @Body() dto: CreateAdminAccountDto) {
@@ -54,5 +83,17 @@ export class AdminAccountController {
       correlationId: req.correlationId,
     });
     return { granted: true };
+  }
+
+  /**
+   * admin-web accounts screen: просмотр текущих grants аккаунта перед
+   * выдачей нового — без этого super_admin не видит, что уже выдано, и
+   * рискует дублировать grant вслепую.
+   */
+  @Get(':adminAccountId/grants')
+  async listGrants(@Req() req: FastifyRequest, @Param('adminAccountId') adminAccountIdParam: string) {
+    const adminContext = requireAdminContext(req);
+    const grants = await this.adminAccountService.listGrants(adminContext, new Types.ObjectId(adminAccountIdParam));
+    return { items: grants };
   }
 }

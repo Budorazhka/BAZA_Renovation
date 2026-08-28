@@ -8,6 +8,7 @@ import { AdminAccountService } from './admin-account.service';
 import { AdminPublicationService } from './admin-publication.service';
 import { AdminPublicationController } from './admin-publication.controller';
 import { AdminAccountController } from './admin-account.controller';
+import { AdminMeController } from './admin-me.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { AuditModule } from '../audit/audit.module';
@@ -40,7 +41,7 @@ import { IdentityModule } from '../identity/identity.module';
     AuditModule,
     IdentityModule,
   ],
-  controllers: [AdminPublicationController, AdminAccountController],
+  controllers: [AdminPublicationController, AdminAccountController, AdminMeController],
   providers: [AdminAccountRepository, AdminPolicyService, AdminAccountService, AdminPublicationService],
   exports: [AdminAccountRepository],
 })
