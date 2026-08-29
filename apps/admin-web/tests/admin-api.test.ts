@@ -79,4 +79,67 @@ describe('createAdminApi', () => {
     const [, init] = fetcher.mock.calls[0]!
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ resource: 'development', action: 'read', scope: 'global', scopeValue: undefined })
   })
+
+  it('logout POSTs to /auth/logout with no body', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ loggedOut: true }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.logout()
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/auth/logout')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(result).toEqual({ loggedOut: true })
+  })
+
+  it('deactivateAccount posts reason to the correct accountId path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ status: 'deactivated' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.deactivateAccount('acc1', 'нарушение политики использования admin-доступа')
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/accounts/acc1/deactivate')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'нарушение политики использования admin-доступа' })
+    expect(result).toEqual({ status: 'deactivated' })
+  })
+
+  it('reactivateAccount posts reason to the correct accountId path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ status: 'active' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.reactivateAccount('acc1', 'ошибка устранена, восстанавливаем доступ')
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/accounts/acc1/reactivate')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'ошибка устранена, восстанавливаем доступ' })
+    expect(result).toEqual({ status: 'active' })
+  })
+
+  it('revokeGrant posts reason and expectedVersion to the correct grant path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ revoked: true }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.revokeGrant('acc1', 'grant1', { reason: 'причина отзыва granta', expectedVersion: 2 })
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/accounts/acc1/grants/grant1/revoke')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'причина отзыва granta', expectedVersion: 2 })
+    expect(result).toEqual({ revoked: true })
+  })
+
+  it('revokeGrant conflict (409 VERSION_CONFLICT) surfaces as AdminApiError with the server code, not swallowed', async () => {
+    const fetcher = vi.fn(async () =>
+      jsonResponse({ error: { code: 'VERSION_CONFLICT', message: 'Grant изменён другим запросом', requestId: 'req-1' } }, 409),
+    )
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await expect(api.revokeGrant('acc1', 'grant1', { reason: 'причина отзыва granta', expectedVersion: 1 })).rejects.toMatchObject({
+      status: 409,
+      code: 'VERSION_CONFLICT',
+    })
+  })
 })

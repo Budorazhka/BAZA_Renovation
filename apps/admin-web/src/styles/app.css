@@ -75,6 +75,11 @@ input#create-identity-id {
   color: var(--ink);
 }
 
+.site-nav button {
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+}
+
 .session-role {
   padding: 0.2rem 0.6rem;
   border-radius: 4px;
@@ -381,4 +386,29 @@ button.danger {
   margin: 0 0 1rem;
   padding-left: 1.1rem;
   font-size: 0.9rem;
+}
+
+.grants-list li {
+  margin-bottom: 0.35rem;
+}
+
+.grant-revoked {
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+
+.row-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--danger);
+  text-decoration: underline;
+  font-size: 0.85rem;
+  margin-left: 0.5rem;
 }

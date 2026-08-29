@@ -13,7 +13,10 @@ import { RegisterRequestDto } from './dto/register-request.dto';
  */
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly sessionService: SessionService,
+  ) {}
 
   @Post('login')
   @HttpCode(200)
@@ -59,5 +62,33 @@ export class AuthController {
   async register(@Body() dto: RegisterRequestDto): Promise<{ identityId: string }> {
     const identityId = await this.authService.registerIdentity({ login: dto.login, password: dto.password });
     return { identityId: identityId.toString() };
+  }
+
+  /**
+   * Не в узкой OpenAPI-спеке v1-first-vertical-slice.yaml до этого прохода
+   * (см. docs/operations/admin-control-plane.md "Не реализовано" п.4) —
+   * закрывает честный пробел: SessionService.revokeSession существовал, но
+   * не был подключен ни к одному HTTP-маршруту ни для одного audience.
+   *
+   * Идемпотентен: отсутствие cookie или уже отозванный/несуществующий
+   * токен — тот же 200 {loggedOut:true}, не 401/404 (logout не должен
+   * палить, была ли сессия вообще валидна — тот же non-disclosure принцип,
+   * что уже применяется к login()). Cookie всегда очищается в ответе,
+   * даже если сессию в БД искать было не по чему.
+   */
+  @Post('logout')
+  @HttpCode(200)
+  async logout(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<{ loggedOut: true }> {
+    const rawToken = this.sessionService.getRawTokenFromRequest(req);
+    if (rawToken) {
+      await this.sessionService.revokeSession(rawToken);
+    }
+
+    reply.clearCookie(SessionService.COOKIE_NAME, { path: '/' });
+
+    return { loggedOut: true };
   }
 }

@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { adminApi, AdminApiError } from '../api/admin-api'
-import type { PermissionGrant, PermissionScope } from '../types/admin'
+import type { PermissionScope } from '../types/admin'
 
 const SCOPES: PermissionScope[] = ['global', 'city', 'own', 'position', 'team', 'organization', 'project', 'assigned', 'domain']
 // city/domain/project требуют scopeValue на сервере (PolicyEvaluatorService.scopeCovers) —
@@ -9,7 +9,13 @@ const SCOPES_REQUIRING_VALUE: PermissionScope[] = ['city', 'domain', 'project']
 
 interface Props {
   adminAccountId: string
-  onGranted: (grant: PermissionGrant) => void
+  /**
+   * Без параметра — вызывающий код (GrantsPanel) всегда просто перезагружает
+   * список с сервера (id/version granta присваивает сервер, форма не может
+   * их предугадать), не строит объект гранта локально. Тот же принцип "нет
+   * optimistic state", что и остальной AccountsPage.
+   */
+  onGranted: () => void
 }
 
 /**
@@ -42,7 +48,7 @@ export function GrantForm({ adminAccountId, onGranted }: Props) {
         scope,
         scopeValue: requiresValue ? scopeValue.trim() : undefined,
       })
-      onGranted({ resource: resource.trim(), action: action.trim(), scope, scopeValue: requiresValue ? scopeValue.trim() : undefined })
+      onGranted()
       setResource('')
       setAction('')
       setScopeValue('')
