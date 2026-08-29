@@ -259,6 +259,454 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   margin: 0 0 var(--space-2);
 }
 
+/* Local Figma surface polish: the approved catalogue/detail frames use the
+ * exact UI-kit values from tokens.css. Keep this block at the end of the
+ * stylesheet so legacy scaffold rules above remain a safe fallback while the
+ * active marketplace surface stays visually coherent. */
+:root {
+  --figma-green: #169600;
+  --figma-green-dark: #107d07;
+  --figma-green-soft: #e5f3dc;
+  --figma-paper: #f1f7eb;
+  --figma-ink: #151515;
+  --figma-muted: #555454;
+  --figma-stroke: #c8d5c0;
+}
+
+body {
+  background: var(--figma-paper);
+  color: var(--figma-ink);
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, .wordmark, .listing-card-price, .detail-price-main {
+  font-family: var(--font-display);
+}
+
+.catalogue-section,
+.catalogue-toolbar,
+.filters-drawer {
+  width: min(100%, 1480px);
+}
+
+.catalogue-toolbar {
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid rgba(22, 150, 0, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 8px 28px rgba(21, 21, 21, 0.035);
+}
+
+.catalogue-count {
+  min-height: 38px;
+  padding: 0 4px;
+  background: transparent;
+}
+
+.catalogue-count strong {
+  color: var(--figma-ink);
+  font-size: clamp(1.15rem, 2vw, 1.45rem);
+  font-weight: 700;
+}
+
+.catalogue-count span,
+.filters-drawer,
+.catalogue-end-note {
+  color: var(--figma-muted);
+}
+
+.catalogue-toolbar__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.sort-control,
+.city-form--compact,
+.view-toggle {
+  border-color: var(--figma-stroke);
+}
+
+.sort-control {
+  color: var(--figma-green-dark);
+  background: #fff;
+}
+
+.sort-control:hover {
+  color: #fff;
+  background: var(--figma-green);
+}
+
+.filters-drawer {
+  padding: 0 4px;
+}
+
+.filters-drawer summary {
+  color: var(--figma-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filters-drawer .catalogue-filters-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  padding: 14px;
+  border: 1px solid rgba(22, 150, 0, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.catalogue-subfilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid var(--figma-stroke);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--figma-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.filter-chip:hover:not(:disabled) {
+  color: var(--figma-green-dark);
+  background: var(--figma-green-soft);
+}
+
+.filter-chip.is-active {
+  border-color: var(--figma-green);
+  background: var(--figma-green);
+  color: #fff;
+}
+
+.development-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.development-card,
+.listing-card {
+  border: 1px solid rgba(21, 21, 21, 0.07);
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 12px rgba(21, 21, 21, 0.045);
+}
+
+.development-card:hover,
+.listing-card:hover {
+  border-color: rgba(22, 150, 0, 0.4);
+  box-shadow: 0 14px 30px rgba(22, 150, 0, 0.11);
+}
+
+.development-card .building-placeholder,
+.listing-card-media,
+.listing-card .building-placeholder {
+  background: var(--figma-green-soft);
+}
+
+.development-card__body {
+  min-height: 156px;
+  padding: 18px 20px 20px;
+}
+
+.development-card h2 {
+  font-size: clamp(1.1rem, 1.6vw, 1.45rem);
+  line-height: 1.15;
+}
+
+.listing-card__body {
+  min-height: 276px;
+  padding: 11px 18px 16px;
+}
+
+.listing-card h2 {
+  color: var(--figma-ink);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  line-height: 1.28;
+}
+
+.listing-card-price {
+  color: var(--figma-green);
+  font-size: 1.15rem;
+  font-weight: 750;
+}
+
+.listing-card .listing-badge {
+  background: var(--figma-green);
+  font-family: var(--font-body);
+}
+
+.listing-card .listing-chip {
+  color: var(--figma-muted);
+}
+
+.listing-card__contact-actions span:first-child {
+  background: var(--figma-green);
+}
+
+.listing-card__contact-actions span {
+  border-color: var(--figma-green);
+  color: var(--figma-green-dark);
+}
+
+.state-panel,
+.pagination-error-panel {
+  border-radius: 14px;
+}
+
+.state-panel {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 32px;
+  border-color: rgba(22, 150, 0, 0.32);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.state-panel--error {
+  border-color: rgba(200, 50, 39, 0.56);
+  background: #fff3f1;
+}
+
+.state-panel--empty {
+  background: rgba(255, 255, 255, 0.68);
+}
+
+/* Detail frames: gallery and facts read as one focused object record. */
+.detail-page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: 34px 0 72px;
+}
+
+.back-link {
+  margin-bottom: 20px;
+  color: var(--figma-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.detail-hero,
+.detail-hero--listing {
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 22px;
+  align-items: stretch;
+}
+
+.detail-hero > .building-placeholder,
+.detail-hero--listing .listing-gallery {
+  min-height: 470px;
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(21, 21, 21, 0.08);
+}
+
+.detail-hero__copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(22px, 4vw, 42px);
+  border: 1px solid var(--figma-stroke);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 35px rgba(21, 21, 21, 0.055);
+}
+
+.detail-hero__copy h1 {
+  max-width: 18ch;
+  margin: 10px 0 14px;
+  font-size: clamp(2rem, 4.4vw, 3.9rem);
+  line-height: 0.98;
+}
+
+.detail-hero--listing .detail-hero__copy {
+  justify-content: flex-start;
+}
+
+.detail-price-box {
+  margin-top: 28px;
+  padding: 18px;
+  border: 1px solid rgba(22, 150, 0, 0.22);
+  border-radius: 14px;
+  background: var(--figma-green-soft);
+}
+
+.detail-price-main {
+  margin: 0;
+  color: var(--figma-green-dark);
+  font-size: clamp(1.8rem, 3.3vw, 2.8rem);
+  font-weight: 750;
+  line-height: 1.05;
+}
+
+.detail-facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 24px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--figma-stroke);
+  border-radius: 14px;
+  background: #fff;
+}
+
+.detail-facts div {
+  min-height: 92px;
+  padding: 18px 20px;
+  border-top: 0;
+  border-right: 1px solid var(--figma-stroke);
+}
+
+.detail-facts div:nth-child(3n) {
+  border-right: 0;
+}
+
+.detail-facts span {
+  color: var(--figma-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-facts strong {
+  color: var(--figma-ink);
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+
+.detail-description {
+  width: min(100%, 820px);
+  max-width: none;
+  margin-top: 24px;
+  padding: 26px 0 0;
+  border-top: 1px solid var(--figma-stroke);
+}
+
+.detail-description h2 {
+  margin-bottom: 12px;
+  color: var(--figma-ink);
+  font-size: clamp(1.6rem, 3vw, 2.35rem);
+}
+
+.detail-description p {
+  color: var(--figma-muted);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.listing-gallery__main {
+  border: 0;
+  border-radius: 18px;
+  background: var(--figma-green-soft);
+}
+
+.listing-gallery__thumbs {
+  padding: 0 2px 4px;
+}
+
+.listing-gallery__thumb {
+  flex-basis: 84px;
+  height: 58px;
+  border-color: transparent;
+  border-radius: 10px;
+}
+
+.listing-gallery__thumb.is-active {
+  border-color: var(--figma-green);
+}
+
+/* Lead reveal card is an intentional conversion point, not a generic form. */
+.listing-lead-card {
+  margin-top: 30px;
+  padding: 24px;
+  border: 1px solid rgba(22, 150, 0, 0.2);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(21, 21, 21, 0.045);
+}
+
+.listing-lead-card__header h3 {
+  color: var(--figma-ink);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.listing-lead-card__header p,
+.listing-lead-card__subtext {
+  color: var(--figma-muted);
+}
+
+.listing-lead-form__field label {
+  color: var(--figma-muted);
+  font-family: var(--font-body);
+}
+
+.listing-lead-form__field input {
+  border-color: var(--figma-stroke);
+  background: var(--figma-paper);
+}
+
+.listing-lead-form__field input:focus {
+  border-color: var(--figma-green);
+  box-shadow: 0 0 0 3px rgba(22, 150, 0, 0.14);
+}
+
+.listing-lead-form__submit {
+  border-radius: 999px;
+  background: var(--figma-green);
+}
+
+.listing-lead-form__submit:hover:not(:disabled) {
+  background: var(--figma-green-dark);
+}
+
+.listing-lead-card--success {
+  border-color: rgba(22, 150, 0, 0.36);
+  background: var(--figma-green-soft);
+}
+
+@media (max-width: 1080px) {
+  .development-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .detail-hero,
+  .detail-hero--listing { grid-template-columns: minmax(0, 1fr); }
+  .detail-hero > .building-placeholder,
+  .detail-hero--listing .listing-gallery { min-height: 360px; }
+}
+
+@media (max-width: 680px) {
+  .catalogue-toolbar { padding: 10px; }
+  .catalogue-toolbar__actions { justify-content: stretch; }
+  .catalogue-toolbar__actions > * { flex: 1 1 auto; }
+  .development-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-page { padding: 22px 0 48px; }
+  .detail-hero > .building-placeholder,
+  .detail-hero--listing .listing-gallery { min-height: 280px; }
+  .detail-hero__copy { padding: 22px; }
+  .detail-hero__copy h1 { font-size: clamp(1.9rem, 10vw, 2.9rem); }
+  .detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-facts div,
+  .detail-facts div:nth-child(3n) { border-right: 1px solid var(--figma-stroke); }
+  .detail-facts div:nth-child(2n) { border-right: 0; }
+  .listing-lead-card { padding: 18px; }
+}
+
+@media (max-width: 420px) {
+  .development-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-facts { grid-template-columns: minmax(0, 1fr); }
+  .detail-facts div,
+  .detail-facts div:nth-child(2n),
+  .detail-facts div:nth-child(3n) { border-right: 0; border-bottom: 1px solid var(--figma-stroke); }
+  .detail-facts div:last-child { border-bottom: 0; }
+}
+
 /* Listing Lead Card & Form */
 .listing-lead-card {
   background: var(--color-paper-raised);
@@ -411,6 +859,116 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
   font-weight: 600;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* Final conversion-form overrides. Keep these at EOF so they win over the
+ * legacy scaffold block above. */
+.listing-lead-card {
+  margin-top: 30px;
+  padding: 24px;
+  border: 1px solid rgba(22, 150, 0, 0.2);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(21, 21, 21, 0.045);
+}
+
+.listing-lead-card__header h3 {
+  color: var(--figma-ink);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.listing-lead-card__header p,
+.listing-lead-card__subtext {
+  color: var(--figma-muted);
+}
+
+.listing-lead-form__field label {
+  color: var(--figma-muted);
+  font-family: var(--font-body);
+}
+
+.listing-lead-form__field input {
+  border-color: var(--figma-stroke);
+  background: var(--figma-paper);
+}
+
+.listing-lead-form__field input:focus {
+  border-color: var(--figma-green);
+  box-shadow: 0 0 0 3px rgba(22, 150, 0, 0.14);
+}
+
+.listing-lead-form__submit {
+  border-radius: 999px;
+  background: var(--figma-green);
+}
+
+.listing-lead-form__submit:hover:not(:disabled) {
+  background: var(--figma-green-dark);
+}
+
+.listing-lead-card--success {
+  border-color: rgba(22, 150, 0, 0.36);
+  background: var(--figma-green-soft);
+}
+
+@media (max-width: 680px) {
+  .listing-lead-card { padding: 18px; }
+}
+
+/* Keep the conversion form aligned with the same Figma surface after the
+ * legacy lead rules above. */
+.listing-lead-card {
+  margin-top: 30px;
+  padding: 24px;
+  border: 1px solid rgba(22, 150, 0, 0.2);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(21, 21, 21, 0.045);
+}
+
+.listing-lead-card__header h3 {
+  color: var(--figma-ink);
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+}
+
+.listing-lead-card__header p,
+.listing-lead-card__subtext {
+  color: var(--figma-muted);
+}
+
+.listing-lead-form__field label {
+  color: var(--figma-muted);
+  font-family: var(--font-body);
+}
+
+.listing-lead-form__field input {
+  border-color: var(--figma-stroke);
+  background: var(--figma-paper);
+}
+
+.listing-lead-form__field input:focus {
+  border-color: var(--figma-green);
+  box-shadow: 0 0 0 3px rgba(22, 150, 0, 0.14);
+}
+
+.listing-lead-form__submit {
+  border-radius: 999px;
+  background: var(--figma-green);
+}
+
+.listing-lead-form__submit:hover:not(:disabled) {
+  background: var(--figma-green-dark);
+}
+
+.listing-lead-card--success {
+  border-color: rgba(22, 150, 0, 0.36);
+  background: var(--figma-green-soft);
+}
+
+@media (max-width: 680px) {
+  .listing-lead-card { padding: 18px; }
 }
 
 /* -------------------------------------------------------------------------
