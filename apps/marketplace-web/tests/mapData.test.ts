@@ -15,4 +15,15 @@ describe('getMarketplaceMapPoints', () => {
     expect(points.map((point) => point.index)).toEqual([1, 2])
     expect(points[0]!.coordinates).toEqual([41.64, 41.62])
   })
+
+  it('drops non-finite and out-of-range coordinates before rendering markers', () => {
+    const points = getMarketplaceMapPoints([
+      { slug: 'nan', location: { geo: { type: 'Point' as const, coordinates: [Number.NaN, 41.62] as [number, number] } } },
+      { slug: 'lng-out-of-range', location: { geo: { type: 'Point' as const, coordinates: [181, 41.62] as [number, number] } } },
+      { slug: 'lat-out-of-range', location: { geo: { type: 'Point' as const, coordinates: [41.64, -91] as [number, number] } } },
+      { slug: 'valid', location: { geo: { type: 'Point' as const, coordinates: [41.64, 41.62] as [number, number] } } },
+    ])
+
+    expect(points.map((point) => point.item.slug)).toEqual(['valid'])
+  })
 })
