@@ -266,4 +266,93 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
       expect(publishBtn.disabled).toBe(false)
     })
   })
+
+  async function walkToReviewStep(overrides?: { priceAmount?: string }) {
+    ;(publishingApi.createPropertyAsset as any).mockResolvedValue({ _id: 'asset-err', version: 0 })
+    ;(publishingApi.createListing as any).mockResolvedValue({ _id: 'listing-err', status: 'draft', version: 0 })
+    ;(publishingApi.activateListing as any).mockResolvedValue({ _id: 'listing-err', status: 'active', version: 1 })
+    ;(publishingApi.getDuplicateCandidates as any).mockResolvedValue([])
+    ;(publishingApi.getActuality as any).mockResolvedValue({
+      listingId: 'listing-err',
+      category: 'sale',
+      version: 1,
+      status: 'confirmed',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/publish']}>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-location')).toBeDefined())
+    fireEvent.change(screen.getByTestId('location-input-address'), { target: { value: 'Chavchavadze 5' } })
+    fireEvent.click(screen.getByTestId('location-next-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-characteristics')).toBeDefined())
+    fireEvent.change(screen.getByTestId('characteristics-input-area'), { target: { value: '40' } })
+    fireEvent.change(screen.getByTestId('characteristics-input-phone'), { target: { value: '+995555000000' } })
+    fireEvent.click(screen.getByTestId('characteristics-next-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-deal')).toBeDefined())
+    fireEvent.change(screen.getByTestId('deal-input-price'), { target: { value: overrides?.priceAmount ?? '40000' } })
+    fireEvent.click(screen.getByTestId('deal-next-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-media')).toBeDefined())
+    fireEvent.click(screen.getByTestId('media-next-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-review')).toBeDefined())
+  }
+
+  it('returns the user to the review step (not a dead end) when the publication build fails', async () => {
+    ;(publishingApi.publishListing as any).mockResolvedValue({
+      id: 'pub-build-fail',
+      status: 'publication_pending',
+      sourceId: 'listing-err',
+    })
+    ;(publishingApi.getPublicationStatus as any).mockResolvedValue({
+      publicationId: 'pub-build-fail',
+      status: 'build_failed',
+      version: 1,
+    })
+
+    await walkToReviewStep()
+    fireEvent.click(screen.getByTestId('publish-submit-btn'))
+
+    // The wizard must not strand the user on the publishing screen forever —
+    // it routes back to review with the error visible and publish re-enabled,
+    // exactly like the other publish-failure paths (409 duplicate, network).
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-review')).toBeDefined()
+      expect(screen.getByText('Ошибка генерации публикации объявления')).toBeDefined()
+    })
+    const publishBtn = screen.getByTestId('publish-submit-btn') as HTMLButtonElement
+    expect(publishBtn.disabled).toBe(false)
+  })
+
+  it('a rapid double-click on Publish before the step transition commits only sends one publish request', async () => {
+    let resolvePublish: (value: unknown) => void
+    ;(publishingApi.publishListing as any).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvePublish = resolve
+        }),
+    )
+
+    await walkToReviewStep()
+    const publishBtn = screen.getByTestId('publish-submit-btn') as HTMLButtonElement
+    // Both events are dispatched synchronously, back-to-back, before React
+    // commits the step transition to 'publishing' that would otherwise
+    // remove this button from the screen — modelling two click events
+    // landing in the same task before any re-render is visible.
+    fireEvent.click(publishBtn)
+    fireEvent.click(publishBtn)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-publishing')).toBeDefined()
+    })
+    expect(publishingApi.publishListing).toHaveBeenCalledTimes(1)
+
+    resolvePublish!({ id: 'pub-1', status: 'publication_pending', sourceId: 'listing-err' })
+  })
 })

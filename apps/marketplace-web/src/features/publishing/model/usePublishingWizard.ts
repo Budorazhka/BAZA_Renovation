@@ -160,6 +160,11 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     async (mediaAssetId: string) => {
       if (!state.assetId) return
       dispatch({ type: 'REMOVE_MEDIA_ITEM', id: mediaAssetId })
+      // A client-only placeholder id means phase 1 (upload-intent) never
+      // reached the backend, so there is nothing there to delete — calling
+      // the API would only produce a spurious 404 after the local removal
+      // already succeeded.
+      if (mediaAssetId.startsWith('temp-')) return
       try {
         await publishingApi.deleteMedia(state.assetId, mediaAssetId)
         const updatedList = await publishingApi.listMedia(state.assetId)
@@ -224,13 +229,19 @@ export function usePublishingWizard(isAuthenticated: boolean) {
   }, [state.assetId, state.listingId])
 
   // Submit Duplicate Override
+  const isOverrideInFlightRef = useRef(false)
   const submitDuplicateOverride = useCallback(
     async (duplicateCandidateId: string) => {
+      // Guards against a double-click firing two override requests before
+      // the `isSubmittingOverride`-driven `disabled` prop commits.
+      if (isOverrideInFlightRef.current) return
+
       if (!state.overrideReason || state.overrideReason.trim().length < 10) {
         dispatch({ type: 'SET_ERROR', error: 'Укажите причину подтверждения (не менее 10 символов)' })
         return
       }
 
+      isOverrideInFlightRef.current = true
       dispatch({ type: 'SET_SUBMITTING_OVERRIDE', isSubmitting: true })
       dispatch({ type: 'SET_ERROR', error: null })
       try {
@@ -242,6 +253,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       } catch (err: any) {
         dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка снятия блокировки дубликата' })
       } finally {
+        isOverrideInFlightRef.current = false
         dispatch({ type: 'SET_SUBMITTING_OVERRIDE', isSubmitting: false })
       }
     },
@@ -268,7 +280,12 @@ export function usePublishingWizard(isAuthenticated: boolean) {
   }, [stopPolling])
 
   // Submit Publication and Poll
+  const isPublishInFlightRef = useRef(false)
   const publishListing = useCallback(async () => {
+    // Guards against a double-click firing two publish/confirm-actuality
+    // requests before the `isPublishing`-driven `disabled` prop commits.
+    if (isPublishInFlightRef.current) return
+
     if (!state.assetId || !state.listingId) {
       dispatch({ type: 'SET_ERROR', error: 'Идентификаторы объявления не найдены' })
       return
@@ -279,6 +296,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       return
     }
 
+    isPublishInFlightRef.current = true
     dispatch({ type: 'SET_PUBLISHING', isPublishing: true })
     dispatch({ type: 'SET_ERROR', error: null })
     dispatch({ type: 'SET_STEP', step: 'publishing' })
@@ -313,7 +331,9 @@ export function usePublishingWizard(isAuthenticated: boolean) {
           if (pollingStartedAtRef.current && Date.now() - pollingStartedAtRef.current > 60_000) {
             stopPolling()
             dispatch({ type: 'SET_PUBLICATION_STATUS', status: 'publication_pending' })
+            dispatch({ type: 'SET_STEP', step: 'review' })
             dispatch({ type: 'SET_ERROR', error: 'Публикация занимает дольше обычного. Повторите проверку позже.' })
+            isPublishInFlightRef.current = false
             dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
             return
           }
@@ -327,6 +347,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
               slug: statusResult.slug,
               publicationId: statusResult.publicationId,
             })
+            isPublishInFlightRef.current = false
             dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
           } else if (statusResult.status === 'build_failed') {
             stopPolling()
@@ -334,7 +355,9 @@ export function usePublishingWizard(isAuthenticated: boolean) {
               type: 'SET_PUBLICATION_STATUS',
               status: 'build_failed',
             })
+            dispatch({ type: 'SET_STEP', step: 'review' })
             dispatch({ type: 'SET_ERROR', error: 'Ошибка генерации публикации объявления' })
+            isPublishInFlightRef.current = false
             dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
           }
         } catch {
@@ -358,13 +381,29 @@ export function usePublishingWizard(isAuthenticated: boolean) {
         dispatch({ type: 'SET_STEP', step: 'review' })
         dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка публикации объявления' })
       }
+      isPublishInFlightRef.current = false
       dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
     }
   }, [state.assetId, state.listingId, state.hasDuplicateBlock, state.actualityState, stopPolling])
 
+  // A logout mid-publish must not let the in-flight status poll keep running
+  // against the just-cleared session and later dispatch a stale result (e.g.
+  // a delayed "published" response) into the next identity's fresh wizard,
+  // nor leave the reentrancy locks permanently held for that next identity.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      stopPolling()
+      idempotencyKeyRef.current = null
+      isPublishInFlightRef.current = false
+      isOverrideInFlightRef.current = false
+    }
+  }, [isAuthenticated, stopPolling])
+
   const resetWizard = useCallback(() => {
     stopPolling()
     idempotencyKeyRef.current = null
+    isPublishInFlightRef.current = false
+    isOverrideInFlightRef.current = false
     dispatch({ type: 'RESET_WIZARD' })
   }, [stopPolling])
 

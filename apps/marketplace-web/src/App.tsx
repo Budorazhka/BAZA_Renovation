@@ -32,9 +32,11 @@ function Shell({ children }: { children: React.ReactNode }) {
   const listingsActive = location.search.includes('tab=listings')
   const mapQuery = new URLSearchParams(location.search)
   mapQuery.set('view', 'map')
+  mapQuery.delete('cursor')
   const listQuery = new URLSearchParams(location.search)
   listQuery.delete('view')
   listQuery.delete('bbox')
+  listQuery.delete('cursor')
   const isMapView = location.search.includes('view=map')
   return (
     <div className="app-shell">

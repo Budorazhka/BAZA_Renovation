@@ -57,6 +57,28 @@ describe('SEO Metadata & JSON-LD Acceptance', () => {
     unmount()
     expect(document.title).toBe('BAZA.sale · каталог объектов недвижимости')
     expect(document.getElementById('baza-seo-jsonld')).toBeNull()
+    // The canonical link must not be left pointing at the departed page —
+    // a page that sets no canonical of its own must not inherit a stale one.
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull()
+  })
+
+  it('does not leak a stale canonical URL into a page that navigates away without setting its own', () => {
+    // Reproduces: user visits a listing detail page (sets a canonical), then
+    // navigates to the catalogue root, which never calls useSeoMetadata.
+    const { unmount } = renderHook(() =>
+      useSeoMetadata({
+        title: 'Уютная квартира у моря',
+        canonicalUrl: 'https://baza.sale/listings/seaside-apt',
+      }),
+    )
+    expect((document.querySelector('link[rel="canonical"]') as HTMLLinkElement)?.href).toBe(
+      'https://baza.sale/listings/seaside-apt',
+    )
+
+    unmount()
+
+    // No canonical tag should remain claiming the departed listing's URL.
+    expect(document.querySelector('link[rel="canonical"]')).toBeNull()
   })
 
   it('buildListingJsonLd adheres to strict public whitelist and NEVER discloses internal fields', () => {
