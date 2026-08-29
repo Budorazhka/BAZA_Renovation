@@ -147,3 +147,10 @@ pnpm build           # tsc -b && vite build — чисто, dist/ генерир
 - Каталожные и detail-хуки передают `AbortSignal` во все публичные GET-запросы и отменяют предыдущий запрос при смене фильтра/slug или unmount. Устаревшие и abort-ошибки не переводят новый экран в ошибочное состояние и не применяют данные после ухода со страницы.
 - Рендер-ошибка отдельного маршрута больше не ломает SPA-shell целиком: `RouteErrorBoundary` показывает доступный recovery-экран с действиями «Повторить» и «Вернуться в каталог».
 - Добавлены регрессионные тесты для отмены `loadMore`/detail-запроса, распознавания abort-ошибок и восстановления после render failure. Backend/API-контракт и дизайн-модель не менялись.
+
+## 10. Read-only auth session check (2026-08-30)
+
+- Добавлен `GET /api/v1/auth/session`: audience определяется по `Origin`, а состояние cookie проверяется через существующий `SessionService`; endpoint не создаёт и не отзывает сессии.
+- Ответ намеренно не раскрывает identity или внутренние поля: активная cookie даёт `{ authenticated: true }`, все guest/expired/revoked/wrong-audience варианты — `{ authenticated: false }`. Отсутствующий или неизвестный `Origin` получает стандартный `AUTH_AUDIENCE_MISMATCH`.
+- Publishing wizard теперь проверяет сессию через этот read-only endpoint, а не через `GET /marketplace/property-assets`. Контракт добавлен в OpenAPI и regenerated `packages/api-client/src/schema.ts`.
+- Проверено: API unit 3/3, HTTP integration 7/7 (marketplace/ERP/admin, revoke/expiry, non-disclosure), frontend 2/2.

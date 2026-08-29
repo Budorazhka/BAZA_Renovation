@@ -76,6 +76,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Проверка текущей сессии без побочных эффектов.
+         * @description Audience определяется сервером по Origin. Отсутствующая, просроченная, отозванная или выданная для другого продукта cookie намеренно не различаются и возвращают authenticated=false.
+         */
+        get: operations["checkSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/register": {
         parameters: {
             query?: never;
@@ -1317,6 +1337,30 @@ export interface operations {
             };
             /** @description normalizedLogin уже занят (domain-model.md invariant — уникален глобально) */
             409: components["responses"]["Error"];
+        };
+    };
+    checkSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние сессии. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        authenticated: boolean;
+                    };
+                };
+            };
+            /** @description Origin отсутствует или не относится к известному продукту. */
+            401: components["responses"]["Error"];
         };
     };
     registerOrganization: {

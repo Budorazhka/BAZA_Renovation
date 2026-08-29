@@ -99,6 +99,30 @@ paths:
                 properties:
                   loggedOut: { type: boolean }
 
+  /auth/session:
+    get:
+      operationId: checkSession
+      tags: [auth]
+      summary: Проверка текущей сессии без побочных эффектов.
+      description: >
+        Audience определяется сервером по Origin. Отсутствующая, просроченная,
+        отозванная или выданная для другого продукта cookie намеренно не
+        различаются и возвращают authenticated=false.
+      security: []
+      responses:
+        '200':
+          description: Состояние сессии.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated]
+                properties:
+                  authenticated: { type: boolean }
+        '401':
+          description: Origin отсутствует или не относится к известному продукту.
+          $ref: '#/components/responses/Error'
+
   /organizations/register:
     post:
       operationId: registerOrganization
