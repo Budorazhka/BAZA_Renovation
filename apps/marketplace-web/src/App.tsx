@@ -295,26 +295,69 @@ function CataloguePage() {
 
   return (
     <Shell>
+      {isDev ? (
+        <section className="home-hero" aria-labelledby="home-hero-title">
+          <div className="home-hero__copy">
+            <p className="home-hero__eyebrow">Каталог недвижимости</p>
+            <h1 id="home-hero-title">ПОИСК НЕДВИЖИМОСТИ <span>В ГРУЗИИ</span></h1>
+            <div className="home-hero__search-card">
+              <div className="home-hero__tabs" role="tablist" aria-label="Тип операции">
+                <Link className="home-hero__tab is-active" role="tab" aria-selected="true" to="/">Купить</Link>
+                <Link className="home-hero__tab" role="tab" aria-selected="false" to="/?tab=listings&dealType=rent_long">Снять</Link>
+              </div>
+              <form className="home-search" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+                <label htmlFor="city">Город</label>
+                <div className="home-search__control">
+                  <input
+                    id="city"
+                    name="city"
+                    type="search"
+                    autoComplete="address-level2"
+                    value={cityInput}
+                    onChange={(event) => setCityInput(event.target.value)}
+                    placeholder="Например, Батуми"
+                  />
+                  <button type="submit" aria-label="Найти объекты в городе">Найти</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div className="home-hero__promos" aria-label="Возможности BAZA">
+            <Link className="home-promo home-promo--light" to="/publish">
+              <strong>Хотите продать квартиру, дом или участок?</strong>
+              <span>Бесплатно разместите свое объявление на BAZA и быстро найдите покупателей.</span>
+              <span className="home-promo__action">Разместить объект <span aria-hidden="true">→</span></span>
+            </Link>
+            <Link className="home-promo home-promo--green" to="/?tab=listings">
+              <strong>Эксклюзивные предложения от BAZA</strong>
+              <span>Уникальные предложения по стоимости и комиссиям только для партнёров.</span>
+              <span className="home-promo__action">Смотреть предложения <span aria-hidden="true">→</span></span>
+            </Link>
+          </div>
+        </section>
+      ) : null}
       <section className="catalogue-toolbar" aria-labelledby="catalogue-heading">
-        <h1 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h1>
+        <h2 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h2>
         <div className="catalogue-count">
           <strong>{state.status === 'ready' ? state.items.length.toLocaleString('ru-RU') : '—'}</strong>
           <span>объектов найдено</span>
         </div>
         <div className="catalogue-toolbar__actions">
-          <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-            <label className="visually-hidden" htmlFor="city">Город</label>
-            <input
-              id="city"
-              name="city"
-              type="search"
-              autoComplete="address-level2"
-              value={cityInput}
-              onChange={(event) => setCityInput(event.target.value)}
-              placeholder="Город"
-            />
-            <button type="submit" aria-label="Найти объекты в городе">⌕</button>
-          </form>
+          {!isDev ? (
+            <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+              <label className="visually-hidden" htmlFor="city">Город</label>
+              <input
+                id="city"
+                name="city"
+                type="search"
+                autoComplete="address-level2"
+                value={cityInput}
+                onChange={(event) => setCityInput(event.target.value)}
+                placeholder="Город"
+              />
+              <button type="submit" aria-label="Найти объекты в городе">⌕</button>
+            </form>
+          ) : null}
           <button className="sort-control" type="button" aria-label="Сортировка объектов">Сначала дешевле⌄</button>
           <div className="view-toggle" role="group" aria-label="Вид каталога">
             <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
