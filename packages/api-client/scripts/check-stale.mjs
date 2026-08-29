@@ -8,14 +8,19 @@
  * полной истории) — прямое сравнение содержимого файлов.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname, relative } from 'node:path';
+import { join, dirname, relative, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const committedSchemaPath = join(packageDir, 'src', 'schema.ts');
-const specPathAbsolute = join(packageDir, '..', '..', '..', 'docs', 'api', 'v1-first-vertical-slice.yaml');
+const specPathAbsolute = normalize(join(packageDir, '..', '..', 'docs', 'api', 'v1-first-vertical-slice.yaml'));
+
+if (!existsSync(specPathAbsolute)) {
+  console.error(`\n❌ Canonical OpenAPI spec not found at: ${specPathAbsolute}\n`);
+  process.exit(1);
+}
 
 // Не через node_modules/.bin/openapi-typescript — на Windows это POSIX
 // shell-shim, не исполняемый напрямую через `node <shim>` (SyntaxError:
