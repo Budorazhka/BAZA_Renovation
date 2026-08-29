@@ -55,7 +55,7 @@ export interface WizardMediaItem {
 
 export interface DuplicateCandidate {
   id: string
-  status: 'detected' | 'override_not_duplicate' | 'merged'
+  status: 'detected' | 'confirmed_duplicate' | 'override_not_duplicate'
   signals: {
     phoneMatch?: boolean
     addressMatch?: boolean

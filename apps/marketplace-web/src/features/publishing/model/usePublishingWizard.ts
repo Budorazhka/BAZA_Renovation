@@ -250,12 +250,15 @@ export function usePublishingWizard(isAuthenticated: boolean) {
 
   // Polling ref
   const pollingTimerRef = useRef<any>(null)
+  const pollingStartedAtRef = useRef<number | null>(null)
+  const idempotencyKeyRef = useRef<{ listingId: string; key: string } | null>(null)
 
   const stopPolling = useCallback(() => {
     if (pollingTimerRef.current) {
       clearInterval(pollingTimerRef.current)
       pollingTimerRef.current = null
     }
+    pollingStartedAtRef.current = null
   }, [])
 
   useEffect(() => {
@@ -280,13 +283,18 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     dispatch({ type: 'SET_ERROR', error: null })
     dispatch({ type: 'SET_STEP', step: 'publishing' })
 
-    const idempotencyKey = 'pub-' + state.listingId + '-' + Date.now()
-
     try {
       // Confirm actuality first if needed
-      if (state.actualityState) {
+      if (state.actualityState && state.actualityState.status !== 'confirmed') {
         await publishingApi.confirmActuality(state.assetId, state.listingId, state.actualityState.version)
       }
+
+      const existingKey = idempotencyKeyRef.current
+      const idempotencyKey =
+        existingKey?.listingId === state.listingId
+          ? existingKey.key
+          : `pub-${state.listingId}-${Date.now()}`
+      idempotencyKeyRef.current = { listingId: state.listingId, key: idempotencyKey }
 
       const pubResult = await publishingApi.publishListing(state.assetId, state.listingId, idempotencyKey)
       dispatch({
@@ -302,6 +310,14 @@ export function usePublishingWizard(isAuthenticated: boolean) {
 
       const poll = async () => {
         try {
+          if (pollingStartedAtRef.current && Date.now() - pollingStartedAtRef.current > 60_000) {
+            stopPolling()
+            dispatch({ type: 'SET_PUBLICATION_STATUS', status: 'publication_pending' })
+            dispatch({ type: 'SET_ERROR', error: 'Публикация занимает дольше обычного. Повторите проверку позже.' })
+            dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
+            return
+          }
+
           const statusResult = await publishingApi.getPublicationStatus(assetId, listingId)
           if (statusResult.status === 'published') {
             stopPolling()
@@ -326,6 +342,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
         }
       }
 
+      pollingStartedAtRef.current = Date.now()
       pollingTimerRef.current = setInterval(poll, 1500)
       poll()
     } catch (err: any) {
@@ -338,6 +355,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
         dispatch({ type: 'SET_STEP', step: 'review' })
         dispatch({ type: 'SET_ERROR', error: 'Обнаружен возможный дубликат объявления. Заполните подтверждение.' })
       } else {
+        dispatch({ type: 'SET_STEP', step: 'review' })
         dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка публикации объявления' })
       }
       dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
@@ -346,6 +364,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
 
   const resetWizard = useCallback(() => {
     stopPolling()
+    idempotencyKeyRef.current = null
     dispatch({ type: 'RESET_WIZARD' })
   }, [stopPolling])
 

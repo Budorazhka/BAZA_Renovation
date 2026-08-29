@@ -56,7 +56,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="header-actions">
           <Link className="header-action header-action--primary" to="/publish" data-testid="header-publish-cta">+ Разместить</Link>
-          <Link className="header-action header-action--dark" to="/">⌕ Войти</Link>
+          <Link className="header-action header-action--dark" to="/publish">⌕ Войти</Link>
           <button className="header-locale" type="button" aria-label="Выбрать язык">RU⌄</button>
           <button className="header-locale" type="button" aria-label="Выбрать валюту">$⌄</button>
           <button className="header-location" type="button" aria-label="Выбрать город">● Тбилиси</button>

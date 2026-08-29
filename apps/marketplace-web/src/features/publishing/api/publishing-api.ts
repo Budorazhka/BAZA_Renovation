@@ -6,8 +6,9 @@ import type {
   ActualityState,
   PublicationStatusResult,
 } from '../model/types'
+import { resolveApiBaseUrl } from './api-base'
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
 export class PublishingApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -69,7 +70,7 @@ export const publishingApi = {
       representativePhone: data.characteristics.representativePhone,
     }
 
-    return request<{ _id: string; version: number }>('/api/v1/marketplace/property-assets', {
+    return request<{ _id: string; version: number }>('/marketplace/property-assets', {
       method: 'POST',
       body: JSON.stringify(payload),
     })
@@ -89,7 +90,7 @@ export const publishingApi = {
     }
 
     return request<{ _id: string; dealType: string; status: string; version: number }>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings`,
+      `/marketplace/property-assets/${assetId}/listings`,
       {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -102,7 +103,7 @@ export const publishingApi = {
     listingId: string,
   ): Promise<{ _id: string; status: string; version: number }> {
     return request<{ _id: string; status: string; version: number }>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings/${listingId}/activate`,
+      `/marketplace/property-assets/${assetId}/listings/${listingId}/activate`,
       {
         method: 'PATCH',
       },
@@ -116,7 +117,7 @@ export const publishingApi = {
     sizeBytes: number,
   ): Promise<{ mediaAssetId: string; uploadUrl: string }> {
     return request<{ mediaAssetId: string; uploadUrl: string }>(
-      `/api/v1/marketplace/property-assets/${assetId}/media/upload-intent`,
+      `/marketplace/property-assets/${assetId}/media/upload-intent`,
       {
         method: 'POST',
         body: JSON.stringify({ declaredMimeType, sizeBytes }),
@@ -144,7 +145,7 @@ export const publishingApi = {
     options?: { role?: 'cover' | 'gallery'; alt?: string },
   ): Promise<any[]> {
     return request<any[]>(
-      `/api/v1/marketplace/property-assets/${assetId}/media/${mediaAssetId}/confirm`,
+      `/marketplace/property-assets/${assetId}/media/${mediaAssetId}/confirm`,
       {
         method: 'POST',
         body: JSON.stringify(options || {}),
@@ -153,11 +154,11 @@ export const publishingApi = {
   },
 
   async listMedia(assetId: string): Promise<any[]> {
-    return request<any[]>(`/api/v1/marketplace/property-assets/${assetId}/media`)
+    return request<any[]>(`/marketplace/property-assets/${assetId}/media`)
   },
 
   async deleteMedia(assetId: string, mediaAssetId: string): Promise<void> {
-    return request<void>(`/api/v1/marketplace/property-assets/${assetId}/media/${mediaAssetId}`, {
+    return request<void>(`/marketplace/property-assets/${assetId}/media/${mediaAssetId}`, {
       method: 'DELETE',
     })
   },
@@ -167,7 +168,7 @@ export const publishingApi = {
     mediaAssetId: string,
     dto: { role?: 'cover' | 'gallery'; alt?: string },
   ): Promise<any> {
-    return request<any>(`/api/v1/marketplace/property-assets/${assetId}/media/${mediaAssetId}`, {
+    return request<any>(`/marketplace/property-assets/${assetId}/media/${mediaAssetId}`, {
       method: 'PATCH',
       body: JSON.stringify(dto),
     })
@@ -175,12 +176,12 @@ export const publishingApi = {
 
   // Deduplication & Actuality
   async getDuplicateCandidates(assetId: string): Promise<DuplicateCandidate[]> {
-    return request<DuplicateCandidate[]>(`/api/v1/marketplace/property-assets/${assetId}/duplicate-candidates`)
+    return request<DuplicateCandidate[]>(`/marketplace/property-assets/${assetId}/duplicate-candidates`)
   },
 
   async overrideDuplicate(duplicateCandidateId: string, reason: string): Promise<{ id: string; status: string }> {
     return request<{ id: string; status: string }>(
-      `/api/v1/marketplace/property-assets/duplicate-candidates/${duplicateCandidateId}/override`,
+      `/marketplace/property-assets/duplicate-candidates/${duplicateCandidateId}/override`,
       {
         method: 'POST',
         body: JSON.stringify({ reason }),
@@ -190,13 +191,13 @@ export const publishingApi = {
 
   async getActuality(assetId: string, listingId: string): Promise<ActualityState> {
     return request<ActualityState>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings/${listingId}/actuality`,
+      `/marketplace/property-assets/${assetId}/listings/${listingId}/actuality`,
     )
   },
 
   async confirmActuality(assetId: string, listingId: string, expectedVersion: number): Promise<ActualityState> {
     return request<ActualityState>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings/${listingId}/confirm-actuality`,
+      `/marketplace/property-assets/${assetId}/listings/${listingId}/confirm-actuality`,
       {
         method: 'PATCH',
         body: JSON.stringify({ expectedVersion }),
@@ -211,7 +212,7 @@ export const publishingApi = {
     idempotencyKey: string,
   ): Promise<{ id: string; sourceType: string; sourceId: string; status: string }> {
     return request<{ id: string; sourceType: string; sourceId: string; status: string }>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings/${listingId}/publish`,
+      `/marketplace/property-assets/${assetId}/listings/${listingId}/publish`,
       {
         method: 'POST',
         headers: {
@@ -223,7 +224,7 @@ export const publishingApi = {
 
   async getPublicationStatus(assetId: string, listingId: string): Promise<PublicationStatusResult> {
     return request<PublicationStatusResult>(
-      `/api/v1/marketplace/property-assets/${assetId}/listings/${listingId}/publication-status`,
+      `/marketplace/property-assets/${assetId}/listings/${listingId}/publication-status`,
     )
   },
 }

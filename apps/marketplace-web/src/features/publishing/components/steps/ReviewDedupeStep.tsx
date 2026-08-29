@@ -44,7 +44,10 @@ export function ReviewDedupeStep({
   error,
 }: ReviewDedupeStepProps) {
   const [overrideError, setOverrideError] = useState<string | null>(null)
-  const activeDuplicate = duplicateCandidates.find((c) => c.status === 'detected')
+  const activeDuplicate = duplicateCandidates.find(
+    (c) => c.status === 'detected' || c.status === 'confirmed_duplicate',
+  )
+  const canOverride = activeDuplicate?.status === 'detected'
 
   const handleOverrideSubmit = async () => {
     if (!activeDuplicate) return
@@ -83,31 +86,37 @@ export function ReviewDedupeStep({
             Система BAZA нашла совпадение по контактам или адресу ({activeDuplicate.signals.phoneMatch ? 'телефон совпадает' : ''}{' '}
             {activeDuplicate.signals.addressMatch ? 'адрес совпадает' : ''}).
           </p>
-          <div className="wizard-override-box">
-            <label htmlFor="override-reason">
-              Если это отдельный объект или эксклюзивное право, подтвердите отсутствие дубликата (не менее 10 символов) *:
-            </label>
-            <textarea
-              id="override-reason"
-              rows={3}
-              value={overrideReason}
-              onChange={(e) => onOverrideReasonChange(e.target.value)}
-              placeholder="Я подтверждаю, что являюсь официальным представителем и это реальный уникальный объект..."
-              disabled={isSubmittingOverride}
-              data-testid="override-reason-input"
-            />
-            {overrideError && <p className="wizard-field-error">{overrideError}</p>}
-            <button
-              type="button"
-              className="wizard-btn wizard-btn--warning"
-              onClick={handleOverrideSubmit}
-              disabled={isSubmittingOverride}
-              aria-busy={isSubmittingOverride}
-              data-testid="override-submit-btn"
-            >
-              {isSubmittingOverride ? 'Отправка...' : 'Подтвердить, что это не дубль'}
-            </button>
-          </div>
+          {canOverride ? (
+            <div className="wizard-override-box">
+              <label htmlFor="override-reason">
+                Если это отдельный объект или эксклюзивное право, подтвердите отсутствие дубликата (не менее 10 символов) *:
+              </label>
+              <textarea
+                id="override-reason"
+                rows={3}
+                value={overrideReason}
+                onChange={(e) => onOverrideReasonChange(e.target.value)}
+                placeholder="Я подтверждаю, что являюсь официальным представителем и это реальный уникальный объект..."
+                disabled={isSubmittingOverride}
+                data-testid="override-reason-input"
+              />
+              {overrideError && <p className="wizard-field-error">{overrideError}</p>}
+              <button
+                type="button"
+                className="wizard-btn wizard-btn--warning"
+                onClick={handleOverrideSubmit}
+                disabled={isSubmittingOverride}
+                aria-busy={isSubmittingOverride}
+                data-testid="override-submit-btn"
+              >
+                {isSubmittingOverride ? 'Отправка...' : 'Подтвердить, что это не дубль'}
+              </button>
+            </div>
+          ) : (
+            <p className="wizard-field-hint" data-testid="duplicate-confirmed-hint">
+              Этот кандидат уже подтверждён системой как дубликат. Обратитесь к модератору для решения вопроса.
+            </p>
+          )}
         </div>
       )}
 

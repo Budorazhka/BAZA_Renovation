@@ -127,4 +127,23 @@ describe('Publishing Wizard Auth & Session Flow', () => {
       expect(screen.getByTestId('wizard-step-location')).toBeDefined()
     })
   })
+
+  it('shows a real login error instead of silently leaving the form unchanged', async () => {
+    ;(authApi.checkSession as any).mockResolvedValue(false)
+    ;(authApi.login as any).mockRejectedValue(new Error('Неверный логин или пароль'))
+
+    render(
+      <MemoryRouter>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('auth-input-login')).toBeDefined())
+    fireEvent.change(screen.getByTestId('auth-input-login'), { target: { value: 'author@test.local' } })
+    fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'wrong-pass' } })
+    fireEvent.click(screen.getByTestId('auth-submit-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('auth-error').textContent).toContain('Неверный логин'))
+    expect(screen.getByTestId('wizard-step-auth')).toBeDefined()
+  })
 })

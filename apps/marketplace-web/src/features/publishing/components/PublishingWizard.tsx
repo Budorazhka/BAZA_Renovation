@@ -19,7 +19,7 @@ const STEPS_NAV = [
 ]
 
 export function PublishingWizard() {
-  const { isAuthenticated, isChecking, login, registerAndLogin, logout } = useAuthSession()
+  const { isAuthenticated, isChecking, error: authError, login, registerAndLogin, logout } = useAuthSession()
   const {
     state,
     setStep,
@@ -103,7 +103,7 @@ export function PublishingWizard() {
             onLogin={login}
             onRegister={registerAndLogin}
             isLoading={state.isLoading}
-            error={state.error}
+            error={authError || state.error}
             onClearError={clearError}
           />
         )}

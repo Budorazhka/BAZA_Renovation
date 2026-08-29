@@ -1,4 +1,6 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
+import { resolveApiBaseUrl } from './api-base'
+
+const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
 export class AuthApiError extends Error {
   constructor(message: string, readonly status: number) {
@@ -38,28 +40,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const authApi = {
   async login(login: string, password: string): Promise<{ identityId: string; requires2fa: boolean }> {
-    return request<{ identityId: string; requires2fa: boolean }>('/api/v1/auth/login', {
+    return request<{ identityId: string; requires2fa: boolean }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ login, password }),
     })
   },
 
   async register(login: string, password: string): Promise<{ identityId: string }> {
-    return request<{ identityId: string }>('/api/v1/auth/register', {
+    return request<{ identityId: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify({ login, password }),
     })
   },
 
   async logout(): Promise<{ loggedOut: boolean }> {
-    return request<{ loggedOut: boolean }>('/api/v1/auth/logout', {
+    return request<{ loggedOut: boolean }>('/auth/logout', {
       method: 'POST',
     })
   },
 
   async checkSession(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/marketplace/property-assets`, {
+      const res = await fetch(`${API_BASE_URL}/marketplace/property-assets`, {
         method: 'GET',
         credentials: 'include',
       })

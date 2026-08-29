@@ -178,7 +178,9 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       }
 
     case 'SET_DUPLICATES': {
-      const hasBlock = action.candidates.some((c) => c.status === 'detected')
+      const hasBlock = action.candidates.some(
+        (c) => c.status === 'detected' || c.status === 'confirmed_duplicate',
+      )
       return {
         ...state,
         duplicateCandidates: action.candidates,

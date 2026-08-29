@@ -1,5 +1,6 @@
 import React, { FormEvent, useState } from 'react'
 import type { LocationFormData } from '../../model/types'
+import { PublishingMapPicker } from '../PublishingMapPicker'
 
 interface LocationStepProps {
   data: LocationFormData
@@ -27,6 +28,19 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
 
     if (!data.address.trim()) {
       setValidationError('Укажите точный адрес (улицу и номер дома)')
+      return
+    }
+
+    const [longitude, latitude] = data.geo.coordinates
+    if (
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(latitude) ||
+      longitude < -180 ||
+      longitude > 180 ||
+      latitude < -90 ||
+      latitude > 90
+    ) {
+      setValidationError('Укажите корректную точку объекта на карте')
       return
     }
 
@@ -116,16 +130,14 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
           />
         </div>
 
-        {/* Map Point Picker Widget */}
+        {/* Real MapLibre point picker; public catalogue markers are not ownership selectors. */}
         <div className="wizard-field" data-testid="map-point-picker">
           <label id="map-coordinates-label">Точные координаты (Долгота и Широта)</label>
+          <PublishingMapPicker
+            coordinates={data.geo.coordinates}
+            onChange={(coordinates) => onChange({ geo: { type: 'Point', coordinates } })}
+          />
           <div className="wizard-map-picker">
-            <div className="wizard-map-picker__preview" aria-hidden="true">
-              <span className="wizard-map-picker__pin">📍</span>
-              <span className="wizard-map-picker__coords">
-                {data.geo.coordinates[1].toFixed(4)}, {data.geo.coordinates[0].toFixed(4)}
-              </span>
-            </div>
             <div className="wizard-form-grid">
               <div>
                 <label htmlFor="loc-lon" className="wizard-field-sub">Долгота (Longitude)</label>
