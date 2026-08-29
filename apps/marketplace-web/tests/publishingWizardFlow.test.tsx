@@ -1,0 +1,269 @@
+/** @vitest-environment jsdom */
+import React from 'react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { PublishingWizard } from '../src/features/publishing'
+import { authApi } from '../src/features/publishing/api/auth-api'
+import { publishingApi } from '../src/features/publishing/api/publishing-api'
+
+vi.mock('../src/features/publishing/api/auth-api', () => ({
+  authApi: {
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    checkSession: vi.fn(),
+  },
+  AuthApiError: class extends Error {
+    constructor(msg: string, readonly status: number) {
+      super(msg)
+      this.name = 'AuthApiError'
+    }
+  },
+}))
+
+vi.mock('../src/features/publishing/api/publishing-api', () => ({
+  publishingApi: {
+    createPropertyAsset: vi.fn(),
+    getAsset: vi.fn(),
+    createListing: vi.fn(),
+    activateListing: vi.fn(),
+    createMediaUploadIntent: vi.fn(),
+    uploadBinaryFile: vi.fn(),
+    confirmMediaUpload: vi.fn(),
+    listMedia: vi.fn(),
+    deleteMedia: vi.fn(),
+    updateMediaItem: vi.fn(),
+    getDuplicateCandidates: vi.fn(),
+    overrideDuplicate: vi.fn(),
+    getActuality: vi.fn(),
+    confirmActuality: vi.fn(),
+    publishListing: vi.fn(),
+    getPublicationStatus: vi.fn(),
+  },
+  PublishingApiError: class extends Error {
+    constructor(msg: string, readonly status: number) {
+      super(msg)
+      this.name = 'PublishingApiError'
+    }
+  },
+}))
+
+describe('Publishing Wizard End-to-End Functional Flow', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    ;(authApi.checkSession as any).mockResolvedValue(true)
+  })
+
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('walks through all steps: location -> characteristics -> deal -> media -> review -> publish -> published card link', async () => {
+    // 1. Mocks
+    ;(publishingApi.createPropertyAsset as any).mockResolvedValue({ _id: 'asset-101', version: 0 })
+    ;(publishingApi.createListing as any).mockResolvedValue({ _id: 'listing-202', status: 'draft', version: 0 })
+    ;(publishingApi.activateListing as any).mockResolvedValue({ _id: 'listing-202', status: 'active', version: 1 })
+    ;(publishingApi.createMediaUploadIntent as any).mockResolvedValue({
+      mediaAssetId: 'media-303',
+      uploadUrl: 'https://storage.test/upload',
+    })
+    ;(publishingApi.uploadBinaryFile as any).mockResolvedValue(undefined)
+    ;(publishingApi.confirmMediaUpload as any).mockResolvedValue([
+      { id: 'media-303', mediaAssetId: 'media-303', role: 'cover', url: 'https://cdn.test/p1.jpg', status: 'verified' },
+    ])
+    ;(publishingApi.getDuplicateCandidates as any).mockResolvedValue([])
+    ;(publishingApi.getActuality as any).mockResolvedValue({
+      listingId: 'listing-202',
+      category: 'sale',
+      version: 1,
+      status: 'confirmed',
+    })
+    ;(publishingApi.confirmActuality as any).mockResolvedValue({ version: 2, status: 'confirmed' })
+    ;(publishingApi.publishListing as any).mockResolvedValue({
+      id: 'pub-404',
+      status: 'publication_pending',
+      sourceId: 'listing-202',
+    })
+    ;(publishingApi.getPublicationStatus as any).mockResolvedValue({
+      publicationId: 'pub-404',
+      status: 'published',
+      slug: '2-room-apartment-batumi-center',
+      version: 1,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/publish']}>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    // --- STEP 1: Location ---
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-location')).toBeDefined()
+    })
+
+    fireEvent.change(screen.getByTestId('location-input-address'), { target: { value: 'Rustaveli 25' } })
+    fireEvent.click(screen.getByTestId('location-next-btn'))
+
+    // --- STEP 2: Characteristics ---
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-characteristics')).toBeDefined()
+    })
+
+    fireEvent.change(screen.getByTestId('characteristics-input-area'), { target: { value: '75' } })
+    fireEvent.change(screen.getByTestId('characteristics-input-rooms'), { target: { value: '2' } })
+    fireEvent.change(screen.getByTestId('characteristics-input-phone'), { target: { value: '+995555123456' } })
+    fireEvent.click(screen.getByTestId('characteristics-next-btn'))
+
+    // Verify Asset creation API call
+    await waitFor(() => {
+      expect(publishingApi.createPropertyAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          location: expect.objectContaining({ address: 'Rustaveli 25' }),
+          characteristics: expect.objectContaining({ area: 75, rooms: 2, representativePhone: '+995555123456' }),
+        }),
+      )
+      expect(screen.getByTestId('wizard-step-deal')).toBeDefined()
+    })
+
+    // --- STEP 3: Deal Pricing ---
+    fireEvent.click(screen.getByTestId('deal-type-sale'))
+    fireEvent.change(screen.getByTestId('deal-input-price'), { target: { value: '95000' } })
+    expect(screen.getByTestId('deal-price-preview').textContent).toContain('95')
+
+    fireEvent.click(screen.getByTestId('deal-next-btn'))
+
+    // Verify Listing creation and activation API calls
+    await waitFor(() => {
+      expect(publishingApi.createListing).toHaveBeenCalledWith('asset-101', expect.objectContaining({ priceAmount: 95000 }))
+      expect(publishingApi.activateListing).toHaveBeenCalledWith('asset-101', 'listing-202')
+      expect(screen.getByTestId('wizard-step-media')).toBeDefined()
+    })
+
+    // --- STEP 4: Media Upload (3-phase) ---
+    const file = new File(['fake-image-bytes'], 'living-room.jpg', { type: 'image/jpeg' })
+    const fileInput = screen.getByTestId('media-file-input')
+    fireEvent.change(fileInput, { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(publishingApi.createMediaUploadIntent).toHaveBeenCalledWith('asset-101', 'image/jpeg', expect.any(Number))
+      expect(publishingApi.uploadBinaryFile).toHaveBeenCalledWith('https://storage.test/upload', file, 'image/jpeg')
+      expect(publishingApi.confirmMediaUpload).toHaveBeenCalledWith('asset-101', 'media-303', expect.any(Object))
+      expect(screen.getByTestId('media-cover-badge')).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByTestId('media-next-btn'))
+
+    // --- STEP 5: Review & Dedupe ---
+    await waitFor(() => {
+      expect(publishingApi.getDuplicateCandidates).toHaveBeenCalledWith('asset-101')
+      expect(publishingApi.getActuality).toHaveBeenCalledWith('asset-101', 'listing-202')
+      expect(screen.getByTestId('wizard-step-review')).toBeDefined()
+    })
+
+    expect(screen.getByText('Batumi, Rustaveli 25')).toBeDefined()
+    expect(screen.getByText(/95000/)).toBeDefined()
+
+    // Click Publish button
+    fireEvent.click(screen.getByTestId('publish-submit-btn'))
+
+    // --- STEP 6: Publishing & Polling ---
+    await waitFor(() => {
+      expect(publishingApi.publishListing).toHaveBeenCalledWith('asset-101', 'listing-202', expect.stringContaining('pub-listing-202-'))
+      expect(publishingApi.getPublicationStatus).toHaveBeenCalledWith('asset-101', 'listing-202')
+      expect(screen.getByTestId('wizard-step-published')).toBeDefined()
+    })
+
+    const viewListingBtn = screen.getByTestId('view-published-listing-btn') as HTMLAnchorElement
+    expect(viewListingBtn.getAttribute('href')).toBe('/listings/2-room-apartment-batumi-center')
+  })
+
+  it('handles duplicate detection with owner override before allowing publish', async () => {
+    ;(publishingApi.createPropertyAsset as any).mockResolvedValue({ _id: 'asset-dup', version: 0 })
+    ;(publishingApi.createListing as any).mockResolvedValue({ _id: 'listing-dup', status: 'draft', version: 0 })
+    ;(publishingApi.activateListing as any).mockResolvedValue({ _id: 'listing-dup', status: 'active', version: 1 })
+    ;(publishingApi.getDuplicateCandidates as any)
+      .mockResolvedValueOnce([
+        {
+          id: 'dup-candidate-99',
+          status: 'detected',
+          signals: { phoneMatch: true, addressMatch: true },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'dup-candidate-99',
+          status: 'override_not_duplicate',
+          signals: { phoneMatch: true, addressMatch: true },
+          overrideReason: 'I am the exclusive licensed broker for this property',
+        },
+      ])
+    ;(publishingApi.overrideDuplicate as any).mockResolvedValue({ id: 'dup-candidate-99', status: 'override_not_duplicate' })
+    ;(publishingApi.getActuality as any).mockResolvedValue({
+      listingId: 'listing-dup',
+      category: 'sale',
+      version: 1,
+      status: 'confirmed',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/publish']}>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-location')).toBeDefined()
+    })
+
+    fireEvent.change(screen.getByTestId('location-input-address'), { target: { value: 'Gorgiladze 10' } })
+    fireEvent.click(screen.getByTestId('location-next-btn'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-characteristics')).toBeDefined()
+    })
+
+    fireEvent.change(screen.getByTestId('characteristics-input-area'), { target: { value: '55' } })
+    fireEvent.change(screen.getByTestId('characteristics-input-phone'), { target: { value: '+995555998877' } })
+    fireEvent.click(screen.getByTestId('characteristics-next-btn'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-deal')).toBeDefined()
+    })
+
+    fireEvent.change(screen.getByTestId('deal-input-price'), { target: { value: '60000' } })
+    fireEvent.click(screen.getByTestId('deal-next-btn'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-media')).toBeDefined()
+    })
+
+    fireEvent.click(screen.getByTestId('media-next-btn'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('wizard-step-review')).toBeDefined()
+      expect(screen.getByTestId('duplicate-warning-card')).toBeDefined()
+    })
+
+    // Publish button is disabled while duplicate block is active
+    const publishBtn = screen.getByTestId('publish-submit-btn') as HTMLButtonElement
+    expect(publishBtn.disabled).toBe(true)
+
+    // Fill override reason and submit
+    fireEvent.change(screen.getByTestId('override-reason-input'), {
+      target: { value: 'I am the exclusive licensed broker for this property' },
+    })
+    fireEvent.click(screen.getByTestId('override-submit-btn'))
+
+    await waitFor(() => {
+      expect(publishingApi.overrideDuplicate).toHaveBeenCalledWith(
+        'dup-candidate-99',
+        'I am the exclusive licensed broker for this property',
+      )
+      // Duplicate block is resolved, publish button becomes enabled!
+      expect(screen.queryByTestId('duplicate-warning-card')).toBeNull()
+      expect(publishBtn.disabled).toBe(false)
+    })
+  })
+})

@@ -18,6 +18,7 @@ import { useSeoMetadata, buildListingJsonLd, buildDevelopmentJsonLd } from './ho
 import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
 import { MarketplaceMap } from './components/MarketplaceMap'
+import { PublishingWizard } from './features/publishing'
 import type {
   BoundingBox,
   PublicDevelopmentCard,
@@ -54,7 +55,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           <Link to="/" className="main-nav__link">Банки</Link>
         </nav>
         <div className="header-actions">
-          <Link className="header-action header-action--primary" to="/">+ Разместить</Link>
+          <Link className="header-action header-action--primary" to="/publish" data-testid="header-publish-cta">+ Разместить</Link>
           <Link className="header-action header-action--dark" to="/">⌕ Войти</Link>
           <button className="header-locale" type="button" aria-label="Выбрать язык">RU⌄</button>
           <button className="header-locale" type="button" aria-label="Выбрать валюту">$⌄</button>
@@ -646,12 +647,27 @@ function ListingDetailPage() {
   )
 }
 
+function PublishingWizardPage() {
+  useSeoMetadata({
+    title: 'Разместить объявление',
+    description: 'Публикация объявления о продаже или аренде недвижимости в каталоге BAZA.sale',
+    canonicalUrl: `${window.location.origin}/publish`,
+  })
+
+  return (
+    <Shell>
+      <PublishingWizard />
+    </Shell>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CataloguePage />} />
       <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
       <Route path="/listings/:slug" element={<ListingDetailPage />} />
+      <Route path="/publish" element={<PublishingWizardPage />} />
       <Route path="*" element={<CataloguePage />} />
     </Routes>
   )
