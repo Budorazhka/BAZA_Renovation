@@ -105,6 +105,6 @@
 
 ## 7. Known Limitations & Backend Gaps (TODOs)
 
-1. **Map provider configuration**: MapLibre подключён, а координаты приходят из реального `searchProjection.geo`. Для запуска карты задайте `VITE_MAP_STYLE_URL` на OSM-compatible провайдера с production SLA; публичный бесплатный OSM tile server намеренно не используется как CDN.
+1. **Map provider configuration**: MapLibre подключён, а координаты приходят из реального `searchProjection.geo`. Для запуска карты задайте `VITE_MAP_STYLE_URL` на OSM-compatible провайдера с production SLA. Шаблоны `.env.example` и `.env.runtime.example` содержат явный placeholder для этой переменной; публичный бесплатный OSM tile server намеренно не используется как CDN. Если переменная не задана, UI показывает конфигурационное состояние вместо фальшивой карты.
 2. **TODO (Public Listing Sorting)**: В текущей версии контракт `GET /public/listings` использует фиксированную сортировку по новизне/актуальности. Сортировка по цене (возрастание/убывание) и площади запланирована в следующем релизе.
 3. **TODO (Favorites / Saved Searches)**: Локальное или серверное сохранение избранных объектов вынесено в отдельный функциональный срез авторизованного покупателя.
