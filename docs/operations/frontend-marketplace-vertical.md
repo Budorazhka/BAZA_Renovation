@@ -1,63 +1,108 @@
-﻿# Frontend & Marketplace Vertical Audit Matrix
+# Frontend & Marketplace Vertical Architecture & Acceptance Specification
 
-Документ фиксирует результаты аудита существующих frontend-маршрутов, источников данных и API-контрактов для вертикального сценария вторички и аренды (PropertyAsset → Listing → Publication → Public Marketplace).
+Документ фиксирует архитектуру, поведение, схему синхронизации состояния, правила доступности, SEO и границы безопасности публичного маркетплейса BAZA (`apps/marketplace-web`).
 
-## 1. Матрица маршрутов и источников данных
+---
 
-| UI / Route | Текущий источник данных | Реальный Backend Endpoint | Необходимые изменения |
+## 1. Маршрутизация и синхронизация состояния с URL
+
+Публичный интерфейс маркетплейса поддерживает полную синхронизацию фильтров и разделов с URL поисковыми параметрами (`useSearchParams`):
+
+| URL Parameter | Допустимые значения | Описание | Поведение при изменении |
 |---|---|---|---|
-| **ERP: Объекты (каталог/список)**<br>`/dashboard/objects/list` | `secondaryObjectsApi` (обращается к устаревшим `/estate-apartments` и `/search/v3`, использует fallback `DEMO_APARTMENTS` и `DEMO_AUTHOR_ID`). | `GET /api/v1/property-assets`<br>`GET /api/v1/property-assets/:assetId/listings` | Заменить legacy-клиент на реальный `propertyAssetsApi`. Загружать реальные `PropertyAsset` организации и их связанные `Listing`. Отображать реальные статусы, цену, характеристики. Поддержать loading, error + retry, empty state. |
-| **ERP: Карточка объекта**<br>`/dashboard/objects/:propertyId` | `secondaryObjectsApi.getEstateApartment(id)` с fallback-объектами и моковыми флагами MLS. | `GET /api/v1/property-assets/:assetId`<br>`GET /api/v1/property-assets/:assetId/listings`<br>`GET /api/v1/property-assets/:assetId/listings/:listingId/publication-status`<br>`GET /api/v1/property-assets/:assetId/listings/:listingId/actuality`<br>`PATCH .../activate`<br>`POST .../publish`<br>`POST .../unpublish`<br>`PATCH .../confirm-actuality`<br>`POST /api/v1/property-assets/duplicate-candidates/:id/override` | Читать реальный актив и листинги. Отображать реальный статус публикации (`published`, `publication_pending`, `build_failed`, `unpublished`), состояние актуальности (пороги, дата подтверждения), действия активации, публикации (с `Idempotency-Key`), снятия с публикации (с `reason`), подтверждения актуальности и снятия дубль-блокировки (owner override). |
-| **ERP: Мои объекты**<br>`/dashboard/my-properties` | `window.localStorage.getItem('agency.product.properties')` + fallback на `mockProperties`. | `GET /api/v1/property-assets`<br>`GET /api/v1/property-assets/:assetId/listings` | Полностью убрать `localStorage` и моковые данные. Подключить реальный `propertyAssetsApi` с поддержкой фильтрации по категориям, статусам, вызову действий публикации и актуализации. |
-| **ERP: Визард создания/редактирования**<br>`ObjectEditWizard` | Локальный state в памяти, генерация фейкового ID `obj-${Date.now()}`. | `POST /api/v1/property-assets`<br>`POST /api/v1/property-assets/:assetId/listings`<br>`PATCH /api/v1/property-assets/:assetId/listings/:listingId/activate`<br>`POST /api/v1/property-assets/:assetId/listings/:listingId/publish` | Собрать валидный DTO: `propertyType`, `commercialSubtype`, `location` (GeoJSON `Point`), `characteristics` (`area`, `rooms`, `floor`, `totalFloors`), `representativePhone`. Создавать PropertyAsset, затем Listing (`dealType`, `price`), активировать и публиковать. Корректно обрабатывать 409 (дубли/конфликты), 422, 401/403. |
-| **Public Marketplace: Каталог**<br>`/` и `/listings` (marketplace-web) | `marketplaceApi.listDevelopments` (`GET /api/v1/public/developments`) — поддерживал только ЖК. | `GET /api/v1/public/listings`<br>(query: `dealType`, `propertyType`, `commercialSubtype`, `city`, `bbox`, `cursor`, `limit`) | Расширить `marketplace-web`: добавить вкладки/фильтры по типу недвижимости (ЖК vs вторичка/аренда: продажа, долгосрочная/посуточная аренда), фильтр по городу, cursor-пагинацию `nextCursor`, индикаторы загрузки, ошибок и пустого каталога. Не ломать существующий каталог новостроек. |
-| **Public Marketplace: Карточка листинга**<br>`/listings/:slug` (marketplace-web) | Отсутствовал (был только `/developments/:slug`). | `GET /api/v1/public/listings/:slug` | Добавить страницу детального просмотра опубликованного листинга: цена, валюта, локация, характеристики (площадь, комнатность, этаж/этажность), SEO-заголовки. Обработать 404 (объект не найден или снят с публикации) и сетевые ошибки. |
+| `tab` | `developments` (default) | `listings` | Активный раздел каталога (Новостройки vs Вторичка/аренда). | Переключение сбрасывает специфичные фильтры сделок и `cursor`. |
+| `city` | Текстовая строка (напр. `Batumi`, `Tbilisi`) | Фильтр по городу объекта / ЖК. | Изменение значения сбрасывает `cursor`. Доступна кнопка «Сбросить фильтры». |
+| `dealType` | `sale` | `rent_long` | `rent_short` | Тип сделки для вторички/аренды. | Сбрасывает `cursor`. |
+| `propertyType` | `apartment` | `house` | `commercial` | `land` | Категория недвижимости. | Сбрасывает `cursor` и `commercialSubtype` при смене категории. |
+| `commercialSubtype` | `office` | `retail` | `warehouse` | `free_purpose` | `land_commercial` | Подтип коммерческого объекта. | Отображается только при `propertyType=commercial`. |
+| `cursor` | Непрозрачная строка пагинации (base64) | Указатель на следующую страницу выборки. | Генерируется backend; сбрасывается при смене любого фильтра. |
+
+### Навигация Back / Forward и защита от Race Conditions
+- **История браузера**: Переключение фильтров и табов создаёт новые записи в истории (`setSearchParams(..., { replace: false })`), обеспечивая бесшовный возврат кнопками «Назад» / «Вперёд» без перезагрузки страницы.
+- **Отмена устаревших запросов (Stale Requests)**:
+  - Хуки `useCatalogue`, `useListingsCatalogue`, `useListingDetail`, `useDevelopmentDetail` используют `AbortController` для мгновенной отмены in-flight HTTP-запросов при смене параметров или размонтировании компонента.
+  - Монотонный `requestIdRef` гарантирует, что ответ предыдущего запроса никогда не перезапишет более свежие данные.
 
 ---
 
-## 2. Архитектурный анализ и границы безопасности
+## 2. Cursor Pagination & Дедупликация
 
-1. **ERP Security & Isolation**:
-   - Все запросы в ERP авторизуются через сессионную cookie с `TenantGuard` и `PermissionGuard` (`property_asset.create/read`, `listing.create/edit/read`).
-   - Изоляция организаций обеспечивается backend (`organizationId` из сессии, `publisherScope: { type: 'organization', organizationId }`).
-   - Защита от несанкционированного доступа: чужие активы возвращают 404 (non-disclosure).
-
-2. **Idempotency & Concurrency**:
-   - Публикация листинга (`POST .../publish`) требует заголовок `Idempotency-Key`.
-   - Ключ генерируется на каждую пользовательскую попытку публикации и сбрасывается после явного результата или повторного клика.
-   - CAS-контроль версий на backend исключает гонки состояний.
-
-3. **Deduplication & Owner Override**:
-   - Если сервер обнаруживает дублирующий актив (`signals.phoneMatch` или `signals.addressMatch` + `roomsAreaFloorMatch`), публикация блокируется (`ConflictException` 409).
-   - Фронтенд не пытается обойти запрет, а запрашивает информацию о кандидате-дубле и предоставляет пользователю форму «Owner Override» с обязательным указанием причины (не менее 10 символов) только если статус кандидата — `detected` (серверный гейт).
-
-4. **Actuality Confirmation**:
-   - Листинги требуют подтверждения актуальности согласно SLA категорий (`ACT-001`).
-   - Фронтенд отображает состояние актуальности (`getActualityState`) и позволяет вызвать `confirmActuality` с передачей `expectedVersion`.
-
-5. **Public Projection & Lead Form Verification**:
-   - `GET /public/listings` и `GET /public/listings/:slug` отдают только whitelist полей из `MarketplacePublication` (`denormalizedFields`, `seo`).
-   - **Проверка лид-формы для листинга**: На текущий момент backend-контракт `reveal-contact` / создание лида существует только для `developments` (`POST /api/v1/public/developments/:slug/reveal-contact`). Для вторички/аренды (`listings`) endpoint регистрации лида с публичной карточки в API пока не реализован. **Фейковая форма не создаётся**, функциональность честно зафиксирована как следующий вертикальный срез.
+- **Кнопка «Показать ещё»**:
+  - При наличии `nextCursor` внизу сетки отображается кнопка подгрузки следующей порции объектов.
+  - **Loading Lock**: Во время выполнения запроса кнопка переходит в состояние `disabled` и `aria-busy="true"`, предотвращая повторные параллельные клики.
+  - **Дедупликация**: При добавлении элементов следующей страницы коллекция дедуплицируется по уникальным ключам (`slug` / составной ключ), исключая дублирование карточек при изменении данных на backend.
+  - **Завершение пагинации**: Если `nextCursor === null`, кнопка исчезает, отображается уведомление «Все доступные объекты показаны».
+  - **Устойчивость к ошибкам (Resilient Pagination)**: Если запрос следующей страницы завершился ошибкой (таймаут, сеть), уже загруженные объекты **не сбрасываются**. Показывается панель ошибки пагинации с кнопкой «Попробовать снова».
 
 ---
 
-## 3. План реализации
+## 3. SEO, метаданные и Schema.org JSON-LD
 
-1. **Backend / API Contracts**:
-   - Добавить эндпоинт получения кандидатов-дублей для актива: `GET /property-assets/:assetId/duplicate-candidates` (и зеркало в `/marketplace/property-assets/:assetId/duplicate-candidates`) с проверкой владения активом.
-   - Обновить OpenAPI-спецификацию `docs/api/v1-first-vertical-slice.yaml` и сгенерировать типы в `@baza/api-client`.
-   - Добавить integration-тесты для новых эндпоинтов.
+При переходе на детальные страницы (`/listings/:slug` и `/developments/:slug`) хук `useSeoMetadata` реактивно обновляет метаданные документа:
 
-2. **ERP Web**:
-   - Создать `propertyAssetsApi.ts` в `apps/erp-web/src/services/` с полной поддержкой CRUD для PropertyAsset/Listing, publish, unpublish, publication-status, actuality, duplicate-override.
-   - Интегрировать `ObjectEditWizard` с реальным API.
-   - Обновить `ObjectsListPage`, `ObjectCardPage`, `MyPropertiesPage` для работы с реальными данными вместо mock/localStorage.
+1. **Title & Description**:
+   - `document.title`: `"${item.seo?.title || itemTitle} — BAZA.sale"`.
+   - `<meta name="description" content="...">`: обновляется из `seo.description` или шаблона.
+   - `<link rel="canonical" href="...">`: канонический URL карточки.
+   - Open Graph: `og:title`, `og:description`, `og:image`, `og:url`.
+2. **Schema.org Structured Data (JSON-LD)**:
+   - Инжектируется безопасный `<script type="application/ld+json" id="baza-seo-jsonld">` со структурой `RealEstateListing` / `ApartmentComplex`.
+   - **Строгий Whitelist безопасности (Non-Disclosure Invariant)**:
+     - Разрешены ТОЛЬКО публичные поля: `@context`, `@type`, `name`, `description`, `url`, `image` (публичные CDN URLs), `offers` (`price`, `priceCurrency`, `availability`), `address` (`addressLocality`, `addressCountry`, `streetAddress`).
+     - **СТРОГО ЗАПРЕЩЕНО**: Выводить `organizationId`, `sourceId`, `identityId`, `storage keys`, внутренние audit-поля, телефон представителя до подтверждения лида.
+3. **Очистка при размонтировании (Cleanup)**:
+   - При уходе со страницы или переходе между карточками все созданные метатеги и JSON-LD скрипт удаляются, а заголовок сбрасывается на дефолтный (`"BAZA.sale · каталог объектов недвижимости"`).
 
-3. **Marketplace Web**:
-   - Расширить `marketplace-api.ts` методами `listListings` и `getListing`.
-   - Добавить хуки `useListingsCatalogue` и `useListingDetail`.
-   - Добавить каталог листингов и карточку `/listings/:slug` в `App.tsx` с сохранением единого дизайн-стиля.
-   - Добавить unit/компонентные тесты.
+---
 
-4. **Верификация**:
-   - Запустить `pnpm typecheck`, `pnpm test`, `pnpm test:integration`, `pnpm build`.
+## 4. Production States & Отказоустойчивость
+
+Интерфейс каталога и детальных карточек обрабатывает все возможные состояния жизненного цикла данных:
+
+| Состояние | Поведение UI |
+|---|---|
+| **Initial Loading** | Скелетон карточек / панели с `aria-busy="true"` и `role="status"`. |
+| **Empty State** | Сообщение об отсутствии объектов по выбранным фильтрам и кнопка «Сбросить фильтры». Никаких фейковых объектов. |
+| **404 Not Found / Unpublished** | Информативный блок о том, что объект не найден или был снят с публикации, со ссылкой на возврат в каталог. |
+| **429 Rate Limited** | Сообщение о превышении лимита запросов с кнопкой «Повторить попытку». |
+| **Network / 500 Error** | Сообщение об ошибке соединения с кнопкой повтора запроса. |
+| **Broken Image** | Обработчик `onError` переключает изображение на аккуратный fallback без падения интерфейса. |
+| **Empty Media (`media: []`)** | Отображение аккуратного заглушечного блока с иконкой и пояснением. |
+
+---
+
+## 5. Доступность (A11y) и Адаптивность (Responsive)
+
+- **Семантические ориентиры (Landmarks)**:
+  - `<header role="banner">` с кнопкой «Перейти к основному содержанию» (`.skip-link`).
+  - `<main id="main-content" tabIndex="-1">`.
+  - `<nav role="tablist" aria-label="...">`.
+  - `<form role="search" aria-label="...">`.
+  - `<footer role="contentinfo">`.
+- **Иерархия заголовков**: Строго один `<h1>` на страницу, разделы — `<h2>`, вложенные блоки — `<h3>`.
+- **Контролы формы**: Все инпуты имеют связанные `<label htmlFor="...">`, кнопки — доступные имена (`aria-label`, `title`).
+- **Живые регионы (Live Regions)**: Все асинхронные статусы, ошибки и успехи размечены `aria-live="polite"` / `role="alert"`.
+- **Клавиатурная навигация галереи**:
+  - `ArrowLeft` / `ArrowRight`: переключение предыдущего / следующего фото.
+  - `Home` / `End`: переход к первому / последнему фото.
+  - `Escape`: сброс фокуса с галереи.
+  - `Enter` / `Space` на миниатюрах: выбор активного кадра.
+- **Видимый фокус**: Стилизация `:focus-visible` с контрастным кольцом фокуса.
+- **Адаптивность**: Отсутствие горизонтального скролла на мобильных (320px, 375px, 414px), планшетах (768px) и десктопах (1440px).
+
+---
+
+## 6. Форма связи и раскрытия контактов
+
+- **Endpoint**: `POST /api/v1/public/listings/:slug/reveal-contact`.
+- **Payload**: `requesterPhone` (обязательный), `requesterName` (опциональный), `utm` (автоматический сбор из URL параметров и `document.referrer`).
+- **Double Submit Prevention**: Блокировка кнопки отправки и формы (`isSubmitting`).
+- **Раскрытие контактов**: Телефон представителя становится видимым **только после успешного ответа backend (200 OK)** и оформляется в виде кликабельной ссылки `tel:`.
+
+---
+
+## 7. Known Limitations & Backend Gaps (TODOs)
+
+1. **TODO (Backend Gap / Geo BBox Filter)**: Публичный эндпоинт `GET /public/listings` принимает параметр `bbox` в query, но расширенный гео-поиск по произвольным полигонам пока не реализован в хранилище `MarketplacePublication`.
+2. **TODO (Public Listing Sorting)**: В текущей версии контракт `GET /public/listings` использует фиксированную сортировку по новизне/актуальности. Сортировка по цене (возрастание/убывание) и площади запланирована в следующем релизе.
+3. **TODO (Favorites / Saved Searches)**: Локальное или серверное сохранение избранных объектов вынесено в отдельный функциональный срез авторизованного покупателя.

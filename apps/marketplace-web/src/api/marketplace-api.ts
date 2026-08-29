@@ -87,11 +87,15 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>
 }
 
+export interface RequestOptions {
+  signal?: AbortSignal
+}
+
 export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: string; fetcher?: Fetcher }) {
   const apiBaseUrl = normalizedBaseUrl(baseUrl)
 
   return {
-    async listDevelopments(query: CatalogueQuery = {}): Promise<PublicDevelopmentList> {
+    async listDevelopments(query: CatalogueQuery = {}, options?: RequestOptions): Promise<PublicDevelopmentList> {
       const params = new URLSearchParams()
       if (query.city?.trim()) params.set('city', query.city.trim())
       if (query.bbox) {
@@ -103,13 +107,15 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
       const suffix = params.size > 0 ? `?${params.toString()}` : ''
       const response = await fetcher(`${apiBaseUrl}/public/developments${suffix}`, {
         headers: { Accept: 'application/json' },
+        signal: options?.signal,
       })
       return parseResponse<PublicDevelopmentList>(response)
     },
 
-    async getDevelopment(slug: string): Promise<PublicDevelopmentCard> {
+    async getDevelopment(slug: string, options?: RequestOptions): Promise<PublicDevelopmentCard> {
       const response = await fetcher(`${apiBaseUrl}/public/developments/${encodeURIComponent(slug)}`, {
         headers: { Accept: 'application/json' },
+        signal: options?.signal,
       })
       return parseResponse<PublicDevelopmentCard>(response)
     },
@@ -117,6 +123,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
     async revealDevelopmentContact(
       slug: string,
       payload: RevealContactPayload,
+      options?: RequestOptions,
     ): Promise<RevealContactResponse> {
       const response = await fetcher(
         `${apiBaseUrl}/public/developments/${encodeURIComponent(slug)}/reveal-contact`,
@@ -127,12 +134,13 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
             Accept: 'application/json',
           },
           body: JSON.stringify(payload),
+          signal: options?.signal,
         },
       )
       return parseResponse<RevealContactResponse>(response)
     },
 
-    async listListings(query: ListingCatalogueQuery = {}): Promise<PublicListingList> {
+    async listListings(query: ListingCatalogueQuery = {}, options?: RequestOptions): Promise<PublicListingList> {
       const params = new URLSearchParams()
       if (query.city?.trim()) params.set('city', query.city.trim())
       if (query.dealType) params.set('dealType', query.dealType)
@@ -147,13 +155,15 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
       const suffix = params.size > 0 ? `?${params.toString()}` : ''
       const response = await fetcher(`${apiBaseUrl}/public/listings${suffix}`, {
         headers: { Accept: 'application/json' },
+        signal: options?.signal,
       })
       return parseResponse<PublicListingList>(response)
     },
 
-    async getListing(slug: string): Promise<PublicListingCard> {
+    async getListing(slug: string, options?: RequestOptions): Promise<PublicListingCard> {
       const response = await fetcher(`${apiBaseUrl}/public/listings/${encodeURIComponent(slug)}`, {
         headers: { Accept: 'application/json' },
+        signal: options?.signal,
       })
       return parseResponse<PublicListingCard>(response)
     },
@@ -161,6 +171,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
     async revealListingContact(
       slug: string,
       payload: RevealContactPayload,
+      options?: RequestOptions,
     ): Promise<RevealContactResponse> {
       const response = await fetcher(
         `${apiBaseUrl}/public/listings/${encodeURIComponent(slug)}/reveal-contact`,
@@ -171,6 +182,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
             Accept: 'application/json',
           },
           body: JSON.stringify(payload),
+          signal: options?.signal,
         },
       )
       return parseResponse<RevealContactResponse>(response)
