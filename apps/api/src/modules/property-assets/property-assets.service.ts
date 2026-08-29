@@ -1,3 +1,22 @@
+import { MediaService } from '../media/media.service';
+import { IMAGE_MIME_TYPES, MAX_UPLOAD_SIZE_BYTES } from '../media/media.constants';
+import type { CreatePropertyAssetMediaUploadIntentDto } from './dto/create-property-asset-media-upload-intent.dto';
+import type { ConfirmPropertyAssetMediaDto } from './dto/confirm-property-asset-media.dto';
+import type { UpdatePropertyAssetMediaDto } from './dto/update-property-asset-media.dto';
+
+export interface PropertyAssetMediaViewItem {
+  id: string;
+  mediaAssetId: string;
+  role: 'cover' | 'gallery';
+  sortOrder: number;
+  alt?: string;
+  isPrivate: boolean;
+  status: 'pending' | 'verified' | 'rejected';
+  sizeBytes?: number;
+  mimeType?: string;
+  url?: string;
+  createdAt: string;
+}
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
@@ -23,6 +42,7 @@ export class PropertyAssetsService {
     private readonly publicationRepository: MarketplacePublicationRepository,
     private readonly idempotencyService: IdempotencyService,
     private readonly dedupeService: DedupeService,
+    private readonly mediaService: MediaService,
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
@@ -331,4 +351,233 @@ export class PropertyAssetsService {
       unpublishReason: publication.unpublishReason,
     };
   }
+  // --- MEDIA VERTICAL (MKT-004) ---
+
+  async createMediaUploadIntent(
+    assetId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    dto: CreatePropertyAssetMediaUploadIntentDto,
+  ) {
+    const asset = await this.getAsset(assetId, organizationId);
+
+    if (!IMAGE_MIME_TYPES.has(dto.declaredMimeType)) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `Only JPEG, PNG, and WebP images are supported, received: ${dto.declaredMimeType}`,
+      );
+    }
+    if (dto.sizeBytes > MAX_UPLOAD_SIZE_BYTES) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `File size (${dto.sizeBytes}) exceeds maximum allowed limit (${MAX_UPLOAD_SIZE_BYTES})`,
+      );
+    }
+
+    const uploadIntent = await this.mediaService.createUploadIntent({
+      ownerScope: { type: 'organization', organizationId },
+      declaredMimeType: dto.declaredMimeType,
+      sizeBytes: dto.sizeBytes,
+      purpose: dto.purpose || 'property_photo',
+      bucket: 'public',
+    });
+
+    return {
+      assetId: asset._id.toString(),
+      mediaAssetId: uploadIntent.assetId,
+      uploadUrl: uploadIntent.uploadUrl,
+    };
+  }
+
+  async confirmMediaUpload(
+    assetId: Types.ObjectId,
+    mediaAssetId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    actorIdentityId: Types.ObjectId,
+    correlationId: string,
+    dto?: ConfirmPropertyAssetMediaDto,
+  ) {
+    const asset = await this.getAsset(assetId, organizationId);
+
+    const confirmRes = await this.mediaService.confirmUpload({
+      assetId: mediaAssetId,
+      actorIdentityId,
+      expectedOwnerScope: { type: 'organization', organizationId },
+      correlationId,
+    });
+
+    if (confirmRes.status === 'rejected') {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'Media file verification failed (invalid magic-byte MIME or corrupt file)',
+      );
+    }
+
+    const existingIndex = (asset.media || []).findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+    let updatedMedia = [...(asset.media || [])];
+
+    if (existingIndex >= 0) {
+      const item = updatedMedia[existingIndex]!;
+      const newRole = dto?.role ?? item.role;
+      if (newRole === 'cover') {
+        updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
+      }
+      updatedMedia[existingIndex] = {
+        ...item,
+        role: newRole,
+        sortOrder: dto?.sortOrder !== undefined ? dto.sortOrder : item.sortOrder,
+        alt: dto?.alt !== undefined ? dto.alt : item.alt,
+        isPrivate: dto?.isPrivate !== undefined ? dto.isPrivate : item.isPrivate,
+      };
+    } else {
+      const hasCover = updatedMedia.some((m) => m.role === 'cover' && !m.isPrivate);
+      const isExplicitCover = dto?.role === 'cover';
+      const shouldBeCover = isExplicitCover || (!hasCover && !dto?.isPrivate);
+
+      if (shouldBeCover) {
+        updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
+      }
+
+      const sortOrder = dto?.sortOrder !== undefined ? dto.sortOrder : updatedMedia.length;
+      updatedMedia.push({
+        id: mediaAssetId.toString(),
+        mediaAssetId,
+        role: shouldBeCover ? 'cover' : 'gallery',
+        sortOrder,
+        alt: dto?.alt,
+        isPrivate: dto?.isPrivate ?? false,
+        createdAt: new Date(),
+      });
+    }
+
+    await this.propertyAssetRepository.updateMedia(asset._id, updatedMedia);
+    return this.listMedia(assetId, organizationId);
+  }
+
+  async listMedia(assetId: Types.ObjectId, organizationId: Types.ObjectId): Promise<PropertyAssetMediaViewItem[]> {
+    const asset = await this.getAsset(assetId, organizationId);
+    const mediaItems = asset.media || [];
+    if (mediaItems.length === 0) return [];
+
+    const mediaAssetIds = mediaItems.map((m) => m.mediaAssetId);
+    const assetsMap = await this.mediaService.getAssetsForOwnerScope(mediaAssetIds, {
+      type: 'organization',
+      organizationId,
+    });
+
+    return mediaItems.map((m) => {
+      const mediaAsset = assetsMap.get(m.mediaAssetId.toString());
+      let url: string | undefined;
+      if (mediaAsset && mediaAsset.variants && mediaAsset.variants.length > 0) {
+        const cardOrDetail = mediaAsset.variants.find((v: any) => v.type === 'card' || v.type === 'detail') ?? mediaAsset.variants[0];
+        if (cardOrDetail) {
+          url = this.mediaService.getPublicUrl(cardOrDetail.assetPath);
+        }
+      }
+
+      return {
+        id: m.id || m.mediaAssetId.toString(),
+        mediaAssetId: m.mediaAssetId.toString(),
+        role: m.role,
+        sortOrder: m.sortOrder,
+        alt: m.alt,
+        isPrivate: m.isPrivate ?? false,
+        status: mediaAsset?.status ?? 'pending',
+        sizeBytes: mediaAsset?.sizeBytes,
+        mimeType: mediaAsset?.verifiedMimeType ?? mediaAsset?.declaredMimeType,
+        url,
+        createdAt: (m.createdAt || new Date()).toISOString(),
+      };
+    });
+  }
+
+  async deleteMedia(assetId: Types.ObjectId, mediaAssetId: Types.ObjectId, organizationId: Types.ObjectId) {
+    const asset = await this.getAsset(assetId, organizationId);
+    const mediaItems = asset.media || [];
+    const index = mediaItems.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+    if (index < 0) {
+      throw new NotFoundException('Media item not found on asset');
+    }
+
+    const removed = mediaItems[index]!;
+    const updatedMedia = mediaItems.filter((m) => !m.mediaAssetId.equals(mediaAssetId));
+
+    if (removed.role === 'cover' && updatedMedia.length > 0) {
+      const firstNonPrivate = updatedMedia.find((m) => !m.isPrivate);
+      if (firstNonPrivate) {
+        firstNonPrivate.role = 'cover';
+      } else if (updatedMedia[0]) {
+        updatedMedia[0].role = 'cover';
+      }
+    }
+
+    await this.propertyAssetRepository.updateMedia(asset._id, updatedMedia);
+    return { success: true };
+  }
+
+  async updateMediaItem(
+    assetId: Types.ObjectId,
+    mediaAssetId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    dto: UpdatePropertyAssetMediaDto,
+  ) {
+    const asset = await this.getAsset(assetId, organizationId);
+    const mediaItems = [...(asset.media || [])];
+    const index = mediaItems.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+    if (index < 0) {
+      throw new NotFoundException('Media item not found on asset');
+    }
+
+    const currentItem = mediaItems[index]!;
+    if (dto.role === 'cover') {
+      for (const m of mediaItems) {
+        m.role = 'gallery';
+      }
+      currentItem.role = 'cover';
+    } else if (dto.role === 'gallery') {
+      currentItem.role = 'gallery';
+    }
+
+    if (dto.sortOrder !== undefined) currentItem.sortOrder = dto.sortOrder;
+    if (dto.alt !== undefined) currentItem.alt = dto.alt;
+    if (dto.isPrivate !== undefined) currentItem.isPrivate = dto.isPrivate;
+
+    await this.propertyAssetRepository.updateMedia(asset._id, mediaItems);
+    return this.listMedia(assetId, organizationId);
+  }
+
+  async reorderMedia(
+    assetId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    items: Array<{ mediaAssetId: string; sortOrder: number; role?: 'cover' | 'gallery' }>,
+  ) {
+    const asset = await this.getAsset(assetId, organizationId);
+    const mediaItems = [...(asset.media || [])];
+    const orderMap = new Map(items.map((it) => [it.mediaAssetId, it]));
+
+    let hasExplicitCover = false;
+    for (const m of mediaItems) {
+      const override = orderMap.get(m.mediaAssetId.toString());
+      if (override) {
+        m.sortOrder = override.sortOrder;
+        if (override.role) {
+          m.role = override.role;
+          if (override.role === 'cover') hasExplicitCover = true;
+        }
+      }
+    }
+
+    if (hasExplicitCover) {
+      const designatedCovers = items.filter((it) => it.role === 'cover').map((it) => it.mediaAssetId);
+      for (const m of mediaItems) {
+        if (!designatedCovers.includes(m.mediaAssetId.toString())) {
+          m.role = 'gallery';
+        }
+      }
+    }
+
+    mediaItems.sort((a, b) => a.sortOrder - b.sortOrder);
+    await this.propertyAssetRepository.updateMedia(asset._id, mediaItems);
+    return this.listMedia(assetId, organizationId);
+  }
+
 }

@@ -41,6 +41,11 @@ export class MediaAssetRepository {
     return this.model.findById(id).exec();
   }
 
+  async findByIds(ids: Types.ObjectId[]): Promise<MediaAssetDocument[]> {
+    if (ids.length === 0) return [];
+    return this.model.find({ _id: { $in: ids } }).exec();
+  }
+
   /**
    * ADR-006: session — часть той же транзакции, что audit+outbox запись
    * в MediaService.confirmUpload (без session смена статуса коммитилась бы

@@ -1,3 +1,8 @@
+import { Delete, Put } from '@nestjs/common';
+import { CreatePropertyAssetMediaUploadIntentDto } from './dto/create-property-asset-media-upload-intent.dto';
+import { ConfirmPropertyAssetMediaDto } from './dto/confirm-property-asset-media.dto';
+import { UpdatePropertyAssetMediaDto } from './dto/update-property-asset-media.dto';
+import { ReorderPropertyAssetMediaDto } from './dto/reorder-property-asset-media.dto';
 import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
@@ -58,6 +63,92 @@ export class MarketplacePropertyAssetsController {
   get(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
     const account = requireMarketplaceAccountContext(req);
     return this.service.getAsset(objectId(assetId, 'assetId'), new Types.ObjectId(account.identityId));
+  }
+
+
+  // --- MEDIA VERTICAL (MKT-004) ---
+
+  @Post(':assetId/media/upload-intent')
+  @HttpCode(201)
+  createMediaUploadIntent(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: CreatePropertyAssetMediaUploadIntentDto,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.createMediaUploadIntent(
+      objectId(assetId, 'assetId'),
+      new Types.ObjectId(account.identityId),
+      dto,
+    );
+  }
+
+  @Post(':assetId/media/:mediaAssetId/confirm')
+  @HttpCode(200)
+  confirmMediaUpload(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+    @Body() dto?: ConfirmPropertyAssetMediaDto,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.confirmMediaUpload(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(account.identityId),
+      req.correlationId,
+      dto,
+    );
+  }
+
+  @Get(':assetId/media')
+  listMedia(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.listMedia(objectId(assetId, 'assetId'), new Types.ObjectId(account.identityId));
+  }
+
+  @Delete(':assetId/media/:mediaAssetId')
+  deleteMedia(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.deleteMedia(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(account.identityId),
+    );
+  }
+
+  @Patch(':assetId/media/:mediaAssetId')
+  updateMediaItem(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+    @Body() dto: UpdatePropertyAssetMediaDto,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.updateMediaItem(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(account.identityId),
+      dto,
+    );
+  }
+
+  @Put(':assetId/media/order')
+  reorderMedia(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: ReorderPropertyAssetMediaDto,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.reorderMedia(
+      objectId(assetId, 'assetId'),
+      new Types.ObjectId(account.identityId),
+      dto.items,
+    );
   }
 
   @Post(':assetId/listings')

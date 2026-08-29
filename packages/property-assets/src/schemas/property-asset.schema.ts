@@ -4,6 +4,30 @@ import { OwnerScopeSchema, type OwnerScope } from '@baza/tenant-scope';
 
 export type PropertyType = 'apartment' | 'house' | 'land' | 'commercial';
 export type CommercialSubtype = 'office' | 'warehouse' | 'retail' | 'business' | 'free_purpose';
+export type PropertyAssetMediaRole = 'cover' | 'gallery';
+
+export interface PropertyAssetMediaItem {
+  id: string;
+  mediaAssetId: Types.ObjectId;
+  role: PropertyAssetMediaRole;
+  sortOrder: number;
+  alt?: string;
+  isPrivate?: boolean;
+  createdAt: Date;
+}
+
+const PropertyAssetMediaItemSchema = new MongooseSchema(
+  {
+    id: { type: String, required: true },
+    mediaAssetId: { type: MongooseSchema.Types.ObjectId, required: true },
+    role: { type: String, enum: ['cover', 'gallery'], required: true },
+    sortOrder: { type: Number, required: true, default: 0 },
+    alt: { type: String, required: false },
+    isPrivate: { type: Boolean, required: false, default: false },
+    createdAt: { type: Date, required: true, default: Date.now },
+  },
+  { _id: false },
+);
 
 const GeoPointSchema = new MongooseSchema(
   {
@@ -64,18 +88,20 @@ export class PropertyAssetDocument extends Document {
 
   /**
    * DEDUPE-001 (owner decision, xlsx #58): "признаки дубля — телефон
-   * собственника, адрес, включая этаж и площадь и комнатность". Не
-   * существовало на схеме до этой задачи (PROP-001 не включал контактное
-   * поле вообще) — тот же паттерн, что Development.contact был добавлен
-   * в D-03 как обязательное поле уже после первого прохода D-01. Не
-   * публикуется напрямую в MarketplacePublication (listing-publication.mapper.ts
-   * whitelist не включает это поле) — используется только для
-   * server-side dedupe-сопоставления, тот же принцип non-disclosure, что
-   * Development.contact не попадает в публичную проекцию без отдельного
-   * reveal-механизма.
+   * собственника, адрес, включая этаж и площадь и комнатность".
    */
   @Prop({ required: true })
   representativePhone!: string;
+
+  /**
+   * Media-вертикаль (MKT-004): каноническое хранилище медиа-ресурсов
+   * физического объекта недвижимости. Хранит массив метаданных медиа,
+   * ссылающихся на MediaAssetDocument из @baza/media-storage.
+   * Листинги (ListingDocument) не дублируют медиа, а разделяют медиа
+   * своего PropertyAsset.
+   */
+  @Prop({ type: [PropertyAssetMediaItemSchema], default: [] })
+  media!: PropertyAssetMediaItem[];
 
   @Prop({ required: true, default: 0 })
   version!: number;
@@ -85,9 +111,7 @@ export class PropertyAssetDocument extends Document {
 
 export const PropertyAssetSchema = SchemaFactory.createForClass(PropertyAssetDocument);
 PropertyAssetSchema.index({ 'publisherScope.organizationId': 1 }, { sparse: true });
-// Owner/realtor marketplace publishing wizard: обслуживает
-// findByIdForIdentity/listForIdentity — тот же паттерн, что
-// media-asset.schema.ts уже применяет для своего ownerScope.identityId.
 PropertyAssetSchema.index({ 'publisherScope.identityId': 1 }, { sparse: true });
 PropertyAssetSchema.index({ 'location.geo': '2dsphere' });
 PropertyAssetSchema.index({ 'publisherScope.organizationId': 1, 'location.city': 1 });
+PropertyAssetSchema.index({ 'media.mediaAssetId': 1 }, { sparse: true });

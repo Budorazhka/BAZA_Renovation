@@ -217,12 +217,42 @@ export class MediaService {
   async getAssetForOwnerScope(
     assetId: Types.ObjectId,
     expectedOwnerScope: OwnerScope,
-  ): Promise<{ status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket } | null> {
+  ): Promise<{ status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType?: string; verifiedMimeType?: string; sizeBytes?: number; createdAt?: Date } | null> {
     const asset = await this.mediaAssetRepository.findById(assetId);
     if (!asset || !ownerScopesEqual(asset.ownerScope, expectedOwnerScope)) {
       return null;
     }
-    return { status: asset.status, variants: asset.variants, bucket: asset.bucket };
+    return {
+      status: asset.status,
+      variants: asset.variants,
+      bucket: asset.bucket,
+      declaredMimeType: asset.declaredMimeType,
+      verifiedMimeType: asset.verifiedMimeType,
+      sizeBytes: asset.sizeBytes,
+      createdAt: asset.createdAt,
+    };
+  }
+
+  async getAssetsForOwnerScope(
+    assetIds: Types.ObjectId[],
+    expectedOwnerScope: OwnerScope,
+  ): Promise<Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date }>> {
+    const assets = await this.mediaAssetRepository.findByIds(assetIds);
+    const result = new Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date }>();
+    for (const asset of assets) {
+      if (ownerScopesEqual(asset.ownerScope, expectedOwnerScope)) {
+        result.set(asset._id.toString(), {
+          status: asset.status,
+          variants: asset.variants,
+          bucket: asset.bucket,
+          declaredMimeType: asset.declaredMimeType,
+          verifiedMimeType: asset.verifiedMimeType,
+          sizeBytes: asset.sizeBytes,
+          createdAt: asset.createdAt,
+        });
+      }
+    }
+    return result;
   }
 
   /**
@@ -235,6 +265,10 @@ export class MediaService {
    */
   getVariantUrl(variant: MediaVariant): string {
     return this.storage.getPublicUrl(variant.assetPath);
+  }
+
+  getPublicUrl(key: string): string {
+    return this.storage.getPublicUrl(key);
   }
 }
 

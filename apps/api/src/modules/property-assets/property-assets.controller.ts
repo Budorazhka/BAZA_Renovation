@@ -1,3 +1,8 @@
+import { Delete, Put } from '@nestjs/common';
+import { CreatePropertyAssetMediaUploadIntentDto } from './dto/create-property-asset-media-upload-intent.dto';
+import { ConfirmPropertyAssetMediaDto } from './dto/confirm-property-asset-media.dto';
+import { UpdatePropertyAssetMediaDto } from './dto/update-property-asset-media.dto';
+import { ReorderPropertyAssetMediaDto } from './dto/reorder-property-asset-media.dto';
 import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
@@ -52,6 +57,99 @@ export class PropertyAssetsController {
   get(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
     const tenant = requireTenantContext(req);
     return this.service.getAsset(objectId(assetId, 'assetId'), new Types.ObjectId(tenant.organizationId));
+  }
+
+
+  // --- MEDIA VERTICAL (MKT-004) ---
+
+  @Post(':assetId/media/upload-intent')
+  @HttpCode(201)
+  @RequirePermission('property_asset', 'edit')
+  createMediaUploadIntent(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: CreatePropertyAssetMediaUploadIntentDto,
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.service.createMediaUploadIntent(
+      objectId(assetId, 'assetId'),
+      new Types.ObjectId(tenant.organizationId),
+      dto,
+    );
+  }
+
+  @Post(':assetId/media/:mediaAssetId/confirm')
+  @HttpCode(200)
+  @RequirePermission('property_asset', 'edit')
+  confirmMediaUpload(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+    @Body() dto?: ConfirmPropertyAssetMediaDto,
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.service.confirmMediaUpload(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(tenant.organizationId),
+      new Types.ObjectId(tenant.identityId),
+      req.correlationId,
+      dto,
+    );
+  }
+
+  @Get(':assetId/media')
+  @RequirePermission('property_asset', 'read')
+  listMedia(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
+    const tenant = requireTenantContext(req);
+    return this.service.listMedia(objectId(assetId, 'assetId'), new Types.ObjectId(tenant.organizationId));
+  }
+
+  @Delete(':assetId/media/:mediaAssetId')
+  @RequirePermission('property_asset', 'edit')
+  deleteMedia(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.service.deleteMedia(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(tenant.organizationId),
+    );
+  }
+
+  @Patch(':assetId/media/:mediaAssetId')
+  @RequirePermission('property_asset', 'edit')
+  updateMediaItem(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('mediaAssetId') mediaAssetId: string,
+    @Body() dto: UpdatePropertyAssetMediaDto,
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.service.updateMediaItem(
+      objectId(assetId, 'assetId'),
+      objectId(mediaAssetId, 'mediaAssetId'),
+      new Types.ObjectId(tenant.organizationId),
+      dto,
+    );
+  }
+
+  @Put(':assetId/media/order')
+  @RequirePermission('property_asset', 'edit')
+  reorderMedia(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: ReorderPropertyAssetMediaDto,
+  ) {
+    const tenant = requireTenantContext(req);
+    return this.service.reorderMedia(
+      objectId(assetId, 'assetId'),
+      new Types.ObjectId(tenant.organizationId),
+      dto.items,
+    );
   }
 
   @Post(':assetId/listings')
