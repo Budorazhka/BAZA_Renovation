@@ -17,6 +17,7 @@ import { useListingDetail } from './hooks/useListingDetail'
 import { useSeoMetadata, buildListingJsonLd, buildDevelopmentJsonLd } from './hooks/useSeoMetadata'
 import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
+import { PublishingWizard } from './features/publishing'
 import type {
   PublicDevelopmentCard,
   PublicListingCard,
@@ -35,6 +36,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           BAZA<span>.sale</span>
         </Link>
         <p className="header-caption">Недвижимость без лишнего шума</p>
+        <Link to="/publish" className="header-publish-link" data-testid="header-publish-cta">
+          + Разместить объявление
+        </Link>
       </header>
       <main id="main-content" tabIndex={-1}>
         {children}
@@ -679,12 +683,27 @@ function ListingDetailPage() {
   )
 }
 
+function PublishingWizardPage() {
+  useSeoMetadata({
+    title: 'Разместить объявление',
+    description: 'Публикация объявления о продаже или аренде недвижимости в каталоге BAZA.sale',
+    canonicalUrl: `${window.location.origin}/publish`,
+  })
+
+  return (
+    <Shell>
+      <PublishingWizard />
+    </Shell>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CataloguePage />} />
       <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
       <Route path="/listings/:slug" element={<ListingDetailPage />} />
+      <Route path="/publish" element={<PublishingWizardPage />} />
       <Route path="*" element={<CataloguePage />} />
     </Routes>
   )
