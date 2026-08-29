@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
+import { isAbortError } from '../lib/async'
 import type { PublicListingCard } from '../types/marketplace'
 
 export type ListingDetailState =
@@ -10,16 +11,20 @@ export type ListingDetailState =
 
 export function useListingDetail(slug: string | undefined): ListingDetailState {
   const [state, setState] = useState<ListingDetailState>({ status: 'loading' })
+  const activeControllerRef = useRef<AbortController | null>(null)
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async () => {
     if (!slug) return
+    activeControllerRef.current?.abort()
+    const controller = new AbortController()
+    activeControllerRef.current = controller
     setState({ status: 'loading' })
     try {
-      const item = await marketplaceApi.getListing(slug, { signal })
-      if (signal?.aborted) return
+      const item = await marketplaceApi.getListing(slug, { signal: controller.signal })
+      if (controller.signal.aborted) return
       setState({ status: 'ready', item })
     } catch (cause) {
-      if (signal?.aborted || (cause instanceof DOMException && cause.name === 'AbortError')) {
+      if (controller.signal.aborted || isAbortError(cause)) {
         return
       }
       if (cause instanceof MarketplaceApiError && cause.status === 404) {
@@ -32,15 +37,16 @@ export function useListingDetail(slug: string | undefined): ListingDetailState {
           ? cause.message
           : 'Не удалось загрузить карточку объекта. Пожалуйста, попробуйте снова.'
       setState({ status: 'error', message, statusCode, retry: () => void load() })
+    } finally {
+      if (activeControllerRef.current === controller) activeControllerRef.current = null
     }
   }, [slug])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void load(controller.signal)
+    void load()
 
     return () => {
-      controller.abort()
+      activeControllerRef.current?.abort()
     }
   }, [load])
 

@@ -19,6 +19,7 @@ import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
 import { MarketplaceMap } from './components/MarketplaceMap'
 import { PublishingWizard } from './features/publishing'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
   PublicDevelopmentCard,
@@ -708,12 +709,14 @@ function PublishingWizardPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<CataloguePage />} />
-      <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
-      <Route path="/listings/:slug" element={<ListingDetailPage />} />
-      <Route path="/publish" element={<PublishingWizardPage />} />
-      <Route path="*" element={<CataloguePage />} />
-    </Routes>
+    <RouteErrorBoundary>
+      <Routes>
+        <Route path="/" element={<CataloguePage />} />
+        <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
+        <Route path="/listings/:slug" element={<ListingDetailPage />} />
+        <Route path="/publish" element={<PublishingWizardPage />} />
+        <Route path="*" element={<CataloguePage />} />
+      </Routes>
+    </RouteErrorBoundary>
   )
 }

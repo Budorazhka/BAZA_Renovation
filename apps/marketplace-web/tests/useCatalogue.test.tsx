@@ -134,6 +134,30 @@ describe('useCatalogue', () => {
     expect(listDevelopmentsMock).toHaveBeenCalledTimes(2)
   })
 
+  it('aborts an in-flight loadMore request when the catalogue unmounts', async () => {
+    listDevelopmentsMock.mockResolvedValueOnce({ items: [{ slug: 'a', name: 'A' }], nextCursor: 'cursor-1' })
+    const { useCatalogue } = await import('../src/hooks/useCatalogue')
+
+    const { result, unmount } = renderHook(() => useCatalogue({}))
+    await waitFor(() => expect(result.current.state.status).toBe('ready'))
+
+    let requestOptions: { signal?: AbortSignal } | undefined
+    listDevelopmentsMock.mockImplementationOnce((_query: unknown, options: { signal?: AbortSignal }) => {
+      requestOptions = options
+      return new Promise(() => {})
+    })
+
+    act(() => result.current.loadMore())
+    await waitFor(() => {
+      const state = result.current.state
+      if (state.status !== 'ready') throw new Error('expected ready')
+      expect(state.loadingMore).toBe(true)
+    })
+
+    unmount()
+    expect(requestOptions?.signal?.aborted).toBe(true)
+  })
+
   it('changing city triggers a fresh fetch and discards stale items from the previous city', async () => {
     let resolveFirstCity: (value: { items: unknown[]; nextCursor: string | null }) => void = () => {}
     listDevelopmentsMock.mockReturnValueOnce(

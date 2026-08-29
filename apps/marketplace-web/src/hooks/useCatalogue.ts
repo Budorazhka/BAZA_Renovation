@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
+import { isAbortError } from '../lib/async'
 import type { BoundingBox, PublicDevelopmentCard } from '../types/marketplace'
 
 export type CatalogueState =
@@ -29,6 +30,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
   const nextCursorRef = useRef<string | null>(null)
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const loadMoreAbortControllerRef = useRef<AbortController | null>(null)
   const { city, bbox, limit = 12 } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
@@ -37,6 +39,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
+    loadMoreAbortControllerRef.current?.abort()
     const controller = new AbortController()
     abortControllerRef.current = controller
 
@@ -67,7 +70,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
       if (
         requestIdRef.current !== requestId ||
         controller.signal.aborted ||
-        (cause instanceof DOMException && cause.name === 'AbortError')
+        isAbortError(cause)
       ) {
         return
       }
@@ -87,6 +90,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
+      loadMoreAbortControllerRef.current?.abort()
     }
   }, [loadFirstPage])
 
@@ -94,6 +98,9 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
     const cursor = nextCursorRef.current
     if (!cursor) return
     const requestId = requestIdRef.current
+    loadMoreAbortControllerRef.current?.abort()
+    const controller = new AbortController()
+    loadMoreAbortControllerRef.current = controller
 
     setState((current) => (current.status === 'ready' ? { ...current, loadingMore: true, loadMoreError: null } : current))
 
@@ -103,10 +110,10 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
         bbox,
         cursor,
         limit,
-      })
+      }, { signal: controller.signal })
       .then(
         (response) => {
-          if (requestIdRef.current !== requestId) return
+          if (requestIdRef.current !== requestId || controller.signal.aborted) return
           nextCursorRef.current = response.nextCursor
 
           setState((current) => {
@@ -123,7 +130,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           })
         },
         (cause: unknown) => {
-          if (requestIdRef.current !== requestId) return
+          if (requestIdRef.current !== requestId || controller.signal.aborted || isAbortError(cause)) return
           const message =
             cause instanceof Error ? cause.message : 'Не удалось загрузить следующую страницу. Попробуйте ещё раз.'
           setState((current) =>

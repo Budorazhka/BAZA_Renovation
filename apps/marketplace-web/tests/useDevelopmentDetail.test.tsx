@@ -89,6 +89,21 @@ describe('useDevelopmentDetail', () => {
     await waitFor(() => expect(result.current.status).toBe('error'))
   })
 
+  it('aborts the active request when the detail unmounts', async () => {
+    let requestOptions: { signal?: AbortSignal } | undefined
+    getDevelopmentMock.mockImplementationOnce((_slug: string, options: { signal?: AbortSignal }) => {
+      requestOptions = options
+      return new Promise(() => {})
+    })
+    const { useDevelopmentDetail } = await import('../src/hooks/useDevelopmentDetail')
+
+    const { unmount } = renderHook(() => useDevelopmentDetail('seaside'))
+    await waitFor(() => expect(getDevelopmentMock).toHaveBeenCalledTimes(1))
+
+    unmount()
+    expect(requestOptions?.signal?.aborted).toBe(true)
+  })
+
   it('changing slug between renders does not leak the previous slug stale item into the new render', async () => {
     let resolveFirstSlug: (value: { slug: string; name: string }) => void = () => {}
     getDevelopmentMock.mockReturnValueOnce(
