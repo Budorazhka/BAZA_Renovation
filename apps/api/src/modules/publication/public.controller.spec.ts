@@ -35,6 +35,10 @@ describe('PublicController — whitelist границы public response', () => 
         publisherScope: { type: 'organization', organizationId: new Types.ObjectId().toString() },
         randomArbitraryField: 'что угодно, чего worker не должен был класть',
       },
+      searchProjection: {
+        geo: { type: 'Point', coordinates: [41.64, 41.62] },
+        organizationId: new Types.ObjectId().toString(),
+      },
       seo: { title: 'ЖК Тест', description: 'Описание', canonicalUrl: '/developments/zhk-test', structuredData: {} },
     };
   }
@@ -67,7 +71,7 @@ describe('PublicController — whitelist границы public response', () => 
       expect(result.items[0]).toMatchObject({
         slug: 'zhk-test',
         name: 'ЖК Тест',
-        location: { country: 'Georgia', city: 'Batumi', address: 'ул. Тестовая, 1' },
+        location: { country: 'Georgia', city: 'Batumi', address: 'ул. Тестовая, 1', geo: { type: 'Point', coordinates: [41.64, 41.62] } },
         classType: 'business',
       });
     });

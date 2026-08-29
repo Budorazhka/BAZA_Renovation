@@ -9,6 +9,12 @@ export interface PublicLocation {
   country?: string
   city?: string
   address?: string
+  geo?: PublicGeoPoint
+}
+
+export interface PublicGeoPoint {
+  type: 'Point'
+  coordinates: [number, number]
 }
 
 export interface PublicDevelopmentCard {
@@ -41,7 +47,7 @@ export interface CatalogueQuery {
   city?: string
   cursor?: string
   limit?: number
-  /** D-04A: карта (MKT-SCR-005) Figma-blocked — data-layer готов, UI-потребителя пока нет. */
+  /** MKT-SCR-005: map viewport filter, serialized as minLng,minLat,maxLng,maxLat. */
   bbox?: BoundingBox
 }
 

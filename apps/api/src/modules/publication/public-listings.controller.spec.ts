@@ -54,6 +54,10 @@ describe('PublicListingsController — whitelist границы public response'
         propertyAssetId: new Types.ObjectId().toString(),
         randomArbitraryField: 'что угодно, чего worker не должен был класть',
       },
+      searchProjection: {
+        geo: { type: 'Point', coordinates: [41.64, 41.62] },
+        organizationId: new Types.ObjectId().toString(),
+      },
       // seo — тоже потенциальный вектор утечки (найдено ревью): предыдущая
       // версия контроллера передавала publication.seo целиком без
       // whitelist. Fixture намеренно загрязняет и его.
@@ -106,6 +110,10 @@ describe('PublicListingsController — whitelist границы public response'
         propertyType: 'apartment',
         price: { amountMinorUnits: 10_000_000, currency: 'USD' },
         location: { country: 'Georgia', city: 'Batumi', address: 'ул. Тестовая, 1' },
+      });
+      expect((result.items[0] as { location: { geo: unknown } }).location.geo).toEqual({
+        type: 'Point',
+        coordinates: [41.64, 41.62],
       });
       expect((result.items[0] as { seo: Record<string, unknown> }).seo).toMatchObject({
         title: 'Квартира — Продажа — Batumi',

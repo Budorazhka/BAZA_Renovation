@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState, useTransition } from 'react'
-import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   completionLabel,
   developmentAddress,
@@ -17,7 +17,10 @@ import { useListingDetail } from './hooks/useListingDetail'
 import { useSeoMetadata, buildListingJsonLd, buildDevelopmentJsonLd } from './hooks/useSeoMetadata'
 import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
+import { MarketplaceMap } from './components/MarketplaceMap'
+import { PublishingWizard } from './features/publishing'
 import type {
+  BoundingBox,
   PublicDevelopmentCard,
   PublicListingCard,
   ListingDealType,
@@ -25,20 +28,54 @@ import type {
 } from './types/marketplace'
 
 function Shell({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+  const listingsActive = location.search.includes('tab=listings')
+  const mapQuery = new URLSearchParams(location.search)
+  mapQuery.set('view', 'map')
+  const listQuery = new URLSearchParams(location.search)
+  listQuery.delete('view')
+  listQuery.delete('bbox')
+  const isMapView = location.search.includes('view=map')
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">
         Перейти к основному содержанию
       </a>
       <header className="site-header" role="banner">
-        <Link className="wordmark" to="/" aria-label="BAZA.sale, каталог объектов недвижимости">
-          BAZA<span>.sale</span>
+        <Link className="wordmark" to="/" aria-label="BAZA, каталог объектов недвижимости">
+          BAZA
         </Link>
-        <p className="header-caption">Недвижимость без лишнего шума</p>
+        <nav className="main-nav" aria-label="Основная навигация">
+          <Link to="/" role="tab" aria-selected={!listingsActive} className={`main-nav__link${listingsActive ? '' : ' is-active'}`}>Новостройки</Link>
+          <Link to="/?tab=listings" role="tab" aria-label="Вторичка и аренда" aria-selected={listingsActive} className={`main-nav__link${listingsActive ? ' is-active' : ''}`}>Вторичка</Link>
+          <Link to="/" className="main-nav__link">Проекты</Link>
+          <Link to="/?tab=listings&dealType=rent_long" className="main-nav__link">Аренда</Link>
+          <Link to="/?tab=listings&propertyType=commercial" className="main-nav__link">Коммерция</Link>
+          <Link to="/" className="main-nav__link">Запросы</Link>
+          <Link to="/" className="main-nav__link">Банки</Link>
+        </nav>
+        <div className="header-actions">
+          <Link className="header-action header-action--primary" to="/publish" data-testid="header-publish-cta">+ Разместить</Link>
+          <Link className="header-action header-action--dark" to="/publish">⌕ Войти</Link>
+          <button className="header-locale" type="button" aria-label="Выбрать язык">RU⌄</button>
+          <button className="header-locale" type="button" aria-label="Выбрать валюту">$⌄</button>
+          <button className="header-location" type="button" aria-label="Выбрать город">● Тбилиси</button>
+          <button className="header-profile" type="button" aria-label="Профиль">◔</button>
+        </div>
       </header>
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
+      <div className="floating-controls" aria-label="Инструменты каталога">
+        <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
+        <Link
+          to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
+          className="floating-control floating-control--map"
+          aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
+        >
+          {isMapView ? '▤' : '♧'}
+        </Link>
+      </div>
       <footer className="site-footer" role="contentinfo">
         <p>BAZA.sale · проверенный каталог объектов недвижимости</p>
       </footer>
@@ -105,11 +142,17 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
   const content = (
     <>
       {mediaDisplay}
-      <div className="development-card__body">
-        <span className="listing-badge">{listingDealTypeLabel(item.dealType)}</span>
+      <div className="listing-card__body">
+        <span className="listing-badge">✦ {item.dealType === 'sale' ? 'Срочная продажа' : listingDealTypeLabel(item.dealType)}</span>
         <p className="listing-card-price">{listingPrice(item)}</p>
-        <h2>{listingTitle(item)}</h2>
-        <p className="address">{listingAddress(item)}</p>
+        <div className="listing-card__title-row">
+          <h2>{listingTitle(item)}</h2>
+          <span className="listing-card__actions" aria-hidden="true">♧ <span>♥</span></span>
+        </div>
+        <p className="address"><span className="address__pin" aria-hidden="true">●</span>{listingAddress(item)}</p>
+        {item.location?.country ? (
+          <p className="address address--country"><span aria-hidden="true">✚</span>{item.location.country}{item.location.city ? `, ${item.location.city}` : ''}</p>
+        ) : null}
         <div className="listing-chips" aria-label="Характеристики объекта">
           {item.characteristics?.rooms ? (
             <span className="listing-chip">{item.characteristics.rooms} комн.</span>
@@ -124,23 +167,42 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
             </span>
           ) : null}
         </div>
-        <div className="card-footer">
-          <span>{listingPropertyTypeLabel(item.propertyType, item.commercialSubtype)}</span>
+        <div className="listing-card__contact-actions" aria-hidden="true">
+          <span>Позвонить</span>
+          <span>Написать</span>
+        </div>
+        <div className="card-footer listing-card__footer">
+          <span className="listing-card__property">{listingPropertyTypeLabel(item.propertyType, item.commercialSubtype)}</span>
           <span className="arrow" aria-hidden="true">↗</span>
         </div>
       </div>
     </>
   )
   return slug ? (
-    <Link className="development-card" to={`/listings/${slug}`} aria-label={`Объявление: ${listingTitle(item)}`}>
+    <Link className="listing-card" to={`/listings/${slug}`} aria-label={`Объявление: ${listingTitle(item)}`}>
       {content}
     </Link>
   ) : (
-    <article className="development-card">{content}</article>
+    <article className="listing-card">{content}</article>
   )
 }
 
 type CatalogueTab = 'developments' | 'listings'
+
+function parseBoundingBox(value: string | null): BoundingBox | undefined {
+  if (!value) return undefined
+  const numbers = value.split(',').map(Number)
+  if (numbers.length !== 4 || numbers.some((number) => !Number.isFinite(number))) return undefined
+  const [minLng, minLat, maxLng, maxLat] = numbers
+  if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90 || minLng >= maxLng || minLat >= maxLat) {
+    return undefined
+  }
+  return { minLng, minLat, maxLng, maxLat }
+}
+
+function serializeBoundingBox(bbox: BoundingBox): string {
+  return [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat].map((value) => value.toFixed(5)).join(',')
+}
 
 function CataloguePage() {
   const navigate = useNavigate()
@@ -153,6 +215,8 @@ function CataloguePage() {
   const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
   const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
   const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
+  const isMapView = searchParams.get('view') === 'map'
+  const bboxParam = parseBoundingBox(searchParams.get('bbox'))
 
   const [cityInput, setCityInput] = useState(cityParam)
 
@@ -164,6 +228,7 @@ function CataloguePage() {
   // Queries
   const developmentsQuery = useCatalogue({
     city: cityParam,
+    bbox: isMapView ? bboxParam : undefined,
   })
 
   const listingsQuery = useListingsCatalogue({
@@ -171,6 +236,7 @@ function CataloguePage() {
     dealType: dealTypeParam,
     propertyType: propertyTypeParam,
     commercialSubtype: commercialSubtypeParam,
+    bbox: isMapView ? bboxParam : undefined,
   })
 
   const isDev = tabParam === 'developments'
@@ -194,19 +260,6 @@ function CataloguePage() {
     })
   }
 
-  function handleTabChange(tab: CatalogueTab) {
-    if (tab === 'developments') {
-      updateFilters({
-        tab: undefined, // default
-        dealType: undefined,
-        propertyType: undefined,
-        commercialSubtype: undefined,
-      })
-    } else {
-      updateFilters({ tab: 'listings' })
-    }
-  }
-
   function submitCity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     updateFilters({ city: cityInput.trim() || undefined })
@@ -219,161 +272,38 @@ function CataloguePage() {
       dealType: undefined,
       propertyType: undefined,
       commercialSubtype: undefined,
+      bbox: undefined,
     })
+  }
+
+  function handleMapBoundsChange(nextBbox: BoundingBox) {
+    const serialized = serializeBoundingBox(nextBbox)
+    if (serialized === searchParams.get('bbox')) return
+    updateFilters({ bbox: serialized, view: 'map' })
+  }
+
+  function viewUrl(view: 'list' | 'map') {
+    const params = new URLSearchParams(searchParams)
+    if (view === 'map') params.set('view', 'map')
+    else {
+      params.delete('view')
+      params.delete('bbox')
+    }
+    params.delete('cursor')
+    return `/?${params.toString()}`
   }
 
   return (
     <Shell>
-      <section className="catalogue-intro" aria-labelledby="catalogue-heading">
-        <div>
-          <nav className="catalogue-tabs" role="tablist" aria-label="Разделы каталога">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tabParam === 'developments'}
-              className={`catalogue-tab-btn${tabParam === 'developments' ? ' is-active' : ''}`}
-              onClick={() => handleTabChange('developments')}
-            >
-              Новостройки
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tabParam === 'listings'}
-              className={`catalogue-tab-btn${tabParam === 'listings' ? ' is-active' : ''}`}
-              onClick={() => handleTabChange('listings')}
-            >
-              Вторичка и аренда
-            </button>
-          </nav>
-
-          <p className="section-kicker">
-            {tabParam === 'developments' ? 'Каталог новостроек' : 'Вторичная недвижимость и аренда'}
-          </p>
-          <h1 id="catalogue-heading">Место, где начинается ваш новый адрес.</h1>
-          <p className="intro-copy">
-            {tabParam === 'developments'
-              ? 'Собрали проверенные жилые комплексы в одном понятном каталоге.'
-              : 'Актуальные квартиры, дома и коммерческие помещения от собственников и агентств.'}
-          </p>
-
-          {tabParam === 'listings' && (
-            <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
-              <div className="catalogue-subfilters" role="group" aria-label="Тип сделки">
-                <button
-                  type="button"
-                  className={`filter-chip${dealTypeParam === undefined ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ dealType: undefined })}
-                >
-                  Все типы сделок
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${dealTypeParam === 'sale' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ dealType: 'sale' })}
-                >
-                  Купить
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${dealTypeParam === 'rent_long' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ dealType: 'rent_long' })}
-                >
-                  Снять длительно
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${dealTypeParam === 'rent_short' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ dealType: 'rent_short' })}
-                >
-                  Посуточно
-                </button>
-              </div>
-
-              <div className="catalogue-subfilters" role="group" aria-label="Тип недвижимости">
-                <button
-                  type="button"
-                  className={`filter-chip${propertyTypeParam === undefined ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ propertyType: undefined, commercialSubtype: undefined })}
-                >
-                  Все объекты
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${propertyTypeParam === 'apartment' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ propertyType: 'apartment', commercialSubtype: undefined })}
-                >
-                  Квартиры
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${propertyTypeParam === 'house' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ propertyType: 'house', commercialSubtype: undefined })}
-                >
-                  Дома и виллы
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${propertyTypeParam === 'commercial' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ propertyType: 'commercial' })}
-                >
-                  Коммерческая
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip${propertyTypeParam === 'land' ? ' is-active' : ''}`}
-                  onClick={() => updateFilters({ propertyType: 'land', commercialSubtype: undefined })}
-                >
-                  Участки
-                </button>
-              </div>
-
-              {propertyTypeParam === 'commercial' && (
-                <div className="catalogue-subfilters" role="group" aria-label="Подтип коммерческой недвижимости">
-                  <button
-                    type="button"
-                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === undefined ? ' is-active' : ''}`}
-                    onClick={() => updateFilters({ commercialSubtype: undefined })}
-                  >
-                    Все форматы
-                  </button>
-                  <button
-                    type="button"
-                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'office' ? ' is-active' : ''}`}
-                    onClick={() => updateFilters({ commercialSubtype: 'office' })}
-                  >
-                    Офис
-                  </button>
-                  <button
-                    type="button"
-                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'retail' ? ' is-active' : ''}`}
-                    onClick={() => updateFilters({ commercialSubtype: 'retail' })}
-                  >
-                    Торговое
-                  </button>
-                  <button
-                    type="button"
-                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'warehouse' ? ' is-active' : ''}`}
-                    onClick={() => updateFilters({ commercialSubtype: 'warehouse' })}
-                  >
-                    Склад
-                  </button>
-                  <button
-                    type="button"
-                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'free_purpose' ? ' is-active' : ''}`}
-                    onClick={() => updateFilters({ commercialSubtype: 'free_purpose' })}
-                  >
-                    Свободное назначение
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+      <section className="catalogue-toolbar" aria-labelledby="catalogue-heading">
+        <h1 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h1>
+        <div className="catalogue-count">
+          <strong>{state.status === 'ready' ? state.items.length.toLocaleString('ru-RU') : '—'}</strong>
+          <span>объектов найдено</span>
         </div>
-
-        <form className="city-form" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-          <label htmlFor="city">Город</label>
-          <div className="city-form__control">
+        <div className="catalogue-toolbar__actions">
+          <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+            <label className="visually-hidden" htmlFor="city">Город</label>
             <input
               id="city"
               name="city"
@@ -381,27 +311,54 @@ function CataloguePage() {
               autoComplete="address-level2"
               value={cityInput}
               onChange={(event) => setCityInput(event.target.value)}
-              placeholder="Например, Батуми"
+              placeholder="Город"
             />
-            <button type="submit" aria-label="Найти объекты в городе">
-              Найти
-            </button>
+            <button type="submit" aria-label="Найти объекты в городе">⌕</button>
+          </form>
+          <button className="sort-control" type="button" aria-label="Сортировка объектов">Сначала дешевле⌄</button>
+          <div className="view-toggle" role="group" aria-label="Вид каталога">
+            <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
+            <Link className={`view-toggle__link${isMapView ? ' is-active' : ''}`} to={viewUrl('map')}>Карта</Link>
           </div>
-          {cityParam || dealTypeParam || propertyTypeParam ? (
-            <button
-              className="clear-filter"
-              type="button"
-              onClick={clearAllFilters}
-              aria-label="Сбросить все применённые фильтры"
-            >
-              Сбросить фильтры
+          {(cityParam || dealTypeParam || propertyTypeParam) ? (
+            <button className="clear-filter clear-filter--compact" type="button" onClick={clearAllFilters}>
+              Сбросить
             </button>
           ) : null}
-        </form>
+        </div>
       </section>
 
+      {tabParam === 'listings' ? (
+        <details id="catalogue-filters" className="filters-drawer" open>
+          <summary>Фильтры и тип объекта</summary>
+          <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
+            <div className="catalogue-subfilters" role="group" aria-label="Тип сделки">
+              {([
+                [undefined, 'Все типы сделок'],
+                ['sale', 'Купить'],
+                ['rent_long', 'Снять длительно'],
+                ['rent_short', 'Посуточно'],
+              ] as const).map(([value, label]) => (
+                <button key={label} type="button" className={`filter-chip${dealTypeParam === value ? ' is-active' : ''}`} onClick={() => updateFilters({ dealType: value })}>{label}</button>
+              ))}
+            </div>
+            <div className="catalogue-subfilters" role="group" aria-label="Тип недвижимости">
+              {([
+                [undefined, 'Все объекты'],
+                ['apartment', 'Квартиры'],
+                ['house', 'Дома и виллы'],
+                ['commercial', 'Коммерческая'],
+                ['land', 'Участки'],
+              ] as const).map(([value, label]) => (
+                <button key={label} type="button" className={`filter-chip${propertyTypeParam === value ? ' is-active' : ''}`} onClick={() => updateFilters({ propertyType: value, commercialSubtype: undefined })}>{label}</button>
+              ))}
+            </div>
+          </div>
+        </details>
+      ) : null}
+
       <section className="catalogue-section" aria-live="polite" aria-labelledby="catalogue-results-heading">
-        <div className="section-heading">
+        <div className="section-heading section-heading--sr-only">
           <h2 id="catalogue-results-heading">
             {cityParam
               ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
@@ -439,15 +396,26 @@ function CataloguePage() {
 
         {state.status === 'ready' ? (
           <>
-            <div className="development-grid">
-              {isDev
-                ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
-                    <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
-                  ))
-                : (state.items as PublicListingCard[]).map((item, index) => (
-                    <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
-                  ))}
-            </div>
+            {isMapView ? (
+              <MarketplaceMap
+                items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
+                onBoundsChange={handleMapBoundsChange}
+                onSelect={(item) => {
+                  if (!item.slug) return
+                  navigate(isDev ? `/developments/${item.slug}` : `/listings/${item.slug}`)
+                }}
+              />
+            ) : (
+              <div className="development-grid">
+                {isDev
+                  ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
+                      <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
+                    ))
+                  : (state.items as PublicListingCard[]).map((item, index) => (
+                      <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                    ))}
+              </div>
+            )}
 
             {state.loadMoreError && (
               <div className="pagination-error-panel" role="alert">
@@ -679,12 +647,27 @@ function ListingDetailPage() {
   )
 }
 
+function PublishingWizardPage() {
+  useSeoMetadata({
+    title: 'Разместить объявление',
+    description: 'Публикация объявления о продаже или аренде недвижимости в каталоге BAZA.sale',
+    canonicalUrl: `${window.location.origin}/publish`,
+  })
+
+  return (
+    <Shell>
+      <PublishingWizard />
+    </Shell>
+  )
+}
+
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CataloguePage />} />
       <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
       <Route path="/listings/:slug" element={<ListingDetailPage />} />
+      <Route path="/publish" element={<PublishingWizardPage />} />
       <Route path="*" element={<CataloguePage />} />
     </Routes>
   )

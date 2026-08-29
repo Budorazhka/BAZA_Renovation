@@ -48,6 +48,7 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
     expect(screen.getByRole('search')).toBeDefined()
     expect(screen.getByRole('contentinfo')).toBeDefined()
     expect(screen.getByText('Перейти к основному содержанию')).toBeDefined()
+    expect(screen.getByRole('link', { name: /Войти/ }).getAttribute('href')).toBe('/publish')
   })
 
   it('has proper heading hierarchy with h1 and section h2', async () => {
