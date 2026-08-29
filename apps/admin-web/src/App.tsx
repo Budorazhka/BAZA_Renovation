@@ -5,6 +5,7 @@ import { RequireAdmin, RequireSuperAdmin } from './hooks/RequireAdmin'
 import { LoginPage } from './pages/LoginPage'
 import { PublicationsPage } from './pages/PublicationsPage'
 import { AccountsPage } from './pages/AccountsPage'
+import { AuditPage } from './pages/AuditPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { state, logout } = useAdminAuth()
@@ -31,6 +32,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {state.status === 'signed-in' ? (
           <nav className="site-nav">
             <Link to="/publications">Публикации</Link>
+            <Link to="/audit">Журнал аудита</Link>
             {isSuperAdmin ? <Link to="/accounts">Аккаунты</Link> : null}
             <span className="session-role">{isSuperAdmin ? 'super_admin' : 'admin'}</span>
             <button type="button" className="secondary" onClick={() => void handleLogout()} disabled={loggingOut}>
@@ -63,6 +65,14 @@ export default function App() {
             <RequireSuperAdmin>
               <AccountsPage />
             </RequireSuperAdmin>
+          }
+        />
+        <Route
+          path="/audit"
+          element={
+            <RequireAdmin>
+              <AuditPage />
+            </RequireAdmin>
           }
         />
         <Route path="/" element={<Navigate to="/publications" replace />} />

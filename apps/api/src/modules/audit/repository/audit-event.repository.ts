@@ -38,4 +38,32 @@ export class AuditEventRepository {
   async findByActor(actorId: Types.ObjectId): Promise<AuditEventDocument[]> {
     return this.model.find({ 'actor.id': actorId }).sort({ createdAt: -1 }).exec();
   }
+
+  /**
+   * Admin audit feed (read-only): newest-first, cursor-paginated. Сортировка
+   * по `_id` (не `createdAt`) — ObjectId монотонно возрастает по времени
+   * создания на уровне драйвера И уникален, поэтому `_id`-курсор не имеет
+   * "дырок"/дублей при нескольких событиях с одинаковым `createdAt`
+   * (миллисекундная гранулярность Date; несколько audit-записей внутри
+   * одной транзакции вполне могут получить одинаковый createdAt) — тот же
+   * failure mode, которого избегает `_id`-курсор в listForAdmin/
+   * AdminAccountRepository.list, только здесь по убыванию (`$lt`), т.к.
+   * фида здесь newest-first, а не oldest-first.
+   *
+   * `scopeFilter` приходит уже построенным вызывающим кодом
+   * (AdminAuditService) — репозиторий не знает про AdminContext/scope,
+   * только исполняет готовое Mongo-условие (та же модульная граница, что
+   * MarketplacePublicationRepository.listForAdmin).
+   */
+  async listForAdmin(params: {
+    scopeFilter: Record<string, unknown>;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<AuditEventDocument[]> {
+    const filter: Record<string, unknown> = { ...params.scopeFilter };
+    if (params.cursor) {
+      filter._id = { $lt: params.cursor };
+    }
+    return this.model.find(filter).sort({ _id: -1 }).limit(params.limit).exec();
+  }
 }

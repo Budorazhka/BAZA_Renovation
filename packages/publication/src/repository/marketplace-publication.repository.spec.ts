@@ -236,4 +236,41 @@ describe('MarketplacePublicationRepository', () => {
       expect(sortSpy).toHaveBeenCalledWith({ _id: 1 });
     });
   });
+
+  describe('listSourceIdsByScopeFilter', () => {
+    it('исполняет scopeFilter как есть, проецирует только sourceType/sourceId (не полный документ)', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const findSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const scopeFilter = { sourceType: 'development', 'searchProjection.city': { $in: ['batumi'] } };
+      await repository.listSourceIdsByScopeFilter(scopeFilter);
+
+      expect(findSpy).toHaveBeenCalledWith(scopeFilter, { sourceType: 1, sourceId: 1 });
+    });
+
+    it('мапит результат в {sourceType, sourceId} пары', async () => {
+      const sourceId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([{ sourceType: 'unit', sourceId }]);
+      const findSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const result = await repository.listSourceIdsByScopeFilter({ sourceType: 'unit' });
+
+      expect(result).toEqual([{ sourceType: 'unit', sourceId }]);
+    });
+
+    it('пустой результат — пустой массив, не undefined/null', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const findSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const result = await repository.listSourceIdsByScopeFilter({ sourceType: 'listing' });
+
+      expect(result).toEqual([]);
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAdminPublications } from '../hooks/useAdminPublications'
 import { useUnpublishAction } from '../hooks/useUnpublishAction'
 import { UnpublishDialog } from '../components/UnpublishDialog'
@@ -11,10 +12,25 @@ function canUnpublish(item: AdminPublicationListItem): boolean {
   return item.status === 'published'
 }
 
+function readSourceTypeFromUrl(value: string | null): PublicationSourceType | '' {
+  return value && (SOURCE_TYPES as string[]).includes(value) ? (value as PublicationSourceType) : ''
+}
+
+/**
+ * ?sourceType= в URL — только начальное значение фильтра при заходе с
+ * AuditPage-ссылки (TargetLink); дальше фильтр живёт как обычный локальный
+ * state этой страницы, тот же паттерн submit-on-apply, что уже был здесь.
+ */
 export function PublicationsPage() {
-  const [sourceTypeInput, setSourceTypeInput] = useState<PublicationSourceType | ''>('')
+  const [searchParams] = useSearchParams()
+  const [sourceTypeInput, setSourceTypeInput] = useState<PublicationSourceType | ''>(() =>
+    readSourceTypeFromUrl(searchParams.get('sourceType')),
+  )
   const [cityInput, setCityInput] = useState('')
-  const [activeFilter, setActiveFilter] = useState<{ sourceType?: PublicationSourceType; city?: string }>({})
+  const [activeFilter, setActiveFilter] = useState<{ sourceType?: PublicationSourceType; city?: string }>(() => {
+    const sourceType = readSourceTypeFromUrl(searchParams.get('sourceType'))
+    return sourceType ? { sourceType } : {}
+  })
 
   const { state, loadMore, applyUnpublished } = useAdminPublications(activeFilter)
   const unpublishAction = useUnpublishAction((result) => {

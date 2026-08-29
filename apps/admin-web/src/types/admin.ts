@@ -86,3 +86,36 @@ export interface AdminMe {
   isSuperAdmin: boolean
   publicationReadScope: 'all' | Partial<Record<PublicationSourceType, PublicationReadScopeEntry>>
 }
+
+export type AuditResource = PublicationSourceType | 'admin_account'
+
+export interface AdminAuditEventView {
+  id: string
+  action: string
+  resource: string
+  resourceId: string
+  actor: { type: string; id: string | null }
+  createdAt: string
+  correlationId: string
+  reason: string | null
+  summary: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+}
+
+export interface AdminAuditEventList {
+  items: AdminAuditEventView[]
+  nextCursor: string | null
+}
+
+export interface AdminAuditEventListQuery {
+  resource?: AuditResource
+  action?: string
+  resourceId?: string
+  publicationId?: string
+  actorId?: string
+  from?: string
+  to?: string
+  cursor?: string
+  limit?: number
+}

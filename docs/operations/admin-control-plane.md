@@ -16,6 +16,13 @@ admin-аккаунтов и их grants.
 существует как `docs/api/v1-first-vertical-slice.yaml` (не существовал
 до этой ветки).
 
+**ОБНОВЛЕНО** веткой `codex/admin-audit-trail` (от `542b509`,
+`origin/codex/integration`) — добавляет read-only admin audit trail:
+`GET /admin/audit-events`, `GET /admin/publications/:id/audit`, экран
+`/audit` в admin-web. Критические действия (unpublish, admin-аккаунты,
+grants) уже писались в `audit_events` до этой ветки — не было способа их
+просмотреть. См. новый раздел "Audit trail" ниже.
+
 ## Готовые сценарии
 
 1. **Вход.** `POST /auth/login` (уже существовал) — общий endpoint для
@@ -65,6 +72,18 @@ admin-аккаунтов и их grants.
     super_admin. Append-only (revokedAt/revokedBy/revokeReason, ничего
     не удаляется физически), защищено optimistic concurrency
     (expectedVersion) от гонки двух конкурентных revoke на один grant.
+12. **Просмотр audit-журнала.** `GET /admin/audit-events` (**НОВОЕ**,
+    `codex/admin-audit-trail`) — read-only, cursor-пагинация, фильтры
+    по resource/action/resourceId/publicationId/actorId/дате. scoped
+    admin видит только publication-события своего read-scope;
+    `resource=admin_account` (account/grant lifecycle) — только
+    super_admin. Explicit whitelist projection на backend — secrets/
+    tokens/raw request body/полные before-after никогда не возвращаются.
+13. **Audit-история одной публикации.** `GET
+    /admin/publications/:publicationId/audit` (**НОВОЕ**,
+    `codex/admin-audit-trail`) — узкий вариант того же
+    endpoint'а/сервиса/whitelist для detail-экрана; вне scope — пустой
+    список, не ошибка.
 
 ## API-контракты
 
@@ -98,6 +117,8 @@ non-disclosure: после logout cookie реально стёрта, следу
 | POST | `/admin/accounts/:id/grants` | super_admin | существовал |
 | GET | `/admin/accounts/:id/grants` | super_admin | **ИЗМЕНЕНО** (включает revoked) |
 | POST | `/admin/accounts/:id/grants/:grantId/revoke` | super_admin | **новый** |
+| GET | `/admin/audit-events` | scope-ограничен (admin_account — super_admin) | **новый** |
+| GET | `/admin/publications/:id/audit` | scope-ограничен | **новый** |
 
 ### `POST /auth/logout`
 
@@ -190,6 +211,147 @@ grant немедленно перестаёт учитываться, `GET /admi
 исчезновение на следующий же запрос, без отдельного кэша для
 инвалидации.
 
+## Audit trail (НОВОЕ, `codex/admin-audit-trail`)
+
+Все критические действия уже писались в append-only `audit_events`
+(`AuditService.append` — `apps/api/src/modules/audit/audit.service.ts`)
+до этой ветки: `publication.unpublish`, `admin_account.create/deactivate/
+reactivate/grant_permission/revoke_permission`. Не было ни одного
+HTTP-пути их прочитать. Эта ветка добавляет read-only feed поверх уже
+существующей записи — не меняет, что и когда аудируется.
+
+### `GET /admin/audit-events`
+
+Query: `resource?: 'development'|'unit'|'listing'|'admin_account'`,
+`action?: string`, `resourceId?: string (ObjectId)`, `publicationId?:
+string (ObjectId)`, `actorId?: string (ObjectId)`, `from?/to?: ISO
+date-time`, `cursor?: string (ObjectId)`, `limit?: number (1..100,
+default 20)`.
+
+```
+200 { items: AdminAuditEventView[], nextCursor: string|null }
+400 — невалидный resource (вне enum)/cursor/limit/дата
+403 ADMIN_SCOPE_INSUFFICIENT — scoped admin явно запросил resource=admin_account
+```
+
+**Сортировка и курсор.** Newest-first, курсор — `_id` документа
+(`AuditEventRepository.listForAdmin`, сортировка `{_id: -1}`, страница —
+`_id: {$lt: cursor}`). ObjectId монотонно возрастает по времени
+создания и уникален на документ — курсор стабилен даже когда несколько
+событий одной транзакции получают одинаковый `createdAt` (миллисекундная
+гранулярность), что сделало бы курсор по `createdAt` неоднозначным
+(дубли/пропуски на границе страницы). `limit+1` паттерн (тот же, что
+`GET /admin/publications`) — на одну запись больше в запросе, чтобы
+`nextCursor` был однозначен без дополнительного `count`.
+
+**Access control — где именно проверяется scope.**
+`AdminAuditService` (`apps/api/src/modules/admin/admin-audit.service.ts`)
+— единственная точка сборки Mongo-фильтра:
+
+- `resource=admin_account` — доступно только `isSuperAdmin`; scoped
+  admin получает `403 ADMIN_SCOPE_INSUFFICIENT` (единственное место в
+  этом сервисе, где отказ раскрывается ошибкой, а не пустым списком —
+  сам факт существования этого значения enum'а не секрет, он
+  документирован в OpenAPI).
+- `resource∈{development,unit,listing}` (или отсутствие фильтра) —
+  переиспользует `AdminPolicyService.resolvePublicationReadScope` (тот
+  же метод, что `GET /admin/publications`), затем строит фильтр по
+  `audit_events`. **Важно:** это НЕ переиспользование
+  `buildPublicationScopeFilter` — тот построен для схемы
+  `marketplace_publications` (`sourceType`/`searchProjection.city`),
+  а `audit_events` имеет другие поля (`resource`, без денормализованного
+  city). Для `global`-грантов фильтр — `{resource: sourceType}`
+  напрямую; для `city`-грантов сервис сперва резолвит множество
+  `sourceId` через новый `MarketplacePublicationRepository
+  .listSourceIdsByScopeFilter`, затем матчит `audit_events` по
+  `resourceId: {$in: [...]}`. Это несоответствие схем нашлось только
+  HTTP-integration-тестом (прямое переиспользование
+  `buildPublicationScopeFilter` молча возвращало 0 строк для любого
+  city-scoped admin — Mongo не матчит несуществующее поле
+  `searchProjection.city` на документе `audit_events`, не бросает
+  ошибку) — покрыто отдельным unit-тестом на регресс.
+- Scope всегда входит в сам Mongo-запрос (`$and`-объединение с
+  клиентскими фильтрами, та же защита от "клиентский фильтр расширяет
+  scope", что `AdminPublicationService.list`) — никогда постфильтрация
+  уже прочитанных документов.
+- Явный `resourceId`/`publicationId` вне scope — пустой список, не
+  404/403 (non-disclosure для конкретных записей, тот же принцип, что
+  `GET /admin/publications`).
+
+### `GET /admin/publications/:publicationId/audit`
+
+Query: `action?/from?/to?/cursor?/limit?` (без `resource`/`resourceId` —
+фиксированы `publicationId` из path).
+
+```
+200 { items: AdminAuditEventView[], nextCursor: string|null }
+400 — невалидный cursor/limit/дата
+404 NOT_FOUND — publicationId не существует
+```
+
+Переиспользует `AdminAuditService.list()` целиком через
+`listForPublication()` — не отдельная бизнес-логика/whitelist. Введён,
+т.к. клиенту неудобно вручную резолвить `resource=sourceType`/
+`resourceId=sourceId` публикации из её `_id` (это разные значения —
+`audit_events.resourceId` это `sourceId`, не `_id` документа
+`marketplace_publications`).
+
+### Whitelist projection (redaction на backend)
+
+`admin-audit-projection.ts` (`apps/api/src/modules/audit/`) —
+единственная точка, которая превращает `AuditEventDocument` в HTTP-ответ.
+Общие поля всегда включены: `id`, `action`, `resource`, `resourceId`,
+`actor{type,id}`, `createdAt`, `correlationId`, `reason`, `summary`
+(человекочитаемая строка, построенная сервером, не raw payload).
+
+`before`/`after` проходят через явный **per-action allow-list**
+(`FIELD_WHITELIST`) — неизвестный action или action без записи в
+whitelist возвращает `before:null, after:null` (safe default, не "всё
+кроме запрещённого"):
+
+| action | Разрешённые поля before/after |
+|---|---|
+| `publication.unpublish` | нет (только `reason`) |
+| `admin_account.create` | `identityId`, `isSuperAdmin` |
+| `admin_account.grant_permission` | `resource`, `action`, `scope`, `scopeValue` |
+| `admin_account.revoke_permission` | `resource`, `action`, `scope`, `scopeValue` |
+| `admin_account.deactivate` | `status` |
+| `admin_account.reactivate` | `status` |
+
+Это дополнительный слой поверх уже существующего
+`AuditService.assertNoSecrets` (бросает при записи, если `before`/`after`
+вообще содержит password/token/secret-подобный ключ на любом уровне
+вложенности) — тот слой защищает запись, этот — чтение: даже если
+будущий вызывающий код когда-нибудь передаст в `after` что-то
+организационно-внутреннее (не секрет в смысле `assertNoSecrets`, но и
+не то, что должен видеть scoped admin), whitelist не даст этому полю
+попасть в HTTP-ответ, пока кто-то явно не добавит его в
+`FIELD_WHITELIST`.
+
+Никогда не возвращается: session token, cookie, password/hash,
+raw request body, storage keys, internal secrets, полный
+before/after-документ. Подтверждено HTTP-integration-тестом
+(`admin-audit-http.integration-spec.ts`), который проверяет тело ответа
+на отсутствие этих паттернов после сценария, реально создающего
+account+grant.
+
+### Admin-web: `/audit`
+
+Защищённый маршрут (`RequireAdmin`, не `RequireSuperAdmin` — scoped
+admin тоже имеет доступ, просто видит меньше) — таблица событий newest-
+first, фильтры (тип ресурса/действие/ID цели/период), "Загрузить ещё"
+(cursor), detail-drawer с безопасным before/after diff (рендерит ровно
+то, что прислал backend, не решает сам, что можно показывать),
+loading/error(+retry)/empty state, `role="dialog"`/`aria-modal`/
+`aria-labelledby` на drawer, `Escape` закрывает. Селектор "Тип ресурса"
+скрывает `admin_account` для не-super_admin на уровне UI (сервер и так
+отказал бы `403`, но неоткуда взяться самой опции в списке). Ссылки на
+цель события (`resourceId`) ведут на уже отфильтрованный список
+(`/publications?sourceType=...` или `/accounts`) — deep-link на
+конкретную запись не поддержан существующими страницами
+(`PublicationsPage`/`AccountsPage` не принимают id из query), не
+добавлялся отдельный route ради этого.
+
 ## Модель scope
 
 Реальная модель авторизации (`PermissionGrantDocument.scope`) — это
@@ -231,6 +393,8 @@ super_admin обходит эту проверку целиком (`isSuperAdmin
   `identityId`), панель "Права доступа" на аккаунт со списком grants и
   формой выдачи нового. UI не даёт отправить `city`/`domain`/`project`
   grant без `scopeValue`, но финальная валидация — всегда на сервере.
+- **`/audit`** (**НОВОЕ**, любой admin, объём виден по scope) — журнал
+  audit-событий, см. раздел "Audit trail" выше.
 
 Нет кнопки "Выйти" — `POST /auth/logout` не существует в API (см. ниже).
 Симулировать логаут на клиенте невозможно и не нужно: cookie httpOnly,
@@ -343,11 +507,19 @@ bootstrap, что integration-тесты) и реального dev-сервер
    реальный отказ доступа, не путается с "сессия истекла", потому что
    `AdminAuthProvider` уже знает, что `/admin/me` только что ответил
    200.
-7. **Audit-запись самого логина/логаута** — `audit_events` пишется
-   только для `admin_account.create`, `admin_account.grant_permission`,
-   `publication.unpublish`. Вход в систему не аудируется отдельно
-   (только создание `Session`-документа) — не входило в описанный
-   сценарий и не добавлено.
+7. **Audit-запись самого логина/логаута** — `audit_events` пишется для
+   `admin_account.create/deactivate/reactivate/grant_permission/
+   revoke_permission` и `publication.unpublish` (полный список на момент
+   `codex/admin-audit-trail`). Вход и **выход** (`POST /auth/logout`,
+   `AuthController`/`SessionService`) по-прежнему НЕ аудируются —
+   `SessionService.revokeSession` только помечает сессию отозванной, не
+   вызывает `AuditService`. `codex/admin-audit-trail` добавил read-only
+   UI/API для уже существующих событий, но не расширял состав того, что
+   аудируется — `identity`/`auth`-модуль вне границ владения этой ветки
+   (`apps/api/src/modules/admin`, `.../audit`, `.../publication`).
+   Audit-журнал технически готов отобразить `auth.logout` в тот момент,
+   когда это будет добавлено в модуле identity (whitelist уже содержит
+   заготовку summary для этого action, см. `admin-audit-projection.ts`).
 8. **E2E тесты admin-web** (Vitest+jsdom) покрывают auth guard/API
    client/unpublish-flow с реальным fetch-клиентом против мок-сервера
    (`no-mock-data.test.tsx` доказывает отсутствие скрытого
@@ -375,6 +547,29 @@ pnpm turbo run build       → 14/14 задач успешно (apps/admin-web/d
 
 Ручная browser-проверка (Playwright/Chromium против реального API +
 in-memory MongoDB) — описана в разделе выше, без ошибок.
+
+## Результаты проверок (29.08.2026, ветка `codex/admin-audit-trail`)
+
+```
+pnpm install --frozen-lockfile → успешно (832 пакета)
+pnpm typecheck              → 23/23 задач успешно
+pnpm test                   → 23/23 задач успешно
+                               @baza/api: 483/483 unit-тестов (53 файла)
+                               @baza/admin-web: 46/46 тестов (6 файлов)
+                               @baza/publication: 17/17 тестов
+                               @baza/worker: 63/63 тестов, без изменений
+pnpm test:integration        → 10/10 задач успешно
+                               @baza/api: 231/231 integration-тестов (20 файлов),
+                               из них новый: admin-audit-http.integration-spec.ts (20)
+pnpm build                   → 14/14 задач успешно (apps/admin-web/dist собран)
+node packages/api-client/scripts/check-stale.mjs         → OK
+node packages/api-client/scripts/verify-contract-layout.mjs → OK
+git diff --check             → чисто (только LF/CRLF-предупреждение на автогенерированном schema.ts)
+```
+
+Существующие тесты (admin-http/admin-accounts/admin-unpublish и все
+остальные 16 integration-файлов) остались зелёными без единого
+изменения — новая функциональность добавлена, ничего не сломано.
 
 ## Локальный dev bootstrap
 
