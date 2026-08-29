@@ -159,4 +159,38 @@ describe('Publishing Wizard Reducer State Machine', () => {
     expect(reaffirmed.step).toBe('characteristics')
     expect(reaffirmed.location.address).toBe('Rustaveli 1')
   })
+
+  it('records and clears failedPhase across a rejected media item retry cycle', () => {
+    let state = wizardReducer(initialWizardState, {
+      type: 'ADD_MEDIA_ITEM',
+      item: {
+        id: 'temp-1',
+        mediaAssetId: 'temp-1',
+        role: 'cover',
+        sortOrder: 0,
+        status: 'uploading',
+        progressPercent: 10,
+      },
+    })
+
+    // Phase 2 (binary PUT) fails — the item is marked rejected with the
+    // specific phase that threw, not a generic "failed" with no detail.
+    state = wizardReducer(state, {
+      type: 'UPDATE_MEDIA_ITEM',
+      id: 'temp-1',
+      payload: { status: 'rejected', failedPhase: 'upload' },
+    })
+    expect(state.mediaItems[0]?.status).toBe('rejected')
+    expect(state.mediaItems[0]?.failedPhase).toBe('upload')
+
+    // Retrying re-enters 'uploading' and clears the stale failedPhase so a
+    // second failure (possibly at a different phase) isn't confused with it.
+    state = wizardReducer(state, {
+      type: 'UPDATE_MEDIA_ITEM',
+      id: 'temp-1',
+      payload: { status: 'uploading', failedPhase: undefined },
+    })
+    expect(state.mediaItems[0]?.status).toBe('uploading')
+    expect(state.mediaItems[0]?.failedPhase).toBeUndefined()
+  })
 })

@@ -267,17 +267,10 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
     })
   })
 
-  async function walkToReviewStep(overrides?: { priceAmount?: string }) {
+  async function walkToMediaStep(overrides?: { priceAmount?: string }) {
     ;(publishingApi.createPropertyAsset as any).mockResolvedValue({ _id: 'asset-err', version: 0 })
     ;(publishingApi.createListing as any).mockResolvedValue({ _id: 'listing-err', status: 'draft', version: 0 })
     ;(publishingApi.activateListing as any).mockResolvedValue({ _id: 'listing-err', status: 'active', version: 1 })
-    ;(publishingApi.getDuplicateCandidates as any).mockResolvedValue([])
-    ;(publishingApi.getActuality as any).mockResolvedValue({
-      listingId: 'listing-err',
-      category: 'sale',
-      version: 1,
-      status: 'confirmed',
-    })
 
     render(
       <MemoryRouter initialEntries={['/publish']}>
@@ -299,10 +292,138 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
     fireEvent.click(screen.getByTestId('deal-next-btn'))
 
     await waitFor(() => expect(screen.getByTestId('wizard-step-media')).toBeDefined())
+  }
+
+  async function walkToReviewStep(overrides?: { priceAmount?: string }) {
+    ;(publishingApi.getDuplicateCandidates as any).mockResolvedValue([])
+    ;(publishingApi.getActuality as any).mockResolvedValue({
+      listingId: 'listing-err',
+      category: 'sale',
+      version: 1,
+      status: 'confirmed',
+    })
+
+    await walkToMediaStep(overrides)
     fireEvent.click(screen.getByTestId('media-next-btn'))
 
     await waitFor(() => expect(screen.getByTestId('wizard-step-review')).toBeDefined())
   }
+
+  it('a media upload that fails during the S3 PUT phase retries only that phase, not the whole upload', async () => {
+    ;(publishingApi.createMediaUploadIntent as any).mockResolvedValue({
+      mediaAssetId: 'media-retry-1',
+      uploadUrl: 'https://storage.test/upload-retry',
+    })
+    ;(publishingApi.uploadBinaryFile as any)
+      .mockRejectedValueOnce(new Error('network blip during PUT'))
+      .mockResolvedValueOnce(undefined)
+    ;(publishingApi.confirmMediaUpload as any).mockResolvedValue([
+      {
+        id: 'media-retry-1',
+        mediaAssetId: 'media-retry-1',
+        role: 'cover',
+        url: 'https://cdn.test/retry-photo.jpg',
+        status: 'verified',
+      },
+    ])
+
+    await walkToMediaStep()
+
+    const file = new File(['bytes'], 'living-room.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('media-file-input'), { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(publishingApi.createMediaUploadIntent).toHaveBeenCalledTimes(1)
+      expect(publishingApi.uploadBinaryFile).toHaveBeenCalledTimes(1)
+    })
+
+    // The failed card shows a retry action (not just delete), scoped to the
+    // upload phase that actually failed.
+    const mediaCard = await screen.findByTestId('media-grid')
+    const retryBtn = mediaCard.querySelector('[data-testid^="media-retry-"]') as HTMLButtonElement
+    expect(retryBtn).toBeTruthy()
+
+    fireEvent.click(retryBtn)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('media-cover-badge')).toBeDefined()
+    })
+
+    // Retrying a phase-2 failure must NOT re-run phase 1 — the file already
+    // has a real backend upload-intent from the first attempt.
+    expect(publishingApi.createMediaUploadIntent).toHaveBeenCalledTimes(1)
+    expect(publishingApi.uploadBinaryFile).toHaveBeenCalledTimes(2)
+    expect(publishingApi.confirmMediaUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('a media upload that fails during the intent phase retries from the start on the next attempt', async () => {
+    ;(publishingApi.createMediaUploadIntent as any)
+      .mockRejectedValueOnce(new Error('server unavailable'))
+      .mockResolvedValueOnce({ mediaAssetId: 'media-retry-2', uploadUrl: 'https://storage.test/upload-retry-2' })
+    ;(publishingApi.uploadBinaryFile as any).mockResolvedValue(undefined)
+    ;(publishingApi.confirmMediaUpload as any).mockResolvedValue([
+      {
+        id: 'media-retry-2',
+        mediaAssetId: 'media-retry-2',
+        role: 'cover',
+        url: 'https://cdn.test/retry-photo-2.jpg',
+        status: 'verified',
+      },
+    ])
+
+    await walkToMediaStep()
+
+    const file = new File(['bytes'], 'kitchen.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('media-file-input'), { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(publishingApi.createMediaUploadIntent).toHaveBeenCalledTimes(1)
+      expect(publishingApi.uploadBinaryFile).not.toHaveBeenCalled()
+    })
+
+    const mediaCard = await screen.findByTestId('media-grid')
+    const retryBtn = mediaCard.querySelector('[data-testid^="media-retry-"]') as HTMLButtonElement
+    fireEvent.click(retryBtn)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('media-cover-badge')).toBeDefined()
+    })
+
+    // A phase-1 failure means there was never a real backend intent to
+    // resume from — retry correctly starts over from phase 1.
+    expect(publishingApi.createMediaUploadIntent).toHaveBeenCalledTimes(2)
+    expect(publishingApi.uploadBinaryFile).toHaveBeenCalledTimes(1)
+    expect(publishingApi.confirmMediaUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('deleting a media item that failed mid-upload does not resurrect it on a later retry click', async () => {
+    ;(publishingApi.createMediaUploadIntent as any).mockResolvedValue({
+      mediaAssetId: 'media-delete-1',
+      uploadUrl: 'https://storage.test/upload-delete',
+    })
+    ;(publishingApi.uploadBinaryFile as any).mockRejectedValue(new Error('network blip'))
+
+    await walkToMediaStep()
+
+    const file = new File(['bytes'], 'balcony.jpg', { type: 'image/jpeg' })
+    fireEvent.change(screen.getByTestId('media-file-input'), { target: { files: [file] } })
+
+    await waitFor(() => {
+      expect(publishingApi.uploadBinaryFile).toHaveBeenCalledTimes(1)
+    })
+
+    const mediaCard = await screen.findByTestId('media-grid')
+    const deleteBtn = mediaCard.querySelector('[data-testid^="media-delete-"]') as HTMLButtonElement
+    fireEvent.click(deleteBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('media-grid')).toBeNull()
+    })
+
+    // The rejected item (and its pending File reference) is gone — nothing
+    // left in the wizard that a stray retry could act on.
+    expect(screen.queryByTestId('media-empty-placeholder')).toBeDefined()
+  })
 
   it('returns the user to the review step (not a dead end) when the publication build fails', async () => {
     ;(publishingApi.publishListing as any).mockResolvedValue({

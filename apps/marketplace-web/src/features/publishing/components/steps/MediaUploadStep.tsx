@@ -5,6 +5,7 @@ interface MediaUploadStepProps {
   mediaItems: WizardMediaItem[]
   isUploading: boolean
   onUploadPhoto: (file: File) => Promise<void>
+  onRetryPhoto: (tempId: string) => Promise<void>
   onDeletePhoto: (mediaAssetId: string) => Promise<void>
   onSetCover: (mediaAssetId: string) => Promise<void>
   onBack: () => void
@@ -16,6 +17,7 @@ export function MediaUploadStep({
   mediaItems,
   isUploading,
   onUploadPhoto,
+  onRetryPhoto,
   onDeletePhoto,
   onSetCover,
   onBack,
@@ -104,6 +106,12 @@ export function MediaUploadStep({
                 )}
               </div>
 
+              {item.status === 'rejected' && (
+                <p className="wizard-field-error" role="alert" data-testid={`media-error-${item.id}`}>
+                  Не удалось загрузить фото{item.failedPhase === 'upload' ? ' (передача файла)' : item.failedPhase === 'confirm' ? ' (подтверждение)' : ''}.
+                </p>
+              )}
+
               <div className="wizard-media-card__actions">
                 {item.role !== 'cover' && item.status === 'verified' && (
                   <button
@@ -113,6 +121,17 @@ export function MediaUploadStep({
                     data-testid={`media-set-cover-${item.id}`}
                   >
                     Сделать обложкой
+                  </button>
+                )}
+                {item.status === 'rejected' && (
+                  <button
+                    type="button"
+                    className="wizard-btn-link"
+                    onClick={() => onRetryPhoto(item.id)}
+                    disabled={isUploading}
+                    data-testid={`media-retry-${item.id}`}
+                  >
+                    Повторить
                   </button>
                 )}
                 <button
