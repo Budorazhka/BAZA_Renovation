@@ -38,6 +38,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Выход — очищает cookie и инвалидирует серверную сессию. */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Сессия успешно завершена */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            loggedOut: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Регистрация новой организации и создание роли первого владельца (onboarding) */
+        post: operations["registerOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/developments": {
         parameters: {
             query?: never;
@@ -237,6 +292,110 @@ export interface paths {
         put?: never;
         /** Admin снимает публикацию с публичного каталога — синхронная транзакция (ADR-005 патч), обязательный reason (permission-matrix.md разд.4) */
         post: operations["adminUnpublish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение профиля текущего администратора и его скоупа прав */
+        get: operations["adminMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список администраторских аккаунтов (только super_admin) */
+        get: operations["adminListAccounts"];
+        put?: never;
+        /** Создание нового администраторского аккаунта (только super_admin) */
+        post: operations["adminCreateAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/accounts/{adminAccountId}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список прав (grants), выданных администратору */
+        get: operations["adminListGrants"];
+        put?: never;
+        /** Выдача нового разрешения администратору */
+        post: operations["adminGrantPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/accounts/{adminAccountId}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Деактивация администраторского аккаунта */
+        post: operations["adminDeactivateAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/accounts/{adminAccountId}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Повторная активация администраторского аккаунта */
+        post: operations["adminReactivateAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/accounts/{adminAccountId}/grants/{grantId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отзыв разрешения администратора */
+        post: operations["adminRevokeGrant"];
         delete?: never;
         options?: never;
         head?: never;
@@ -906,6 +1065,94 @@ export interface components {
         DeletePropertyAssetMediaResponse: {
             success: boolean;
         };
+        RegisterOrganizationRequest: {
+            login: string;
+            password: string;
+            /** @enum {string} */
+            type: "agency" | "developer" | "independent_realtor";
+            name: string;
+        };
+        RegisterOrganizationResponse: {
+            organizationId: string;
+            positionId: string;
+            identityId: string;
+        };
+        AdminMeResponse: {
+            adminAccountId: string;
+            isSuperAdmin: boolean;
+            publicationReadScope: "all" | {
+                [key: string]: {
+                    global: boolean;
+                    cities: string[];
+                };
+            };
+        };
+        AdminAccountListItem: {
+            id: string;
+            identityId: string;
+            isSuperAdmin: boolean;
+            /** @enum {string} */
+            status: "active" | "deactivated";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminAccountListResponse: {
+            items: components["schemas"]["AdminAccountListItem"][];
+            nextCursor: string | null;
+        };
+        CreateAdminAccountRequest: {
+            identityId: string;
+            /** @default false */
+            isSuperAdmin: boolean;
+        };
+        CreateAdminAccountResponse: {
+            id: string;
+            identityId: string;
+            isSuperAdmin: boolean;
+        };
+        PermissionGrantItem: {
+            id: string;
+            resource: string;
+            action: string;
+            /** @enum {string} */
+            scope: "own" | "position" | "team" | "organization" | "project" | "city" | "global" | "assigned" | "domain";
+            scopeValue?: string | null;
+            version: number;
+            /** Format: date-time */
+            revokedAt?: string | null;
+            revokedBy?: string | null;
+            revokeReason?: string | null;
+        };
+        AdminGrantsListResponse: {
+            items: components["schemas"]["PermissionGrantItem"][];
+        };
+        CreatePermissionGrantRequest: {
+            resource: string;
+            action: string;
+            /** @enum {string} */
+            scope: "own" | "position" | "team" | "organization" | "project" | "city" | "global" | "assigned" | "domain";
+            scopeValue?: string;
+        };
+        GrantPermissionResponse: {
+            granted: boolean;
+        };
+        DeactivateAdminAccountRequest: {
+            reason: string;
+        };
+        ReactivateAdminAccountRequest: {
+            reason: string;
+        };
+        DeactivateReactivateAccountResponse: {
+            /** @enum {string} */
+            status: "active" | "deactivated";
+        };
+        RevokePermissionGrantRequest: {
+            expectedVersion: number;
+            reason: string;
+        };
+        RevokePermissionGrantResponse: {
+            revoked: boolean;
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -996,6 +1243,36 @@ export interface operations {
                 };
             };
             /** @description normalizedLogin уже занят (domain-model.md invariant — уникален глобально) */
+            409: components["responses"]["Error"];
+        };
+    };
+    registerOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Организация создана, сессия установлена в cookie */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterOrganizationResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description UNAUTHORIZED — неверный логин или пароль Identity */
+            401: components["responses"]["Error"];
+            /** @description CONFLICT — у Identity уже есть организация или имя занято */
             409: components["responses"]["Error"];
         };
     };
@@ -1359,6 +1636,240 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description FORBIDDEN / ADMIN_SCOPE_INSUFFICIENT */
             403: components["responses"]["Error"];
+        };
+    };
+    adminMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Данные администратора и его скоуп чтения */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMeResponse"];
+                };
+            };
+            /** @description FORBIDDEN — нет активного контекста администратора */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminListAccounts: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список аккаунтов администраторов с пагинацией */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountListResponse"];
+                };
+            };
+            /** @description FORBIDDEN — доступ только для super_admin */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminCreateAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAdminAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Аккаунт администратора создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateAdminAccountResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description CONFLICT — аккаунт для данного identityId уже существует */
+            409: components["responses"]["Error"];
+        };
+    };
+    adminListGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminAccountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список выданных и отозванных прав */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminGrantsListResponse"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    adminGrantPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminAccountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePermissionGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Разрешение успешно выдано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrantPermissionResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    adminDeactivateAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminAccountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeactivateAdminAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Аккаунт деактивирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeactivateReactivateAccountResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    adminReactivateAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminAccountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReactivateAdminAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Аккаунт активирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeactivateReactivateAccountResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    adminRevokeGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                adminAccountId: string;
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokePermissionGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Разрешение отозвано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokePermissionGrantResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion не совпадает */
+            409: components["responses"]["Error"];
         };
     };
     listPropertyAssets: {

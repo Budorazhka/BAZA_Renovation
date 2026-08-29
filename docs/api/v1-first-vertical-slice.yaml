@@ -1,0 +1,1896 @@
+openapi: 3.0.3
+info:
+  title: BAZA.sale API — v1 first vertical slice
+  version: 0.1.0-proposed
+  description: >
+    Первый OpenAPI-срез, покрывающий ровно цепочку D-07 (vertical E2E acceptance,
+    CLAUDE_HANDOFF_TZ.md разд.9): застройщик создаёт draft ЖК → корпус → этаж →
+    юнит → публикует → гость находит через поиск/карту → открывает карточку →
+    раскрывает контакт → лид появляется в ERP организации застройщика →
+    РОП назначает лид на менеджера → Admin снимает публикацию с причиной →
+    marketplace больше не выдаёт карточку, ERP видит причину, audit полон.
+    Статус: Proposed, первый цельный проход 25.08.2026. Не production-контракт,
+    основа для дальнейшего развития по мере проектирования остальных вертикалей.
+
+servers:
+  - url: /api/v1
+
+security:
+  - cookieAuth: []
+
+paths:
+  /auth/login:
+    post:
+      operationId: login
+      summary: Логин (audience определяется origin запроса, ADR-004)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login: {type: string}
+                password: {type: string, format: password}
+      responses:
+        '200':
+          description: Успешный логин, session cookie установлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identityId: {type: string}
+                  requires2fa: {type: boolean}
+        '401':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+
+  /auth/register:
+    post:
+      operationId: register
+      summary: >
+        Регистрация Identity (domain-model.md Module 1 command `register`) —
+        расширение узкой D-07 spec, тот же паттерн, что unit.price.update/
+        status.update в D-01: не в исходной D-07 vertical slice, но без
+        этой команды ни одна Identity не может появиться в системе.
+        Не создаёт ERP/Admin ProductAccess сама по себе — только базовую
+        marketplace-способную Identity (ADR-004).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login: {type: string}
+                password: {type: string, format: password, minLength: 8}
+      responses:
+        '201':
+          description: Identity создана (без сессии — отдельный /auth/login вызов после)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identityId: {type: string}
+        '409':
+          description: normalizedLogin уже занят (domain-model.md invariant — уникален глобально)
+          $ref: '#/components/responses/Error'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Выход — очищает cookie и инвалидирует серверную сессию.
+      security: []
+      responses:
+        '200':
+          description: Сессия успешно завершена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [loggedOut]
+                properties:
+                  loggedOut: { type: boolean }
+
+  /organizations/register:
+    post:
+      operationId: registerOrganization
+      summary: Регистрация новой организации и создание роли первого владельца (onboarding)
+      tags: [organizations]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterOrganizationRequest'
+      responses:
+        '201':
+          description: Организация создана, сессия установлена в cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterOrganizationResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: UNAUTHORIZED — неверный логин или пароль Identity
+          $ref: '#/components/responses/Error'
+        '409':
+          description: CONFLICT — у Identity уже есть организация или имя занято
+          $ref: '#/components/responses/Error'
+
+  /developments:
+    post:
+      operationId: createDevelopment
+      summary: Создать draft ЖК (застройщик)
+      tags: [erp-development]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDevelopmentRequest'
+      responses:
+        '201':
+          description: Development создан в статусе draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Development'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listDevelopments
+      summary: Список ЖК текущей организации (cursor pagination)
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список ЖК
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevelopmentList'
+
+  /developments/{developmentId}:
+    get:
+      operationId: getDevelopment
+      summary: Получить ЖК по id (tenant-scoped)
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      responses:
+        '200':
+          description: Development
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Development'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /developments/{developmentId}/buildings:
+    post:
+      operationId: createBuilding
+      summary: Создать корпус внутри ЖК
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBuildingRequest'
+      responses:
+        '201':
+          description: Building создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Building'
+
+  /buildings/{buildingId}/floors:
+    post:
+      operationId: createFloor
+      summary: Создать этаж внутри корпуса
+      tags: [erp-development]
+      parameters:
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFloorRequest'
+      responses:
+        '201':
+          description: Floor создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Floor'
+
+  /floors/{floorId}/units:
+    post:
+      operationId: createUnit
+      summary: Создать юнит на этаже (включая kind=parking для отдельной паркинг-шахматки)
+      tags: [erp-development]
+      parameters:
+        - name: floorId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUnitRequest'
+      responses:
+        '201':
+          description: Unit создан в статусе available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+
+  /developments/{developmentId}/publish:
+    post:
+      operationId: publishDevelopment
+      summary: Публикация ЖК (draft → active, синхронная транзакция + асинхронная projection, ADR-005)
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '202':
+          description: >
+            Publication принята, статус publication_pending (ADR-005 патч — worker
+            строит полную проекцию асинхронно, этот ответ не ждёт его завершения)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '400':
+          description: PUBLICATION_SOURCE_NOT_READY
+          $ref: '#/components/responses/Error'
+        '409':
+          description: IDEMPOTENCY_KEY_CONFLICT
+          $ref: '#/components/responses/Error'
+
+  /public/developments:
+    get:
+      operationId: searchPublicDevelopments
+      summary: Публичный поиск ЖК (гость, каталог/карта, MongoDB geo/compound индексы ADR-007)
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: bbox
+          in: query
+          description: "bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat"
+          schema: {type: string}
+        - name: city
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: Список публичных карточек (whitelist-поля из MarketplacePublication, ADR-005)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDevelopmentList'
+        '400':
+          description: VALIDATION_FAILED — невалидный cursor/limit/bbox или неизвестный query-параметр (D-04A)
+          $ref: '#/components/responses/Error'
+
+  /public/developments/{slug}:
+    get:
+      operationId: getPublicDevelopment
+      summary: Публичная карточка ЖК по slug (SSR, только status=published)
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Публичная карточка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicDevelopmentCard'
+        '404':
+          description: PUBLICATION_NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /public/developments/{slug}/reveal-contact:
+    post:
+      operationId: revealContact
+      summary: >
+        Раскрытие контакта — отдельная rate-limited команда, создаёт Lead
+        (master plan D-05: контакты отсутствуют в list/search HTML/JSON,
+        reveal отдельная команда с audit/abuse signals)
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevealContactRequest'
+      responses:
+        '200':
+          description: Контакт раскрыт, Lead создан в организации застройщика
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealContactResponse'
+        '429':
+          description: RATE_LIMITED
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/assign:
+    post:
+      operationId: assignLead
+      summary: РОП/Директор/Собственник назначает лид на Position менеджера (ручное назначение, не auto)
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigneePositionId]
+              properties:
+                assigneePositionId: {type: string}
+      responses:
+        '200':
+          description: Лид назначен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        '403':
+          description: FORBIDDEN — нет lead.assign.organization
+          $ref: '#/components/responses/Error'
+
+  /admin/publications:
+    get:
+      operationId: adminListPublications
+      summary: >
+        Admin находит publication только в разрешённом scope (мастер-план D-06)
+        — deny-by-default: sourceType/city read-grant'ы admin'а определяют,
+        что видно, sourceType/city query-параметры дополнительно СУЖАЮТ уже
+        разрешённый набор, не расширяют его
+      tags: [admin]
+      parameters:
+        - name: sourceType
+          in: query
+          schema: {type: string, enum: [development, unit, listing]}
+        - name: city
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: >
+            Список publication в разрешённом scope, ЛЮБОЙ статус (не только
+            published — admin должен видеть publication_pending/unpublished/
+            build_failed тоже)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: {type: string}
+                        sourceType: {type: string}
+                        sourceId: {type: string}
+                        organizationId: {type: string, nullable: true}
+                        status: {type: string}
+                        slug: {type: string, nullable: true}
+                        publishedAt: {type: string, nullable: true}
+                        unpublishedAt: {type: string, nullable: true}
+                        unpublishReason: {type: string, nullable: true}
+                        city: {type: string, nullable: true}
+                  nextCursor: {type: string, nullable: true}
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+
+  /admin/publications/{publicationId}/unpublish:
+    post:
+      operationId: adminUnpublish
+      summary: >
+        Admin снимает публикацию с публичного каталога — синхронная транзакция
+        (ADR-005 патч), обязательный reason (permission-matrix.md разд.4)
+      tags: [admin]
+      parameters:
+        - name: publicationId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '200':
+          description: >
+            Публикация скрыта немедленно (синхронно), canonical-статус изменён,
+            audit event записан в той же транзакции
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '400':
+          description: ADMIN_REASON_REQUIRED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN / ADMIN_SCOPE_INSUFFICIENT
+          $ref: '#/components/responses/Error'
+
+  /admin/me:
+    get:
+      operationId: adminMe
+      summary: Получение профиля текущего администратора и его скоупа прав
+      tags: [admin]
+      responses:
+        '200':
+          description: Данные администратора и его скоуп чтения
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMeResponse'
+        '403':
+          description: FORBIDDEN — нет активного контекста администратора
+          $ref: '#/components/responses/Error'
+
+  /admin/accounts:
+    get:
+      operationId: adminListAccounts
+      summary: Список администраторских аккаунтов (только super_admin)
+      tags: [admin]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список аккаунтов администраторов с пагинацией
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAccountListResponse'
+        '403':
+          description: FORBIDDEN — доступ только для super_admin
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: adminCreateAccount
+      summary: Создание нового администраторского аккаунта (только super_admin)
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminAccountRequest'
+      responses:
+        '201':
+          description: Аккаунт администратора создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAdminAccountResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '409':
+          description: CONFLICT — аккаунт для данного identityId уже существует
+          $ref: '#/components/responses/Error'
+
+  /admin/accounts/{adminAccountId}/grants:
+    get:
+      operationId: adminListGrants
+      summary: Список прав (grants), выданных администратору
+      tags: [admin]
+      parameters:
+        - name: adminAccountId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Список выданных и отозванных прав
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminGrantsListResponse'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: adminGrantPermission
+      summary: Выдача нового разрешения администратору
+      tags: [admin]
+      parameters:
+        - name: adminAccountId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePermissionGrantRequest'
+      responses:
+        '200':
+          description: Разрешение успешно выдано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantPermissionResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /admin/accounts/{adminAccountId}/deactivate:
+    post:
+      operationId: adminDeactivateAccount
+      summary: Деактивация администраторского аккаунта
+      tags: [admin]
+      parameters:
+        - name: adminAccountId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivateAdminAccountRequest'
+      responses:
+        '200':
+          description: Аккаунт деактивирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeactivateReactivateAccountResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /admin/accounts/{adminAccountId}/reactivate:
+    post:
+      operationId: adminReactivateAccount
+      summary: Повторная активация администраторского аккаунта
+      tags: [admin]
+      parameters:
+        - name: adminAccountId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReactivateAdminAccountRequest'
+      responses:
+        '200':
+          description: Аккаунт активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeactivateReactivateAccountResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /admin/accounts/{adminAccountId}/grants/{grantId}/revoke:
+    post:
+      operationId: adminRevokeGrant
+      summary: Отзыв разрешения администратора
+      tags: [admin]
+      parameters:
+        - name: adminAccountId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: grantId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevokePermissionGrantRequest'
+      responses:
+        '200':
+          description: Разрешение отозвано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevokePermissionGrantResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion не совпадает
+          $ref: '#/components/responses/Error'
+
+  /property-assets:
+    post:
+      operationId: createPropertyAsset
+      summary: Создать PropertyAsset организации
+      tags: [erp-property-assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePropertyAssetRequest'
+      responses:
+        '201':
+          description: PropertyAsset создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAsset'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listPropertyAssets
+      summary: Список PropertyAsset организации
+      tags: [erp-property-assets]
+      responses:
+        '200':
+          description: Список PropertyAsset
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyAsset'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}:
+    get:
+      operationId: getPropertyAsset
+      summary: Получить PropertyAsset по ID (tenant-scoped)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: PropertyAsset найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAsset'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/media/upload-intent:
+    post:
+      operationId: createPropertyAssetMediaUploadIntent
+      summary: Создать upload intent для загрузки фото объекта
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePropertyAssetMediaUploadIntentRequest'
+      responses:
+        '201':
+          description: Upload intent создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePropertyAssetMediaUploadIntentResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/media/{mediaAssetId}/confirm:
+    post:
+      operationId: confirmPropertyAssetMediaUpload
+      summary: Подтвердить загрузку и привязать фото к объекту
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Фото подтверждено и привязано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/media:
+    get:
+      operationId: listPropertyAssetMedia
+      summary: Список медиа-файлов объекта
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список медиа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/media/{mediaAssetId}:
+    patch:
+      operationId: updatePropertyAssetMedia
+      summary: Обновить метаданные медиа-файла (cover, sortOrder, alt, isPrivate)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Метаданные обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deletePropertyAssetMedia
+      summary: Удалить медиа-файл из объекта
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      responses:
+        '200':
+          description: Медиа удалено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletePropertyAssetMediaResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/media/order:
+    put:
+      operationId: reorderPropertyAssetMedia
+      summary: Изменить порядок отображения медиа-файлов
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Порядок обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings:
+    post:
+      operationId: createListing
+      summary: Создать Listing для PropertyAsset
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingRequest'
+      responses:
+        '201':
+          description: Listing создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listListings
+      summary: Список Listing для PropertyAsset
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список Listing
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Listing'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/activate:
+    patch:
+      operationId: activateListing
+      summary: Активировать Listing (draft -> active)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Listing активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Уже есть активный listing для этого dealType или статус не draft
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/actuality:
+    get:
+      operationId: getListingActuality
+      summary: Получить состояние актуальности Listing
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Состояние актуальности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingActuality'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/confirm-actuality:
+    patch:
+      operationId: confirmListingActuality
+      summary: Подтвердить актуальность Listing (сброс таймера)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: Актуальность подтверждена, возвращает обновлённое состояние актуальности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingActuality'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Version conflict / Listing is not active or expired
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/duplicate-candidates:
+    get:
+      operationId: getDuplicateCandidates
+      summary: Получить список кандидатов-дублей для PropertyAsset
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список кандидатов-дублей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DuplicateCandidate'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/duplicate-candidates/{duplicateCandidateId}/override:
+    post:
+      operationId: overrideDuplicateCandidate
+      summary: Owner override дубль-блокировки (подтверждение «это не дубль»)
+      tags: [erp-property-assets]
+      parameters:
+        - name: duplicateCandidateId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '200':
+          description: Дубль снят (status override_not_duplicate)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [override_not_duplicate]}
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Duplicate candidate status is not 'detected'
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/publish:
+    post:
+      operationId: publishListing
+      summary: >
+        MKT-002: публикация Listing (active → publication_pending, синхронная
+        транзакция + асинхронная projection, ADR-005) — тот же паттерн, что
+        publishDevelopment. Listing.status не меняется этой командой (в
+        отличие от Development draft→active); повторный publish уже
+        published/publication_pending listing отклоняется 409 (не создаёт
+        дублирующую publication/version) — используйте unpublish, затем
+        publish заново.
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '202':
+          description: Publication принята, статус publication_pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          description: Listing не найден / чужая организация (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >
+            Listing status не 'active' (draft/expired/archived) ИЛИ публикация
+            уже существует в статусе, отличном от unpublished/build_failed
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/unpublish:
+    post:
+      operationId: unpublishListing
+      summary: >
+        MKT-002: owner снимает Listing с публичного каталога — синхронная
+        транзакция (тот же PublicationService.unpublish, что D-06 admin
+        unpublish использует, actorType:identity вместо admin_account)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '201':
+          description: >
+            Публикация скрыта немедленно (синхронно) — 201, не 200 (Nest
+            default для POST без явного @HttpCode, задокументировано как
+            фактическое поведение, не переопределено этим проходом)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Publication уже не в статусе published
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/listings/{listingId}/publication-status:
+    get:
+      operationId: getListingPublicationStatus
+      summary: >
+        ERP polling после publish — читает РЕАЛЬНЫЙ статус MarketplacePublication,
+        не canonical Listing.status (тот же паттерн, что D-03
+        getPublicationStatus для Development)
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Publication status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          description: Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+
+  /public/listings:
+    get:
+      operationId: searchPublicListings
+      summary: >
+        MKT-002: публичный поиск вторички/аренды (гость, каталог/карта) —
+        тот же паттерн, что searchPublicDevelopments, дополнительно
+        фильтруется по dealType/propertyType/commercialSubtype
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: bbox
+          in: query
+          description: "bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat"
+          schema: {type: string}
+        - name: city
+          in: query
+          schema: {type: string}
+        - name: dealType
+          in: query
+          schema: {type: string, enum: [sale, rent_long, rent_short]}
+        - name: propertyType
+          in: query
+          schema: {type: string, enum: [apartment, house, land, commercial]}
+        - name: commercialSubtype
+          in: query
+          schema: {type: string, enum: [office, warehouse, retail, business, free_purpose]}
+      responses:
+        '200':
+          description: Список публичных карточек (whitelist-поля из MarketplacePublication, ADR-005)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicListingList'
+        '400':
+          description: VALIDATION_FAILED — невалидный cursor/limit/bbox/enum-значение или неизвестный query-параметр
+          $ref: '#/components/responses/Error'
+
+  /public/listings/{slug}:
+    get:
+      operationId: getPublicListing
+      summary: >
+        Публичная карточка Listing по slug (только status=published). Единый
+        404 для "не существует" и "slug принадлежит Development/Unit, не
+        Listing" (non-disclosure, тот же принцип, что getPublicDevelopment)
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Публичная карточка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicListingCard'
+        '404':
+          description: PUBLICATION_NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /public/listings/{slug}/reveal-contact:
+    post:
+      operationId: revealListingContact
+      summary: >
+        Раскрытие контакта для листинга вторички/аренды — отдельная rate-limited
+        команда, создаёт Lead и Contact в организации-владельце PropertyAsset
+        (тот же паттерн, что /public/developments/{slug}/reveal-contact)
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevealContactRequest'
+      responses:
+        '200':
+          description: Контакт раскрыт, Lead создан в организации-владельце листинга
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RevealContactResponse'
+        '400':
+          description: VALIDATION_FAILED — requesterPhone обязателен для создания лида
+          $ref: '#/components/responses/Error'
+        '404':
+          description: PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом
+          $ref: '#/components/responses/Error'
+        '429':
+          description: RATE_LIMITED
+          $ref: '#/components/responses/Error'
+
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: baza_session
+      description: Host-only secure cookie, productAudience зашит в server-side session (ADR-004)
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: {type: string}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, default: 20, maximum: 100}
+    DevelopmentId:
+      name: developmentId
+      in: path
+      required: true
+      schema: {type: string}
+    AssetId:
+      name: assetId
+      in: path
+      required: true
+      schema: {type: string}
+    MediaAssetId:
+      name: mediaAssetId
+      in: path
+      required: true
+      schema: {type: string}
+    ListingId:
+      name: listingId
+      in: path
+      required: true
+      schema: {type: string}
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, format: uuid}
+      description: ADR-006 — обязателен для publish/book/cancel/manual-ledger
+
+  responses:
+    Error:
+      description: Стандартный формат ошибки (conventions.md разд.3)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    MoneyAmount:
+      type: object
+      required: [amountMinorUnits, currency]
+      properties:
+        amountMinorUnits: {type: integer, description: "Никогда float (conventions.md разд.1)"}
+        currency: {type: string, enum: [USD, GEL, RUB]}
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: {type: string, description: "См. error-catalog.md"}
+            message: {type: string}
+            requestId: {type: string, format: uuid}
+            details: {type: object, additionalProperties: true}
+
+    CreateDevelopmentRequest:
+      type: object
+      required: [name, location]
+      properties:
+        name: {type: string}
+        location:
+          type: object
+          required: [country, city, geo]
+          properties:
+            country: {type: string}
+            city: {type: string}
+            address: {type: string}
+            geo:
+              type: object
+              description: "GeoJSON Point, [longitude, latitude] — жёсткое требование порядка (ADR-007)"
+              properties:
+                type: {type: string, enum: [Point]}
+                coordinates: {type: array, items: {type: number}, minItems: 2, maxItems: 2}
+        classType: {type: string}
+        completionDate: {type: string, format: date}
+
+    Development:
+      type: object
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [draft, active, archived]}
+        location: {type: object}
+        version: {type: integer, description: "Optimistic concurrency (conventions.md разд.5)"}
+        createdAt: {type: string, format: date-time}
+
+    DevelopmentList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Development'}}
+        nextCursor: {type: string, nullable: true}
+
+    CreateBuildingRequest:
+      type: object
+      required: [name, floorsCount]
+      properties:
+        name: {type: string}
+        floorsCount: {type: integer}
+        startDate: {type: string, format: date}
+        completionDate: {type: string, format: date}
+
+    Building:
+      type: object
+      properties:
+        id: {type: string}
+        developmentId: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        floorsCount: {type: integer}
+
+    CreateFloorRequest:
+      type: object
+      required: [floorNumber]
+      properties:
+        floorNumber: {type: integer}
+        sectionId: {type: string, nullable: true}
+        floorType: {type: string, nullable: true}
+
+    Floor:
+      type: object
+      properties:
+        id: {type: string}
+        buildingId: {type: string}
+        organizationId: {type: string}
+        floorNumber: {type: integer}
+
+    CreateUnitRequest:
+      type: object
+      required: [number, kind, area, price]
+      properties:
+        number: {type: string}
+        kind: {type: string, enum: [apartment, commercial, office, parking, storage, other], description: "parking — отдельная шахматка (domain-model.md Module 4)"}
+        rooms: {type: integer, nullable: true}
+        area: {type: number}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+        floorPlanId: {type: string, nullable: true}
+
+    Unit:
+      type: object
+      properties:
+        id: {type: string}
+        floorId: {type: string}
+        buildingId: {type: string}
+        organizationId: {type: string}
+        number: {type: string}
+        kind: {type: string}
+        area: {type: number}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+        status: {type: string, enum: [available, reserved, sold, hidden]}
+        version: {type: integer}
+
+    PublicationStatus:
+      type: object
+      properties:
+        id: {type: string}
+        sourceType: {type: string, enum: [unit, development, listing]}
+        sourceId: {type: string}
+        status: {type: string, enum: [publication_pending, published, unpublished, build_failed]}
+        slug: {type: string, nullable: true}
+        unpublishReason: {type: string, nullable: true}
+
+    PublicDevelopmentList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PublicDevelopmentCard'}}
+        nextCursor: {type: string, nullable: true}
+
+    PublicDevelopmentCard:
+      type: object
+      description: "Только whitelist-поля из MarketplacePublication.denormalizedFields (ADR-005) — никогда внутренние комиссии/notes/tenant-only контакты"
+      properties:
+        slug: {type: string}
+        name: {type: string}
+        location: {type: object}
+        priceFrom: {$ref: '#/components/schemas/MoneyAmount'}
+        seo:
+          type: object
+          properties:
+            title: {type: string}
+            description: {type: string}
+            canonicalUrl: {type: string}
+            structuredData: {type: object, additionalProperties: true}
+
+    RevealContactRequest:
+      type: object
+      properties:
+        requesterName: {type: string}
+        requesterPhone: {type: string}
+        utm: {type: object, additionalProperties: true, nullable: true}
+
+    RevealContactResponse:
+      type: object
+      properties:
+        phone: {type: string}
+        whatsapp: {type: string, nullable: true}
+        telegram: {type: string, nullable: true}
+        leadId: {type: string, description: "Lead создан в организации застройщика (D-05)"}
+
+    Lead:
+      type: object
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        contactId: {type: string}
+        ownerPositionId: {type: string, nullable: true}
+        stage: {type: string}
+        source: {type: object, additionalProperties: true}
+
+    PublicListingList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PublicListingCard'}}
+        nextCursor: {type: string, nullable: true}
+
+    PublicListingCard:
+      type: object
+      description: >
+        MKT-002: только whitelist-поля из MarketplacePublication.denormalizedFields
+        (ADR-005, apps/worker/src/handlers/listing-publication.mapper.ts) —
+        никогда organizationId/publisherScope/contact/duplicate signals/audit/
+        commission. media намеренно отсутствует — PropertyAsset/Listing схема
+        не содержит media-поля в этом проходе (PROP-001 не включал).
+      properties:
+        slug: {type: string}
+        dealType: {type: string, enum: [sale, rent_long, rent_short]}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+        propertyType: {type: string, enum: [apartment, house, land, commercial]}
+        commercialSubtype: {type: string, enum: [office, warehouse, retail, business, free_purpose], nullable: true}
+        location: {type: object}
+        characteristics:
+          type: object
+          properties:
+            area: {type: number}
+            rooms: {type: integer, nullable: true}
+            floor: {type: integer, nullable: true}
+            totalFloors: {type: integer, nullable: true}
+        media:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicMediaItem'
+        seo:
+          type: object
+          properties:
+            title: {type: string}
+            description: {type: string}
+            canonicalUrl: {type: string}
+            structuredData: {type: object, additionalProperties: true}
+
+    CreatePropertyAssetRequest:
+      type: object
+      required: [propertyType, location, characteristics, representativePhone]
+      properties:
+        propertyType: {type: string, enum: [apartment, house, land, commercial]}
+        commercialSubtype: {type: string, enum: [office, warehouse, retail, business, free_purpose]}
+        location:
+          type: object
+          required: [country, city, address, geo]
+          properties:
+            country: {type: string}
+            city: {type: string}
+            address: {type: string}
+            geo:
+              type: object
+              required: [type, coordinates]
+              properties:
+                type: {type: string, enum: [Point]}
+                coordinates: {type: array, items: {type: number}, minItems: 2, maxItems: 2}
+        characteristics:
+          type: object
+          required: [area]
+          properties:
+            area: {type: number}
+            rooms: {type: integer}
+            floor: {type: integer}
+            totalFloors: {type: integer}
+        representativePhone: {type: string}
+
+    PropertyAsset:
+      type: object
+      properties:
+        _id: {type: string}
+        publisherScope: {type: object}
+        propertyType: {type: string, enum: [apartment, house, land, commercial]}
+        commercialSubtype: {type: string, enum: [office, warehouse, retail, business, free_purpose]}
+        location: {type: object}
+        characteristics: {type: object}
+        representativePhone: {type: string}
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    CreateListingRequest:
+      type: object
+      required: [dealType, price]
+      properties:
+        dealType: {type: string, enum: [sale, rent_long, rent_short]}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+
+    Listing:
+      type: object
+      properties:
+        _id: {type: string}
+        propertyAssetId: {type: string}
+        publisherScope: {type: object}
+        dealType: {type: string, enum: [sale, rent_long, rent_short]}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+        status: {type: string, enum: [draft, active, expired, archived]}
+        version: {type: integer}
+        lastConfirmedAt: {type: string, format: date-time}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    ListingActuality:
+      type: object
+      properties:
+        status: {type: string}
+        category: {type: string}
+        thresholds:
+          type: object
+          properties:
+            warningDays: {type: integer}
+            overdueDays: {type: integer}
+        lastConfirmedAt: {type: string, format: date-time}
+        state:
+          type: string
+          nullable: true
+          enum: [fresh, warning, overdue]
+
+    DuplicateCandidate:
+      type: object
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [detected, confirmed_duplicate, override_not_duplicate]}
+        signals:
+          type: object
+          properties:
+            phoneMatch: {type: boolean}
+            addressMatch: {type: boolean}
+            roomsAreaFloorMatch: {type: boolean}
+        overrideReason: {type: string}
+        overrideAt: {type: string, format: date-time}
+        detectedAt: {type: string, format: date-time}
+
+    PublicMediaItem:
+      type: object
+      required: [url, role, sortOrder]
+      properties:
+        url: {type: string}
+        role: {type: string, enum: [cover, gallery]}
+        sortOrder: {type: integer}
+        alt: {type: string, nullable: true}
+
+    CreatePropertyAssetMediaUploadIntentRequest:
+      type: object
+      required: [declaredMimeType, sizeBytes]
+      properties:
+        declaredMimeType: {type: string, enum: [image/jpeg, image/png, image/webp]}
+        sizeBytes: {type: integer}
+        purpose: {type: string}
+
+    CreatePropertyAssetMediaUploadIntentResponse:
+      type: object
+      required: [assetId, mediaAssetId, uploadUrl]
+      properties:
+        assetId: {type: string}
+        mediaAssetId: {type: string}
+        uploadUrl: {type: string}
+
+    ConfirmPropertyAssetMediaRequest:
+      type: object
+      properties:
+        role: {type: string, enum: [cover, gallery]}
+        sortOrder: {type: integer}
+        alt: {type: string}
+        isPrivate: {type: boolean}
+
+    UpdatePropertyAssetMediaRequest:
+      type: object
+      properties:
+        role: {type: string, enum: [cover, gallery]}
+        sortOrder: {type: integer}
+        alt: {type: string}
+        isPrivate: {type: boolean}
+
+    ReorderPropertyAssetMediaRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [mediaAssetId, sortOrder]
+            properties:
+              mediaAssetId: {type: string}
+              sortOrder: {type: integer}
+              role: {type: string, enum: [cover, gallery]}
+
+    PropertyAssetMediaItem:
+      type: object
+      required: [id, mediaAssetId, role, sortOrder, isPrivate, status, createdAt]
+      properties:
+        id: {type: string}
+        mediaAssetId: {type: string}
+        role: {type: string, enum: [cover, gallery]}
+        sortOrder: {type: integer}
+        alt: {type: string, nullable: true}
+        isPrivate: {type: boolean}
+        status: {type: string, enum: [pending, verified, rejected]}
+        sizeBytes: {type: integer, nullable: true}
+        mimeType: {type: string, nullable: true}
+        url: {type: string, nullable: true}
+        createdAt: {type: string}
+
+    PropertyAssetMediaListResponse:
+      type: array
+      items:
+        $ref: '#/components/schemas/PropertyAssetMediaItem'
+
+    DeletePropertyAssetMediaResponse:
+      type: object
+      required: [success]
+      properties:
+        success: {type: boolean}
+
+    RegisterOrganizationRequest:
+      type: object
+      required: [login, password, type, name]
+      properties:
+        login: {type: string}
+        password: {type: string, minLength: 8}
+        type:
+          type: string
+          enum: [agency, developer, independent_realtor]
+        name: {type: string, minLength: 1, maxLength: 200}
+
+    RegisterOrganizationResponse:
+      type: object
+      required: [organizationId, positionId, identityId]
+      properties:
+        organizationId: {type: string}
+        positionId: {type: string}
+        identityId: {type: string}
+
+    AdminMeResponse:
+      type: object
+      required: [adminAccountId, isSuperAdmin, publicationReadScope]
+      properties:
+        adminAccountId: {type: string}
+        isSuperAdmin: {type: boolean}
+        publicationReadScope:
+          oneOf:
+            - type: string
+              enum: [all]
+            - type: object
+              additionalProperties:
+                type: object
+                required: [global, cities]
+                properties:
+                  global: {type: boolean}
+                  cities:
+                    type: array
+                    items: {type: string}
+
+    AdminAccountListItem:
+      type: object
+      required: [id, identityId, isSuperAdmin, status, createdAt]
+      properties:
+        id: {type: string}
+        identityId: {type: string}
+        isSuperAdmin: {type: boolean}
+        status:
+          type: string
+          enum: [active, deactivated]
+        createdAt: {type: string, format: date-time}
+
+    AdminAccountListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAccountListItem'
+        nextCursor: {type: string, nullable: true}
+
+    CreateAdminAccountRequest:
+      type: object
+      required: [identityId]
+      properties:
+        identityId: {type: string}
+        isSuperAdmin: {type: boolean, default: false}
+
+    CreateAdminAccountResponse:
+      type: object
+      required: [id, identityId, isSuperAdmin]
+      properties:
+        id: {type: string}
+        identityId: {type: string}
+        isSuperAdmin: {type: boolean}
+
+    PermissionGrantItem:
+      type: object
+      required: [id, resource, action, scope, version]
+      properties:
+        id: {type: string}
+        resource: {type: string}
+        action: {type: string}
+        scope:
+          type: string
+          enum: [own, position, team, organization, project, city, global, assigned, domain]
+        scopeValue: {type: string, nullable: true}
+        version: {type: integer}
+        revokedAt: {type: string, format: date-time, nullable: true}
+        revokedBy: {type: string, nullable: true}
+        revokeReason: {type: string, nullable: true}
+
+    AdminGrantsListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PermissionGrantItem'
+
+    CreatePermissionGrantRequest:
+      type: object
+      required: [resource, action, scope]
+      properties:
+        resource: {type: string}
+        action: {type: string}
+        scope:
+          type: string
+          enum: [own, position, team, organization, project, city, global, assigned, domain]
+        scopeValue: {type: string}
+
+    GrantPermissionResponse:
+      type: object
+      required: [granted]
+      properties:
+        granted: {type: boolean}
+
+    DeactivateAdminAccountRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 10}
+
+    ReactivateAdminAccountRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 10}
+
+    DeactivateReactivateAccountResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [active, deactivated]
+
+    RevokePermissionGrantRequest:
+      type: object
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: {type: integer}
+        reason: {type: string, minLength: 10}
+
+    RevokePermissionGrantResponse:
+      type: object
+      required: [revoked]
+      properties:
+        revoked: {type: boolean}
