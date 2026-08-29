@@ -44,6 +44,7 @@ describe('mapListingToDenormalizedFields — whitelist mapper (MKT-002/ADR-005)'
       commercialSubtype: undefined,
       location: { country: 'Georgia', city: 'Batumi', address: '1 Sea Boulevard' },
       characteristics: { area: 55, rooms: 2, floor: 5, totalFloors: 12 },
+      media: [],
     });
   });
 
@@ -105,6 +106,15 @@ describe('mapListingToDenormalizedFields — whitelist mapper (MKT-002/ADR-005)'
     expect(result).not.toHaveProperty('representativePhone');
     expect(JSON.stringify(result)).not.toContain('+995500000001');
   });
+  it('включает переданный массив public media без модификаций', () => {
+    const media = [
+      { url: 'https://cdn.example.com/cover.webp', role: 'cover' as const, sortOrder: 0, alt: 'Cover' },
+      { url: 'https://cdn.example.com/gallery1.webp', role: 'gallery' as const, sortOrder: 1 },
+    ];
+    const result = mapListingToDenormalizedFields(makeListing(), makeAsset(), media);
+    expect(result.media).toEqual(media);
+  });
+
 });
 
 describe('buildListingSeo', () => {

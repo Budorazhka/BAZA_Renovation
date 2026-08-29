@@ -1,3 +1,10 @@
+export interface PublicMediaItem {
+  url: string
+  role: 'cover' | 'gallery'
+  sortOrder: number
+  alt?: string
+}
+
 export interface PublicLocation {
   country?: string
   city?: string
@@ -61,6 +68,7 @@ export interface PublicListingCard {
   commercialSubtype?: string
   location?: PublicLocation
   characteristics?: PublicListingCharacteristics
+  media?: PublicMediaItem[]
   seo?: {
     title?: string
     description?: string

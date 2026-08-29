@@ -37,6 +37,7 @@ function makeService(overrides: {
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   dedupeService?: Partial<DedupeService>;
+  mediaService?: Partial<any>;
 } = {}) {
   return new MarketplacePropertyAssetsService(
     (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
@@ -52,6 +53,7 @@ function makeService(overrides: {
       ...overrides.idempotencyService,
     }) as IdempotencyService,
     (overrides.dedupeService ?? { assertNoBlockingDuplicates: jest.fn().mockResolvedValue(undefined), scanForDuplicates: jest.fn().mockResolvedValue(undefined) }) as DedupeService,
+    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
     makeMockConnection() as never,
   );
 }
@@ -206,4 +208,32 @@ describe('MarketplacePropertyAssetsService', () => {
       await expect(service.getListingPublicationStatus(listingId, assetId, new Types.ObjectId())).rejects.toMatchObject({ code: 'PUBLICATION_NOT_FOUND' });
     });
   });
+  describe('Marketplace Media vertical (MKT-004)', () => {
+    it('createMediaUploadIntent sets ownerScope type: marketplace_account', async () => {
+      const assetId = new Types.ObjectId();
+      const identityId = new Types.ObjectId();
+      const assetRepo = {
+        findByIdForIdentity: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
+      };
+      const mediaService = {
+        createUploadIntent: jest.fn().mockResolvedValue({ assetId: 'media-999', uploadUrl: 'https://minio.test/upload' }),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+
+      const res = await service.createMediaUploadIntent(assetId, identityId, {
+        declaredMimeType: 'image/png',
+        sizeBytes: 500_000,
+      });
+
+      expect(res.mediaAssetId).toBe('media-999');
+      expect(mediaService.createUploadIntent).toHaveBeenCalledWith({
+        ownerScope: { type: 'marketplace_account', identityId },
+        declaredMimeType: 'image/png',
+        sizeBytes: 500_000,
+        purpose: 'property_photo',
+        bucket: 'public',
+      });
+    });
+  });
+
 });

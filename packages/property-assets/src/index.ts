@@ -3,6 +3,8 @@ export {
   PropertyAssetSchema,
   type PropertyType,
   type CommercialSubtype,
+  type PropertyAssetMediaRole,
+  type PropertyAssetMediaItem,
 } from './schemas/property-asset.schema';
 export { PropertyAssetRepository, type CreatePropertyAssetInput } from './repository/property-asset.repository';
 export {

@@ -21,6 +21,7 @@ import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AuditModule } from '../audit/audit.module';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AuditModule } from '../audit/audit.module';
     PublicationModule,
     IdempotencyModule,
     AuditModule,
+    MediaModule,
   ],
   controllers: [PropertyAssetsController, MarketplacePropertyAssetsController],
   providers: [

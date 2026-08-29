@@ -40,12 +40,16 @@ function makeHandler(overrides: {
   developmentRepository?: Partial<DevelopmentRepository>;
   listingRepository?: Partial<ListingRepository>;
   propertyAssetRepository?: Partial<PropertyAssetRepository>;
+  mediaAssetRepository?: Partial<any>;
+  storage?: Partial<any>;
 } = {}) {
   return new PublicationRequestedHandler(
     (overrides.publicationRepository ?? {}) as MarketplacePublicationRepository,
     (overrides.developmentRepository ?? { findById: jest.fn() }) as DevelopmentRepository,
     (overrides.listingRepository ?? { findById: jest.fn() }) as ListingRepository,
     (overrides.propertyAssetRepository ?? { findById: jest.fn() }) as PropertyAssetRepository,
+    (overrides.mediaAssetRepository ?? { findByIds: jest.fn().mockResolvedValue([]) }) as any,
+    (overrides.storage ?? { getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
   );
 }
 
@@ -422,4 +426,87 @@ describe('PublicationRequestedHandler', () => {
       ).resolves.toBeUndefined();
     });
   });
+  it('MKT-004: проецирует только verified public media, сортируя cover первой и исключая private', async () => {
+    const publicationId = new Types.ObjectId();
+    const listingId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const coverMediaId = new Types.ObjectId();
+    const galleryMediaId = new Types.ObjectId();
+    const privateMediaId = new Types.ObjectId();
+
+    const listing = makeListing({ _id: listingId, propertyAssetId: assetId });
+    const asset = makeAsset({
+      _id: assetId,
+      media: [
+        { id: galleryMediaId.toString(), mediaAssetId: galleryMediaId, role: 'gallery', sortOrder: 1, isPrivate: false },
+        { id: coverMediaId.toString(), mediaAssetId: coverMediaId, role: 'cover', sortOrder: 0, isPrivate: false, alt: 'Обложка' },
+        { id: privateMediaId.toString(), mediaAssetId: privateMediaId, role: 'gallery', sortOrder: 2, isPrivate: true },
+      ],
+    });
+
+    const mediaDocs = [
+      {
+        _id: coverMediaId,
+        status: 'verified',
+        bucket: 'public',
+        variants: [{ type: 'card', assetPath: 'photos/cover.webp' }],
+      },
+      {
+        _id: galleryMediaId,
+        status: 'verified',
+        bucket: 'public',
+        variants: [{ type: 'detail', assetPath: 'photos/gallery.webp' }],
+      },
+      {
+        _id: privateMediaId,
+        status: 'verified',
+        bucket: 'public',
+        variants: [{ type: 'detail', assetPath: 'photos/private.webp' }],
+      },
+    ];
+
+    const markPublishedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const handler = makeHandler({
+      publicationRepository: {
+        isSlugTaken: jest.fn().mockResolvedValue(false),
+        markPublished: markPublishedSpy,
+      },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(asset) },
+      mediaAssetRepository: { findByIds: jest.fn().mockResolvedValue(mediaDocs) },
+      storage: { getPublicUrl: (k: string) => `https://cdn.test/${k}` },
+    });
+
+    await handler.handle(
+      makeEvent({
+        publicationId: publicationId.toString(),
+        sourceType: 'listing',
+        sourceId: listingId.toString(),
+        version: 1,
+      }),
+    );
+
+    expect(markPublishedSpy).toHaveBeenCalledWith(
+      publicationId,
+      expect.objectContaining({
+        denormalizedFields: expect.objectContaining({
+          media: [
+            {
+              url: 'https://cdn.test/photos/cover.webp',
+              role: 'cover',
+              sortOrder: 0,
+              alt: 'Обложка',
+            },
+            {
+              url: 'https://cdn.test/photos/gallery.webp',
+              role: 'gallery',
+              sortOrder: 1,
+              alt: undefined,
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
 });

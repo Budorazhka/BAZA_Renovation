@@ -102,4 +102,12 @@ export class PropertyAssetRepository {
       })
       .exec();
   }
+
+  async updateMedia(
+    id: Types.ObjectId,
+    media: PropertyAssetDocument['media'],
+    session?: ClientSession,
+  ) {
+    return this.model.updateOne({ _id: id }, { $set: { media } }, { session }).exec();
+  }
 }

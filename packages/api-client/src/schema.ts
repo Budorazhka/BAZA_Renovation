@@ -278,6 +278,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/property-assets/{assetId}/media/upload-intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Создать upload intent для загрузки фото объекта */
+        post: operations["createPropertyAssetMediaUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/media/{mediaAssetId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подтвердить загрузку и привязать фото к объекту */
+        post: operations["confirmPropertyAssetMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список медиа-файлов объекта */
+        get: operations["listPropertyAssetMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/media/{mediaAssetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить медиа-файл из объекта */
+        delete: operations["deletePropertyAssetMedia"];
+        options?: never;
+        head?: never;
+        /** Обновить метаданные медиа-файла (cover, sortOrder, alt, isPrivate) */
+        patch: operations["updatePropertyAssetMedia"];
+        trace?: never;
+    };
+    "/property-assets/{assetId}/media/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Изменить порядок отображения медиа-файлов */
+        put: operations["reorderPropertyAssetMedia"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/property-assets/{assetId}/listings": {
         parameters: {
             query?: never;
@@ -663,6 +749,7 @@ export interface components {
                 floor?: number | null;
                 totalFloors?: number | null;
             };
+            media?: components["schemas"]["PublicMediaItem"][];
             seo?: {
                 title?: string;
                 description?: string;
@@ -760,6 +847,65 @@ export interface components {
             /** Format: date-time */
             detectedAt?: string;
         };
+        PublicMediaItem: {
+            url: string;
+            /** @enum {string} */
+            role: "cover" | "gallery";
+            sortOrder: number;
+            alt?: string | null;
+        };
+        CreatePropertyAssetMediaUploadIntentRequest: {
+            /** @enum {string} */
+            declaredMimeType: "image/jpeg" | "image/png" | "image/webp";
+            sizeBytes: number;
+            purpose?: string;
+        };
+        CreatePropertyAssetMediaUploadIntentResponse: {
+            assetId: string;
+            mediaAssetId: string;
+            uploadUrl: string;
+        };
+        ConfirmPropertyAssetMediaRequest: {
+            /** @enum {string} */
+            role?: "cover" | "gallery";
+            sortOrder?: number;
+            alt?: string;
+            isPrivate?: boolean;
+        };
+        UpdatePropertyAssetMediaRequest: {
+            /** @enum {string} */
+            role?: "cover" | "gallery";
+            sortOrder?: number;
+            alt?: string;
+            isPrivate?: boolean;
+        };
+        ReorderPropertyAssetMediaRequest: {
+            items: {
+                mediaAssetId: string;
+                sortOrder: number;
+                /** @enum {string} */
+                role?: "cover" | "gallery";
+            }[];
+        };
+        PropertyAssetMediaItem: {
+            id: string;
+            mediaAssetId: string;
+            /** @enum {string} */
+            role: "cover" | "gallery";
+            sortOrder: number;
+            alt?: string | null;
+            isPrivate: boolean;
+            /** @enum {string} */
+            status: "pending" | "verified" | "rejected";
+            sizeBytes?: number | null;
+            mimeType?: string | null;
+            url?: string | null;
+            createdAt: string;
+        };
+        PropertyAssetMediaListResponse: components["schemas"]["PropertyAssetMediaItem"][];
+        DeletePropertyAssetMediaResponse: {
+            success: boolean;
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -777,6 +923,7 @@ export interface components {
         Limit: number;
         DevelopmentId: string;
         AssetId: string;
+        MediaAssetId: string;
         ListingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
@@ -1283,6 +1430,179 @@ export interface operations {
                     "application/json": components["schemas"]["PropertyAsset"];
                 };
             };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createPropertyAssetMediaUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePropertyAssetMediaUploadIntentRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload intent создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatePropertyAssetMediaUploadIntentResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    confirmPropertyAssetMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Фото подтверждено и привязано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listPropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список медиа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deletePropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Медиа удалено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePropertyAssetMediaResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updatePropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Метаданные обновлены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    reorderPropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderPropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Порядок обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];

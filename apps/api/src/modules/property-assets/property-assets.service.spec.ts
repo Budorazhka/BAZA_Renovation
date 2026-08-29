@@ -37,6 +37,7 @@ function makeService(overrides: {
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   dedupeService?: Partial<DedupeService>;
+  mediaService?: Partial<any>;
 } = {}) {
   return new PropertyAssetsService(
     (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
@@ -62,6 +63,7 @@ function makeService(overrides: {
     // publishListing-тесты (не про DEDUPE-001) не ломались новым gate'ом;
     // тесты именно на dedupe-блокировку переопределяют assertNoBlockingDuplicates.
     (overrides.dedupeService ?? { assertNoBlockingDuplicates: jest.fn().mockResolvedValue(undefined), scanForDuplicates: jest.fn().mockResolvedValue(undefined) }) as DedupeService,
+    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
     makeMockConnection() as never,
   );
 }
@@ -636,4 +638,200 @@ describe('PropertyAssetsService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
+  describe('Media vertical (MKT-004)', () => {
+    it('createMediaUploadIntent rejects non-image MIME types', async () => {
+      const assetId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any });
+
+      await expect(
+        service.createMediaUploadIntent(assetId, orgId, {
+          declaredMimeType: 'application/pdf',
+          sizeBytes: 1024,
+        }),
+      ).rejects.toThrow('Only JPEG, PNG, and WebP images are supported');
+    });
+
+    it('createMediaUploadIntent rejects oversized files', async () => {
+      const assetId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any });
+
+      await expect(
+        service.createMediaUploadIntent(assetId, orgId, {
+          declaredMimeType: 'image/jpeg',
+          sizeBytes: 25 * 1024 * 1024, // 25 MB > 20 MB limit
+        }),
+      ).rejects.toThrow('exceeds maximum allowed limit');
+    });
+
+    it('createMediaUploadIntent creates upload intent with property_photo purpose and public bucket', async () => {
+      const assetId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
+      };
+      const mediaService = {
+        createUploadIntent: jest.fn().mockResolvedValue({ assetId: 'media-123', uploadUrl: 'https://minio.test/upload' }),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+
+      const res = await service.createMediaUploadIntent(assetId, orgId, {
+        declaredMimeType: 'image/jpeg',
+        sizeBytes: 2 * 1024 * 1024,
+      });
+
+      expect(res).toEqual({
+        assetId: assetId.toString(),
+        mediaAssetId: 'media-123',
+        uploadUrl: 'https://minio.test/upload',
+      });
+      expect(mediaService.createUploadIntent).toHaveBeenCalledWith({
+        ownerScope: { type: 'organization', organizationId: orgId },
+        declaredMimeType: 'image/jpeg',
+        sizeBytes: 2 * 1024 * 1024,
+        purpose: 'property_photo',
+        bucket: 'public',
+      });
+    });
+
+    it('confirmMediaUpload throws if media verification failed', async () => {
+      const assetId = new Types.ObjectId();
+      const mediaAssetId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const actorId = new Types.ObjectId();
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
+      };
+      const mediaService = {
+        confirmUpload: jest.fn().mockResolvedValue({ status: 'rejected' }),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+
+      await expect(
+        service.confirmMediaUpload(assetId, mediaAssetId, orgId, actorId, 'corr-1'),
+      ).rejects.toThrow('Media file verification failed');
+    });
+
+    it('confirmMediaUpload attaches media as cover on first upload and returns list', async () => {
+      const assetId = new Types.ObjectId();
+      const mediaAssetId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const actorId = new Types.ObjectId();
+      const asset = { _id: assetId, media: [] as any[] };
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue(asset),
+        updateMedia: jest.fn().mockImplementation((id, media) => {
+          asset.media = media;
+          return Promise.resolve();
+        }),
+      };
+      const mediaService = {
+        confirmUpload: jest.fn().mockResolvedValue({ status: 'verified' }),
+        getAssetsForOwnerScope: jest.fn().mockResolvedValue(
+          new Map([
+            [
+              mediaAssetId.toString(),
+              {
+                status: 'verified',
+                variants: [{ type: 'card', assetPath: 'media-123/card/1.webp' }],
+                bucket: 'public',
+                declaredMimeType: 'image/jpeg',
+                verifiedMimeType: 'image/jpeg',
+                sizeBytes: 1024,
+                createdAt: new Date(),
+              },
+            ],
+          ]),
+        ),
+        getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+
+      const list = await service.confirmMediaUpload(assetId, mediaAssetId, orgId, actorId, 'corr-1', {
+        alt: 'Фасад здания',
+      });
+
+      expect(list).toHaveLength(1);
+      expect(list[0]).toMatchObject({
+        mediaAssetId: mediaAssetId.toString(),
+        role: 'cover',
+        sortOrder: 0,
+        alt: 'Фасад здания',
+        isPrivate: false,
+        status: 'verified',
+        url: 'https://cdn.example.com/media-123/card/1.webp',
+      });
+      expect(assetRepo.updateMedia).toHaveBeenCalledWith(assetId, expect.any(Array));
+    });
+
+    it('deleteMedia removes item and promotes next non-private to cover if cover was removed', async () => {
+      const assetId = new Types.ObjectId();
+      const coverId = new Types.ObjectId();
+      const galleryId = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const asset = {
+        _id: assetId,
+        media: [
+          { id: coverId.toString(), mediaAssetId: coverId, role: 'cover', sortOrder: 0, isPrivate: false },
+          { id: galleryId.toString(), mediaAssetId: galleryId, role: 'gallery', sortOrder: 1, isPrivate: false },
+        ],
+      };
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue(asset),
+        updateMedia: jest.fn().mockResolvedValue(undefined),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any });
+
+      const res = await service.deleteMedia(assetId, coverId, orgId);
+
+      expect(res).toEqual({ success: true });
+      expect(assetRepo.updateMedia).toHaveBeenCalledWith(
+        assetId,
+        expect.arrayContaining([
+          expect.objectContaining({ mediaAssetId: galleryId, role: 'cover' }),
+        ]),
+      );
+    });
+
+    it('updateMediaItem updates cover role and demotes previous cover', async () => {
+      const assetId = new Types.ObjectId();
+      const item1Id = new Types.ObjectId();
+      const item2Id = new Types.ObjectId();
+      const orgId = new Types.ObjectId();
+      const asset = {
+        _id: assetId,
+        media: [
+          { id: item1Id.toString(), mediaAssetId: item1Id, role: 'cover', sortOrder: 0, isPrivate: false },
+          { id: item2Id.toString(), mediaAssetId: item2Id, role: 'gallery', sortOrder: 1, isPrivate: false },
+        ],
+      };
+      const assetRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue(asset),
+        updateMedia: jest.fn().mockResolvedValue(undefined),
+      };
+      const mediaService = {
+        getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()),
+        getPublicUrl: jest.fn(),
+      };
+      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+
+      await service.updateMediaItem(assetId, item2Id, orgId, { role: 'cover' });
+
+      expect(assetRepo.updateMedia).toHaveBeenCalledWith(
+        assetId,
+        expect.arrayContaining([
+          expect.objectContaining({ mediaAssetId: item1Id, role: 'gallery' }),
+          expect.objectContaining({ mediaAssetId: item2Id, role: 'cover' }),
+        ]),
+      );
+    });
+  });
+
 });

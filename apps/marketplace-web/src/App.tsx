@@ -15,6 +15,7 @@ import { useDevelopmentDetail } from './hooks/useDevelopmentDetail'
 import { useListingsCatalogue } from './hooks/useListingsCatalogue'
 import { useListingDetail } from './hooks/useListingDetail'
 import { ListingContactForm } from './components/ListingContactForm'
+import { ListingMediaGallery } from './components/ListingMediaGallery'
 import type {
   PublicDevelopmentCard,
   PublicListingCard,
@@ -74,9 +75,27 @@ function DevelopmentCard({ item }: { item: PublicDevelopmentCard }) {
 
 function ListingCardItem({ item }: { item: PublicListingCard }) {
   const slug = item.slug
+  const coverItem = item.media?.find((m) => m.role === 'cover') || item.media?.[0]
+  const [imgError, setImgError] = useState(false)
+
+  const mediaDisplay =
+    coverItem && !imgError ? (
+      <div className="listing-card-media">
+        <img
+          src={coverItem.url}
+          alt={coverItem.alt || listingTitle(item)}
+          className="listing-card-media__img"
+          loading="lazy"
+          onError={() => setImgError(true)}
+        />
+      </div>
+    ) : (
+      <BuildingPlaceholder />
+    )
+
   const content = (
     <>
-      <BuildingPlaceholder />
+      {mediaDisplay}
       <div className="development-card__body">
         <span className="listing-badge">{listingDealTypeLabel(item.dealType)}</span>
         <p className="listing-card-price">{listingPrice(item)}</p>
@@ -352,8 +371,8 @@ function ListingDetailPage() {
         ) : null}
         {state.status === 'ready' ? (
           <>
-            <div className="detail-hero">
-              <BuildingPlaceholder />
+            <div className="detail-hero detail-hero--listing">
+              <ListingMediaGallery media={state.item.media} title={listingTitle(state.item)} />
               <div className="detail-hero__copy">
                 <span className="listing-badge">{listingDealTypeLabel(state.item.dealType)}</span>
                 <h1>{listingTitle(state.item)}</h1>

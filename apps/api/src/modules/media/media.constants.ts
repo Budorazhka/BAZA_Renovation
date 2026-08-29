@@ -19,6 +19,12 @@ export const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
 ]);
 
+export const IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
 /**
  * purpose → bucket: явный whitelist, не произвольная строка от клиента
  * (ADR-008 требует физическое разделение приватного/публичного —
@@ -29,8 +35,7 @@ export const MEDIA_PURPOSE_BUCKET: Record<string, 'private' | 'public'> = {
   unit_photo: 'public',
   floor_plan: 'public',
   agency_document: 'private',
-  // teamApi.ts::uploadAvatar (26.08.2026) — public, тот же принцип, что
-  // unit_photo/floor_plan: сотрудник виден в UI команды, ничего приватного.
   profile_avatar: 'public',
+  property_photo: 'public',
 };
 
