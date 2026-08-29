@@ -90,12 +90,19 @@ export function MarketplaceMap({ items, onBoundsChange, onSelect }: MarketplaceM
       }
     }
 
-    const handleLoad = () => {
+    let didSyncInitialMarkers = false
+    const handleReady = () => {
+      if (didSyncInitialMarkers) return
+      didSyncInitialMarkers = true
       setMapError(null)
       syncMarkers()
     }
     const handleError = () => setMapError('Не удалось загрузить слой карты. Проверьте VITE_MAP_STYLE_URL.')
-    map.on('load', handleLoad)
+    map.on('load', handleReady)
+    // Some style providers (and browser runtimes) reach an idle, style-ready
+    // state without dispatching the initial load event. Idle is the safe
+    // fallback: it runs after the style is usable and only syncs once.
+    map.on('idle', handleReady)
     map.on('error', handleError)
     map.on('moveend', (event) => {
       // Ignore the initial programmatic fit; only user viewport changes
