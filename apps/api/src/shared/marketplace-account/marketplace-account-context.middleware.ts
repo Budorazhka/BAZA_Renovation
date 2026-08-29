@@ -6,6 +6,15 @@ import type { MarketplaceAccountContext, VerifiedMarketplaceAccountContext } fro
 declare module 'fastify' {
   interface FastifyRequest {
     marketplaceAccountContext?: VerifiedMarketplaceAccountContext;
+    /**
+     * Mirrors AdminContextMiddleware's hadSessionCookie / TenantContextMiddleware's
+     * hadSessionCookieErp — lets MarketplaceAccountGuard distinguish "guest,
+     * no baza_session cookie at all" (401 AUTH_NO_SESSION) from "cookie
+     * present but doesn't resolve to a valid MarketplaceAccountContext" (403
+     * FORBIDDEN, non-disclosure). Closes the same asymmetry this had with
+     * the admin audience.
+     */
+    hadSessionCookieMarketplace?: boolean;
   }
 }
 
@@ -25,6 +34,8 @@ export class MarketplaceAccountContextMiddleware implements NestMiddleware {
   constructor(private readonly sessionService: SessionService) {}
 
   async use(req: FastifyRequest, _res: FastifyReply, next: () => void): Promise<void> {
+    req.hadSessionCookieMarketplace = this.sessionService.getRawTokenFromRequest(req) !== undefined;
+
     const session = await this.sessionService.getActiveSessionFromRequest(req, 'marketplace');
     if (!session) {
       next();

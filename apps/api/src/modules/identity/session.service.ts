@@ -78,15 +78,18 @@ export class SessionService {
    * req.headers.cookie (стандартный HTTP-заголовок) — единственный
    * надёжный источник здесь, парсится вручную.
    *
-   * Это устраняет ЧТЕНИЕ cookie внутри одного middleware — но НЕ устраняет
-   * отдельную, более серьёзную часть той же проблемы: mutation req.tenantContext/
+   * Это устраняет ЧТЕНИЕ cookie внутри одного middleware — та же проблема
+   * также затрагивала WRITE стороны: mutation req.tenantContext/
    * req.adminContext внутри TenantContextMiddleware/AdminContextMiddleware
-   * тоже не долетает до Guard'ов дальше по цепочке (тот же root cause —
-   * middleware и guard видят РАЗНЫЕ объекты). См. память
-   * baza-nestjs-fastify-middleware-bug — фикс (переход на нативные Fastify
-   * onRequest hooks) найден, НЕ применён, приостановлен по решению
-   * владельца до следующей сессии. Этот cookie-парсинг фикс корректен и
-   * нужен сам по себе независимо от того фикса, не откатывать.
+   * не долетала до Guard'ов дальше по цепочке (тот же root cause —
+   * middleware и guard видели РАЗНЫЕ объекты). ОБНОВЛЕНО (проверено по
+   * текущему коду 2026-08-30): фикс ПРИМЕНЁН — TenantContextMiddleware/
+   * AdminContextMiddleware/CorrelationIdMiddleware/
+   * MarketplaceAccountContextMiddleware зарегистрированы как нативные
+   * Fastify onRequest hooks в main.api.ts, минуя @fastify/middie
+   * (`app.getHttpAdapter().getInstance().addHook('onRequest', ...)`), не
+   * через AppModule.configure(). Этот cookie-парсинг фикс остаётся нужен
+   * сам по себе независимо от того фикса, не откатывать.
    */
   private parseCookie(cookieHeader: string | undefined, name: string): string | undefined {
     if (!cookieHeader) return undefined;

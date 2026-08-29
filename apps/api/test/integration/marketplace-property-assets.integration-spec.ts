@@ -203,9 +203,17 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     expect(asset.publisherScope).toEqual({ type: 'marketplace_account', identityId: account.identityId });
   });
 
-  it('запрос без marketplace-сессии (ERP-сессия или гость) получает 403 FORBIDDEN, не 401/500', async () => {
+  it('запрос вообще без cookie (гость) получает 401 AUTH_NO_SESSION, не 403/500 — зеркалирует AdminGuard', async () => {
+    // MarketplaceAccountGuard теперь различает "нет cookie вообще" (401 —
+    // не было попытки аутентификации, безопасно раскрыть) от "cookie есть,
+    // но не резолвится" (403, non-disclosure причины) — тот же паттерн,
+    // что уже применён к AdminGuard. Случай "ERP-сессия против
+    // marketplace-endpoint" (cookie ЕСТЬ, просто не тот audience) остаётся
+    // 403 и отдельно покрыт ниже, см. "ERP-сессия ... НЕ проходит
+    // MarketplaceAccountGuard".
     const response = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', payload: makeAssetPayload() });
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('AUTH_NO_SESSION');
   });
 
   it('другой marketplace-аккаунт не видит чужой PropertyAsset (единый 404, tenant isolation по identityId)', async () => {

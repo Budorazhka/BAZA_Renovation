@@ -108,4 +108,10 @@ UI-счётчик каталога честно продолжает показ�
 - `apps/marketplace-web/tests/publishingReducer.test.ts`
 - `docs/operations/frontend-marketplace-vertical.md` (раздел 7 — расширен пп.2, добавлены пп.3–4)
 - `docs/operations/marketplace-publishing-wizard.md` (п.5 — добавлено описание resumable retry)
+
+---
+
+## 8. Связанные находки следующего прохода (2026-08-30, production acceptance gate)
+
+Отдельная сессия (`docs/operations/marketplace-functional-acceptance.md`, «Проход 2») зафиксировала три дополнительных backend-gap'а того же класса, что пп.3.1–3.3 выше (реальный контрактный/инфраструктурный разрыв, не изобретённое решение): in-memory rate limiter storage (не Redis-backed, риск при горизонтальном масштабировании), orphaned pending `MediaAsset` записи без TTL/cleanup, `overrideDuplicate` без `Idempotency-Key`-обёртки. Полные детали — в `frontend-marketplace-vertical.md` раздел 7 пп.6–8 и `marketplace-functional-acceptance.md` раздел 4 «Проход 2» — не дублируются здесь, чтобы не разойтись при будущих правках.
 - `docs/operations/marketplace-public-api-gap-closure.md` (новый — этот документ)

@@ -145,7 +145,7 @@ describe('MarketplacePublicationRepository', () => {
   });
 
   describe('listPublished', () => {
-    it('без bbox/city фильтрует только по status:published', async () => {
+    it('без bbox/city фильтрует по status:published И sourceType:development', async () => {
       const execSpy = jest.fn().mockResolvedValue([]);
       const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
       const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
@@ -155,7 +155,11 @@ describe('MarketplacePublicationRepository', () => {
       const repository = new MarketplacePublicationRepository(mockModel as never);
       await repository.listPublished({ limit: 20 });
 
-      expect(findSpy).toHaveBeenCalledWith({ status: 'published' });
+      // sourceType:'development' guards against a future 'unit'-sourceType
+      // publication mapper silently mixing unit cards into this list —
+      // status alone isn't a complete filter now that PublicationSourceType
+      // has three values, not one.
+      expect(findSpy).toHaveBeenCalledWith({ status: 'published', sourceType: 'development' });
     });
 
     it('с bbox добавляет $geoWithin/$box фильтр', async () => {

@@ -727,9 +727,9 @@ describe('PropertyAssetsService', () => {
       const asset = { _id: assetId, media: [] as any[] };
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
-        updateMedia: jest.fn().mockImplementation((id, media) => {
-          asset.media = media;
-          return Promise.resolve();
+        mutateMedia: jest.fn().mockImplementation((id, mutator) => {
+          asset.media = mutator(asset.media);
+          return Promise.resolve(asset);
         }),
       };
       const mediaService = {
@@ -768,7 +768,7 @@ describe('PropertyAssetsService', () => {
         status: 'verified',
         url: 'https://cdn.example.com/media-123/card/1.webp',
       });
-      expect(assetRepo.updateMedia).toHaveBeenCalledWith(assetId, expect.any(Array));
+      expect(assetRepo.mutateMedia).toHaveBeenCalledWith(assetId, expect.any(Function));
     });
 
     it('deleteMedia removes item and promotes next non-private to cover if cover was removed', async () => {
@@ -783,17 +783,21 @@ describe('PropertyAssetsService', () => {
           { id: galleryId.toString(), mediaAssetId: galleryId, role: 'gallery', sortOrder: 1, isPrivate: false },
         ],
       };
+      let capturedMedia: any[] | undefined;
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
-        updateMedia: jest.fn().mockResolvedValue(undefined),
+        mutateMedia: jest.fn().mockImplementation((id, mutator) => {
+          capturedMedia = mutator(asset.media);
+          return Promise.resolve({ ...asset, media: capturedMedia });
+        }),
       };
       const service = makeService({ propertyAssetRepository: assetRepo as any });
 
       const res = await service.deleteMedia(assetId, coverId, orgId);
 
       expect(res).toEqual({ success: true });
-      expect(assetRepo.updateMedia).toHaveBeenCalledWith(
-        assetId,
+      expect(assetRepo.mutateMedia).toHaveBeenCalledWith(assetId, expect.any(Function));
+      expect(capturedMedia).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ mediaAssetId: galleryId, role: 'cover' }),
         ]),
@@ -812,9 +816,13 @@ describe('PropertyAssetsService', () => {
           { id: item2Id.toString(), mediaAssetId: item2Id, role: 'gallery', sortOrder: 1, isPrivate: false },
         ],
       };
+      let capturedMedia: any[] | undefined;
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
-        updateMedia: jest.fn().mockResolvedValue(undefined),
+        mutateMedia: jest.fn().mockImplementation((id, mutator) => {
+          capturedMedia = mutator(asset.media);
+          return Promise.resolve({ ...asset, media: capturedMedia });
+        }),
       };
       const mediaService = {
         getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()),
@@ -824,8 +832,8 @@ describe('PropertyAssetsService', () => {
 
       await service.updateMediaItem(assetId, item2Id, orgId, { role: 'cover' });
 
-      expect(assetRepo.updateMedia).toHaveBeenCalledWith(
-        assetId,
+      expect(assetRepo.mutateMedia).toHaveBeenCalledWith(assetId, expect.any(Function));
+      expect(capturedMedia).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ mediaAssetId: item1Id, role: 'gallery' }),
           expect.objectContaining({ mediaAssetId: item2Id, role: 'cover' }),

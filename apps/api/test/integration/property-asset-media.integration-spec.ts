@@ -256,4 +256,142 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
     expect(finalItems[0].mediaAssetId).toBe(mediaAssetId1);
     expect(finalItems[0].role).toBe('cover');
   });
+
+  /**
+   * MKT-004-MEDIA-RACE-001: two genuinely concurrent confirm calls for
+   * DIFFERENT photos on the SAME asset — before mutateMedia's CAS+retry,
+   * both requests read the same starting media[] array, both computed an
+   * "append" in memory, and whichever `$set` committed last silently
+   * discarded the other's write (a real lost-update bug, not just a
+   * theoretical one). Real HTTP via app.inject(), real Mongo transaction
+   * isolation via mongodb-memory-server (not a mock of the repository).
+   */
+  it('two concurrent confirms for different photos on the same asset both survive (no lost update)', async () => {
+    const { cookie } = await ownerCookie('race-tenant');
+
+    const assetRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/property-assets',
+      headers: { cookie },
+      payload: makeAssetPayload('RACE1'),
+    });
+    expect(assetRes.statusCode).toBe(201);
+    const assetId = assetRes.json()._id;
+
+    // Two independent upload-intents, sequential (only the CONFIRM calls
+    // below race — intent creation itself isn't the vertical under test).
+    const intentA = await app.inject({
+      method: 'POST',
+      url: `/api/v1/property-assets/${assetId}/media/upload-intent`,
+      headers: { cookie },
+      payload: { declaredMimeType: 'image/jpeg', sizeBytes: 1024 * 1024 },
+    });
+    const intentB = await app.inject({
+      method: 'POST',
+      url: `/api/v1/property-assets/${assetId}/media/upload-intent`,
+      headers: { cookie },
+      payload: { declaredMimeType: 'image/png', sizeBytes: 1024 * 1024 },
+    });
+    const mediaAssetIdA = intentA.json().mediaAssetId;
+    const mediaAssetIdB = intentB.json().mediaAssetId;
+
+    const confirm = (mediaAssetId: string, alt: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/property-assets/${assetId}/media/${mediaAssetId}/confirm`,
+        headers: { cookie },
+        payload: { alt },
+      });
+
+    const [confirmA, confirmB] = await Promise.all([
+      confirm(mediaAssetIdA, 'Photo A'),
+      confirm(mediaAssetIdB, 'Photo B'),
+    ]);
+    expect(confirmA.statusCode).toBe(200);
+    expect(confirmB.statusCode).toBe(200);
+
+    const finalListRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/property-assets/${assetId}/media`,
+      headers: { cookie },
+    });
+    const finalItems = finalListRes.json();
+    // Both photos must be present — a lost update would leave only 1.
+    expect(finalItems).toHaveLength(2);
+    const ids = finalItems.map((i: any) => i.mediaAssetId).sort();
+    expect(ids).toEqual([mediaAssetIdA, mediaAssetIdB].sort());
+    // Exactly one cover (the invariant the mutator logic maintains) —
+    // a lost update could also have left this at 0 or 2.
+    const coverCount = finalItems.filter((i: any) => i.role === 'cover').length;
+    expect(coverCount).toBe(1);
+  });
+
+  /**
+   * Same class of race, different pair of operations: confirming a NEW
+   * photo while concurrently deleting an EXISTING one on the same asset.
+   * Before the fix, the delete's array (missing the removed item) and the
+   * confirm's array (missing the new item) raced on the same `$set` — one
+   * of the two changes would vanish depending on write order.
+   */
+  it('a concurrent confirm and delete on the same asset both apply (no lost update)', async () => {
+    const { cookie } = await ownerCookie('race-tenant-2');
+
+    const assetRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/property-assets',
+      headers: { cookie },
+      payload: makeAssetPayload('RACE2'),
+    });
+    const assetId = assetRes.json()._id;
+
+    const existingIntent = await app.inject({
+      method: 'POST',
+      url: `/api/v1/property-assets/${assetId}/media/upload-intent`,
+      headers: { cookie },
+      payload: { declaredMimeType: 'image/jpeg', sizeBytes: 1024 * 1024 },
+    });
+    const existingMediaAssetId = existingIntent.json().mediaAssetId;
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/property-assets/${assetId}/media/${existingMediaAssetId}/confirm`,
+      headers: { cookie },
+      payload: { alt: 'Existing photo' },
+    });
+
+    const newIntent = await app.inject({
+      method: 'POST',
+      url: `/api/v1/property-assets/${assetId}/media/upload-intent`,
+      headers: { cookie },
+      payload: { declaredMimeType: 'image/png', sizeBytes: 1024 * 1024 },
+    });
+    const newMediaAssetId = newIntent.json().mediaAssetId;
+
+    const [deleteRes, confirmRes] = await Promise.all([
+      app.inject({
+        method: 'DELETE',
+        url: `/api/v1/property-assets/${assetId}/media/${existingMediaAssetId}`,
+        headers: { cookie },
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/property-assets/${assetId}/media/${newMediaAssetId}/confirm`,
+        headers: { cookie },
+        payload: { alt: 'New photo' },
+      }),
+    ]);
+    expect(deleteRes.statusCode).toBe(200);
+    expect(confirmRes.statusCode).toBe(200);
+
+    const finalListRes = await app.inject({
+      method: 'GET',
+      url: `/api/v1/property-assets/${assetId}/media`,
+      headers: { cookie },
+    });
+    const finalItems = finalListRes.json();
+    // The delete's effect (old photo gone) AND the confirm's effect (new
+    // photo present) must both have applied — a lost update would leave
+    // either the old photo still present, or the new one missing.
+    expect(finalItems).toHaveLength(1);
+    expect(finalItems[0].mediaAssetId).toBe(newMediaAssetId);
+  });
 });

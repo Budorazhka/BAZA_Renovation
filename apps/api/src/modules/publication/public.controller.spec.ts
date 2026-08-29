@@ -12,11 +12,13 @@ import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developmen
  */
 describe('PublicController — whitelist границы public response', () => {
   const LEAKED_FIELDS = ['organizationId', 'sourceId', 'version', 'contact', 'internalNotes', 'publisherScope', 'randomArbitraryField'];
+  const LEAKED_SEO_FIELDS = ['internalNotes', 'organizationId', 'randomArbitraryField'];
 
-  function makeContaminatedPublication(overrides?: { slug?: string }) {
+  function makeContaminatedPublication(overrides?: { slug?: string; sourceType?: string }) {
     return {
       _id: new Types.ObjectId(),
       slug: overrides?.slug ?? 'zhk-test',
+      sourceType: overrides?.sourceType ?? 'development',
       status: 'published' as const,
       // Симулирует ошибку worker-side mapper'а — internal-поля случайно
       // попали в denormalizedFields, которого по контракту быть не должно.
@@ -39,13 +41,31 @@ describe('PublicController — whitelist границы public response', () => 
         geo: { type: 'Point', coordinates: [41.64, 41.62] },
         organizationId: new Types.ObjectId().toString(),
       },
-      seo: { title: 'ЖК Тест', description: 'Описание', canonicalUrl: '/developments/zhk-test', structuredData: {} },
+      // seo — тоже потенциальный вектор утечки (тот же класс находки, что
+      // уже покрыт для PublicListingsController): toPublicCard раньше
+      // передавал publication.seo целиком без whitelist. Fixture намеренно
+      // загрязняет и его, зеркалируя public-listings.controller.spec.ts.
+      seo: {
+        title: 'ЖК Тест',
+        description: 'Описание',
+        canonicalUrl: '/developments/zhk-test',
+        structuredData: {},
+        internalNotes: 'не должно попасть в ответ',
+        organizationId: new Types.ObjectId().toString(),
+        randomArbitraryField: 'мусор',
+      },
     };
   }
 
   function assertNoLeakedFields(body: Record<string, unknown>) {
     for (const field of LEAKED_FIELDS) {
       expect(body).not.toHaveProperty(field);
+    }
+    const seo = body.seo as Record<string, unknown> | undefined;
+    if (seo) {
+      for (const field of LEAKED_SEO_FIELDS) {
+        expect(seo).not.toHaveProperty(field);
+      }
     }
   }
 
@@ -78,7 +98,7 @@ describe('PublicController — whitelist границы public response', () => 
   });
 
   describe('GET /public/developments/:slug (detail)', () => {
-    it('загрязнённый denormalizedFields не протекает в detail — только whitelist-поля', async () => {
+    it('загрязнённый denormalizedFields/seo не протекает в detail — только whitelist-поля', async () => {
       const contaminated = makeContaminatedPublication();
       const controller = makeController([], contaminated);
 
@@ -86,6 +106,24 @@ describe('PublicController — whitelist границы public response', () => 
 
       assertNoLeakedFields(result);
       expect(result).toMatchObject({ slug: 'zhk-test', name: 'ЖК Тест' });
+      expect(result.seo).toMatchObject({
+        title: 'ЖК Тест',
+        description: 'Описание',
+        canonicalUrl: '/developments/zhk-test',
+      });
+    });
+
+    it('slug, принадлежащий Listing (sourceType!==development), даёт единый 404 — не раскрывает существование чужого sourceType', async () => {
+      const listingPublication = makeContaminatedPublication({ sourceType: 'listing' });
+      const controller = makeController([], listingPublication);
+
+      await expect(controller.getPublicDevelopment('zhk-test')).rejects.toThrow('Publication not found');
+    });
+
+    it('несуществующий slug даёт единый 404 (не отличим от "принадлежит другому sourceType")', async () => {
+      const controller = makeController([], null);
+
+      await expect(controller.getPublicDevelopment('does-not-exist')).rejects.toThrow('Publication not found');
     });
   });
 });

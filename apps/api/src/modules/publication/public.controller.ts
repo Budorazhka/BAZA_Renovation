@@ -52,7 +52,11 @@ export class PublicController {
   @Get(':slug')
   async getPublicDevelopment(@Param('slug') slug: string) {
     const publication = await this.publicationRepository.findBySlug(slug);
-    if (!publication) {
+    // Mirrors PublicListingsController.getPublicListing: a slug that
+    // resolves but belongs to a different sourceType (e.g. a listing's slug
+    // requested here) must 404 the same way an unknown slug does, not fall
+    // through toPublicCard and render a mostly-empty development card.
+    if (!publication || publication.sourceType !== 'development') {
       throw new NotFoundException('Publication not found');
     }
     return toPublicCard(publication);
@@ -63,6 +67,33 @@ interface PublicLocation {
   country?: unknown;
   city?: unknown;
   address?: unknown;
+}
+
+interface PublicDevelopmentSeo {
+  title?: unknown;
+  description?: unknown;
+  canonicalUrl?: unknown;
+  structuredData?: unknown;
+}
+
+/**
+ * Mirrors PublicListingsController's toPublicSeo — same whitelist boundary,
+ * applied here too. Previously this file passed `publication.seo` through
+ * unpicked, meaning the worker's `seo` object was the ONLY line of defense
+ * for that one field, unlike every other field on this response (which the
+ * comment above toPublicCard explicitly calls out as an independent,
+ * second boundary). No live leak today (the worker only ever constructs a
+ * clean seo object), but this closes the one field where that guarantee
+ * didn't actually hold.
+ */
+function toPublicSeo(seo: PublicDevelopmentSeo | undefined) {
+  if (!seo) return undefined;
+  return {
+    title: seo.title,
+    description: seo.description,
+    canonicalUrl: seo.canonicalUrl,
+    structuredData: seo.structuredData,
+  };
 }
 
 /**
@@ -111,6 +142,6 @@ function toPublicCard(publication: {
     startDate: fields.startDate,
     completionDate: fields.completionDate,
     description: fields.description,
-    seo: publication.seo,
+    seo: toPublicSeo(publication.seo),
   };
 }
