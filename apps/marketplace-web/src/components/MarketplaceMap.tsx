@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { getMarketplaceMapPoints, type MarketplaceMapItem } from '../lib/map-data'
+import { resolveMapStyleUrl } from '../lib/map-config'
 import type { BoundingBox } from '../types/marketplace'
 
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -50,7 +51,7 @@ export function MarketplaceMap({ items, onBoundsChange, onSelect }: MarketplaceM
   const onBoundsChangeRef = useRef(onBoundsChange)
   const onSelectRef = useRef(onSelect)
   const [mapError, setMapError] = useState<string | null>(null)
-  const styleUrl = import.meta.env.VITE_MAP_STYLE_URL?.trim()
+  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL)
 
   itemsRef.current = items
   onBoundsChangeRef.current = onBoundsChange
