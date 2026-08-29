@@ -103,6 +103,9 @@ export function MarketplaceMap({ items, onBoundsChange, onSelect }: MarketplaceM
     // state without dispatching the initial load event. Idle is the safe
     // fallback: it runs after the style is usable and only syncs once.
     map.on('idle', handleReady)
+    // Marker placement only needs the map container and projection, so do not
+    // hide real geo points behind a slow style/worker bootstrap.
+    queueMicrotask(handleReady)
     map.on('error', handleError)
     map.on('moveend', (event) => {
       // Ignore the initial programmatic fit; only user viewport changes
