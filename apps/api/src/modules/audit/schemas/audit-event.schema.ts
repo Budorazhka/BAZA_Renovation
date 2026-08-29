@@ -61,6 +61,17 @@ AuditEventSchema.index({ 'actor.id': 1, createdAt: -1 });
 AuditEventSchema.index({ resourceId: 1, createdAt: -1 });
 AuditEventSchema.index({ correlationId: 1 });
 
+/**
+ * Admin audit feed (AuditEventRepository.listForAdmin): newest-first
+ * cursor по `_id`, обычно сужено по `resource` (scoped admin — публикационные
+ * sourceType; super_admin — любой resource, включая 'admin_account') и/или
+ * `action`. `_id` последним полем в обоих индексах — ObjectId encode'ит
+ * timestamp, поэтому `sort({_id:-1})` использует индекс напрямую без
+ * дополнительной in-memory сортировки при равенстве префикса.
+ */
+AuditEventSchema.index({ resource: 1, _id: -1 });
+AuditEventSchema.index({ action: 1, _id: -1 });
+
 // Retention 3 месяца (open-decisions.md #3) — TTL index на createdAt.
 const THREE_MONTHS_IN_SECONDS = 60 * 60 * 24 * 90;
 AuditEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: THREE_MONTHS_IN_SECONDS });

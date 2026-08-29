@@ -1,5 +1,7 @@
 import type {
   AdminAccountList,
+  AdminAuditEventList,
+  AdminAuditEventListQuery,
   AdminMe,
   AdminPublicationList,
   AdminPublicationListQuery,
@@ -150,6 +152,35 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
         method: 'POST',
         body: JSON.stringify(params),
       })
+    },
+
+    async listAuditEvents(query: AdminAuditEventListQuery = {}): Promise<AdminAuditEventList> {
+      const params = new URLSearchParams()
+      if (query.resource) params.set('resource', query.resource)
+      if (query.action?.trim()) params.set('action', query.action.trim())
+      if (query.resourceId) params.set('resourceId', query.resourceId)
+      if (query.publicationId) params.set('publicationId', query.publicationId)
+      if (query.actorId) params.set('actorId', query.actorId)
+      if (query.from) params.set('from', query.from)
+      if (query.to) params.set('to', query.to)
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/audit-events${suffix}`)
+    },
+
+    async listPublicationAudit(
+      publicationId: string,
+      query: { action?: string; from?: string; to?: string; cursor?: string; limit?: number } = {},
+    ): Promise<AdminAuditEventList> {
+      const params = new URLSearchParams()
+      if (query.action?.trim()) params.set('action', query.action.trim())
+      if (query.from) params.set('from', query.from)
+      if (query.to) params.set('to', query.to)
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/publications/${encodeURIComponent(publicationId)}/audit${suffix}`)
     },
   }
 }

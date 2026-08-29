@@ -402,6 +402,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read-only admin audit trail (D-07): scoped admin видит только события публикаций в своём publication read-scope (resource∈ {development,unit,listing}); resource=admin_account (account/grant/ session lifecycle) доступен только super_admin. Whitelist-проекция before/after — redaction на backend (admin-audit-projection.ts), secrets/tokens никогда не возвращаются. */
+        get: operations["adminListAuditEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/publications/{publicationId}/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit-история ОДНОЙ publication (переиспользует тот же service/repository/whitelist, что adminListAuditEvents — не отдельная бизнес-логика). Вне scope текущего администратора — пустой список, не ошибка (non-disclosure). */
+        get: operations["adminListPublicationAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/property-assets": {
         parameters: {
             query?: never;
@@ -1153,6 +1187,34 @@ export interface components {
         RevokePermissionGrantResponse: {
             revoked: boolean;
         };
+        AdminAuditEventView: {
+            id: string;
+            action: string;
+            resource: string;
+            resourceId: string;
+            actor: {
+                /** @enum {string} */
+                type: "identity" | "admin_account" | "system";
+                id: string | null;
+            };
+            /** Format: date-time */
+            createdAt: string;
+            correlationId: string;
+            reason: string | null;
+            summary: string;
+            /** @description Явный per-action whitelist (admin-audit-projection.ts) — никогда не сырой audit payload */
+            before: {
+                [key: string]: unknown;
+            } | null;
+            /** @description Явный per-action whitelist (admin-audit-projection.ts) — никогда не сырой audit payload */
+            after: {
+                [key: string]: unknown;
+            } | null;
+        };
+        AdminAuditEventListResponse: {
+            items: components["schemas"]["AdminAuditEventView"][];
+            nextCursor: string | null;
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -1870,6 +1932,72 @@ export interface operations {
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — expectedVersion не совпадает */
             409: components["responses"]["Error"];
+        };
+    };
+    adminListAuditEvents: {
+        parameters: {
+            query?: {
+                resource?: "development" | "unit" | "listing" | "admin_account";
+                action?: string;
+                resourceId?: string;
+                publicationId?: string;
+                actorId?: string;
+                from?: string;
+                to?: string;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список audit-событий newest-first, ограниченный scope текущего администратора */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditEventListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный resource/cursor/limit/дата */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — scoped admin запросил resource=admin_account явно */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminListPublicationAudit: {
+        parameters: {
+            query?: {
+                action?: string;
+                from?: string;
+                to?: string;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                publicationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Audit-события этой publication, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditEventListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description NOT_FOUND — publicationId не существует */
+            404: components["responses"]["Error"];
         };
     };
     listPropertyAssets: {

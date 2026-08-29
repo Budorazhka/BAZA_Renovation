@@ -693,6 +693,94 @@ paths:
           description: VERSION_CONFLICT — expectedVersion не совпадает
           $ref: '#/components/responses/Error'
 
+  /admin/audit-events:
+    get:
+      operationId: adminListAuditEvents
+      summary: >
+        Read-only admin audit trail (D-07): scoped admin видит только
+        события публикаций в своём publication read-scope (resource∈
+        {development,unit,listing}); resource=admin_account (account/grant/
+        session lifecycle) доступен только super_admin. Whitelist-проекция
+        before/after — redaction на backend (admin-audit-projection.ts),
+        secrets/tokens никогда не возвращаются.
+      tags: [admin]
+      parameters:
+        - name: resource
+          in: query
+          schema: {type: string, enum: [development, unit, listing, admin_account]}
+        - name: action
+          in: query
+          schema: {type: string}
+        - name: resourceId
+          in: query
+          schema: {type: string}
+        - name: publicationId
+          in: query
+          schema: {type: string}
+        - name: actorId
+          in: query
+          schema: {type: string}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список audit-событий newest-first, ограниченный scope текущего администратора
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditEventListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный resource/cursor/limit/дата
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — scoped admin запросил resource=admin_account явно
+          $ref: '#/components/responses/Error'
+
+  /admin/publications/{publicationId}/audit:
+    get:
+      operationId: adminListPublicationAudit
+      summary: >
+        Audit-история ОДНОЙ publication (переиспользует тот же
+        service/repository/whitelist, что adminListAuditEvents — не
+        отдельная бизнес-логика). Вне scope текущего администратора —
+        пустой список, не ошибка (non-disclosure).
+      tags: [admin]
+      parameters:
+        - name: publicationId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: action
+          in: query
+          schema: {type: string}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Audit-события этой publication, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditEventListResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — publicationId не существует
+          $ref: '#/components/responses/Error'
+
   /property-assets:
     post:
       operationId: createPropertyAsset
@@ -1894,3 +1982,42 @@ components:
       required: [revoked]
       properties:
         revoked: {type: boolean}
+
+    AdminAuditEventView:
+      type: object
+      required: [id, action, resource, resourceId, actor, createdAt, correlationId, reason, summary, before, after]
+      properties:
+        id: {type: string}
+        action: {type: string}
+        resource: {type: string}
+        resourceId: {type: string}
+        actor:
+          type: object
+          required: [type, id]
+          properties:
+            type: {type: string, enum: [identity, admin_account, system]}
+            id: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time}
+        correlationId: {type: string}
+        reason: {type: string, nullable: true}
+        summary: {type: string}
+        before:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Явный per-action whitelist (admin-audit-projection.ts) — никогда не сырой audit payload
+        after:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Явный per-action whitelist (admin-audit-projection.ts) — никогда не сырой audit payload
+
+    AdminAuditEventListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminAuditEventView'
+        nextCursor: {type: string, nullable: true}

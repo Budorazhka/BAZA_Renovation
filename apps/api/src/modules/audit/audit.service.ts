@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ClientSession, Types } from 'mongoose';
 import { AuditEventRepository } from './repository/audit-event.repository';
-import type { AuditActorType } from './schemas/audit-event.schema';
+import type { AuditActorType, AuditEventDocument } from './schemas/audit-event.schema';
 
 // master plan разд.6.3: audit payload не содержит password/token/provider secret.
 // Список ключей, которые НИКОГДА не должны попасть в before/after — defense
@@ -75,6 +75,22 @@ export class AuditService {
     this.assertNoSecrets(params.after, 'after');
 
     await this.auditEventRepository.append(params, session);
+  }
+
+  /**
+   * Единственный read-путь на audit_events для других модулей (ADR-001:
+   * общение между модулями только через сервисы, не repository напрямую —
+   * `test/architecture/module-boundaries.test.ts` это enforce'ит). Admin
+   * audit feed (admin-audit.service.ts) — единственный вызывающий код на
+   * сегодня; сам метод не знает про AdminContext/scope, только исполняет
+   * уже готовое Mongo-условие, построенное вызывающей стороной.
+   */
+  async listForAdmin(params: {
+    scopeFilter: Record<string, unknown>;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<AuditEventDocument[]> {
+    return this.auditEventRepository.listForAdmin(params);
   }
 
   private assertNoSecrets(payload: Record<string, unknown> | undefined, field: 'before' | 'after'): void {

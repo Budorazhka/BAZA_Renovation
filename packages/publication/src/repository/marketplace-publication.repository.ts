@@ -209,6 +209,23 @@ export class MarketplacePublicationRepository {
   }
 
   /**
+   * Admin audit feed (apps/api AdminAuditService): audit_events хранит
+   * `resource`/`resourceId` (= sourceType/sourceId публикации), НЕ city —
+   * city-scoped read-grant (searchProjection.city в этой коллекции) не
+   * может быть применён напрямую к audit_events-документу. Этот метод
+   * резолвит МНОЖЕСТВО sourceId, попадающих под уже построенный
+   * buildPublicationScopeFilter (тот же scopeFilter-контракт, что
+   * listForAdmin), чтобы вызывающий код мог построить
+   * `resourceId: {$in: [...]}` фильтр по audit_events. Без пагинации —
+   * используется только для построения промежуточного $in-списка, не
+   * возвращается клиенту напрямую.
+   */
+  async listSourceIdsByScopeFilter(scopeFilter: Record<string, unknown>): Promise<{ sourceType: string; sourceId: Types.ObjectId }[]> {
+    const rows = await this.model.find(scopeFilter, { sourceType: 1, sourceId: 1 }).exec();
+    return rows.map((row) => ({ sourceType: row.sourceType, sourceId: row.sourceId }));
+  }
+
+  /**
    * ADR-005 worker-сторона: успешная сборка полной проекции. Условие
    * status:'publication_pending' в фильтре — worker не должен затирать
    * уже unpublished (синхронный API-путь опережает асинхронный worker)
