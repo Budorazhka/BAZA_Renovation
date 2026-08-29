@@ -16,6 +16,8 @@
 | `propertyType` | `apartment` | `house` | `commercial` | `land` | Категория недвижимости. | Сбрасывает `cursor` и `commercialSubtype` при смене категории. |
 | `commercialSubtype` | `office` | `retail` | `warehouse` | `free_purpose` | `land_commercial` | Подтип коммерческого объекта. | Отображается только при `propertyType=commercial`. |
 | `cursor` | Непрозрачная строка пагинации (base64) | Указатель на следующую страницу выборки. | Генерируется backend; сбрасывается при смене любого фильтра. |
+| `view` | `list` (default) / `map` | Переключатель списка и карты. | При переходе в список bbox очищается; при движении карты bbox сохраняется в URL и сбрасывает cursor. |
+| `bbox` | `minLng,minLat,maxLng,maxLat` | Текущий viewport карты. | Отправляется на backend только в режиме `view=map`; значения валидируются перед запросом. |
 
 ### Навигация Back / Forward и защита от Race Conditions
 - **История браузера**: Переключение фильтров и табов создаёт новые записи в истории (`setSearchParams(..., { replace: false })`), обеспечивая бесшовный возврат кнопками «Назад» / «Вперёд» без перезагрузки страницы.
@@ -103,6 +105,6 @@
 
 ## 7. Known Limitations & Backend Gaps (TODOs)
 
-1. **TODO (Backend Gap / Geo BBox Filter)**: Публичный эндпоинт `GET /public/listings` принимает параметр `bbox` в query, но расширенный гео-поиск по произвольным полигонам пока не реализован в хранилище `MarketplacePublication`.
+1. **Map provider configuration**: MapLibre подключён, а координаты приходят из реального `searchProjection.geo`. Для запуска карты задайте `VITE_MAP_STYLE_URL` на OSM-compatible провайдера с production SLA; публичный бесплатный OSM tile server намеренно не используется как CDN.
 2. **TODO (Public Listing Sorting)**: В текущей версии контракт `GET /public/listings` использует фиксированную сортировку по новизне/актуальности. Сортировка по цене (возрастание/убывание) и площади запланирована в следующем релизе.
 3. **TODO (Favorites / Saved Searches)**: Локальное или серверное сохранение избранных объектов вынесено в отдельный функциональный срез авторизованного покупателя.

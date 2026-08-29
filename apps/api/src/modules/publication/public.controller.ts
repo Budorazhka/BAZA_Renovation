@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
+import { toPublicGeoPoint } from './public-geo';
 
 /**
  * D-04/OpenAPI v1-first-vertical-slice.yaml: публичные marketplace
@@ -77,24 +78,35 @@ interface PublicLocation {
  * сломается, эта функция физически не может пропустить поле, которого нет в
  * её собственном перечислении ниже.
  *
- * Список полей — ровно то, что сейчас кладёт worker
+ * Список denormalizedFields — ровно то, что сейчас кладёт worker
  * (mapDevelopmentToDenormalizedFields): name/location/classType/startDate/
- * completionDate/description. Расширение публичного набора требует явной
- * правки ОБЕИХ границ (worker mapper И этой функции), не может произойти
+ * completionDate/description. Координаты — отдельное явное исключение из
+ * searchProjection.geo, прошедшее собственную валидацию GeoJSON. Расширение
+ * публичного набора требует явной правки обеих границ, не может произойти
  * случайно через spread.
  */
 function toPublicCard(publication: {
   slug?: string;
   denormalizedFields: Record<string, unknown>;
+  searchProjection?: Record<string, unknown>;
   seo?: { title: string; description: string; canonicalUrl: string; structuredData: Record<string, unknown> };
 }) {
   const fields = publication.denormalizedFields;
   const location = fields.location as PublicLocation | undefined;
+  const geo = toPublicGeoPoint(publication.searchProjection?.geo);
+  const publicLocation = location || geo
+    ? {
+        country: location?.country,
+        city: location?.city,
+        address: location?.address,
+        ...(geo ? { geo } : {}),
+      }
+    : undefined;
 
   return {
     slug: publication.slug,
     name: fields.name,
-    location: location ? { country: location.country, city: location.city, address: location.address } : undefined,
+    location: publicLocation,
     classType: fields.classType,
     startDate: fields.startDate,
     completionDate: fields.completionDate,

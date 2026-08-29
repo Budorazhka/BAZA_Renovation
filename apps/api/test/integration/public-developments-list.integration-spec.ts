@@ -154,6 +154,7 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
     const firstItems = first.body.items as Array<Record<string, unknown>>;
     expect(firstItems).toHaveLength(2);
     expect(first.body.nextCursor).toBe(seeded[1]!.id.toString());
+    expect(firstItems[0]!.location).toMatchObject({ geo: { type: 'Point', coordinates: [41.6, 41.6] } });
 
     const second = await get(`?limit=2&cursor=${first.body.nextCursor}`);
     expect(second.statusCode).toBe(200);

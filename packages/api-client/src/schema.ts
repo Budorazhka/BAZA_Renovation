@@ -886,7 +886,7 @@ export interface components {
         PublicDevelopmentCard: {
             slug?: string;
             name?: string;
-            location?: Record<string, never>;
+            location?: components["schemas"]["PublicLocation"];
             priceFrom?: components["schemas"]["MoneyAmount"];
             seo?: {
                 title?: string;
@@ -935,7 +935,7 @@ export interface components {
             propertyType?: "apartment" | "house" | "land" | "commercial";
             /** @enum {string|null} */
             commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose" | null;
-            location?: Record<string, never>;
+            location?: components["schemas"]["PublicLocation"];
             characteristics?: {
                 area?: number;
                 rooms?: number | null;
@@ -951,6 +951,17 @@ export interface components {
                     [key: string]: unknown;
                 };
             };
+        };
+        PublicLocation: {
+            country?: string;
+            city?: string;
+            address?: string;
+            geo?: components["schemas"]["PublicGeoPoint"];
+        };
+        PublicGeoPoint: {
+            /** @enum {string} */
+            type: "Point";
+            coordinates: number[];
         };
         CreatePropertyAssetRequest: {
             /** @enum {string} */

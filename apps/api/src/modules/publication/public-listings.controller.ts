@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicListingsQueryDto } from './dto/search-public-listings-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
+import { toPublicGeoPoint } from './public-geo';
 
 @Controller('public/listings')
 export class PublicListingsController {
@@ -80,10 +81,12 @@ function toPublicSeo(seo: PublicListingSeo | undefined) {
 function toPublicListingCard(publication: {
   slug?: string;
   denormalizedFields: Record<string, unknown>;
+  searchProjection?: Record<string, unknown>;
   seo?: { title: string; description: string; canonicalUrl: string; structuredData: Record<string, unknown> };
 }) {
   const fields = publication.denormalizedFields;
   const location = fields.location as PublicListingLocation | undefined;
+  const geo = toPublicGeoPoint(publication.searchProjection?.geo);
   const price = fields.price as PublicListingPrice | undefined;
   const characteristics = fields.characteristics as PublicListingCharacteristics | undefined;
   const rawMedia = Array.isArray(fields.media) ? (fields.media as Array<Record<string, unknown>>) : [];
@@ -105,7 +108,15 @@ function toPublicListingCard(publication: {
     price: price ? { amountMinorUnits: price.amountMinorUnits, currency: price.currency } : undefined,
     propertyType: fields.propertyType,
     commercialSubtype: fields.commercialSubtype,
-    location: location ? { country: location.country, city: location.city, address: location.address } : undefined,
+    location:
+      location || geo
+        ? {
+            country: location?.country,
+            city: location?.city,
+            address: location?.address,
+            ...(geo ? { geo } : {}),
+          }
+        : undefined,
     characteristics: characteristics
       ? {
           area: characteristics.area,

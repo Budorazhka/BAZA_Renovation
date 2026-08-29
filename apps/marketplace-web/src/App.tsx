@@ -17,7 +17,9 @@ import { useListingDetail } from './hooks/useListingDetail'
 import { useSeoMetadata, buildListingJsonLd, buildDevelopmentJsonLd } from './hooks/useSeoMetadata'
 import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
+import { MarketplaceMap } from './components/MarketplaceMap'
 import type {
+  BoundingBox,
   PublicDevelopmentCard,
   PublicListingCard,
   ListingDealType,
@@ -27,6 +29,12 @@ import type {
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const listingsActive = location.search.includes('tab=listings')
+  const mapQuery = new URLSearchParams(location.search)
+  mapQuery.set('view', 'map')
+  const listQuery = new URLSearchParams(location.search)
+  listQuery.delete('view')
+  listQuery.delete('bbox')
+  const isMapView = location.search.includes('view=map')
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">
@@ -37,8 +45,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           BAZA
         </Link>
         <nav className="main-nav" aria-label="Основная навигация">
-          <Link to="/" className={`main-nav__link${listingsActive ? '' : ' is-active'}`}>Новостройки</Link>
-          <Link to="/?tab=listings" className={`main-nav__link${listingsActive ? ' is-active' : ''}`}>Вторичка</Link>
+          <Link to="/" role="tab" aria-selected={!listingsActive} className={`main-nav__link${listingsActive ? '' : ' is-active'}`}>Новостройки</Link>
+          <Link to="/?tab=listings" role="tab" aria-label="Вторичка и аренда" aria-selected={listingsActive} className={`main-nav__link${listingsActive ? ' is-active' : ''}`}>Вторичка</Link>
           <Link to="/" className="main-nav__link">Проекты</Link>
           <Link to="/?tab=listings&dealType=rent_long" className="main-nav__link">Аренда</Link>
           <Link to="/?tab=listings&propertyType=commercial" className="main-nav__link">Коммерция</Link>
@@ -58,8 +66,14 @@ function Shell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <div className="floating-controls" aria-label="Инструменты каталога">
-        <button type="button" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></button>
-        <button type="button" className="floating-control floating-control--map" aria-label="Показать на карте">♧</button>
+        <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
+        <Link
+          to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
+          className="floating-control floating-control--map"
+          aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
+        >
+          {isMapView ? '▤' : '♧'}
+        </Link>
       </div>
       <footer className="site-footer" role="contentinfo">
         <p>BAZA.sale · проверенный каталог объектов недвижимости</p>
@@ -174,6 +188,21 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
 
 type CatalogueTab = 'developments' | 'listings'
 
+function parseBoundingBox(value: string | null): BoundingBox | undefined {
+  if (!value) return undefined
+  const numbers = value.split(',').map(Number)
+  if (numbers.length !== 4 || numbers.some((number) => !Number.isFinite(number))) return undefined
+  const [minLng, minLat, maxLng, maxLat] = numbers
+  if (minLng < -180 || maxLng > 180 || minLat < -90 || maxLat > 90 || minLng >= maxLng || minLat >= maxLat) {
+    return undefined
+  }
+  return { minLng, minLat, maxLng, maxLat }
+}
+
+function serializeBoundingBox(bbox: BoundingBox): string {
+  return [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat].map((value) => value.toFixed(5)).join(',')
+}
+
 function CataloguePage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -185,6 +214,8 @@ function CataloguePage() {
   const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
   const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
   const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
+  const isMapView = searchParams.get('view') === 'map'
+  const bboxParam = parseBoundingBox(searchParams.get('bbox'))
 
   const [cityInput, setCityInput] = useState(cityParam)
 
@@ -196,6 +227,7 @@ function CataloguePage() {
   // Queries
   const developmentsQuery = useCatalogue({
     city: cityParam,
+    bbox: isMapView ? bboxParam : undefined,
   })
 
   const listingsQuery = useListingsCatalogue({
@@ -203,6 +235,7 @@ function CataloguePage() {
     dealType: dealTypeParam,
     propertyType: propertyTypeParam,
     commercialSubtype: commercialSubtypeParam,
+    bbox: isMapView ? bboxParam : undefined,
   })
 
   const isDev = tabParam === 'developments'
@@ -238,7 +271,25 @@ function CataloguePage() {
       dealType: undefined,
       propertyType: undefined,
       commercialSubtype: undefined,
+      bbox: undefined,
     })
+  }
+
+  function handleMapBoundsChange(nextBbox: BoundingBox) {
+    const serialized = serializeBoundingBox(nextBbox)
+    if (serialized === searchParams.get('bbox')) return
+    updateFilters({ bbox: serialized, view: 'map' })
+  }
+
+  function viewUrl(view: 'list' | 'map') {
+    const params = new URLSearchParams(searchParams)
+    if (view === 'map') params.set('view', 'map')
+    else {
+      params.delete('view')
+      params.delete('bbox')
+    }
+    params.delete('cursor')
+    return `/?${params.toString()}`
   }
 
   return (
@@ -264,6 +315,10 @@ function CataloguePage() {
             <button type="submit" aria-label="Найти объекты в городе">⌕</button>
           </form>
           <button className="sort-control" type="button" aria-label="Сортировка объектов">Сначала дешевле⌄</button>
+          <div className="view-toggle" role="group" aria-label="Вид каталога">
+            <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
+            <Link className={`view-toggle__link${isMapView ? ' is-active' : ''}`} to={viewUrl('map')}>Карта</Link>
+          </div>
           {(cityParam || dealTypeParam || propertyTypeParam) ? (
             <button className="clear-filter clear-filter--compact" type="button" onClick={clearAllFilters}>
               Сбросить
@@ -273,7 +328,7 @@ function CataloguePage() {
       </section>
 
       {tabParam === 'listings' ? (
-        <details className="filters-drawer">
+        <details id="catalogue-filters" className="filters-drawer" open>
           <summary>Фильтры и тип объекта</summary>
           <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
             <div className="catalogue-subfilters" role="group" aria-label="Тип сделки">
@@ -340,15 +395,26 @@ function CataloguePage() {
 
         {state.status === 'ready' ? (
           <>
-            <div className="development-grid">
-              {isDev
-                ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
-                    <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
-                  ))
-                : (state.items as PublicListingCard[]).map((item, index) => (
-                    <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
-                  ))}
-            </div>
+            {isMapView ? (
+              <MarketplaceMap
+                items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
+                onBoundsChange={handleMapBoundsChange}
+                onSelect={(item) => {
+                  if (!item.slug) return
+                  navigate(isDev ? `/developments/${item.slug}` : `/listings/${item.slug}`)
+                }}
+              />
+            ) : (
+              <div className="development-grid">
+                {isDev
+                  ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
+                      <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
+                    ))
+                  : (state.items as PublicListingCard[]).map((item, index) => (
+                      <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                    ))}
+              </div>
+            )}
 
             {state.loadMoreError && (
               <div className="pagination-error-panel" role="alert">

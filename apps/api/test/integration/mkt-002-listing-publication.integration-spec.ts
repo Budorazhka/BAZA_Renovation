@@ -256,6 +256,7 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
     expect(body).not.toHaveProperty('contact');
     expect(body.dealType).toBe('sale');
     expect(body.propertyType).toBe('apartment');
+    expect(body.location).toMatchObject({ geo: { type: 'Point', coordinates: [41.6, 41.64] } });
   });
 
   // 6. rent listing публикуется независимо от sale.

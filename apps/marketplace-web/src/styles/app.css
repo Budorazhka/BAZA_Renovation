@@ -726,6 +726,108 @@ main { padding: 22px clamp(18px, 5vw, 52px) 48px; }
 .floating-control--filters span { font-size: 13px; }
 .floating-control--map { top: 45%; right: -22px; }
 
+.marketplace-map {
+  position: relative;
+  min-height: min(72vh, 720px);
+  overflow: hidden;
+  border: 1px solid rgba(18, 44, 32, 0.16);
+  border-radius: 24px;
+  background: #dfe9df;
+}
+
+.marketplace-map__canvas {
+  min-height: min(72vh, 720px);
+  width: 100%;
+}
+
+.marketplace-map--unconfigured {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--figma-ink);
+}
+
+.marketplace-map--unconfigured strong {
+  font: 600 24px/1.1 var(--font-body);
+}
+
+.marketplace-map--unconfigured span,
+.marketplace-map--unconfigured small {
+  max-width: 520px;
+  color: rgba(18, 44, 32, 0.68);
+}
+
+.marketplace-map__error {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 247, 244, 0.94);
+  color: #9f2d23;
+  font-size: 13px;
+}
+
+.marketplace-map__marker {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: var(--figma-green);
+  box-shadow: 0 5px 16px rgba(15, 45, 29, 0.28);
+  cursor: pointer;
+  transform: rotate(-45deg);
+}
+
+.marketplace-map__marker::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin: 6px auto;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.marketplace-map__marker:focus-visible {
+  outline: 3px solid #dcae36;
+  outline-offset: 4px;
+}
+
+.view-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid rgba(18, 44, 32, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.view-toggle__link {
+  padding: 8px 12px;
+  border-radius: 999px;
+  color: rgba(18, 44, 32, 0.72);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.view-toggle__link.is-active {
+  background: var(--figma-green);
+  color: #fff;
+}
+
+@media (max-width: 680px) {
+  .marketplace-map,
+  .marketplace-map__canvas { min-height: 62vh; }
+
+  .view-toggle { order: 3; }
+}
+
 @media (max-width: 1180px) {
   .main-nav { gap: 14px; }
   .main-nav__link:nth-last-child(-n+2), .header-location { display: none; }
