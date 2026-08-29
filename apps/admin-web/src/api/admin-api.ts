@@ -3,6 +3,7 @@ import type {
   AdminMe,
   AdminPublicationList,
   AdminPublicationListQuery,
+  DeactivateReactivateResult,
   PermissionGrant,
   PermissionScope,
   UnpublishResult,
@@ -71,6 +72,10 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
       return request('/auth/login', { method: 'POST', body: JSON.stringify(params) })
     },
 
+    async logout(): Promise<{ loggedOut: true }> {
+      return request('/auth/logout', { method: 'POST' })
+    },
+
     async me(): Promise<AdminMe> {
       return request('/admin/me')
     },
@@ -120,6 +125,31 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
 
     async listGrants(adminAccountId: string): Promise<{ items: PermissionGrant[] }> {
       return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/grants`)
+    },
+
+    async deactivateAccount(adminAccountId: string, reason: string): Promise<DeactivateReactivateResult> {
+      return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/deactivate`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async reactivateAccount(adminAccountId: string, reason: string): Promise<DeactivateReactivateResult> {
+      return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/reactivate`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async revokeGrant(
+      adminAccountId: string,
+      grantId: string,
+      params: { reason: string; expectedVersion: number },
+    ): Promise<{ revoked: true }> {
+      return request(`/admin/accounts/${encodeURIComponent(adminAccountId)}/grants/${encodeURIComponent(grantId)}/revoke`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      })
     },
   }
 }

@@ -1,4 +1,5 @@
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { useAdminAuth } from './hooks/useAdminAuth'
 import { RequireAdmin, RequireSuperAdmin } from './hooks/RequireAdmin'
 import { LoginPage } from './pages/LoginPage'
@@ -6,8 +7,20 @@ import { PublicationsPage } from './pages/PublicationsPage'
 import { AccountsPage } from './pages/AccountsPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
-  const { state } = useAdminAuth()
+  const { state, logout } = useAdminAuth()
+  const navigate = useNavigate()
+  const [loggingOut, setLoggingOut] = useState(false)
   const isSuperAdmin = state.status === 'signed-in' && state.me.isSuperAdmin
+
+  async function handleLogout() {
+    setLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setLoggingOut(false)
+      navigate('/login', { replace: true })
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -20,14 +33,9 @@ function Shell({ children }: { children: React.ReactNode }) {
             <Link to="/publications">Публикации</Link>
             {isSuperAdmin ? <Link to="/accounts">Аккаунты</Link> : null}
             <span className="session-role">{isSuperAdmin ? 'super_admin' : 'admin'}</span>
-            {/*
-              Нет кнопки "Выйти" — POST /auth/logout не существует в API
-              (см. docs/operations/admin-control-plane.md "Не реализовано").
-              Симулировать logout удалением cookie на клиенте невозможно —
-              cookie httpOnly, JS её не видит и не может стереть; притворная
-              кнопка, которая ничего не делает на сервере, была бы обманом
-              пользователя, поэтому её здесь нет.
-            */}
+            <button type="button" className="secondary" onClick={() => void handleLogout()} disabled={loggingOut}>
+              {loggingOut ? 'Выходим…' : 'Выйти'}
+            </button>
           </nav>
         ) : null}
       </header>

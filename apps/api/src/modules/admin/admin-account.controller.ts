@@ -7,6 +7,9 @@ import { AdminAccountService } from './admin-account.service';
 import { CreateAdminAccountDto } from './dto/create-admin-account.dto';
 import { CreatePermissionGrantDto } from './dto/create-permission-grant.dto';
 import { ListAdminAccountsQueryDto } from './dto/list-admin-accounts-query.dto';
+import { DeactivateAdminAccountDto } from './dto/deactivate-admin-account.dto';
+import { ReactivateAdminAccountDto } from './dto/reactivate-admin-account.dto';
+import { RevokePermissionGrantDto } from './dto/revoke-permission-grant.dto';
 
 /**
  * НЕ в узкой OpenAPI-спеке (v1-first-vertical-slice.yaml специфицирует
@@ -88,12 +91,76 @@ export class AdminAccountController {
   /**
    * admin-web accounts screen: просмотр текущих grants аккаунта перед
    * выдачей нового — без этого super_admin не видит, что уже выдано, и
-   * рискует дублировать grant вслепую.
+   * рискует дублировать grant вслепую. Включает уже отозванные grants
+   * (см. AdminAccountService.listGrants) — UI показывает полную историю.
    */
   @Get(':adminAccountId/grants')
   async listGrants(@Req() req: FastifyRequest, @Param('adminAccountId') adminAccountIdParam: string) {
     const adminContext = requireAdminContext(req);
     const grants = await this.adminAccountService.listGrants(adminContext, new Types.ObjectId(adminAccountIdParam));
     return { items: grants };
+  }
+
+  /**
+   * Именование по существующему паттерну модуля: singular-verb-suffix,
+   * тот же стиль, что POST /admin/publications/:id/unpublish, не PATCH
+   * (нет ни одного PATCH-прецедента в этом модуле). reason обязателен
+   * (DeactivateAdminAccountDto, min 10 символов) — тот же порог, что
+   * unpublish. super_admin-only и self-deactivation/last-super-admin
+   * инварианты — целиком внутри AdminAccountService, не здесь (тот же
+   * принцип, что уже документирован в самом сервисе).
+   */
+  @Post(':adminAccountId/deactivate')
+  @HttpCode(200)
+  async deactivate(
+    @Req() req: FastifyRequest,
+    @Param('adminAccountId') adminAccountIdParam: string,
+    @Body() dto: DeactivateAdminAccountDto,
+  ): Promise<{ status: 'active' | 'deactivated' }> {
+    const adminContext = requireAdminContext(req);
+    return this.adminAccountService.deactivateAdminAccount(adminContext, {
+      adminAccountId: new Types.ObjectId(adminAccountIdParam),
+      reason: dto.reason,
+      correlationId: req.correlationId,
+    });
+  }
+
+  @Post(':adminAccountId/reactivate')
+  @HttpCode(200)
+  async reactivate(
+    @Req() req: FastifyRequest,
+    @Param('adminAccountId') adminAccountIdParam: string,
+    @Body() dto: ReactivateAdminAccountDto,
+  ): Promise<{ status: 'active' | 'deactivated' }> {
+    const adminContext = requireAdminContext(req);
+    return this.adminAccountService.reactivateAdminAccount(adminContext, {
+      adminAccountId: new Types.ObjectId(adminAccountIdParam),
+      reason: dto.reason,
+      correlationId: req.correlationId,
+    });
+  }
+
+  /**
+   * Append-only revoke (не DELETE — ничего физически не удаляется, см.
+   * PermissionGrantDocument.revokedAt). expectedVersion — CAS, конфликт
+   * возвращается как 409 VERSION_CONFLICT (см. AdminAccountService.revokeGrant).
+   */
+  @Post(':adminAccountId/grants/:grantId/revoke')
+  @HttpCode(200)
+  async revokeGrant(
+    @Req() req: FastifyRequest,
+    @Param('adminAccountId') adminAccountIdParam: string,
+    @Param('grantId') grantIdParam: string,
+    @Body() dto: RevokePermissionGrantDto,
+  ): Promise<{ revoked: true }> {
+    const adminContext = requireAdminContext(req);
+    await this.adminAccountService.revokeGrant(adminContext, {
+      adminAccountId: new Types.ObjectId(adminAccountIdParam),
+      grantId: new Types.ObjectId(grantIdParam),
+      expectedVersion: dto.expectedVersion,
+      reason: dto.reason,
+      correlationId: req.correlationId,
+    });
+    return { revoked: true };
   }
 }

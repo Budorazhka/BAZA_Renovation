@@ -1,0 +1,365 @@
+openapi: 3.0.3
+info:
+  title: BAZA API — admin/auth control plane slice
+  version: 0.1.0-proposed
+  description: >
+    Этот файл не существует в коммите fd08c94 (origin/codex/integration),
+    базовом для ветки codex/admin-lifecycle-hardening — подтверждено прямым
+    осмотром этого коммита. packages/api-client уже ссылается на путь
+    docs/api/v1-first-vertical-slice.yaml (generate/check-stale скрипты), но
+    сам файл ещё не создавался на этой линии истории. Документирует ТОЛЬКО
+    admin/auth-контур (apps/api/src/modules/admin,
+    apps/api/src/modules/auth) — session lifecycle, деактивация/
+    реактивация admin-аккаунтов, revoke grant'ов — в границах владения
+    этой задачи. Остальной API (organizations, developments, units,
+    property-assets, marketplace publications и т.д.) НЕ описан здесь:
+    он развивается параллельно на отдельной ветке
+    (codex/api-contract-reproducibility), вне границ владения этой задачи.
+    При интеграции веток этот файл потребует слияния с той, более широкой
+    версией спеки, не замены одной другой.
+servers:
+  - url: /api/v1
+tags:
+  - name: auth
+  - name: admin
+
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Вход — общий endpoint для marketplace/erp/admin, audience резолвится сервером по Origin.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [login, password]
+              properties:
+                login: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: >
+            Успешный вход. Выставляет httpOnly `baza_session` cookie
+            (ADR-004, host-only, без domain-атрибута; secure только в
+            production). Тело ответа не содержит токен.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identityId: { type: string }
+                  requires2fa: { type: boolean }
+        '401':
+          description: AUTH_INVALID_CREDENTIALS (тот же код для неверного логина/пароля и для "нет доступа к этому продукту" — anti-enumeration) или AUTH_2FA_REQUIRED.
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Выход — очищает cookie и инвалидирует серверную сессию.
+      description: >
+        НОВОЕ (codex/admin-lifecycle-hardening). Идемпотентен: отсутствие
+        cookie или уже отозванный/несуществующий токен всё равно отвечают
+        200 — logout не раскрывает, была ли сессия валидна (тот же
+        non-disclosure принцип, что login). Не логирует токен/cookie
+        (SessionService.revokeSession хеширует токен так же, как
+        createSession, значение сравнения никогда не пишется в лог).
+      security: []
+      responses:
+        '200':
+          description: Cookie очищена (Set-Cookie с истёкшим expires), сессия отозвана в БД, если существовала.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loggedOut: { type: boolean, enum: [true] }
+
+  /admin/me:
+    get:
+      tags: [admin]
+      summary: Whoami — текущий adminAccountId/isSuperAdmin/publicationReadScope.
+      description: >
+        Единственный источник истины для admin-web route guard'ов —
+        server-driven, не client-side флаг. Отражает live-агрегацию
+        активных (не отозванных) grants на момент запроса, без кэша: revoke
+        granta или деактивация аккаунта видны здесь немедленно на следующий
+        запрос.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  adminAccountId: { type: string }
+                  isSuperAdmin: { type: boolean }
+                  publicationReadScope:
+                    oneOf:
+                      - type: string
+                        enum: [all]
+                      - type: object
+                        additionalProperties:
+                          type: object
+                          properties:
+                            global: { type: boolean }
+                            cities: { type: array, items: { type: string } }
+        '401':
+          description: AUTH_NO_SESSION — запрос вообще без baza_session cookie (ИЗМЕНЕНО в этой ветке, см. "Известные ограничения" ниже).
+        '403':
+          description: FORBIDDEN — cookie присутствует, но не резолвится в валидный AdminContext (мусорный токен, чужой audience, деактивированный AdminAccount). Причина намеренно не различается клиенту.
+
+  /admin/accounts:
+    get:
+      tags: [admin]
+      summary: Список admin-аккаунтов (super_admin-only).
+      parameters:
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: SELF_ESCALATION_BLOCKED — вызвано не super_admin (не 200 с пустым списком — IDOR/enumeration prevention).
+    post:
+      tags: [admin]
+      summary: Создать admin-аккаунт (super_admin-only, требует уже существующий identityId).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identityId]
+              properties:
+                identityId: { type: string }
+                isSuperAdmin: { type: boolean, default: false }
+      responses:
+        '201':
+          description: Создан.
+        '403':
+          description: SELF_ESCALATION_BLOCKED.
+
+  /admin/accounts/{adminAccountId}/deactivate:
+    post:
+      tags: [admin]
+      summary: Деактивировать admin-аккаунт (super_admin-only).
+      description: >
+        НОВОЕ (codex/admin-lifecycle-hardening). Транзакционно: status→
+        'deactivated' + отзыв всех admin-audience сессий этой identity +
+        audit-запись — одна атомарная операция. Инварианты: self-
+        deactivation запрещена полностью (ADMIN_SELF_DEACTIVATION_BLOCKED);
+        последний активный super_admin не может быть деактивирован никем
+        (ADMIN_LAST_SUPER_ADMIN); повторный вызов на уже деактивированный
+        аккаунт — идемпотентный no-op (200, тот же ответ), не ошибка.
+      parameters:
+        - in: path
+          name: adminAccountId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [active, deactivated] }
+        '400':
+          description: ADMIN_REASON_REQUIRED-эквивалент — DTO-валидация reason.
+        '403':
+          description: SELF_ESCALATION_BLOCKED (вызвано не super_admin) | ADMIN_SELF_DEACTIVATION_BLOCKED (попытка деактивировать себя) | ADMIN_LAST_SUPER_ADMIN (последний активный super_admin).
+        '404':
+          description: NOT_FOUND — аккаунт не существует (единый код, не раскрывающий детали).
+
+  /admin/accounts/{adminAccountId}/reactivate:
+    post:
+      tags: [admin]
+      summary: Восстановить доступ ранее деактивированному admin-аккаунту (super_admin-only).
+      description: >
+        НОВОЕ. Симметрично deactivate, без last-super-admin/self-
+        deactivation инвариантов. Не восстанавливает старую сессию —
+        аккаунт логинится заново. Идемпотентен: повторный вызов на уже
+        активный аккаунт — no-op.
+      parameters:
+        - in: path
+          name: adminAccountId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 10 }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: SELF_ESCALATION_BLOCKED.
+        '404':
+          description: NOT_FOUND.
+
+  /admin/accounts/{adminAccountId}/grants:
+    post:
+      tags: [admin]
+      summary: Выдать право доступа (super_admin-only, один grant за вызов).
+      parameters:
+        - in: path
+          name: adminAccountId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action, scope]
+              properties:
+                resource: { type: string }
+                action: { type: string }
+                scope:
+                  type: string
+                  enum: [own, position, team, organization, project, city, global, assigned, domain]
+                scopeValue: { type: string }
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: SELF_ESCALATION_BLOCKED.
+        '404':
+          description: NOT_FOUND.
+    get:
+      tags: [admin]
+      summary: Список grants аккаунта (super_admin-only), включая уже отозванные.
+      description: >
+        ИЗМЕНЕНО (codex/admin-lifecycle-hardening): раньше возвращал только
+        активные grants; теперь возвращает полную историю (включая
+        revokedAt/revokedBy/revokeReason), чтобы UI мог показать, что было
+        отозвано и почему, не только текущее подмножество. version на
+        каждом элементе — обязателен для последующего revoke (CAS).
+      parameters:
+        - in: path
+          name: adminAccountId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        resource: { type: string }
+                        action: { type: string }
+                        scope: { type: string }
+                        scopeValue: { type: string }
+                        version: { type: integer }
+                        revokedAt: { type: string, format: date-time }
+                        revokedBy: { type: string }
+                        revokeReason: { type: string }
+        '403':
+          description: SELF_ESCALATION_BLOCKED (не раскрывает чужие grants — IDOR prevention).
+        '404':
+          description: NOT_FOUND.
+
+  /admin/accounts/{adminAccountId}/grants/{grantId}/revoke:
+    post:
+      tags: [admin]
+      summary: Отозвать право доступа (super_admin-only).
+      description: >
+        НОВОЕ. Append-only — ничего не удаляется физически, grant
+        помечается revokedAt/revokedBy/revokeReason
+        (PermissionGrantDocument, permission_grants коллекция).
+        expectedVersion — обязательная optimistic concurrency (CAS):
+        клиент передаёт version, прочитанную вместе со списком grants;
+        конфликт (уже отозван кем-то другим, или список устарел) — 409
+        VERSION_CONFLICT, не тихий успех и не молчаливое игнорирование.
+        GET /admin/me для владельца granta немедленно перестаёт отражать
+        отозванное право на следующий же запрос (нет кэша).
+      parameters:
+        - in: path
+          name: adminAccountId
+          required: true
+          schema: { type: string }
+        - in: path
+          name: grantId
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, expectedVersion]
+              properties:
+                reason: { type: string, minLength: 10 }
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked: { type: boolean, enum: [true] }
+        '400':
+          description: DTO-валидация (reason/expectedVersion отсутствуют или некорректны).
+        '403':
+          description: SELF_ESCALATION_BLOCKED — вызвано не super_admin.
+        '404':
+          description: NOT_FOUND — аккаунт не существует, или grant не существует, или grant принадлежит другому аккаунту (единый код, не раскрывающий разницу).
+        '409':
+          description: VERSION_CONFLICT — grant уже отозван, или expectedVersion устарел (гонка/устаревший клиентский список).
+
+components:
+  schemas: {}
+
+# Известные ограничения этого среза (codex/admin-lifecycle-hardening,
+# см. docs/operations/admin-control-plane.md за полным описанием):
+#
+# 1. Country-scope НЕ поддерживается — модель авторизации (PermissionScope)
+#    знает только city/global (и другие немасштабные значения), не
+#    country-иерархию. Не реализовано намеренно, вне границ владения
+#    задачи (admin/auth контур, не расширение domain-модели scope).
+# 2. Email invite для новых admin-аккаунтов НЕ реализован — POST
+#    /admin/accounts принимает только уже существующий identityId.
+# 3. Произвольная новая authorization model НЕ вводилась — grants
+#    по-прежнему только city/global (и остальные существующие scope),
+#    revoke не меняет саму модель прав, только жизненный цикл записи
+#    (append-only revoke поверх существующей PermissionGrantDocument).
+# 4. Остальной API-контракт (organizations/developments/units/
+#    property-assets/marketplace publications и т.д.) НЕ описан этим
+#    файлом — развивается параллельно на codex/api-contract-reproducibility,
+#    вне границ владения этой задачи. Слияние веток потребует объединения
+#    обеих версий этого файла, не выбора одной вместо другой.

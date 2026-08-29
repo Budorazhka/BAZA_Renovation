@@ -136,3 +136,79 @@ describe('useAdminAuth throws outside its provider — no silent undefined-conte
     expect(() => render(<Unwrapped />)).toThrow(/useAdminAuth must be used within AdminAuthProvider/)
   })
 })
+
+describe('useAdminAuth.logout — реально вызывает POST /auth/logout, переводит state в signed-out', () => {
+  function mockAdminApiMeAndLogout(logoutImpl: () => Promise<unknown>) {
+    vi.doMock('../src/api/admin-api', async () => {
+      const actual = await vi.importActual<typeof import('../src/api/admin-api')>('../src/api/admin-api')
+      return {
+        ...actual,
+        adminApi: {
+          ...actual.adminApi,
+          me: () => Promise.resolve({ adminAccountId: 'a1', isSuperAdmin: true, publicationReadScope: 'all' }),
+          logout: logoutImpl,
+        },
+      }
+    })
+  }
+
+  it('logout() вызывает реальный adminApi.logout и переводит state в signed-out после успеха', async () => {
+    const logoutSpy = vi.fn(() => Promise.resolve({ loggedOut: true as const }))
+    mockAdminApiMeAndLogout(logoutSpy)
+    const { AdminAuthProvider: Provider } = await import('../src/hooks/useAdminAuth')
+    const { useAdminAuth: useAuth } = await import('../src/hooks/useAdminAuth')
+
+    function Probe() {
+      const { state, logout } = useAuth()
+      return (
+        <div>
+          <span data-testid="status">{state.status}</span>
+          <button onClick={() => void logout()}>logout</button>
+        </div>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/publications']}>
+        <Provider>
+          <Probe />
+        </Provider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('signed-in'))
+    screen.getByText('logout').click()
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('signed-out'))
+    expect(logoutSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('logout() всё равно переводит state в signed-out, даже если сетевой запрос падает', async () => {
+    mockAdminApiMeAndLogout(() => Promise.reject(new Error('network error')))
+    const { AdminAuthProvider: Provider } = await import('../src/hooks/useAdminAuth')
+    const { useAdminAuth: useAuth } = await import('../src/hooks/useAdminAuth')
+
+    function Probe() {
+      const { state, logout } = useAuth()
+      return (
+        <div>
+          <span data-testid="status">{state.status}</span>
+          <button onClick={() => void logout()}>logout</button>
+        </div>
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/publications']}>
+        <Provider>
+          <Probe />
+        </Provider>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('signed-in'))
+    screen.getByText('logout').click()
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('signed-out'))
+  })
+})
