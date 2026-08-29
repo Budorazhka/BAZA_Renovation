@@ -64,7 +64,6 @@ export function MarketplaceMap({ items, onBoundsChange, onSelect }: MarketplaceM
       style: styleUrl,
       center: DEFAULT_CENTER,
       zoom: 10,
-      attributionControl: true,
     })
     mapRef.current = map
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
@@ -84,7 +83,9 @@ export function MarketplaceMap({ items, onBoundsChange, onSelect }: MarketplaceM
       }
 
       const bounds = boundsFor(points)
-      if (bounds && !map.getCenter().equals(bounds.getCenter())) {
+      const center = map.getCenter()
+      const target = bounds?.getCenter()
+      if (bounds && target && (Math.abs(center.lng - target.lng) > 0.00001 || Math.abs(center.lat - target.lat) > 0.00001)) {
         map.fitBounds(bounds, { padding: 64, maxZoom: 14, duration: 0 })
       }
     }
