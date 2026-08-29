@@ -1,94 +1,143 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { marketplaceApi } from '../api/marketplace-api'
+import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
 import type { BoundingBox, PublicDevelopmentCard } from '../types/marketplace'
 
 export type CatalogueState =
   | { status: 'loading' }
   | { status: 'empty' }
-  | { status: 'ready'; items: PublicDevelopmentCard[]; nextCursor: string | null; loadingMore: boolean }
-  | { status: 'error'; message: string; retry: () => void }
+  | {
+      status: 'ready'
+      items: PublicDevelopmentCard[]
+      nextCursor: string | null
+      loadingMore: boolean
+      loadMoreError: string | null
+    }
+  | { status: 'error'; message: string; statusCode?: number; retry: () => void }
 
 export interface UseCatalogueQuery {
   city?: string
   bbox?: BoundingBox
+  limit?: number
 }
 
-/**
- * D-04A: логика из CataloguePage поднята сюда без изменения поведения —
- * discriminated union делает 'empty' (успешный fetch, 0 items) отдельным,
- * тестируемым вариантом вместо вложенного JSX-if внутри 'ready'. 400
- * (невалидный фильтр) и network failure (fetcher reject) оба попадают в
- * 'error' — на уровне hook'а это одинаково "запрос не удался", различение
- * не требуется как отдельный state (см. plan §6).
- */
-export function useCatalogue(query: UseCatalogueQuery): { state: CatalogueState; loadMore: () => void } {
+export function useCatalogue(query: UseCatalogueQuery = {}): {
+  state: CatalogueState
+  loadMore: () => void
+  retryLoadMore: () => void
+} {
   const [state, setState] = useState<CatalogueState>({ status: 'loading' })
-  // nextCursor читается из loadMore, который не должен пересоздаваться при
-  // каждом изменении state — ref избегает лишней зависимости в useCallback.
   const nextCursorRef = useRef<string | null>(null)
-  // Monotonic id текущего "актуального" запроса первой страницы — при
-  // быстрой смене city/bbox между рендерами предыдущий fetch может
-  // резолвиться ПОЗЖЕ уже стартовавшего нового; без guard устаревший ответ
-  // перезаписал бы state, актуальный уже для другого фильтра.
   const requestIdRef = useRef(0)
-  const { city, bbox } = query
-  // Стабилизирует bbox для useCallback-зависимостей по значению, не по
-  // ссылке — вызывающий код (CataloguePage) сегодня не передаёт bbox
-  // вообще, но объект-литерал {minLng,...}, создаваемый заново на каждый
-  // рендер без useMemo на вызывающей стороне, иначе пересоздавал бы
-  // loadFirstPage/useEffect на каждый рендер — бесконечный цикл fetch→
-  // setState→render→новый bbox-объект→новый fetch. bboxKey — примитив,
-  // стабилен между рендерами при тех же значениях координат.
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const { city, bbox, limit = 12 } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
   const loadFirstPage = useCallback(async () => {
     const requestId = ++requestIdRef.current
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     setState({ status: 'loading' })
+    nextCursorRef.current = null
+
     try {
-      const response = await marketplaceApi.listDevelopments({ city: city || undefined, bbox, limit: 12 })
-      if (requestIdRef.current !== requestId) return
+      const response = await marketplaceApi.listDevelopments(
+        { city: city?.trim() || undefined, bbox, limit },
+        { signal: controller.signal },
+      )
+
+      if (requestIdRef.current !== requestId || controller.signal.aborted) return
+
       nextCursorRef.current = response.nextCursor
       if (response.items.length === 0) {
         setState({ status: 'empty' })
       } else {
-        setState({ status: 'ready', items: response.items, nextCursor: response.nextCursor, loadingMore: false })
+        setState({
+          status: 'ready',
+          items: response.items,
+          nextCursor: response.nextCursor,
+          loadingMore: false,
+          loadMoreError: null,
+        })
       }
     } catch (cause) {
-      if (requestIdRef.current !== requestId) return
+      if (
+        requestIdRef.current !== requestId ||
+        controller.signal.aborted ||
+        (cause instanceof DOMException && cause.name === 'AbortError')
+      ) {
+        return
+      }
       nextCursorRef.current = null
-      const message = cause instanceof Error ? cause.message : 'Не удалось загрузить каталог.'
-      setState({ status: 'error', message, retry: () => void loadFirstPage() })
+      const statusCode = cause instanceof MarketplaceApiError ? cause.status : undefined
+      const message =
+        cause instanceof Error
+          ? cause.message
+          : 'Не удалось загрузить каталог новостроек. Проверьте соединение и попробуйте снова.'
+      setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, bboxKey])
+  }, [city, bboxKey, limit])
 
   useEffect(() => {
     void loadFirstPage()
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
+    }
   }, [loadFirstPage])
 
-  const loadMore = useCallback(() => {
+  const executeLoadMore = useCallback(() => {
     const cursor = nextCursorRef.current
     if (!cursor) return
     const requestId = requestIdRef.current
-    setState((current) => (current.status === 'ready' ? { ...current, loadingMore: true } : current))
-    void marketplaceApi.listDevelopments({ city: city || undefined, bbox, cursor, limit: 12 }).then(
-      (response) => {
-        if (requestIdRef.current !== requestId) return
-        nextCursorRef.current = response.nextCursor
-        setState((current) =>
-          current.status === 'ready'
-            ? { status: 'ready', items: [...current.items, ...response.items], nextCursor: response.nextCursor, loadingMore: false }
-            : current,
-        )
-      },
-      (cause: unknown) => {
-        if (requestIdRef.current !== requestId) return
-        const message = cause instanceof Error ? cause.message : 'Не удалось загрузить следующую страницу.'
-        setState({ status: 'error', message, retry: () => void loadFirstPage() })
-      },
-    )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [city, bboxKey, loadFirstPage])
 
-  return { state, loadMore }
+    setState((current) => (current.status === 'ready' ? { ...current, loadingMore: true, loadMoreError: null } : current))
+
+    void marketplaceApi
+      .listDevelopments({
+        city: city?.trim() || undefined,
+        bbox,
+        cursor,
+        limit,
+      })
+      .then(
+        (response) => {
+          if (requestIdRef.current !== requestId) return
+          nextCursorRef.current = response.nextCursor
+
+          setState((current) => {
+            if (current.status !== 'ready') return current
+            const existingKeys = new Set(current.items.map((i) => i.slug || i.name))
+            const newItems = response.items.filter((i) => !existingKeys.has(i.slug || i.name))
+            return {
+              status: 'ready',
+              items: [...current.items, ...newItems],
+              nextCursor: response.nextCursor,
+              loadingMore: false,
+              loadMoreError: null,
+            }
+          })
+        },
+        (cause: unknown) => {
+          if (requestIdRef.current !== requestId) return
+          const message =
+            cause instanceof Error ? cause.message : 'Не удалось загрузить следующую страницу. Попробуйте ещё раз.'
+          setState((current) =>
+            current.status === 'ready'
+              ? {
+                  ...current,
+                  loadingMore: false,
+                  loadMoreError: message,
+                }
+              : current,
+          )
+        },
+      )
+  }, [city, bboxKey, limit])
+
+  return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

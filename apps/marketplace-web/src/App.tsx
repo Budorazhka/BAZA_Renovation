@@ -1,5 +1,5 @@
-import { FormEvent, useState } from 'react'
-import { Link, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { FormEvent, useEffect, useState, useTransition } from 'react'
+import { Link, Route, Routes, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   completionLabel,
   developmentAddress,
@@ -14,25 +14,34 @@ import { useCatalogue } from './hooks/useCatalogue'
 import { useDevelopmentDetail } from './hooks/useDevelopmentDetail'
 import { useListingsCatalogue } from './hooks/useListingsCatalogue'
 import { useListingDetail } from './hooks/useListingDetail'
+import { useSeoMetadata, buildListingJsonLd, buildDevelopmentJsonLd } from './hooks/useSeoMetadata'
 import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
 import type {
   PublicDevelopmentCard,
   PublicListingCard,
   ListingDealType,
+  ListingPropertyType,
 } from './types/marketplace'
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
-      <header className="site-header">
-        <Link className="wordmark" to="/" aria-label="BAZA.sale, каталог недвижимости">
+      <a href="#main-content" className="skip-link">
+        Перейти к основному содержанию
+      </a>
+      <header className="site-header" role="banner">
+        <Link className="wordmark" to="/" aria-label="BAZA.sale, каталог объектов недвижимости">
           BAZA<span>.sale</span>
         </Link>
         <p className="header-caption">Недвижимость без лишнего шума</p>
       </header>
-      <main>{children}</main>
-      <footer className="site-footer">BAZA.sale · каталог объектов недвижимости</footer>
+      <main id="main-content" tabIndex={-1}>
+        {children}
+      </main>
+      <footer className="site-footer" role="contentinfo">
+        <p>BAZA.sale · проверенный каталог объектов недвижимости</p>
+      </footer>
     </div>
   )
 }
@@ -65,7 +74,7 @@ function DevelopmentCard({ item }: { item: PublicDevelopmentCard }) {
     </>
   )
   return slug ? (
-    <Link className="development-card" to={`/developments/${slug}`}>
+    <Link className="development-card" to={`/developments/${slug}`} aria-label={`Жилой комплекс ${developmentTitle(item)}`}>
       {content}
     </Link>
   ) : (
@@ -101,7 +110,7 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
         <p className="listing-card-price">{listingPrice(item)}</p>
         <h2>{listingTitle(item)}</h2>
         <p className="address">{listingAddress(item)}</p>
-        <div className="listing-chips">
+        <div className="listing-chips" aria-label="Характеристики объекта">
           {item.characteristics?.rooms ? (
             <span className="listing-chip">{item.characteristics.rooms} комн.</span>
           ) : null}
@@ -123,7 +132,7 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
     </>
   )
   return slug ? (
-    <Link className="development-card" to={`/listings/${slug}`}>
+    <Link className="development-card" to={`/listings/${slug}`} aria-label={`Объявление: ${listingTitle(item)}`}>
       {content}
     </Link>
   ) : (
@@ -135,153 +144,338 @@ type CatalogueTab = 'developments' | 'listings'
 
 function CataloguePage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<CatalogueTab>('developments')
-  const [cityInput, setCityInput] = useState('')
-  const [activeCity, setActiveCity] = useState('')
-  const [dealTypeFilter, setDealTypeFilter] = useState<ListingDealType | undefined>(undefined)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [, startTransition] = useTransition()
 
-  const developmentsQuery = useCatalogue({ city: activeCity })
-  const listingsQuery = useListingsCatalogue({
-    city: activeCity,
-    dealType: dealTypeFilter,
+  // Read URL parameters
+  const tabParam = (searchParams.get('tab') as CatalogueTab) || 'developments'
+  const cityParam = searchParams.get('city') || ''
+  const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
+  const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
+  const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
+
+  const [cityInput, setCityInput] = useState(cityParam)
+
+  // Keep input synchronized if URL changes (e.g. back/forward button)
+  useEffect(() => {
+    setCityInput(cityParam)
+  }, [cityParam])
+
+  // Queries
+  const developmentsQuery = useCatalogue({
+    city: cityParam,
   })
+
+  const listingsQuery = useListingsCatalogue({
+    city: cityParam,
+    dealType: dealTypeParam,
+    propertyType: propertyTypeParam,
+    commercialSubtype: commercialSubtypeParam,
+  })
+
+  const isDev = tabParam === 'developments'
+  const state = isDev ? developmentsQuery.state : listingsQuery.state
+  const loadMore = isDev ? developmentsQuery.loadMore : listingsQuery.loadMore
+  const retryLoadMore = isDev ? developmentsQuery.retryLoadMore : listingsQuery.retryLoadMore
+
+  // Update URL helper (resets cursor)
+  function updateFilters(updates: Record<string, string | undefined>) {
+    startTransition(() => {
+      const nextParams = new URLSearchParams(searchParams)
+      for (const [key, value] of Object.entries(updates)) {
+        if (value === undefined || value === '') {
+          nextParams.delete(key)
+        } else {
+          nextParams.set(key, value)
+        }
+      }
+      nextParams.delete('cursor')
+      setSearchParams(nextParams, { replace: false })
+    })
+  }
+
+  function handleTabChange(tab: CatalogueTab) {
+    if (tab === 'developments') {
+      updateFilters({
+        tab: undefined, // default
+        dealType: undefined,
+        propertyType: undefined,
+        commercialSubtype: undefined,
+      })
+    } else {
+      updateFilters({ tab: 'listings' })
+    }
+  }
 
   function submitCity(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setActiveCity(cityInput.trim())
+    updateFilters({ city: cityInput.trim() || undefined })
   }
 
-  const isDev = activeTab === 'developments'
-  const state = isDev ? developmentsQuery.state : listingsQuery.state
-  const loadMore = isDev ? developmentsQuery.loadMore : listingsQuery.loadMore
+  function clearAllFilters() {
+    setCityInput('')
+    updateFilters({
+      city: undefined,
+      dealType: undefined,
+      propertyType: undefined,
+      commercialSubtype: undefined,
+    })
+  }
 
   return (
     <Shell>
-      <section className="catalogue-intro">
+      <section className="catalogue-intro" aria-labelledby="catalogue-heading">
         <div>
-          <div className="catalogue-tabs" role="tablist">
+          <nav className="catalogue-tabs" role="tablist" aria-label="Разделы каталога">
             <button
               type="button"
-              className={`catalogue-tab-btn${activeTab === 'developments' ? ' is-active' : ''}`}
-              onClick={() => setActiveTab('developments')}
+              role="tab"
+              aria-selected={tabParam === 'developments'}
+              className={`catalogue-tab-btn${tabParam === 'developments' ? ' is-active' : ''}`}
+              onClick={() => handleTabChange('developments')}
             >
               Новостройки
             </button>
             <button
               type="button"
-              className={`catalogue-tab-btn${activeTab === 'listings' ? ' is-active' : ''}`}
-              onClick={() => setActiveTab('listings')}
+              role="tab"
+              aria-selected={tabParam === 'listings'}
+              className={`catalogue-tab-btn${tabParam === 'listings' ? ' is-active' : ''}`}
+              onClick={() => handleTabChange('listings')}
             >
               Вторичка и аренда
             </button>
-          </div>
+          </nav>
+
           <p className="section-kicker">
-            {activeTab === 'developments' ? 'Каталог новостроек' : 'Вторичная недвижимость и аренда'}
+            {tabParam === 'developments' ? 'Каталог новостроек' : 'Вторичная недвижимость и аренда'}
           </p>
-          <h1>Место, где начинается ваш новый адрес.</h1>
+          <h1 id="catalogue-heading">Место, где начинается ваш новый адрес.</h1>
           <p className="intro-copy">
-            {activeTab === 'developments'
+            {tabParam === 'developments'
               ? 'Собрали проверенные жилые комплексы в одном понятном каталоге.'
               : 'Актуальные квартиры, дома и коммерческие помещения от собственников и агентств.'}
           </p>
 
-          {activeTab === 'listings' && (
-            <div className="catalogue-subfilters">
-              <button
-                type="button"
-                className={`filter-chip${dealTypeFilter === undefined ? ' is-active' : ''}`}
-                onClick={() => setDealTypeFilter(undefined)}
-              >
-                Все типы сделок
-              </button>
-              <button
-                type="button"
-                className={`filter-chip${dealTypeFilter === 'sale' ? ' is-active' : ''}`}
-                onClick={() => setDealTypeFilter('sale')}
-              >
-                Купить
-              </button>
-              <button
-                type="button"
-                className={`filter-chip${dealTypeFilter === 'rent_long' ? ' is-active' : ''}`}
-                onClick={() => setDealTypeFilter('rent_long')}
-              >
-                Снять длительно
-              </button>
-              <button
-                type="button"
-                className={`filter-chip${dealTypeFilter === 'rent_short' ? ' is-active' : ''}`}
-                onClick={() => setDealTypeFilter('rent_short')}
-              >
-                Посуточно
-              </button>
+          {tabParam === 'listings' && (
+            <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
+              <div className="catalogue-subfilters" role="group" aria-label="Тип сделки">
+                <button
+                  type="button"
+                  className={`filter-chip${dealTypeParam === undefined ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ dealType: undefined })}
+                >
+                  Все типы сделок
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${dealTypeParam === 'sale' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ dealType: 'sale' })}
+                >
+                  Купить
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${dealTypeParam === 'rent_long' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ dealType: 'rent_long' })}
+                >
+                  Снять длительно
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${dealTypeParam === 'rent_short' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ dealType: 'rent_short' })}
+                >
+                  Посуточно
+                </button>
+              </div>
+
+              <div className="catalogue-subfilters" role="group" aria-label="Тип недвижимости">
+                <button
+                  type="button"
+                  className={`filter-chip${propertyTypeParam === undefined ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ propertyType: undefined, commercialSubtype: undefined })}
+                >
+                  Все объекты
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${propertyTypeParam === 'apartment' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ propertyType: 'apartment', commercialSubtype: undefined })}
+                >
+                  Квартиры
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${propertyTypeParam === 'house' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ propertyType: 'house', commercialSubtype: undefined })}
+                >
+                  Дома и виллы
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${propertyTypeParam === 'commercial' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ propertyType: 'commercial' })}
+                >
+                  Коммерческая
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip${propertyTypeParam === 'land' ? ' is-active' : ''}`}
+                  onClick={() => updateFilters({ propertyType: 'land', commercialSubtype: undefined })}
+                >
+                  Участки
+                </button>
+              </div>
+
+              {propertyTypeParam === 'commercial' && (
+                <div className="catalogue-subfilters" role="group" aria-label="Подтип коммерческой недвижимости">
+                  <button
+                    type="button"
+                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === undefined ? ' is-active' : ''}`}
+                    onClick={() => updateFilters({ commercialSubtype: undefined })}
+                  >
+                    Все форматы
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'office' ? ' is-active' : ''}`}
+                    onClick={() => updateFilters({ commercialSubtype: 'office' })}
+                  >
+                    Офис
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'retail' ? ' is-active' : ''}`}
+                    onClick={() => updateFilters({ commercialSubtype: 'retail' })}
+                  >
+                    Торговое
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'warehouse' ? ' is-active' : ''}`}
+                    onClick={() => updateFilters({ commercialSubtype: 'warehouse' })}
+                  >
+                    Склад
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter-chip filter-chip--sub${commercialSubtypeParam === 'free_purpose' ? ' is-active' : ''}`}
+                    onClick={() => updateFilters({ commercialSubtype: 'free_purpose' })}
+                  >
+                    Свободное назначение
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-        <form className="city-form" onSubmit={submitCity}>
+
+        <form className="city-form" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
           <label htmlFor="city">Город</label>
           <div className="city-form__control">
             <input
               id="city"
+              name="city"
+              type="search"
+              autoComplete="address-level2"
               value={cityInput}
               onChange={(event) => setCityInput(event.target.value)}
               placeholder="Например, Батуми"
             />
-            <button type="submit">Найти</button>
+            <button type="submit" aria-label="Найти объекты в городе">
+              Найти
+            </button>
           </div>
-          {activeCity ? (
+          {cityParam || dealTypeParam || propertyTypeParam ? (
             <button
               className="clear-filter"
               type="button"
-              onClick={() => {
-                setCityInput('')
-                setActiveCity('')
-              }}
+              onClick={clearAllFilters}
+              aria-label="Сбросить все применённые фильтры"
             >
-              Сбросить фильтр
+              Сбросить фильтры
             </button>
           ) : null}
         </form>
       </section>
 
-      <section className="catalogue-section" aria-live="polite">
+      <section className="catalogue-section" aria-live="polite" aria-labelledby="catalogue-results-heading">
         <div className="section-heading">
-          <p>
-            {activeCity
-              ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${activeCity}`
+          <h2 id="catalogue-results-heading">
+            {cityParam
+              ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
               : `Все опубликованные ${isDev ? 'ЖК' : 'объекты'}`}
-          </p>
+          </h2>
           {state.status === 'ready' ? <span>{`Показано: ${state.items.length}`}</span> : null}
           {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
         </div>
 
-        {state.status === 'loading' ? <div className="state-panel">Загружаем каталог…</div> : null}
+        {state.status === 'loading' ? (
+          <div className="state-panel" role="status" aria-busy="true">
+            Загружаем каталог…
+          </div>
+        ) : null}
+
         {state.status === 'error' ? (
-          <div className="state-panel state-panel--error">
+          <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
-            <button type="button" onClick={state.retry}>
-              Повторить
+            <button type="button" className="retry-btn" onClick={state.retry}>
+              Повторить попытку
             </button>
           </div>
         ) : null}
+
         {state.status === 'empty' ? (
-          <div className="state-panel">По этому запросу пока нет опубликованных объектов.</div>
-        ) : null}
-        {state.status === 'ready' ? (
-          <div className="development-grid">
-            {isDev
-              ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
-                  <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
-                ))
-              : (state.items as PublicListingCard[]).map((item, index) => (
-                  <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
-                ))}
+          <div className="state-panel state-panel--empty">
+            <p>По выбранным параметрам пока нет опубликованных объектов.</p>
+            {(cityParam || dealTypeParam || propertyTypeParam) && (
+              <button type="button" className="clear-filter-btn" onClick={clearAllFilters}>
+                Сбросить фильтры
+              </button>
+            )}
           </div>
         ) : null}
-        {state.status === 'ready' && state.nextCursor ? (
-          <button className="load-more" type="button" onClick={loadMore} disabled={state.loadingMore}>
-            {state.loadingMore ? 'Загружаем…' : 'Показать ещё'}
-          </button>
+
+        {state.status === 'ready' ? (
+          <>
+            <div className="development-grid">
+              {isDev
+                ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
+                    <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
+                  ))
+                : (state.items as PublicListingCard[]).map((item, index) => (
+                    <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                  ))}
+            </div>
+
+            {state.loadMoreError && (
+              <div className="pagination-error-panel" role="alert">
+                <p>{state.loadMoreError}</p>
+                <button type="button" className="retry-btn" onClick={retryLoadMore}>
+                  Попробовать снова
+                </button>
+              </div>
+            )}
+
+            {state.nextCursor ? (
+              <div className="load-more-container">
+                <button
+                  className="load-more"
+                  type="button"
+                  onClick={loadMore}
+                  disabled={state.loadingMore}
+                  aria-busy={state.loadingMore}
+                >
+                  {state.loadingMore ? 'Загружаем…' : 'Показать ещё'}
+                </button>
+              </div>
+            ) : (
+              <p className="catalogue-end-note" aria-live="polite">
+                Все доступные объекты показаны
+              </p>
+            )}
+          </>
         ) : null}
       </section>
 
@@ -296,23 +490,46 @@ function DevelopmentDetailPage() {
   const { slug } = useParams()
   const state = useDevelopmentDetail(slug)
 
+  useSeoMetadata(
+    state.status === 'ready'
+      ? {
+          title: developmentTitle(state.item),
+          description: state.item.description || `Жилой комплекс ${developmentTitle(state.item)}`,
+          jsonLd: buildDevelopmentJsonLd(
+            state.item,
+            typeof window !== 'undefined' ? window.location.origin : ''
+          ),
+        }
+      : {
+          title: state.status === 'not-found' ? 'Объект не найден' : undefined,
+        }
+  )
+
   return (
     <Shell>
-      <section className="detail-page">
-        <Link className="back-link" to="/">
+      <section className="detail-page" aria-labelledby="development-detail-title">
+        <Link className="back-link" to="/" aria-label="Вернуться в каталог объектов">
           ← В каталог
         </Link>
-        {state.status === 'loading' ? <div className="state-panel">Загружаем объект…</div> : null}
+        {state.status === 'loading' ? (
+          <div className="state-panel" role="status" aria-busy="true">
+            Загружаем объект…
+          </div>
+        ) : null}
         {state.status === 'not-found' ? (
-          <div className="state-panel state-panel--error">
-            <p>Объект не найден или больше не опубликован.</p>
-            <Link to="/">Вернуться в каталог</Link>
+          <div className="state-panel state-panel--error" role="alert">
+            <p>Жилой комплекс не найден или был снят с публикации.</p>
+            <Link to="/" className="back-to-catalogue-btn">
+              Вернуться в каталог
+            </Link>
           </div>
         ) : null}
         {state.status === 'error' ? (
-          <div className="state-panel state-panel--error">
+          <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
-            <Link to="/">Вернуться в каталог</Link>
+            <button type="button" className="retry-btn" onClick={state.retry}>
+              Повторить попытку
+            </button>
           </div>
         ) : null}
         {state.status === 'ready' ? (
@@ -321,11 +538,11 @@ function DevelopmentDetailPage() {
               <BuildingPlaceholder />
               <div className="detail-hero__copy">
                 {state.item.classType ? <p className="meta">{state.item.classType}</p> : null}
-                <h1>{developmentTitle(state.item)}</h1>
+                <h1 id="development-detail-title">{developmentTitle(state.item)}</h1>
                 <p className="address">{developmentAddress(state.item)}</p>
               </div>
             </div>
-            <div className="detail-facts">
+            <div className="detail-facts" aria-label="Ключевые факты о комплексе">
               <div>
                 <span>Срок сдачи</span>
                 <strong>{completionLabel(state.item.completionDate) ?? 'Уточняется'}</strong>
@@ -334,9 +551,13 @@ function DevelopmentDetailPage() {
                 <span>Страна</span>
                 <strong>{state.item.location?.country ?? 'Уточняется'}</strong>
               </div>
+              <div>
+                <span>Город</span>
+                <strong>{state.item.location?.city ?? 'Уточняется'}</strong>
+              </div>
             </div>
-            <section className="detail-description">
-              <h2>О проекте</h2>
+            <section className="detail-description" aria-labelledby="about-project-heading">
+              <h2 id="about-project-heading">О проекте</h2>
               <p>{state.item.description?.trim() || 'Описание проекта будет добавлено застройщиком.'}</p>
             </section>
           </>
@@ -350,23 +571,49 @@ function ListingDetailPage() {
   const { slug } = useParams()
   const state = useListingDetail(slug)
 
+  useSeoMetadata(
+    state.status === 'ready'
+      ? {
+          title: state.item.seo?.title || listingTitle(state.item),
+          description:
+            state.item.seo?.description ||
+            `${listingTitle(state.item)} по адресу ${listingAddress(state.item)}`,
+          imageUrl: state.item.media?.find((m) => m.role === 'cover')?.url || state.item.media?.[0]?.url,
+          jsonLd: buildListingJsonLd(
+            state.item,
+            typeof window !== 'undefined' ? window.location.origin : ''
+          ),
+        }
+      : {
+          title: state.status === 'not-found' ? 'Объявление не найдено' : undefined,
+        }
+  )
+
   return (
     <Shell>
-      <section className="detail-page">
-        <Link className="back-link" to="/">
+      <section className="detail-page" aria-labelledby="listing-detail-title">
+        <Link className="back-link" to="/?tab=listings" aria-label="Вернуться в каталог вторички и аренды">
           ← В каталог
         </Link>
-        {state.status === 'loading' ? <div className="state-panel">Загружаем объект…</div> : null}
+        {state.status === 'loading' ? (
+          <div className="state-panel" role="status" aria-busy="true">
+            Загружаем объект…
+          </div>
+        ) : null}
         {state.status === 'not-found' ? (
-          <div className="state-panel state-panel--error">
-            <p>Объект не найден или больше не опубликован.</p>
-            <Link to="/">Вернуться в каталог</Link>
+          <div className="state-panel state-panel--error" role="alert">
+            <p>Объявление не найдено или было снято с публикации.</p>
+            <Link to="/?tab=listings" className="back-to-catalogue-btn">
+              Вернуться в каталог
+            </Link>
           </div>
         ) : null}
         {state.status === 'error' ? (
-          <div className="state-panel state-panel--error">
+          <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
-            <Link to="/">Вернуться в каталог</Link>
+            <button type="button" className="retry-btn" onClick={state.retry}>
+              Повторить попытку
+            </button>
           </div>
         ) : null}
         {state.status === 'ready' ? (
@@ -375,22 +622,26 @@ function ListingDetailPage() {
               <ListingMediaGallery media={state.item.media} title={listingTitle(state.item)} />
               <div className="detail-hero__copy">
                 <span className="listing-badge">{listingDealTypeLabel(state.item.dealType)}</span>
-                <h1>{listingTitle(state.item)}</h1>
+                <h1 id="listing-detail-title">{listingTitle(state.item)}</h1>
                 <p className="address">{listingAddress(state.item)}</p>
                 <div className="detail-price-box">
                   <p className="detail-price-main">{listingPrice(state.item)}</p>
-                  <p className="meta">{listingPropertyTypeLabel(state.item.propertyType, state.item.commercialSubtype)}</p>
+                  <p className="meta">
+                    {listingPropertyTypeLabel(state.item.propertyType, state.item.commercialSubtype)}
+                  </p>
                 </div>
               </div>
             </div>
-            <div className="detail-facts">
+            <div className="detail-facts" aria-label="Характеристики объекта">
               <div>
                 <span>Тип сделки</span>
                 <strong>{listingDealTypeLabel(state.item.dealType)}</strong>
               </div>
               <div>
                 <span>Площадь</span>
-                <strong>{state.item.characteristics?.area ? `${state.item.characteristics.area} м²` : '—'}</strong>
+                <strong>
+                  {state.item.characteristics?.area ? `${state.item.characteristics.area} м²` : '—'}
+                </strong>
               </div>
               <div>
                 <span>Комнат</span>
@@ -413,8 +664,8 @@ function ListingDetailPage() {
                 <strong>{state.item.location?.country ?? 'Уточняется'}</strong>
               </div>
             </div>
-            <section className="detail-description">
-              <h2>Описание</h2>
+            <section className="detail-description" aria-labelledby="listing-description-heading">
+              <h2 id="listing-description-heading">Описание</h2>
               <p>
                 {state.item.seo?.description?.trim() ||
                   'Объект проверен и опубликован через систему управления недвижимостью BAZA.'}
