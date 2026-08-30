@@ -66,3 +66,5 @@ export const LeadEventSchema = SchemaFactory.createForClass(LeadEventDocument);
 
 LeadEventSchema.index({ leadId: 1, changedAt: 1 });
 LeadEventSchema.index({ organizationId: 1, changedAt: -1 });
+/** GET /leads/:leadId/events — cursor pagination (LeadEventRepository.listForLead) сортирует по _id внутри leadId+organizationId. */
+LeadEventSchema.index({ leadId: 1, organizationId: 1, _id: -1 });

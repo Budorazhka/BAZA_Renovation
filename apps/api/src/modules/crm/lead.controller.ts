@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { TenantGuard } from '../../shared/tenant/tenant.guard';
@@ -9,6 +9,7 @@ import { CrmService } from './crm.service';
 import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
+import { ListLeadEventsDto } from './dto/list-lead-events.dto';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 
@@ -30,8 +31,17 @@ export class LeadController {
   async listLeads(@Req() req: FastifyRequest, @Query() dto: ListLeadsDto) {
     const tenantContext = requireTenantContext(req);
     const organizationId = new Types.ObjectId(tenantContext.organizationId);
-    const ownerPositionId = await this.ownerFilterForAction(tenantContext.positionId, 'read');
-    return this.crmService.listLeads({ organizationId, ownerPositionId, stage: dto.stage, limit: dto.limit });
+    const ownerPositionId = this.resolveOwnerFilter(
+      await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      dto.ownerPositionId,
+    );
+    return this.crmService.listLeads({
+      organizationId,
+      ownerPositionId,
+      stage: dto.stage,
+      cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      limit: dto.limit,
+    });
   }
 
   @Get(':leadId')
@@ -42,6 +52,23 @@ export class LeadController {
       leadId,
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+    });
+  }
+
+  @Get(':leadId/events')
+  @RequirePermission('lead', 'read')
+  async listLeadEvents(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Query() dto: ListLeadEventsDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.listLeadEvents({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      limit: dto.limit,
     });
   }
 
@@ -94,6 +121,33 @@ export class LeadController {
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'changeStage'),
       correlationId: req.correlationId,
     });
+  }
+
+  /**
+   * GET /leads фильтр ownerPositionId — клиентское значение ДОПОЛНИТЕЛЬНО
+   * сужает, никогда не расширяет уже резолвленный permission scope
+   * (тот же AND-принцип, что AdminAuditService.buildClientFilter):
+   *  - scopeFilter===undefined (organization/global grant) → любой клиентский
+   *    ownerPositionId проходит как есть, включая undefined (весь tenant).
+   *  - scopeFilter задан (own/assigned grant, уже = своя Position) → клиент
+   *    может явно запросить ТОЛЬКО ту же самую Position (идемпотентно) или
+   *    не передавать фильтр вовсе; запрос чужой Position здесь — попытка
+   *    расширить own-scope, отклоняется 400 (не 403 — сам grant на read
+   *    есть, это невалидная комбинация фильтров, тот же класс ошибки, что
+   *    невалидный cursor/limit, не authorization-отказ).
+   */
+  private resolveOwnerFilter(
+    scopeFilter: Types.ObjectId | undefined,
+    clientOwnerPositionId: string | undefined,
+  ): Types.ObjectId | undefined {
+    if (!clientOwnerPositionId) {
+      return scopeFilter;
+    }
+    const requested = new Types.ObjectId(clientOwnerPositionId);
+    if (scopeFilter && !scopeFilter.equals(requested)) {
+      throw new BadRequestException('ownerPositionId filter is outside the caller permission scope');
+    }
+    return requested;
   }
 
   /**

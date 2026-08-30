@@ -417,6 +417,82 @@ paths:
           description: FORBIDDEN — нет lead.assign.organization
           $ref: '#/components/responses/Error'
 
+  /leads:
+    get:
+      operationId: listLeads
+      summary: >
+        Список лидов текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/administrator) видит весь
+        tenant; own-scope (manager) видит только лиды, где ownerPositionId
+        совпадает с его собственной Position — сужение применяется на
+        backend до чтения, не постфильтрацией. ownerPositionId в query —
+        дополнительное клиентское сужение поверх уже резолвленного scope,
+        никогда не расширяет его (own-scope с чужим ownerPositionId в query
+        — 400, не 403 и не расширение видимости).
+      tags: [erp-crm]
+      parameters:
+        - name: stage
+          in: query
+          schema: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        - name: ownerPositionId
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Лиды текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный stage/ownerPositionId/cursor/limit, либо ownerPositionId вне permission scope вызывающего
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/events:
+    get:
+      operationId: listLeadEvents
+      summary: >
+        Append-only история stage-переходов ОДНОГО лида, newest-first,
+        cursor-paginated. Tenant и owner/own-scope проверяются ДО чтения
+        lead_events (тот же findByIdForOrganization, что GET /leads/{leadId})
+        — чужой (другая организация, либо не «свой» лид при own-scope) и
+        несуществующий leadId дают ОДИНАКОВЫЙ 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: История переходов лида, newest-first (может быть пустой)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadEventListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный leadId/cursor/limit
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
   /admin/publications:
     get:
       operationId: adminListPublications
@@ -1667,6 +1743,64 @@ components:
         ownerPositionId: {type: string, nullable: true}
         stage: {type: string}
         source: {type: object, additionalProperties: true}
+
+    LeadListItem:
+      type: object
+      description: >
+        GET /leads item shape (CrmService.CrmLeadReadModel) — contact
+        встроен как whitelist-проекция {id, name, phone, email?}, никогда
+        весь Contact-документ; ownerPositionId — null, если лид ещё не
+        назначен ни на одну Position.
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        ownerPositionId: {type: string, nullable: true}
+        stage: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        version: {type: integer}
+        source: {type: object, additionalProperties: true}
+        createdAt: {type: string, format: date-time}
+        contact:
+          type: object
+          nullable: true
+          properties:
+            id: {type: string}
+            name: {type: string}
+            phone: {type: string}
+            email: {type: string, nullable: true}
+
+    LeadListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeadListItem'
+        nextCursor: {type: string, nullable: true}
+
+    LeadEvent:
+      type: object
+      description: Один immutable append-only переход стадии лида (LeadEventDocument).
+      properties:
+        id: {type: string}
+        leadId: {type: string}
+        stage: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        changedBy:
+          type: object
+          properties:
+            type: {type: string, enum: [position, system]}
+            positionId: {type: string, nullable: true}
+        changedAt: {type: string, format: date-time}
+
+    LeadEventListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeadEvent'
+        nextCursor: {type: string, nullable: true}
 
     PublicListingList:
       type: object

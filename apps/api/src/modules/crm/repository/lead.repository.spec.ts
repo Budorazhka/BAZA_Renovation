@@ -64,6 +64,51 @@ describe('LeadRepository', () => {
     });
   });
 
+  describe('listForOrganization', () => {
+    it('без cursor — фильтр без _id, сортировка по _id desc', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const repository = new LeadRepository({ find: findSpy } as never);
+
+      await repository.listForOrganization(organizationId, { limit: 21 });
+
+      expect(findSpy).toHaveBeenCalledWith({ organizationId });
+      expect(sortSpy).toHaveBeenCalledWith({ _id: -1 });
+      expect(limitSpy).toHaveBeenCalledWith(21);
+    });
+
+    it('с cursor — фильтр включает _id: {$lt: cursor}', async () => {
+      const organizationId = new Types.ObjectId();
+      const cursor = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const repository = new LeadRepository({ find: findSpy } as never);
+
+      await repository.listForOrganization(organizationId, { cursor, limit: 21 });
+
+      expect(findSpy).toHaveBeenCalledWith({ organizationId, _id: { $lt: cursor } });
+    });
+
+    it('ownerPositionId и stage фильтры комбинируются с organizationId', async () => {
+      const organizationId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const repository = new LeadRepository({ find: findSpy } as never);
+
+      await repository.listForOrganization(organizationId, { ownerPositionId, stage: 'qualified', limit: 21 });
+
+      expect(findSpy).toHaveBeenCalledWith({ organizationId, ownerPositionId, stage: 'qualified' });
+    });
+  });
+
   describe('create', () => {
     it('всегда инициализирует stage:new вне зависимости от переданных params', async () => {
       const createSpy = jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]);

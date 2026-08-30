@@ -28,6 +28,14 @@ export interface CrmLeadReadModel {
   contact: { id: string; name: string; phone: string; email?: string } | null;
 }
 
+export interface CrmLeadEventReadModel {
+  id: string;
+  leadId: string;
+  stage: LeadStage;
+  changedBy: { type: 'position' | 'system'; positionId?: string };
+  changedAt: string;
+}
+
 /**
  * D-05B: технически решение (не owner decision — тот же статус, что сам
  * LEAD_STAGES список, зафиксированный в lead-stage.ts), явный список
@@ -83,23 +91,76 @@ export class CrmService {
    * grants; organization-wide роли получают undefined и видят весь tenant.
    * Нельзя реализовывать это фильтрацией уже после чтения: repository
    * обязан получить ownerPositionId прямо в Mongo-фильтре.
+   *
+   * Cursor pagination (limit+1 паттерн, тот же принцип, что
+   * AdminAuditService.list): repository запрашивается на одну запись
+   * больше, чем params.limit — лишняя запись сигнализирует hasMore и
+   * становится источником nextCursor (курсор — _id последней ВОЗВРАЩЁННОЙ
+   * записи страницы, не лишней), сама лишняя запись отбрасывается перед
+   * маппингом в read model.
    */
   async listLeads(params: {
     organizationId: Types.ObjectId;
     ownerPositionId?: Types.ObjectId;
     stage?: LeadStage;
+    cursor?: Types.ObjectId;
     limit: number;
-  }): Promise<{ items: CrmLeadReadModel[] }> {
-    const leads = await this.leadRepository.listForOrganization(params.organizationId, {
+  }): Promise<{ items: CrmLeadReadModel[]; nextCursor: string | null }> {
+    const rows = await this.leadRepository.listForOrganization(params.organizationId, {
       ownerPositionId: params.ownerPositionId,
       stage: params.stage,
-      limit: params.limit,
+      cursor: params.cursor,
+      limit: params.limit + 1,
     });
+    const hasMore = rows.length > params.limit;
+    const leads = hasMore ? rows.slice(0, params.limit) : rows;
+    const nextCursor = hasMore ? leads[leads.length - 1]!._id.toString() : null;
+
     const contactIds = [...new Map(leads.map((lead) => [lead.contactId.toString(), lead.contactId])).values()];
     const contacts = await this.contactRepository.findByIdsForOrganization(params.organizationId, contactIds);
     const contactsById = new Map(contacts.map((contact) => [contact._id.toString(), contact]));
 
-    return { items: leads.map((lead) => toLeadReadModel(lead, contactsById.get(lead.contactId.toString()))) };
+    return {
+      items: leads.map((lead) => toLeadReadModel(lead, contactsById.get(lead.contactId.toString()))),
+      nextCursor,
+    };
+  }
+
+  /**
+   * GET /leads/:leadId/events. Tenant/owner scope проверяются ЗДЕСЬ, ДО
+   * любого чтения lead_events — findByIdForOrganization уже применяет
+   * organizationId (tenant) И, если передан, ownerPositionId (own/assigned
+   * сужение), тот же метод, что getLead. Чужой (другая организация или не
+   * "свой" при own-grant) и несуществующий лид дают ОДИНАКОВЫЙ
+   * NotFoundException — не раскрываем менеджеру факт существования чужого
+   * лида через различие 403 vs 404 (тот же non-disclosure принцип, что
+   * getLead/changeLeadStage).
+   */
+  async listLeadEvents(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<{ items: CrmLeadEventReadModel[]; nextCursor: string | null }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const rows = await this.leadEventRepository.listForLead(params.leadId, params.organizationId, {
+      cursor: params.cursor,
+      limit: params.limit + 1,
+    });
+    const hasMore = rows.length > params.limit;
+    const events = hasMore ? rows.slice(0, params.limit) : rows;
+    const nextCursor = hasMore ? events[events.length - 1]!._id.toString() : null;
+
+    return { items: events.map(toLeadEventReadModel), nextCursor };
   }
 
   async getLead(params: {
@@ -700,5 +761,24 @@ function toLeadReadModel(
     contact: contact
       ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
       : null,
+  };
+}
+
+function toLeadEventReadModel(event: {
+  _id: Types.ObjectId;
+  leadId: Types.ObjectId;
+  stage: LeadStage;
+  changedBy: { type: 'position' | 'system'; positionId?: Types.ObjectId };
+  changedAt: Date;
+}): CrmLeadEventReadModel {
+  return {
+    id: event._id.toString(),
+    leadId: event.leadId.toString(),
+    stage: event.stage,
+    changedBy: {
+      type: event.changedBy.type,
+      positionId: event.changedBy.positionId?.toString(),
+    },
+    changedAt: event.changedAt.toISOString(),
   };
 }

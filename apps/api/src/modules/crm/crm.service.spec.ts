@@ -1061,6 +1061,7 @@ describe('CrmService — read leads', () => {
         organizationId: Types.ObjectId;
         ownerPositionId?: Types.ObjectId;
         stage?: 'new' | 'contacted' | 'qualified' | 'converted' | 'lost';
+        cursor?: Types.ObjectId;
         limit: number;
       }): Promise<unknown>;
     };
@@ -1080,14 +1081,72 @@ describe('CrmService — read leads', () => {
           contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
         },
       ],
+      nextCursor: null,
     });
 
     expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
       ownerPositionId,
       stage: 'new',
-      limit: 20,
+      cursor: undefined,
+      // limit+1: repository запрашивается на одну запись больше params.limit
+      // для однозначного hasMore/nextCursor без отдельного count().
+      limit: 21,
     });
     expect(findByIdsForOrganization).toHaveBeenCalledWith(organizationId, [contactId]);
+  });
+
+  it('limit+1: repository возвращает limit+1 строк → nextCursor указывает на последнюю ВОЗВРАЩЁННУЮ (не лишнюю) запись', async () => {
+    const organizationId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+    const leadIds = [new Types.ObjectId(), new Types.ObjectId()];
+    const rows = leadIds.map((id, index) => ({
+      _id: id,
+      organizationId,
+      contactId,
+      ownerPositionId: undefined,
+      stage: 'new' as const,
+      source: { route: '/developments/test' },
+      createdAt: new Date(`2026-08-2${6 - index}T10:00:00Z`),
+    }));
+    const listForOrganization = jest.fn().mockResolvedValue(rows);
+    const findByIdsForOrganization = jest.fn().mockResolvedValue([{ _id: contactId, name: 'Иван', phone: '+995555000000' }]);
+
+    const service = createTestCrmService({
+      contactRepository: { findByIdsForOrganization },
+      leadRepository: { listForOrganization },
+    });
+
+    const readService = service as unknown as {
+      listLeads(params: { organizationId: Types.ObjectId; limit: number }): Promise<{ items: unknown[]; nextCursor: string | null }>;
+    };
+
+    const result = await readService.listLeads({ organizationId, limit: 1 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.nextCursor).toBe(leadIds[0]!.toString());
+  });
+
+  it('cursor из controller пробрасывается repository как есть', async () => {
+    const organizationId = new Types.ObjectId();
+    const cursor = new Types.ObjectId();
+    const listForOrganization = jest.fn().mockResolvedValue([]);
+    const service = createTestCrmService({
+      contactRepository: { findByIdsForOrganization: jest.fn().mockResolvedValue([]) },
+      leadRepository: { listForOrganization },
+    });
+
+    const readService = service as unknown as {
+      listLeads(params: { organizationId: Types.ObjectId; cursor?: Types.ObjectId; limit: number }): Promise<unknown>;
+    };
+
+    await readService.listLeads({ organizationId, cursor, limit: 20 });
+
+    expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
+      ownerPositionId: undefined,
+      stage: undefined,
+      cursor,
+      limit: 21,
+    });
   });
 
   it('возвращает отдельный лид с контактом', async () => {
@@ -1146,5 +1205,135 @@ describe('CrmService — read leads', () => {
     await expect(
       readService.getLead({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CrmService.listLeadEvents', () => {
+  function makeReadEventsService(overrides: {
+    leadRepository?: unknown;
+    leadEventRepository?: unknown;
+  }) {
+    const service = createTestCrmService(overrides);
+    return service as unknown as {
+      listLeadEvents(params: {
+        leadId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        ownerPositionId?: Types.ObjectId;
+        cursor?: Types.ObjectId;
+        limit: number;
+      }): Promise<{ items: unknown[]; nextCursor: string | null }>;
+    };
+  }
+
+  it('проверяет tenant/owner scope ДО чтения lead_events (findByIdForOrganization вызывается первым)', async () => {
+    const organizationId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const lead = { _id: leadId, organizationId };
+    const findByIdForOrganization = jest.fn().mockResolvedValue(lead);
+    const listForLead = jest.fn().mockResolvedValue([]);
+
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization },
+      leadEventRepository: { listForLead },
+    });
+
+    await service.listLeadEvents({ leadId, organizationId, limit: 20 });
+
+    expect(findByIdForOrganization).toHaveBeenCalledWith(leadId, organizationId, undefined);
+    expect(listForLead).toHaveBeenCalledWith(leadId, organizationId, { cursor: undefined, limit: 21 });
+  });
+
+  it('чужой (другая организация) лид → NotFoundException, lead_events НЕ читается', async () => {
+    const listForLead = jest.fn();
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      leadEventRepository: { listForLead },
+    });
+
+    await expect(
+      service.listLeadEvents({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId(), limit: 20 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(listForLead).not.toHaveBeenCalled();
+  });
+
+  it('несуществующий leadId даёт ТОТ ЖЕ NotFoundException, что чужой лид (non-disclosure)', async () => {
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      leadEventRepository: { listForLead: jest.fn() },
+    });
+
+    await expect(
+      service.listLeadEvents({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId(), limit: 20 }),
+    ).rejects.toThrow('Lead not found');
+  });
+
+  it('own-scope: чужой (не свой) лид даёт NotFoundException — findByIdForOrganization применяет ownerPositionId', async () => {
+    const ownerPositionId = new Types.ObjectId();
+    const findByIdForOrganization = jest.fn().mockResolvedValue(null);
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization },
+      leadEventRepository: { listForLead: jest.fn() },
+    });
+
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    await expect(
+      service.listLeadEvents({ leadId, organizationId, ownerPositionId, limit: 20 }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(findByIdForOrganization).toHaveBeenCalledWith(leadId, organizationId, ownerPositionId);
+  });
+
+  it('пустая история — items:[], nextCursor:null, не ошибка', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: leadId, organizationId }) },
+      leadEventRepository: { listForLead: jest.fn().mockResolvedValue([]) },
+    });
+
+    await expect(service.listLeadEvents({ leadId, organizationId, limit: 20 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
+  });
+
+  it('маппит LeadEventDocument в CrmLeadEventReadModel и вычисляет nextCursor по limit+1 паттерну', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const eventIds = [new Types.ObjectId(), new Types.ObjectId()];
+    const rows = [
+      {
+        _id: eventIds[0],
+        leadId,
+        stage: 'contacted' as const,
+        changedBy: { type: 'position' as const, positionId },
+        changedAt: new Date('2026-08-27T09:00:00Z'),
+      },
+      {
+        _id: eventIds[1],
+        leadId,
+        stage: 'new' as const,
+        changedBy: { type: 'system' as const },
+        changedAt: new Date('2026-08-26T09:00:00Z'),
+      },
+    ];
+    const service = makeReadEventsService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: leadId, organizationId }) },
+      leadEventRepository: { listForLead: jest.fn().mockResolvedValue(rows) },
+    });
+
+    const result = await service.listLeadEvents({ leadId, organizationId, limit: 1 });
+
+    expect(result.items).toEqual([
+      {
+        id: eventIds[0]!.toString(),
+        leadId: leadId.toString(),
+        stage: 'contacted',
+        changedBy: { type: 'position', positionId: positionId.toString() },
+        changedAt: '2026-08-27T09:00:00.000Z',
+      },
+    ]);
+    expect(result.nextCursor).toBe(eventIds[0]!.toString());
   });
 });
