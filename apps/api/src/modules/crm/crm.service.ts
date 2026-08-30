@@ -419,6 +419,15 @@ export class CrmService {
     }
 
     const previousStage = lead.stage;
+    // Check the optimistic-concurrency token before validating the transition
+    // against the snapshot we just read. A parallel request may have already
+    // moved the lead to a stage from which `newStage` is no longer reachable;
+    // that is still a stale write and must be reported as 409, not as a 400
+    // transition validation error (the client needs to refresh and retry).
+    if ((lead.version ?? 0) !== params.expectedVersion) {
+      throw new ConflictException('Lead was modified by another request — refresh and retry');
+    }
+
     const allowedFromStages = LEAD_STAGE_TRANSITIONS[previousStage];
 
     if (!allowedFromStages.includes(params.newStage)) {

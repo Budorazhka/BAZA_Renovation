@@ -12,7 +12,10 @@ export const env = {
   marketplaceOrigin: process.env.RUNTIME_MARKETPLACE_ORIGIN || process.env.RUNTIME_MARKETPLACE_URL || 'http://localhost:4173',
   adminUrl: process.env.RUNTIME_ADMIN_URL || 'http://localhost:4174',
   adminOrigin: process.env.RUNTIME_ADMIN_ORIGIN || process.env.RUNTIME_ADMIN_URL || 'http://localhost:4174',
-  mongoUri: process.env.RUNTIME_MONGO_URI || 'mongodb://localhost:27017/baza?replicaSet=rs0',
+  // The runtime Mongo replica set advertises its Docker hostname (`mongodb`).
+  // The host-side seed fixture must stay on the host member and therefore
+  // uses directConnection when connecting through a published port.
+  mongoUri: process.env.RUNTIME_MONGO_URI || 'mongodb://localhost:27017/baza?replicaSet=rs0&directConnection=true',
 };
 
 export function apiUrl(path: string): string {

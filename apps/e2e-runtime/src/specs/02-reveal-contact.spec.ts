@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/test';
+import type { APIRequestContext } from '@playwright/test';
 import { apiUrl } from '../fixtures/env';
-import { uniquePhone } from '../fixtures/test-data';
+import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from '../fixtures/test-data';
 
 /**
  * Reveal-contact on a listing detail page (`<ListingContactForm>`).
@@ -11,13 +12,81 @@ import { uniquePhone } from '../fixtures/test-data';
  * reach the browser-visible response).
  */
 test.describe('listing reveal-contact', () => {
-  test('submitting the contact form reveals a real phone number via the real API', async ({ page, request }) => {
-    const catalogue = await request.get(apiUrl('/public/listings?limit=1'));
-    const catalogueBody = await catalogue.json();
-    test.skip(catalogueBody.items.length === 0, 'No published listings in this environment to reveal contact on.');
+  /**
+   * The marketplace publishing wizard creates marketplace-account listings.
+   * ListingCrmService intentionally reveals contacts only for organization-
+   * owned listings, so this test provisions one through the real organization
+   * onboarding + ERP listing API before exercising the public browser flow.
+   * No database shortcut is used here.
+   */
+  async function seedOrganizationListing(request: APIRequestContext) {
+    const login = uniqueLogin('reveal-owner');
+    const password = STRONG_TEST_PASSWORD;
+    const register = await request.post(apiUrl('/auth/register'), { data: { login, password } });
+    expect(register.status()).toBe(201);
 
-    const slug = catalogueBody.items[0].slug;
-    test.skip(!slug, 'First listing in the catalogue has no slug.');
+    const onboarding = await request.post(apiUrl('/organizations/register'), {
+      data: { login, password, type: 'agency', name: `E2E Reveal Agency ${login}` },
+    });
+    expect(onboarding.status()).toBe(201);
+
+    const assetResponse = await request.post(apiUrl('/property-assets'), {
+      data: {
+        propertyType: 'apartment',
+        location: {
+          country: 'Georgia',
+          city: 'Batumi',
+          address: uniqueAddress(),
+          geo: { type: 'Point', coordinates: [41.6367, 41.6434] },
+        },
+        characteristics: { area: 64, rooms: 2, floor: 5, totalFloors: 12 },
+        representativePhone: uniquePhone(),
+      },
+    });
+    expect(assetResponse.status()).toBe(201);
+    const asset = await assetResponse.json();
+
+    const listingResponse = await request.post(apiUrl(`/property-assets/${asset._id}/listings`), {
+      data: { dealType: 'sale', price: { amountMinorUnits: 8_500_000, currency: 'USD' } },
+    });
+    expect(listingResponse.status()).toBe(201);
+    const listing = await listingResponse.json();
+
+    const activateResponse = await request.patch(
+      apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/activate`),
+    );
+    expect(activateResponse.status()).toBe(200);
+
+    const publishResponse = await request.post(
+      apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publish`),
+      { headers: { 'Idempotency-Key': `e2e-reveal-${login}` } },
+    );
+    expect(publishResponse.status()).toBe(202);
+
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(
+            apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publication-status`),
+          );
+          if (response.status() !== 200) return null;
+          return (await response.json()).status;
+        },
+        { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toBe('published');
+
+    const statusResponse = await request.get(
+      apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publication-status`),
+    );
+    expect(statusResponse.status()).toBe(200);
+    const status = await statusResponse.json();
+    expect(status.slug).toBeTruthy();
+    return status.slug as string;
+  }
+
+  test('submitting the contact form reveals a real phone number via the real API', async ({ page, request }) => {
+    const slug = await seedOrganizationListing(request);
 
     await page.goto(`/listings/${slug}`);
     await expect(page.getByRole('heading', { name: 'Связаться с риелтором' })).toBeVisible();

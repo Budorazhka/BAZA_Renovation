@@ -12,8 +12,11 @@ import { marketplaceApiClient } from '../fixtures/api-clients';
  * checking its status, not just observing a client-side route change.
  */
 test.describe('logout', () => {
-  test('logout clears the baza_session cookie and revokes the session server-side', async ({ context, request }) => {
-    const marketplace = marketplaceApiClient(request);
+  test('logout clears the baza_session cookie and revokes the session server-side', async ({ context, page }) => {
+    // page.request shares the browser context's cookie jar. The standalone
+    // request fixture is intentionally independent, so using it here would
+    // make a real login cookie invisible to context.cookies().
+    const marketplace = marketplaceApiClient(page.request);
     const login = uniqueLogin('logout');
 
     const registerResult = await marketplace.register(login, STRONG_TEST_PASSWORD);
@@ -58,7 +61,7 @@ test.describe('logout', () => {
     // it does not differentiate a missing cookie from an invalid one; see
     // apps/api/src/shared/marketplace-account/marketplace-account.guard.ts)
     // — checking the real HTTP status, not a UI redirect.
-    const protectedResponse = await request.get(apiUrl('/marketplace/property-assets'), {
+    const protectedResponse = await page.request.get(apiUrl('/marketplace/property-assets'), {
       headers: { Origin: env.marketplaceOrigin },
     });
     expect(protectedResponse.status()).toBe(403);

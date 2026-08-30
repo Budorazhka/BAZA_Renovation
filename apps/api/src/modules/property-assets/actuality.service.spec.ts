@@ -111,7 +111,7 @@ describe('ActualityService', () => {
       const lastConfirmedAt = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const service = makeService({
         listingRepository: {
-          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: assetId, status: 'active', dealType: 'sale', lastConfirmedAt }),
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: assetId, status: 'active', dealType: 'sale', version: 3, lastConfirmedAt }),
         } as never,
         propertyAssetRepository: { findById: jest.fn().mockResolvedValue({ propertyType: 'apartment' }) } as never,
       });
@@ -121,6 +121,8 @@ describe('ActualityService', () => {
       expect(result.category).toBe('secondary');
       expect(result.thresholds).toEqual({ warningDays: 28, overdueDays: 60 });
       expect(result.state).toBe('needs_attention');
+      expect(result.listingId).toBe(listingId.toString());
+      expect(result.version).toBe(3);
     });
 
     it('state:null для listing не в статусе active (actuality не имеет смысла для draft/expired/archived)', async () => {

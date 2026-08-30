@@ -73,10 +73,12 @@ export interface DuplicateCandidate {
 
 export interface ActualityState {
   listingId: string
-  category: 'sale' | 'rent'
+  category: string
+  thresholds?: { warningDays: number; overdueDays: number }
   lastConfirmedAt?: string
   version: number
-  status: 'confirmed' | 'needs_confirmation' | 'expired'
+  status: 'draft' | 'active' | 'expired' | 'archived' | 'confirmed' | 'needs_confirmation'
+  state?: 'up_to_date' | 'needs_attention' | 'needs_update' | 'fresh' | 'warning' | 'overdue' | null
 }
 
 export interface PublicationStatusResult {
