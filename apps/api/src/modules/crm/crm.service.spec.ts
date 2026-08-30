@@ -16,6 +16,7 @@ import type { PublicRevealIdempotencyService } from '../../shared/idempotency/pu
 import type { TaskRepository } from './repository/task.repository';
 import type { DealRepository } from './repository/deal.repository';
 import type { DealEventRepository } from './repository/deal-event.repository';
+import type { OutboxService } from '../outbox/outbox.service';
 
 function makeMockConnection() {
   return {
@@ -41,6 +42,7 @@ function createTestCrmService(overrides: {
   taskRepository?: unknown;
   dealRepository?: unknown;
   dealEventRepository?: unknown;
+  outboxService?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -65,6 +67,7 @@ function createTestCrmService(overrides: {
     }) as unknown as TaskRepository,
     (overrides.dealRepository ?? {}) as unknown as DealRepository,
     (overrides.dealEventRepository ?? {}) as unknown as DealEventRepository,
+    (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as unknown as OutboxService,
   );
 }
 
@@ -1961,6 +1964,434 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
         }),
         expect.anything(),
       );
+    });
+  });
+});
+
+describe('CRM-004: Task outbox events', () => {
+  function makeTaskDoc(overrides: Partial<{
+    _id: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    title: string;
+    status: 'open' | 'completed' | 'cancelled';
+    assignedPositionId: Types.ObjectId;
+    leadId: Types.ObjectId;
+    contactId: Types.ObjectId;
+    completedAt: Date;
+    completedByPositionId: Types.ObjectId;
+    version: number;
+  }> = {}) {
+    return {
+      _id: overrides._id ?? new Types.ObjectId(),
+      organizationId: overrides.organizationId ?? new Types.ObjectId(),
+      title: overrides.title ?? 'Задача',
+      status: overrides.status ?? 'open',
+      assignedPositionId: overrides.assignedPositionId,
+      leadId: overrides.leadId,
+      contactId: overrides.contactId,
+      completedAt: overrides.completedAt,
+      completedByPositionId: overrides.completedByPositionId,
+      version: overrides.version ?? 0,
+      createdAt: new Date('2026-08-30T10:00:00Z'),
+      updatedAt: new Date('2026-08-30T10:00:00Z'),
+    };
+  }
+
+  describe('createTask', () => {
+    function makeCreateTaskService(overrides: {
+      leadRepository?: unknown;
+      contactRepository?: unknown;
+      taskRepository?: unknown;
+      organizationsService?: unknown;
+      auditService?: unknown;
+      outboxService?: unknown;
+    }) {
+      return createTestCrmService(overrides) as unknown as {
+        createTask(params: {
+          organizationId: Types.ObjectId;
+          actorPositionId: Types.ObjectId;
+          actorIdentityId: Types.ObjectId;
+          requiredScopePositionId?: Types.ObjectId;
+          title: string;
+          description?: string;
+          dueAt?: Date;
+          assignedPositionId?: Types.ObjectId;
+          leadId?: Types.ObjectId;
+          contactId?: Types.ObjectId;
+          correlationId: string;
+        }): Promise<unknown>;
+      };
+    }
+
+    it('публикует TaskCreated внутри транзакции с минимальным payload', async () => {
+      const organizationId = new Types.ObjectId();
+      const leadId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const assignedPositionId = new Types.ObjectId();
+      const actorPositionId = new Types.ObjectId();
+      const task = makeTaskDoc({ organizationId, leadId, contactId, assignedPositionId });
+      const publish = jest.fn().mockResolvedValue(undefined);
+
+      const service = makeCreateTaskService({
+        leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: leadId, contactId }) },
+        contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: contactId }) },
+        taskRepository: { create: jest.fn().mockResolvedValue(task) },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+        outboxService: { publish },
+      });
+
+      await service.createTask({
+        organizationId,
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        title: 'Позвонить',
+        assignedPositionId,
+        leadId,
+        contactId,
+        correlationId: 'corr-1',
+      });
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      const [publishedEvent, session] = publish.mock.calls[0]!;
+      expect(publishedEvent).toEqual({
+        eventType: 'TaskCreated',
+        aggregateType: 'task',
+        aggregateId: task._id,
+        payload: {
+          taskId: task._id.toString(),
+          organizationId: organizationId.toString(),
+          leadId: leadId.toString(),
+          contactId: contactId.toString(),
+          assignedPositionId: assignedPositionId.toString(),
+          actorPositionId: actorPositionId.toString(),
+          occurredAt: expect.any(String),
+          correlationId: 'corr-1',
+        },
+      });
+      // Payload не содержит title/description/телефон/сырой документ.
+      expect(publishedEvent.payload).not.toHaveProperty('title');
+      expect(publishedEvent.payload).not.toHaveProperty('description');
+      expect(publishedEvent.payload).not.toHaveProperty('phone');
+      expect(session).toBeDefined();
+    });
+
+    it('несуществующий leadId — NotFoundException, TaskCreated НЕ публикуется', async () => {
+      const publish = jest.fn();
+      const service = makeCreateTaskService({
+        leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+        taskRepository: { create: jest.fn() },
+        outboxService: { publish },
+      });
+
+      await expect(
+        service.createTask({
+          organizationId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          title: 'x',
+          leadId: new Types.ObjectId(),
+          correlationId: 'corr-1',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(publish).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('completeTask', () => {
+    function makeCompleteService(overrides: { taskRepository?: unknown; auditService?: unknown; outboxService?: unknown }) {
+      return createTestCrmService(overrides) as unknown as {
+        completeTask(params: {
+          taskId: Types.ObjectId;
+          organizationId: Types.ObjectId;
+          actorPositionId: Types.ObjectId;
+          actorIdentityId: Types.ObjectId;
+          requiredScopePositionId?: Types.ObjectId;
+          expectedVersion: number;
+          correlationId: string;
+        }): Promise<unknown>;
+      };
+    }
+
+    it('первый успешный open→completed — публикует TaskCompleted с версионированным deduplicationKey', async () => {
+      const taskId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const leadId = new Types.ObjectId();
+      const actorPositionId = new Types.ObjectId();
+      const openTask = makeTaskDoc({ _id: taskId, organizationId, leadId, status: 'open', version: 0 });
+      const completedTask = makeTaskDoc({
+        _id: taskId,
+        organizationId,
+        leadId,
+        status: 'completed',
+        version: 1,
+        completedAt: new Date('2026-08-30T12:00:00Z'),
+        completedByPositionId: actorPositionId,
+      });
+      const publish = jest.fn().mockResolvedValue(undefined);
+
+      const service = makeCompleteService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValueOnce(openTask).mockResolvedValueOnce(completedTask),
+          completeTask: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+        outboxService: { publish },
+      });
+
+      await service.completeTask({
+        taskId,
+        organizationId,
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        expectedVersion: 0,
+        correlationId: 'corr-2',
+      });
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      const [publishedEvent] = publish.mock.calls[0]!;
+      expect(publishedEvent.eventType).toBe('TaskCompleted');
+      expect(publishedEvent.deduplicationKey).toBe(`task:${taskId.toString()}:TaskCompleted:v1`);
+      expect(publishedEvent.payload.taskId).toBe(taskId.toString());
+      expect(publishedEvent.payload.leadId).toBe(leadId.toString());
+    });
+
+    it('уже completed (идемпотентный повтор) — TaskCompleted НЕ публикуется повторно', async () => {
+      const taskId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const publish = jest.fn();
+      const completeTaskSpy = jest.fn();
+      const service = makeCompleteService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(
+            makeTaskDoc({ _id: taskId, organizationId, status: 'completed', version: 7 }),
+          ),
+          completeTask: completeTaskSpy,
+        },
+        outboxService: { publish },
+      });
+
+      await service.completeTask({
+        taskId,
+        organizationId,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedVersion: 0,
+        correlationId: 'corr-3',
+      });
+
+      expect(completeTaskSpy).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('modifiedCount:0 (устаревший expectedVersion, 409) — TaskCompleted НЕ публикуется', async () => {
+      const publish = jest.fn();
+      const service = makeCompleteService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(makeTaskDoc({ status: 'open', version: 2 })),
+          completeTask: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        },
+        outboxService: { publish },
+      });
+
+      await expect(
+        service.completeTask({
+          taskId: new Types.ObjectId(),
+          organizationId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedVersion: 1,
+          correlationId: 'corr-4',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('чужая (own-scope не совпадает) задача — NotFoundException, TaskCompleted НЕ публикуется', async () => {
+      const publish = jest.fn();
+      const service = makeCompleteService({
+        taskRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+        outboxService: { publish },
+      });
+
+      await expect(
+        service.completeTask({
+          taskId: new Types.ObjectId(),
+          organizationId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          requiredScopePositionId: new Types.ObjectId(),
+          expectedVersion: 0,
+          correlationId: 'corr-5',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(publish).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reassignTask', () => {
+    function makeReassignService(overrides: {
+      taskRepository?: unknown;
+      organizationsService?: unknown;
+      auditService?: unknown;
+      outboxService?: unknown;
+    }) {
+      return createTestCrmService(overrides) as unknown as {
+        reassignTask(params: {
+          taskId: Types.ObjectId;
+          organizationId: Types.ObjectId;
+          actorPositionId: Types.ObjectId;
+          actorIdentityId: Types.ObjectId;
+          requiredScopePositionId?: Types.ObjectId;
+          expectedVersion: number;
+          assignedPositionId: Types.ObjectId | null;
+          correlationId: string;
+        }): Promise<unknown>;
+      };
+    }
+
+    it('фактическая смена assignedPositionId — публикует TaskReassigned с previous/new', async () => {
+      const taskId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const oldAssignee = new Types.ObjectId();
+      const newAssignee = new Types.ObjectId();
+      const existingTask = makeTaskDoc({ _id: taskId, organizationId, assignedPositionId: oldAssignee, version: 0 });
+      const updatedTask = makeTaskDoc({ _id: taskId, organizationId, assignedPositionId: newAssignee, version: 1 });
+      const publish = jest.fn().mockResolvedValue(undefined);
+
+      const service = makeReassignService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValueOnce(existingTask).mockResolvedValueOnce(updatedTask),
+          reassignTask: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        },
+        organizationsService: { findAssignablePosition: jest.fn().mockResolvedValue({ _id: newAssignee, status: 'vacant' }) },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+        outboxService: { publish },
+      });
+
+      await service.reassignTask({
+        taskId,
+        organizationId,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedVersion: 0,
+        assignedPositionId: newAssignee,
+        correlationId: 'corr-6',
+      });
+
+      expect(publish).toHaveBeenCalledTimes(1);
+      const [publishedEvent] = publish.mock.calls[0]!;
+      expect(publishedEvent.eventType).toBe('TaskReassigned');
+      expect(publishedEvent.deduplicationKey).toBe(`task:${taskId.toString()}:TaskReassigned:v1`);
+      expect(publishedEvent.payload.previousAssignedPositionId).toBe(oldAssignee.toString());
+      expect(publishedEvent.payload.newAssignedPositionId).toBe(newAssignee.toString());
+    });
+
+    it('reassign на ТО ЖЕ значение — no-op: repository.reassignTask НЕ вызывается, TaskReassigned НЕ публикуется', async () => {
+      const taskId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const samePositionId = new Types.ObjectId();
+      const reassignTaskSpy = jest.fn();
+      const publish = jest.fn();
+
+      const service = makeReassignService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(
+            makeTaskDoc({ _id: taskId, organizationId, assignedPositionId: samePositionId, version: 3 }),
+          ),
+          reassignTask: reassignTaskSpy,
+        },
+        outboxService: { publish },
+      });
+
+      await service.reassignTask({
+        taskId,
+        organizationId,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedVersion: 3,
+        assignedPositionId: samePositionId,
+        correlationId: 'corr-7',
+      });
+
+      expect(reassignTaskSpy).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('reassign null→null (оба unassigned) — тоже no-op', async () => {
+      const taskId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const reassignTaskSpy = jest.fn();
+      const publish = jest.fn();
+
+      const service = makeReassignService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(
+            makeTaskDoc({ _id: taskId, organizationId, version: 0 }),
+          ),
+          reassignTask: reassignTaskSpy,
+        },
+        outboxService: { publish },
+      });
+
+      await service.reassignTask({
+        taskId,
+        organizationId,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedVersion: 0,
+        assignedPositionId: null,
+        correlationId: 'corr-8',
+      });
+
+      expect(reassignTaskSpy).not.toHaveBeenCalled();
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('modifiedCount:0 (устаревший expectedVersion, 409) — TaskReassigned НЕ публикуется', async () => {
+      const publish = jest.fn();
+      const service = makeReassignService({
+        taskRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(makeTaskDoc({ version: 3 })),
+          reassignTask: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        },
+        organizationsService: { findAssignablePosition: jest.fn().mockResolvedValue({}) },
+        outboxService: { publish },
+      });
+
+      await expect(
+        service.reassignTask({
+          taskId: new Types.ObjectId(),
+          organizationId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedVersion: 1,
+          assignedPositionId: new Types.ObjectId(),
+          correlationId: 'corr-9',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(publish).not.toHaveBeenCalled();
+    });
+
+    it('чужая (own-scope не совпадает) задача — NotFoundException, TaskReassigned НЕ публикуется', async () => {
+      const publish = jest.fn();
+      const service = makeReassignService({
+        taskRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+        outboxService: { publish },
+      });
+
+      await expect(
+        service.reassignTask({
+          taskId: new Types.ObjectId(),
+          organizationId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          requiredScopePositionId: new Types.ObjectId(),
+          expectedVersion: 0,
+          assignedPositionId: new Types.ObjectId(),
+          correlationId: 'corr-10',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(publish).not.toHaveBeenCalled();
     });
   });
 });

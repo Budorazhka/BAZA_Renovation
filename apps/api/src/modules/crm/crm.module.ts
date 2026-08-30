@@ -38,6 +38,7 @@ import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { PublicRevealIdempotencyModule } from '../../shared/idempotency/public-reveal-idempotency.module';
 import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
+import { OutboxModule } from '../outbox/outbox.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     OrganizationsModule,
     PublicRevealIdempotencyModule,
     RateLimitModule,
+    OutboxModule,
   ],
   controllers: [
     CrmController,

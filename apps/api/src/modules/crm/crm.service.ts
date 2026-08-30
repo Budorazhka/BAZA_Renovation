@@ -12,6 +12,7 @@ import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
 import { AuditService } from '../audit/audit.service';
 import { OrganizationsService } from '../organizations/organizations.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
@@ -190,6 +191,7 @@ export class CrmService {
     private readonly taskRepository: TaskRepository,
     private readonly dealRepository: DealRepository,
     private readonly dealEventRepository: DealEventRepository,
+    private readonly outboxService: OutboxService,
   ) {}
 
   /**
@@ -808,6 +810,24 @@ export class CrmService {
         session,
       );
 
+      // CRM-004: TaskCreated — только при фактическом POST /tasks, в той же
+      // транзакции, что документ+audit (см. taskEventPayload докстринг).
+      // Default deduplicationKey (`task:{taskId}:TaskCreated`) достаточен —
+      // задача создаётся ОДИН раз, дублирующего create с тем же _id физически
+      // не может произойти (новый ObjectId на каждый POST).
+      await this.outboxService.publish(
+        {
+          eventType: 'TaskCreated',
+          aggregateType: 'task',
+          aggregateId: task._id,
+          payload: taskEventPayload(task, {
+            actorPositionId: params.actorPositionId,
+            correlationId: params.correlationId,
+          }),
+        },
+        session,
+      );
+
       return toTaskReadModel(task);
     });
   }
@@ -936,6 +956,22 @@ export class CrmService {
       throw new BadRequestException('Cannot reassign task outside caller scope');
     }
 
+    // CRM-004: reassign на ТО ЖЕ значение assignedPositionId — не мутация,
+    // короткий выход ДО транзакции. Ни version не инкрементируется, ни
+    // audit-запись, ни TaskReassigned не публикуются — "переназначение"
+    // фактически не произошло, нечего фиксировать как факт изменения (тот
+    // же принцип non-event, что modifiedCount:0 у 409, просто другая
+    // причина отсутствия эффекта). null===null (оба "не назначено") тоже
+    // считается отсутствием изменения.
+    const currentAssignee = existingTask.assignedPositionId ?? null;
+    const requestedAssignee = params.assignedPositionId;
+    const isNoopReassign =
+      (currentAssignee === null && requestedAssignee === null) ||
+      (currentAssignee !== null && requestedAssignee !== null && currentAssignee.equals(requestedAssignee));
+    if (isNoopReassign) {
+      return toTaskReadModel(existingTask);
+    }
+
     return runInTransaction(this.connection, async (session) => {
       if (params.assignedPositionId) {
         await this.organizationsService.findAssignablePosition(
@@ -972,6 +1008,30 @@ export class CrmService {
           before: { assignedPositionId: existingTask.assignedPositionId?.toString() ?? null },
           after: { assignedPositionId: updated!.assignedPositionId?.toString() ?? null },
           correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      // CRM-004: TaskReassigned — только при ФАКТИЧЕСКОЙ смене значения
+      // (isNoopReassign выше уже отсеял "reassign на то же самое" до входа
+      // в транзакцию). previousAssignedPositionId/newAssignedPositionId —
+      // единственное поле, специфичное для этого события (не входит в
+      // общий taskEventPayload, т.к. TaskCreated/TaskCompleted его не имеют
+      // смысла нести).
+      await this.outboxService.publish(
+        {
+          eventType: 'TaskReassigned',
+          aggregateType: 'task',
+          aggregateId: params.taskId,
+          payload: {
+            ...taskEventPayload(updated!, {
+              actorPositionId: params.actorPositionId,
+              correlationId: params.correlationId,
+            }),
+            previousAssignedPositionId: existingTask.assignedPositionId?.toString() ?? null,
+            newAssignedPositionId: updated!.assignedPositionId?.toString() ?? null,
+          },
+          deduplicationKey: `task:${params.taskId.toString()}:TaskReassigned:v${params.expectedVersion + 1}`,
         },
         session,
       );
@@ -1046,6 +1106,30 @@ export class CrmService {
             completedAt: completed!.completedAt?.toISOString(),
           },
           correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      // CRM-004: TaskCompleted — только на ПЕРВЫЙ фактический open→completed
+      // переход. Этот код-путь недостижим ни для 409 (modifiedCount:0 бросил
+      // выше, транзакция откатывается, publish никогда не вызывается), ни
+      // для идемпотентного повтора уже завершённой задачи (тот случай
+      // возвращается ДО runInTransaction — см. `if (existingTask.status ===
+      // 'completed')` выше, publish физически не в этой ветке кода).
+      // deduplicationKey версионирован — задача может быть completed ровно
+      // один раз в своей истории (нет reopen-пути от completed), но explicit
+      // версия в ключе следует тому же паттерну, что UnitPriceChanged/
+      // UnitStatusChanged, а не полагается на "и так по построению один раз".
+      await this.outboxService.publish(
+        {
+          eventType: 'TaskCompleted',
+          aggregateType: 'task',
+          aggregateId: params.taskId,
+          payload: taskEventPayload(completed!, {
+            actorPositionId: params.actorPositionId,
+            correlationId: params.correlationId,
+          }),
+          deduplicationKey: `task:${params.taskId.toString()}:TaskCompleted:v${params.expectedVersion + 1}`,
         },
         session,
       );
@@ -2370,6 +2454,34 @@ function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     version: task.version ?? 0,
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
+  };
+}
+
+/**
+ * CRM-004: минимальный, безопасный payload, общий для TaskCreated/
+ * TaskCompleted/TaskReassigned (последнее добавляет previous/new
+ * assignedPositionId поверх этого набора отдельно в reassignTask, т.к.
+ * этот сдвиг не имеет смысла для двух других событий). НАМЕРЕННО не
+ * включает title/description (потенциально содержат PII/бизнес-детали,
+ * consumer не для этого — таск требует "минимальный и безопасный payload:
+ * taskId, organizationId, leadId/contactId, previous/new assignee только
+ * для reassign, actorPositionId, occurredAt/correlationId"), не
+ * телефон/email контакта (contactId — ссылка, не денормализация), не
+ * весь Mongo-документ и не сырое audit-тело.
+ */
+function taskEventPayload(
+  task: { _id: Types.ObjectId; organizationId: Types.ObjectId; leadId?: Types.ObjectId; contactId?: Types.ObjectId; assignedPositionId?: Types.ObjectId },
+  context: { actorPositionId: Types.ObjectId; correlationId: string },
+): Record<string, unknown> {
+  return {
+    taskId: task._id.toString(),
+    organizationId: task.organizationId.toString(),
+    leadId: task.leadId?.toString() ?? null,
+    contactId: task.contactId?.toString() ?? null,
+    assignedPositionId: task.assignedPositionId?.toString() ?? null,
+    actorPositionId: context.actorPositionId.toString(),
+    occurredAt: new Date().toISOString(),
+    correlationId: context.correlationId,
   };
 }
 
