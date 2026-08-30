@@ -152,6 +152,7 @@ describe('buildListingSearchProjection', () => {
       commercialSubtype: 'retail',
       priceAmountMinorUnits: 5_000_00,
       priceCurrency: 'GEL',
+      area: 55,
     });
   });
 });

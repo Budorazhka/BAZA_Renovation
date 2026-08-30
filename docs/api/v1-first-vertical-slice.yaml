@@ -315,6 +315,10 @@ paths:
         - name: city
           in: query
           schema: {type: string}
+        - name: sort
+          in: query
+          description: "Порядок выдачи. Для ЖК поддерживается только newest."
+          schema: {type: string, enum: [newest], default: newest}
       responses:
         '200':
           description: Список публичных карточек (whitelist-поля из MarketplacePublication, ADR-005)
@@ -1338,6 +1342,10 @@ paths:
         - name: commercialSubtype
           in: query
           schema: {type: string, enum: [office, warehouse, retail, business, free_purpose]}
+        - name: sort
+          in: query
+          description: "Порядок выдачи: newest, price_asc/desc или area_asc/desc."
+          schema: {type: string, enum: [newest, price_asc, price_desc, area_asc, area_desc], default: newest}
       responses:
         '200':
           description: Список публичных карточек (whitelist-поля из MarketplacePublication, ADR-005)
@@ -1424,6 +1432,7 @@ components:
     Cursor:
       name: cursor
       in: query
+      description: "Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId."
       schema: {type: string}
     Limit:
       name: limit
@@ -1594,9 +1603,11 @@ components:
 
     PublicDevelopmentList:
       type: object
+      required: [items, nextCursor, total]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/PublicDevelopmentCard'}}
         nextCursor: {type: string, nullable: true}
+        total: {type: integer, minimum: 0, description: "Точное число опубликованных карточек с теми же фильтрами, без учёта cursor."}
 
     PublicDevelopmentCard:
       type: object
@@ -1641,9 +1652,11 @@ components:
 
     PublicListingList:
       type: object
+      required: [items, nextCursor, total]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/PublicListingCard'}}
         nextCursor: {type: string, nullable: true}
+        total: {type: integer, minimum: 0, description: "Точное число опубликованных карточек с теми же фильтрами, без учёта cursor."}
 
     PublicListingCard:
       type: object

@@ -5,4 +5,9 @@ export {
   type PublicationStatus,
   type PublicationSeo,
 } from './schemas/marketplace-publication.schema';
-export { MarketplacePublicationRepository } from './repository/marketplace-publication.repository';
+export {
+  MarketplacePublicationRepository,
+  type PublicCatalogCursor,
+  type PublicCatalogPage,
+  type PublicCatalogSort,
+} from './repository/marketplace-publication.repository';

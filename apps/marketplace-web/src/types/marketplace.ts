@@ -34,6 +34,7 @@ export interface PublicDevelopmentCard {
 export interface PublicDevelopmentList {
   items: PublicDevelopmentCard[]
   nextCursor: string | null
+  total: number
 }
 
 export interface BoundingBox {
@@ -49,6 +50,7 @@ export interface CatalogueQuery {
   limit?: number
   /** MKT-SCR-005: map viewport filter, serialized as minLng,minLat,maxLng,maxLat. */
   bbox?: BoundingBox
+  sort?: 'newest'
 }
 
 export type ListingDealType = 'sale' | 'rent_long' | 'rent_short'
@@ -86,7 +88,10 @@ export interface PublicListingCard {
 export interface PublicListingList {
   items: PublicListingCard[]
   nextCursor: string | null
+  total: number
 }
+
+export type PublicListingSort = 'newest' | 'price_asc' | 'price_desc' | 'area_asc' | 'area_desc'
 
 export interface ListingCatalogueQuery {
   city?: string
@@ -96,5 +101,6 @@ export interface ListingCatalogueQuery {
   cursor?: string
   limit?: number
   bbox?: BoundingBox
+  sort?: PublicListingSort
 }
 

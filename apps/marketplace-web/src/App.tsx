@@ -26,6 +26,7 @@ import type {
   PublicListingCard,
   ListingDealType,
   ListingPropertyType,
+  PublicListingSort,
 } from './types/marketplace'
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -191,6 +192,7 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
 }
 
 type CatalogueTab = 'developments' | 'listings'
+const LISTING_SORTS = ['newest', 'price_asc', 'price_desc', 'area_asc', 'area_desc'] as const
 
 function parseBoundingBox(value: string | null): BoundingBox | undefined {
   if (!value) return undefined
@@ -218,6 +220,10 @@ function CataloguePage() {
   const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
   const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
   const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
+  const rawSortParam = searchParams.get('sort')
+  const sortParam: PublicListingSort = LISTING_SORTS.includes(rawSortParam as PublicListingSort)
+    ? (rawSortParam as PublicListingSort)
+    : 'newest'
   const isMapView = searchParams.get('view') === 'map'
   const bboxParam = parseBoundingBox(searchParams.get('bbox'))
 
@@ -240,6 +246,7 @@ function CataloguePage() {
     propertyType: propertyTypeParam,
     commercialSubtype: commercialSubtypeParam,
     bbox: isMapView ? bboxParam : undefined,
+    sort: sortParam,
   })
 
   const isDev = tabParam === 'developments'
@@ -361,7 +368,19 @@ function CataloguePage() {
               <button type="submit" aria-label="Найти объекты в городе">⌕</button>
             </form>
           ) : null}
-          <button className="sort-control" type="button" aria-label="Сортировка объектов">Сначала дешевле⌄</button>
+          <label className="sort-control" aria-label="Сортировка объектов">
+            <span className="visually-hidden">Сортировка объектов</span>
+            <select
+              value={isDev ? 'newest' : sortParam}
+              onChange={(event) => updateFilters({ sort: event.target.value })}
+            >
+              <option value="newest">Сначала новые</option>
+              {!isDev ? <option value="price_asc">Сначала дешевле</option> : null}
+              {!isDev ? <option value="price_desc">Сначала дороже</option> : null}
+              {!isDev ? <option value="area_asc">Меньше площадь</option> : null}
+              {!isDev ? <option value="area_desc">Больше площадь</option> : null}
+            </select>
+          </label>
           <div className="view-toggle" role="group" aria-label="Вид каталога">
             <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
             <Link className={`view-toggle__link${isMapView ? ' is-active' : ''}`} to={viewUrl('map')}>Карта</Link>
@@ -410,7 +429,7 @@ function CataloguePage() {
               ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
               : `Все опубликованные ${isDev ? 'ЖК' : 'объекты'}`}
           </h2>
-          {state.status === 'ready' ? <span>{`Показано: ${state.items.length}`}</span> : null}
+          {state.status === 'ready' ? <span>{`Показано: ${state.items.length} из ${state.total}`}</span> : null}
           {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
         </div>
 

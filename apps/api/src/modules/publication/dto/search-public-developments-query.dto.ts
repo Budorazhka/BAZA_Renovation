@@ -1,11 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsMongoId, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
 import { IsBboxConstraint } from './is-bbox.constraint';
 
 // Синхронизировано с docs/api/v1-first-vertical-slice.yaml Limit-параметром
 // (default:20, maximum:100) — не менять по отдельности.
 export const DEFAULT_LIST_LIMIT = 20;
 export const MAX_LIST_LIMIT = 100;
+export const PUBLIC_DEVELOPMENT_SORTS = ['newest'] as const;
 
 /**
  * D-04A: query-фильтры GET /public/developments. Тот же паттерн, что
@@ -23,8 +24,12 @@ export class SearchPublicDevelopmentsQueryDto {
   city?: string;
 
   @IsOptional()
-  @IsMongoId()
+  @IsString()
   cursor?: string;
+
+  @IsOptional()
+  @IsIn(PUBLIC_DEVELOPMENT_SORTS)
+  sort?: (typeof PUBLIC_DEVELOPMENT_SORTS)[number];
 
   @IsOptional()
   @Type(() => Number)

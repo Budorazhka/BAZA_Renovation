@@ -5,18 +5,19 @@ describe('Marketplace API client', () => {
   it('passes only supported public catalogue filters and returns the API payload', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({ items: [{ slug: 'seaside', name: 'Seaside' }], nextCursor: 'next-page' }),
+        JSON.stringify({ items: [{ slug: 'seaside', name: 'Seaside' }], nextCursor: 'next-page', total: 42 }),
         { status: 200 },
       ),
     )
     const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
 
-    await expect(api.listDevelopments({ city: 'Batumi', cursor: 'cursor-1', limit: 12 })).resolves.toEqual({
+    await expect(api.listDevelopments({ city: 'Batumi', cursor: 'cursor-1', limit: 12, sort: 'newest' })).resolves.toEqual({
       items: [{ slug: 'seaside', name: 'Seaside' }],
       nextCursor: 'next-page',
+      total: 42,
     })
     expect(fetcher).toHaveBeenCalledWith(
-      'https://api.example.test/api/v1/public/developments?city=Batumi&cursor=cursor-1&limit=12',
+      'https://api.example.test/api/v1/public/developments?city=Batumi&cursor=cursor-1&limit=12&sort=newest',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     )
   })
@@ -27,6 +28,7 @@ describe('Marketplace API client', () => {
         JSON.stringify({
           items: [{ slug: 'batumi-flat-1', dealType: 'sale', price: { amountMinorUnits: 5000000, currency: 'USD' } }],
           nextCursor: null,
+          total: 1,
         }),
         { status: 200 },
       ),
@@ -34,14 +36,15 @@ describe('Marketplace API client', () => {
     const api = createMarketplaceApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
 
     await expect(
-      api.listListings({ city: 'Batumi', dealType: 'sale', propertyType: 'apartment', limit: 12 }),
+      api.listListings({ city: 'Batumi', dealType: 'sale', propertyType: 'apartment', limit: 12, sort: 'price_asc' }),
     ).resolves.toEqual({
       items: [{ slug: 'batumi-flat-1', dealType: 'sale', price: { amountMinorUnits: 5000000, currency: 'USD' } }],
       nextCursor: null,
+      total: 1,
     })
 
     expect(fetcher).toHaveBeenCalledWith(
-      'https://api.example.test/api/v1/public/listings?city=Batumi&dealType=sale&propertyType=apartment&limit=12',
+      'https://api.example.test/api/v1/public/listings?city=Batumi&dealType=sale&propertyType=apartment&limit=12&sort=price_asc',
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     )
   })

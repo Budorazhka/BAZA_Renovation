@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
 import { isAbortError } from '../lib/async'
-import type { BoundingBox, ListingDealType, ListingPropertyType, PublicListingCard } from '../types/marketplace'
+import type {
+  BoundingBox,
+  ListingDealType,
+  ListingPropertyType,
+  PublicListingCard,
+  PublicListingSort,
+} from '../types/marketplace'
 
 export type ListingsCatalogueState =
   | { status: 'loading' }
@@ -10,6 +16,7 @@ export type ListingsCatalogueState =
       status: 'ready'
       items: PublicListingCard[]
       nextCursor: string | null
+      total: number
       loadingMore: boolean
       loadMoreError: string | null
     }
@@ -22,6 +29,7 @@ export interface UseListingsCatalogueQuery {
   commercialSubtype?: string
   bbox?: BoundingBox
   limit?: number
+  sort?: PublicListingSort
 }
 
 export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
@@ -34,7 +42,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const loadMoreAbortControllerRef = useRef<AbortController | null>(null)
-  const { city, dealType, propertyType, commercialSubtype, bbox, limit = 12 } = query
+  const { city, dealType, propertyType, commercialSubtype, bbox, limit = 12, sort = 'newest' } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
   const loadFirstPage = useCallback(async () => {
@@ -58,6 +66,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           commercialSubtype,
           bbox,
           limit,
+          sort,
         },
         { signal: controller.signal },
       )
@@ -72,6 +81,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           status: 'ready',
           items: response.items,
           nextCursor: response.nextCursor,
+          total: typeof response.total === 'number' ? response.total : response.items.length,
           loadingMore: false,
           loadMoreError: null,
         })
@@ -92,7 +102,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           : 'Не удалось загрузить каталог объявлений. Проверьте соединение и попробуйте снова.'
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit, sort])
 
   useEffect(() => {
     void loadFirstPage()
@@ -123,6 +133,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
         bbox,
         cursor,
         limit,
+        sort,
       }, { signal: controller.signal })
       .then(
         (response) => {
@@ -141,6 +152,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
               status: 'ready',
               items: [...current.items, ...newItems],
               nextCursor: response.nextCursor,
+              total: typeof response.total === 'number' ? response.total : current.total,
               loadingMore: false,
               loadMoreError: null,
             }
@@ -161,7 +173,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit, sort])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

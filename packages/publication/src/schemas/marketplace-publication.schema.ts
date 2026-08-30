@@ -117,3 +117,7 @@ MarketplacePublicationSchema.index({ status: 1 });
 // (markPendingIfPublished, admin listing), которым compound не нужен.
 MarketplacePublicationSchema.index({ status: 1, _id: 1 });
 MarketplacePublicationSchema.index({ 'searchProjection.geo': '2dsphere' });
+MarketplacePublicationSchema.index({ status: 1, sourceType: 1, _id: 1 });
+MarketplacePublicationSchema.index({ status: 1, sourceType: 1, 'searchProjection.priceAmountMinorUnits': 1, _id: 1 });
+MarketplacePublicationSchema.index({ status: 1, sourceType: 1, 'searchProjection.area': 1, _id: 1 });
+MarketplacePublicationSchema.index({ status: 1, sourceType: 1, 'searchProjection.city': 1, _id: 1 });

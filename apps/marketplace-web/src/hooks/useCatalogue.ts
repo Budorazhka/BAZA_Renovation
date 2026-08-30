@@ -10,6 +10,7 @@ export type CatalogueState =
       status: 'ready'
       items: PublicDevelopmentCard[]
       nextCursor: string | null
+      total: number
       loadingMore: boolean
       loadMoreError: string | null
     }
@@ -19,6 +20,7 @@ export interface UseCatalogueQuery {
   city?: string
   bbox?: BoundingBox
   limit?: number
+  sort?: 'newest'
 }
 
 export function useCatalogue(query: UseCatalogueQuery = {}): {
@@ -31,7 +33,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const loadMoreAbortControllerRef = useRef<AbortController | null>(null)
-  const { city, bbox, limit = 12 } = query
+  const { city, bbox, limit = 12, sort = 'newest' } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
   const loadFirstPage = useCallback(async () => {
@@ -48,7 +50,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
 
     try {
       const response = await marketplaceApi.listDevelopments(
-        { city: city?.trim() || undefined, bbox, limit },
+        { city: city?.trim() || undefined, bbox, limit, sort },
         { signal: controller.signal },
       )
 
@@ -62,6 +64,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           status: 'ready',
           items: response.items,
           nextCursor: response.nextCursor,
+          total: typeof response.total === 'number' ? response.total : response.items.length,
           loadingMore: false,
           loadMoreError: null,
         })
@@ -82,7 +85,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           : 'Не удалось загрузить каталог новостроек. Проверьте соединение и попробуйте снова.'
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, bboxKey, limit])
+  }, [city, bboxKey, limit, sort])
 
   useEffect(() => {
     void loadFirstPage()
@@ -110,6 +113,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
         bbox,
         cursor,
         limit,
+        sort,
       }, { signal: controller.signal })
       .then(
         (response) => {
@@ -124,6 +128,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
               status: 'ready',
               items: [...current.items, ...newItems],
               nextCursor: response.nextCursor,
+              total: typeof response.total === 'number' ? response.total : current.total,
               loadingMore: false,
               loadMoreError: null,
             }
@@ -144,7 +149,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, bboxKey, limit])
+  }, [city, bboxKey, limit, sort])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

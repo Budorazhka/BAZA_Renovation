@@ -51,7 +51,7 @@ describe('PublicController — whitelist границы public response', () => 
 
   function makeController(listPublishedResult: unknown[], findBySlugResult: unknown) {
     const repository = {
-      listPublished: jest.fn().mockResolvedValue(listPublishedResult),
+      listPublishedPage: jest.fn().mockResolvedValue({ items: listPublishedResult, total: listPublishedResult.length }),
       findBySlug: jest.fn().mockResolvedValue(findBySlugResult),
     } as unknown as MarketplacePublicationRepository;
     return new PublicController(repository);

@@ -337,6 +337,21 @@ h1, h2, h3, .wordmark, .listing-card-price, .detail-price-main {
   background: var(--figma-green);
 }
 
+.sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-control select {
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .filters-drawer {
   padding: 0 4px;
 }
