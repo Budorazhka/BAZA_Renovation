@@ -573,3 +573,131 @@ h3,
   .route-error-boundary__actions button,
   .route-error-boundary__actions a { width: 100%; }
 }
+
+/* Home frame alignment: the approved Figma home keeps the search hero and
+ * promotional cards as two clear vertical beats. The earlier implementation
+ * nested the promos in a desktop side rail, which made the page read like a
+ * dashboard and diverged from the 1035:13357 composition. */
+.home-hero {
+  display: block;
+  width: min(100%, 1769px);
+  margin: 0 auto;
+  padding: clamp(48px, 6vw, 92px) clamp(18px, 3.2vw, 50px) clamp(42px, 5vw, 76px);
+  border: 0;
+  border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(21, 21, 21, 0.04);
+}
+
+.home-hero__copy {
+  width: min(100%, 1220px);
+  margin: 0 auto;
+  display: grid;
+  gap: 22px;
+}
+
+.home-hero h1 {
+  max-width: 22ch;
+  font-size: clamp(2.35rem, 4.1vw, 4rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.home-hero__search-card {
+  width: 100%;
+  max-width: none;
+  padding: 22px 0 0;
+  border: 0;
+  border-top: 1px solid var(--surface-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+.home-hero__tabs {
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.home-hero__tab {
+  font-size: 16px;
+}
+
+.home-search {
+  width: min(100%, 780px);
+}
+
+.home-search__control {
+  max-width: 780px;
+}
+
+.home-hero__promos {
+  width: min(100%, 1769px);
+  margin: clamp(44px, 7vw, 104px) auto 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(16px, 2vw, 30px);
+}
+
+.home-promo {
+  min-height: 270px;
+  padding: clamp(24px, 3vw, 42px);
+  border: 1px solid var(--surface-line);
+  border-radius: 30px;
+}
+
+.home-promo--light {
+  background: #fff;
+}
+
+.home-promo--green {
+  border-color: var(--surface-green);
+}
+
+.home-promo strong {
+  max-width: 24ch;
+  font-size: clamp(1.2rem, 1.8vw, 1.65rem);
+  line-height: 1.25;
+}
+
+.home-promo span {
+  max-width: 46ch;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 980px) {
+  .home-hero { display: block; }
+  .home-hero__promos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .home-hero {
+    padding: 32px 18px 36px;
+    border-radius: 20px;
+  }
+
+  .home-hero h1 {
+    max-width: 15ch;
+    font-size: clamp(2rem, 9vw, 2.35rem);
+    line-height: 1.06;
+  }
+
+  .home-hero__search-card {
+    padding-top: 18px;
+  }
+
+  .home-hero__promos {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 28px;
+  }
+
+  .home-promo {
+    min-height: 184px;
+    padding: 22px;
+    border-radius: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-promo:hover { transform: none; }
+}
