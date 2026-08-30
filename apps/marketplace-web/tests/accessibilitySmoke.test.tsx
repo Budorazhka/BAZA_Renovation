@@ -63,4 +63,28 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
       expect(screen.getAllByRole('heading', { level: 2 }).length).toBeGreaterThan(0)
     })
   })
+
+  it('keeps catalogue-only floating controls off public detail pages', async () => {
+    ;(marketplaceApi.getListing as any).mockResolvedValue({
+      id: 'listing-1',
+      slug: 'listing-1',
+      dealType: 'sale',
+      propertyType: 'apartment',
+      price: { amountMinorUnits: 12000000, currency: 'USD' },
+      location: { city: 'Batumi', address: 'Улица Руставели, 15' },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/listings/listing-1']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 })).toBeDefined()
+    })
+
+    expect(screen.queryByLabelText('Инструменты каталога')).toBeNull()
+    expect(screen.getByRole('contentinfo')).toBeDefined()
+  })
 })

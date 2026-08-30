@@ -61,6 +61,9 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
       expect(screen.getByText('Показано: 2 из 3')).toBeDefined()
     })
 
+    const resultsHeading = screen.getByRole('heading', { name: 'Все опубликованные объекты' })
+    expect(resultsHeading.parentElement?.className).toBe('section-heading')
+
     const loadMoreBtn = screen.getByRole('button', { name: /показать ещё/i })
     fireEvent.click(loadMoreBtn)
 
