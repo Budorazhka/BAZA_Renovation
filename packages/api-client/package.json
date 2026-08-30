@@ -9,8 +9,8 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node ./scripts/verify-contract-layout.mjs && node ./scripts/check-stale.mjs",
-    "check:stale": "node ./scripts/verify-contract-layout.mjs && node ./scripts/check-stale.mjs",
+    "test": "node --test ./scripts/check-stale.test.mjs && node ./scripts/verify-contract-layout.mjs && node ./scripts/check-stale.mjs",
+    "check:stale": "node --test ./scripts/check-stale.test.mjs && node ./scripts/verify-contract-layout.mjs && node ./scripts/check-stale.mjs",
     "clean": "rm -rf dist",
     "check:contract": "node ./scripts/verify-contract-layout.mjs"
   },

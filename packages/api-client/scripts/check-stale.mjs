@@ -12,6 +12,7 @@ import { readFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, relative, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeLineEndings } from './normalize-text.mjs';
 
 const packageDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const committedSchemaPath = join(packageDir, 'src', 'schema.ts');
@@ -42,8 +43,8 @@ const tempSchemaPath = relative(packageDir, join(tempDir, 'schema.ts'));
 try {
   execFileSync('node', [cliEntrypoint, specPath, '-o', tempSchemaPath], { stdio: 'inherit' });
 
-  const committed = readFileSync(committedSchemaPath, 'utf-8');
-  const fresh = readFileSync(tempSchemaPath, 'utf-8');
+  const committed = normalizeLineEndings(readFileSync(committedSchemaPath, 'utf-8'));
+  const fresh = normalizeLineEndings(readFileSync(tempSchemaPath, 'utf-8'));
 
   if (committed !== fresh) {
     console.error(

@@ -112,3 +112,12 @@ node packages/api-client/scripts/verify-contract-layout.mjs
 # 7. Check for whitespace and git issues
 git diff --check
 ```
+
+### Cross-platform generated SDK check
+
+The `@baza/api-client` stale-output check compares generated
+`packages/api-client/src/schema.ts` with the committed file after normalising
+CRLF/CR to LF. This keeps the contract gate strict on content while avoiding a
+false failure when Git materialises the same generated source with Windows line
+endings (`core.autocrlf`). A direct Node test for the normalisation helper runs
+before the OpenAPI layout and stale checks.
