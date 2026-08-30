@@ -352,6 +352,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список задач текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop) видит все задачи tenant'а; own-scope (manager) видит только задачи, назначенные на его собственную Position — сужение применяется на backend до чтения. */
+        get: operations["listTasks"];
+        put?: never;
+        /** Создание новой CRM-задачи с опциональной привязкой к лиду и контакту */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение задачи по ID. Tenant и own-scope проверяются до чтения — чужая задача возвращает 404 (non-disclosure). */
+        get: operations["getTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Частичное обновление задачи (заголовок, описание, срок, исполнитель, статус) */
+        patch: operations["updateTask"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Завершение задачи (перевод в статус completed с фиксацией времени и исполнителя) */
+        post: operations["completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -1374,6 +1427,48 @@ export interface components {
             items: components["schemas"]["AdminAuditEventView"][];
             nextCursor: string | null;
         };
+        TaskView: {
+            id: string;
+            organizationId: string;
+            title: string;
+            description?: string | null;
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled";
+            /** Format: date-time */
+            dueAt?: string | null;
+            assignedPositionId?: string | null;
+            leadId?: string | null;
+            contactId?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedByPositionId?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        TaskListResponse: {
+            items: components["schemas"]["TaskView"][];
+            nextCursor: string | null;
+        };
+        CreateTaskRequest: {
+            title: string;
+            description?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            assignedPositionId?: string;
+            leadId?: string;
+            contactId?: string;
+        };
+        UpdateTaskRequest: {
+            title?: string;
+            description?: string | null;
+            /** Format: date-time */
+            dueAt?: string | null;
+            assignedPositionId?: string | null;
+            /** @enum {string} */
+            status?: "open" | "cancelled";
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -1946,6 +2041,168 @@ export interface operations {
             /** @description FORBIDDEN — нет contact.read */
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                status?: "open" | "completed" | "cancelled";
+                assignedPositionId?: string;
+                leadId?: string;
+                contactId?: string;
+                dueBefore?: string;
+                dueAfter?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задачи текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидные фильтры или assignedPositionId вне scope */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.create */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — указанный leadId или contactId не найден */
+            404: components["responses"]["Error"];
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задача */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED / Нельзя редактировать завершённую задачу */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задача завершена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.complete */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
             404: components["responses"]["Error"];
         };
     };

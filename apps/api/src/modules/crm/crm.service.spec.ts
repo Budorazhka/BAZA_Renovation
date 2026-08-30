@@ -13,6 +13,8 @@ import type { AuditService } from '../audit/audit.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
 import type { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
 
+import type { TaskRepository } from './repository/task.repository';
+
 function makeMockConnection() {
   return {
     startSession: jest.fn().mockResolvedValue({
@@ -34,6 +36,7 @@ function createTestCrmService(overrides: {
   auditService?: unknown;
   organizationsService?: unknown;
   publicRevealIdempotencyService?: unknown;
+  taskRepository?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -52,6 +55,7 @@ function createTestCrmService(overrides: {
       checkReplay: jest.fn().mockResolvedValue(null),
       record: jest.fn().mockResolvedValue(undefined),
     }) as unknown as PublicRevealIdempotencyService,
+    (overrides.taskRepository ?? {}) as unknown as TaskRepository,
   );
 }
 

@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
@@ -13,7 +13,9 @@ import { OrganizationsService } from '../organizations/organizations.service';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
+import { TaskRepository } from './repository/task.repository';
 import type { LeadStage } from './schemas/lead.schema';
+import type { TaskDocument, TaskStatus } from './schemas/task.schema';
 
 type RevealContactResult = { phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId };
 
@@ -43,6 +45,22 @@ export interface CrmContactReadModel {
   phone: string;
   email: string | null;
   createdAt: string;
+}
+
+export interface CrmTaskReadModel {
+  id: string;
+  organizationId: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  dueAt: string | null;
+  assignedPositionId: string | null;
+  leadId: string | null;
+  contactId: string | null;
+  completedAt: string | null;
+  completedByPositionId: string | null;
+  createdAt: string;
+  updatedAt: string | null;
 }
 
 /**
@@ -93,6 +111,7 @@ export class CrmService {
     private readonly auditService: AuditService,
     private readonly organizationsService: OrganizationsService,
     private readonly publicRevealIdempotencyService: PublicRevealIdempotencyService,
+    private readonly taskRepository: TaskRepository,
   ) {}
 
   /**
@@ -262,6 +281,312 @@ export class CrmService {
       throw new NotFoundException('Contact not found');
     }
     return toContactReadModel(contact);
+  }
+
+  /**
+   * GET /tasks. organization-wide роли видят все задачи организации;
+   * own-scope роли (manager) видят только задачи, назначенные на их собственную Position.
+   * Cursor pagination (limit+1 паттерн).
+   */
+  async listTasks(params: {
+    organizationId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
+    leadId?: Types.ObjectId;
+    contactId?: Types.ObjectId;
+    status?: TaskStatus;
+    dueBefore?: Date;
+    dueAfter?: Date;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<{ items: CrmTaskReadModel[]; nextCursor: string | null }> {
+    const rows = await this.taskRepository.listForOrganization(params.organizationId, {
+      assignedPositionId: params.assignedPositionId,
+      leadId: params.leadId,
+      contactId: params.contactId,
+      status: params.status,
+      dueBefore: params.dueBefore,
+      dueAfter: params.dueAfter,
+      cursor: params.cursor,
+      limit: params.limit + 1,
+    });
+    const hasMore = rows.length > params.limit;
+    const tasks = hasMore ? rows.slice(0, params.limit) : rows;
+    const nextCursor = hasMore ? tasks[tasks.length - 1]!._id.toString() : null;
+
+    return {
+      items: tasks.map(toTaskReadModel),
+      nextCursor,
+    };
+  }
+
+  /**
+   * GET /tasks/:taskId. Tenant и own-scope проверяются до возврата —
+   * чужая задача возвращает NotFoundException (non-disclosure).
+   */
+  async getTask(params: {
+    taskId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
+  }): Promise<CrmTaskReadModel> {
+    const task = await this.taskRepository.findByIdForOrganization(
+      params.taskId,
+      params.organizationId,
+      params.assignedPositionId,
+    );
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+    return toTaskReadModel(task);
+  }
+
+  /**
+   * POST /tasks. Создание задачи с привязкой к Lead/Contact и аудитом.
+   */
+  async createTask(params: {
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    requiredScopePositionId?: Types.ObjectId;
+    title: string;
+    description?: string;
+    dueAt?: Date;
+    assignedPositionId?: Types.ObjectId;
+    leadId?: Types.ObjectId;
+    contactId?: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmTaskReadModel> {
+    let resolvedContactId = params.contactId;
+
+    if (params.leadId) {
+      const lead = await this.leadRepository.findByIdForOrganization(
+        params.leadId,
+        params.organizationId,
+        params.requiredScopePositionId,
+      );
+      if (!lead) {
+        throw new NotFoundException('Lead not found');
+      }
+      if (!resolvedContactId) {
+        resolvedContactId = lead.contactId;
+      }
+    }
+
+    if (resolvedContactId) {
+      const contact = await this.contactRepository.findByIdForOrganization(
+        resolvedContactId,
+        params.organizationId,
+      );
+      if (!contact) {
+        throw new NotFoundException('Contact not found');
+      }
+    }
+
+    let targetAssignee = params.assignedPositionId;
+    if (params.requiredScopePositionId) {
+      if (targetAssignee && !targetAssignee.equals(params.requiredScopePositionId)) {
+        throw new BadRequestException('Cannot assign task outside caller scope');
+      }
+      targetAssignee = params.requiredScopePositionId;
+    } else if (!targetAssignee) {
+      targetAssignee = params.actorPositionId;
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      if (targetAssignee) {
+        await this.organizationsService.findAssignablePosition(
+          targetAssignee,
+          params.organizationId,
+          session,
+        );
+      }
+
+      const task = await this.taskRepository.create(
+        {
+          organizationId: params.organizationId,
+          title: params.title,
+          description: params.description,
+          dueAt: params.dueAt,
+          assignedPositionId: targetAssignee,
+          leadId: params.leadId,
+          contactId: resolvedContactId,
+          status: 'open',
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'task.create',
+          resource: 'task',
+          resourceId: task._id,
+          after: {
+            title: task.title,
+            assignedPositionId: task.assignedPositionId?.toString() ?? null,
+            leadId: task.leadId?.toString() ?? null,
+            contactId: task.contactId?.toString() ?? null,
+            dueAt: task.dueAt?.toISOString() ?? null,
+            status: task.status,
+          },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toTaskReadModel(task);
+    });
+  }
+
+  /**
+   * PATCH /tasks/:taskId. Изменение задачи с проверкой own-scope и аудитом.
+   */
+  async updateTask(params: {
+    taskId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    requiredScopePositionId?: Types.ObjectId;
+    title?: string;
+    description?: string | null;
+    dueAt?: Date | null;
+    assignedPositionId?: Types.ObjectId | null;
+    status?: TaskStatus;
+    correlationId: string;
+  }): Promise<CrmTaskReadModel> {
+    const existingTask = await this.taskRepository.findByIdForOrganization(
+      params.taskId,
+      params.organizationId,
+      params.requiredScopePositionId,
+    );
+    if (!existingTask) {
+      throw new NotFoundException('Task not found');
+    }
+
+    if (existingTask.status === 'completed' && params.status !== 'open') {
+      throw new BadRequestException('Cannot edit a completed task');
+    }
+
+    const targetAssignee = params.assignedPositionId;
+    if (params.requiredScopePositionId && targetAssignee) {
+      if (!targetAssignee.equals(params.requiredScopePositionId)) {
+        throw new BadRequestException('Cannot reassign task outside caller scope');
+      }
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      if (targetAssignee && !targetAssignee.equals(existingTask.assignedPositionId ?? Types.ObjectId.createFromTime(0))) {
+        await this.organizationsService.findAssignablePosition(
+          targetAssignee,
+          params.organizationId,
+          session,
+        );
+      }
+
+      await this.taskRepository.updateTask(
+        params.taskId,
+        params.organizationId,
+        {
+          title: params.title,
+          description: params.description,
+          dueAt: params.dueAt,
+          assignedPositionId: targetAssignee,
+          status: params.status,
+        },
+        session,
+      );
+
+      const updated = await this.taskRepository.findByIdForOrganization(
+        params.taskId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'task.update',
+          resource: 'task',
+          resourceId: params.taskId,
+          before: {
+            title: existingTask.title,
+            assignedPositionId: existingTask.assignedPositionId?.toString() ?? null,
+            dueAt: existingTask.dueAt?.toISOString() ?? null,
+            status: existingTask.status,
+          },
+          after: {
+            title: updated!.title,
+            assignedPositionId: updated!.assignedPositionId?.toString() ?? null,
+            dueAt: updated!.dueAt?.toISOString() ?? null,
+            status: updated!.status,
+          },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toTaskReadModel(updated!);
+    });
+  }
+
+  /**
+   * POST /tasks/:taskId/complete. Завершение задачи с фиксацией времени и исполнителя.
+   */
+  async completeTask(params: {
+    taskId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    requiredScopePositionId?: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmTaskReadModel> {
+    const existingTask = await this.taskRepository.findByIdForOrganization(
+      params.taskId,
+      params.organizationId,
+      params.requiredScopePositionId,
+    );
+    if (!existingTask) {
+      throw new NotFoundException('Task not found');
+    }
+
+    if (existingTask.status === 'completed') {
+      return toTaskReadModel(existingTask);
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      await this.taskRepository.completeTask(
+        params.taskId,
+        params.organizationId,
+        params.actorPositionId,
+        session,
+      );
+
+      const completed = await this.taskRepository.findByIdForOrganization(
+        params.taskId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'task.complete',
+          resource: 'task',
+          resourceId: params.taskId,
+          before: { status: existingTask.status },
+          after: {
+            status: 'completed',
+            completedByPositionId: params.actorPositionId.toString(),
+            completedAt: completed!.completedAt?.toISOString(),
+          },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toTaskReadModel(completed!);
+    });
   }
 
   /**
@@ -886,4 +1211,22 @@ function toContactReadModel(contact: {
 /** Экранирует regex-метасимволы в пользовательском вводе перед сборкой $regex — сырой `q` никогда не подставляется в RegExp() как есть (ReDoS/injection). */
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
+  return {
+    id: task._id.toString(),
+    organizationId: task.organizationId.toString(),
+    title: task.title,
+    description: task.description ?? null,
+    status: task.status,
+    dueAt: task.dueAt ? task.dueAt.toISOString() : null,
+    assignedPositionId: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+    leadId: task.leadId ? task.leadId.toString() : null,
+    contactId: task.contactId ? task.contactId.toString() : null,
+    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+    completedByPositionId: task.completedByPositionId ? task.completedByPositionId.toString() : null,
+    createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
+    updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
+  };
 }

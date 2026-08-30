@@ -17,14 +17,17 @@ import {
 import { ContactDocument, ContactSchema } from './schemas/contact.schema';
 import { LeadDocument, LeadSchema } from './schemas/lead.schema';
 import { LeadEventDocument, LeadEventSchema } from './schemas/lead-event.schema';
+import { TaskDocument, TaskSchema } from './schemas/task.schema';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
+import { TaskRepository } from './repository/task.repository';
 import { CrmService } from './crm.service';
 import { CrmController } from './crm.controller';
 import { ListingCrmController } from './listing-crm.controller';
 import { LeadController } from './lead.controller';
 import { ContactController } from './contact.controller';
+import { TaskController } from './task.controller';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -37,6 +40,7 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
       { name: ContactDocument.name, schema: ContactSchema },
       { name: LeadDocument.name, schema: LeadSchema },
       { name: LeadEventDocument.name, schema: LeadEventSchema },
+      { name: TaskDocument.name, schema: TaskSchema },
       { name: MarketplacePublicationDocument.name, schema: MarketplacePublicationSchema },
       { name: DevelopmentDocument.name, schema: DevelopmentSchema },
       { name: PropertyAssetDocument.name, schema: PropertyAssetSchema },
@@ -48,16 +52,18 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     PublicRevealIdempotencyModule,
     RateLimitModule,
   ],
-  controllers: [CrmController, ListingCrmController, LeadController, ContactController],
+  controllers: [CrmController, ListingCrmController, LeadController, ContactController, TaskController],
   providers: [
     ContactRepository,
     LeadRepository,
     LeadEventRepository,
+    TaskRepository,
     MarketplacePublicationRepository,
     DevelopmentRepository,
     PropertyAssetRepository,
     ListingRepository,
     CrmService,
   ],
+  exports: [TaskRepository],
 })
 export class CrmModule {}

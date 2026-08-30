@@ -564,6 +564,180 @@ paths:
           description: NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
           $ref: '#/components/responses/Error'
 
+  /tasks:
+    get:
+      operationId: listTasks
+      summary: >
+        Список задач текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop) видит все задачи tenant'а;
+        own-scope (manager) видит только задачи, назначенные на его собственную
+        Position — сужение применяется на backend до чтения.
+      tags: [erp-crm]
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [open, completed, cancelled]}
+        - name: assignedPositionId
+          in: query
+          schema: {type: string}
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: contactId
+          in: query
+          schema: {type: string}
+        - name: dueBefore
+          in: query
+          schema: {type: string, format: date-time}
+        - name: dueAfter
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Задачи текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидные фильтры или assignedPositionId вне scope
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.read
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: createTask
+      summary: Создание новой CRM-задачи с опциональной привязкой к лиду и контакту
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Задача создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — указанный leadId или contactId не найден
+          $ref: '#/components/responses/Error'
+
+  /tasks/{taskId}:
+    get:
+      operationId: getTask
+      summary: >
+        Получение задачи по ID. Tenant и own-scope проверяются до чтения —
+        чужая задача возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Задача
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+    patch:
+      operationId: updateTask
+      summary: Частичное обновление задачи (заголовок, описание, срок, исполнитель, статус)
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Задача обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED / Нельзя редактировать завершённую задачу
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /tasks/{taskId}/complete:
+    post:
+      operationId: completeTask
+      summary: Завершение задачи (перевод в статус completed с фиксацией времени и исполнителя)
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Задача завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.complete
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
   /admin/publications:
     get:
       operationId: adminListPublications
@@ -2325,3 +2499,55 @@ components:
           items:
             $ref: '#/components/schemas/AdminAuditEventView'
         nextCursor: {type: string, nullable: true}
+
+    TaskView:
+      type: object
+      required: [id, organizationId, title, status, createdAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        status:
+          type: string
+          enum: [open, completed, cancelled]
+        dueAt: {type: string, format: date-time, nullable: true}
+        assignedPositionId: {type: string, nullable: true}
+        leadId: {type: string, nullable: true}
+        contactId: {type: string, nullable: true}
+        completedAt: {type: string, format: date-time, nullable: true}
+        completedByPositionId: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time, nullable: true}
+
+    TaskListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskView'
+        nextCursor: {type: string, nullable: true}
+
+    CreateTaskRequest:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        dueAt: {type: string, format: date-time}
+        assignedPositionId: {type: string}
+        leadId: {type: string}
+        contactId: {type: string}
+
+    UpdateTaskRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000, nullable: true}
+        dueAt: {type: string, format: date-time, nullable: true}
+        assignedPositionId: {type: string, nullable: true}
+        status:
+          type: string
+          enum: [open, cancelled]
