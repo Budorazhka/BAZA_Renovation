@@ -36,6 +36,15 @@ export interface CrmLeadEventReadModel {
   changedAt: string;
 }
 
+export interface CrmContactReadModel {
+  id: string;
+  organizationId: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  createdAt: string;
+}
+
 /**
  * D-05B: технически решение (не owner decision — тот же статус, что сам
  * LEAD_STAGES список, зафиксированный в lead-stage.ts), явный список
@@ -180,6 +189,79 @@ export class CrmService {
     }
     const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
     return toLeadReadModel(lead, contact);
+  }
+
+  /**
+   * GET /contacts. Contact не хранит ownerPositionId напрямую (в отличие
+   * от Lead) — own-scope (manager, contact.read scope:'own',
+   * permission-matrix.md) резолвится ТРАНЗИТИВНО через
+   * LeadRepository.distinctContactIdsForOwner: "свой" контакт — контакт,
+   * связанный хотя бы с одним лидом текущей Position. Это множество
+   * резолвится ОДИН раз здесь, до чтения contacts, и передаётся как
+   * AND-фильтр `_id: {$in: contactIds}` — не постфильтрация уже
+   * прочитанной страницы (та же ошибка класса "пустая страница из-за
+   * постфильтрации", которую buildAuditScopeFilter уже избегает для
+   * audit_events). organization-scope (owner/director/rop/administrator)
+   * получает ownerPositionId:undefined и не резолвит contactIds вовсе —
+   * видит весь tenant.
+   *
+   * `q` — единый поиск по name/phone (не два отдельных query-параметра),
+   * регистронезависимый partial-match, метасимволы regex экранируются
+   * ДО сборки $regex (escapeRegex ниже) — сырой пользовательский ввод
+   * никогда не подставляется в RegExp() как есть (ReDoS/injection).
+   */
+  async listContacts(params: {
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    q?: string;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<{ items: CrmContactReadModel[]; nextCursor: string | null }> {
+    const contactIds = params.ownerPositionId
+      ? await this.leadRepository.distinctContactIdsForOwner(params.organizationId, params.ownerPositionId)
+      : undefined;
+
+    const rows = await this.contactRepository.listForOrganization(params.organizationId, {
+      contactIds,
+      q: params.q ? new RegExp(escapeRegex(params.q), 'i') : undefined,
+      cursor: params.cursor,
+      limit: params.limit + 1,
+    });
+    const hasMore = rows.length > params.limit;
+    const contacts = hasMore ? rows.slice(0, params.limit) : rows;
+    const nextCursor = hasMore ? contacts[contacts.length - 1]!._id.toString() : null;
+
+    return { items: contacts.map(toContactReadModel), nextCursor };
+  }
+
+  /**
+   * GET /contacts/:contactId. Tenant И own-scope проверяются здесь ДО
+   * возврата данных — findByIdForOrganizationScoped принимает уже
+   * резолвленное множество "своих" contactId (own-scope) или undefined
+   * (organization-scope, весь tenant), тот же принцип, что
+   * LeadRepository.findByIdForOrganization(ownerPositionId). Чужой
+   * (другая организация ИЛИ не связан ни с одним "своим" лидом при
+   * own-scope) и несуществующий contactId дают ОДИНАКОВЫЙ
+   * NotFoundException — non-disclosure, тот же паттерн, что getLead.
+   */
+  async getContact(params: {
+    contactId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+  }): Promise<CrmContactReadModel> {
+    const contactIds = params.ownerPositionId
+      ? await this.leadRepository.distinctContactIdsForOwner(params.organizationId, params.ownerPositionId)
+      : undefined;
+
+    const contact = await this.contactRepository.findByIdForOrganizationScoped(
+      params.contactId,
+      params.organizationId,
+      contactIds,
+    );
+    if (!contact) {
+      throw new NotFoundException('Contact not found');
+    }
+    return toContactReadModel(contact);
   }
 
   /**
@@ -781,4 +863,27 @@ function toLeadEventReadModel(event: {
     },
     changedAt: event.changedAt.toISOString(),
   };
+}
+
+function toContactReadModel(contact: {
+  _id: Types.ObjectId;
+  organizationId: Types.ObjectId;
+  name: string;
+  phone: string;
+  email?: string;
+  createdAt: Date;
+}): CrmContactReadModel {
+  return {
+    id: contact._id.toString(),
+    organizationId: contact.organizationId.toString(),
+    name: contact.name,
+    phone: contact.phone,
+    email: contact.email ?? null,
+    createdAt: contact.createdAt.toISOString(),
+  };
+}
+
+/** Экранирует regex-метасимволы в пользовательском вводе перед сборкой $regex — сырой `q` никогда не подставляется в RegExp() как есть (ReDoS/injection). */
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

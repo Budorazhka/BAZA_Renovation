@@ -1337,3 +1337,219 @@ describe('CrmService.listLeadEvents', () => {
     expect(result.nextCursor).toBe(eventIds[0]!.toString());
   });
 });
+
+describe('CrmService.listContacts', () => {
+  function makeReadContactsService(overrides: { leadRepository?: unknown; contactRepository?: unknown }) {
+    const service = createTestCrmService(overrides);
+    return service as unknown as {
+      listContacts(params: {
+        organizationId: Types.ObjectId;
+        ownerPositionId?: Types.ObjectId;
+        q?: string;
+        cursor?: Types.ObjectId;
+        limit: number;
+      }): Promise<{ items: unknown[]; nextCursor: string | null }>;
+    };
+  }
+
+  it('organization-scope: не резолвит contactIds, listForOrganization вызывается без contactIds', async () => {
+    const organizationId = new Types.ObjectId();
+    const distinctContactIdsForOwner = jest.fn();
+    const listForOrganization = jest.fn().mockResolvedValue([]);
+    const service = makeReadContactsService({
+      leadRepository: { distinctContactIdsForOwner },
+      contactRepository: { listForOrganization },
+    });
+
+    await service.listContacts({ organizationId, limit: 20 });
+
+    expect(distinctContactIdsForOwner).not.toHaveBeenCalled();
+    expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
+      contactIds: undefined,
+      q: undefined,
+      cursor: undefined,
+      limit: 21,
+    });
+  });
+
+  it('own-scope: резолвит contactIds через LeadRepository ДО чтения contacts, передаёт множество в фильтр', async () => {
+    const organizationId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+    const contactIds = [new Types.ObjectId(), new Types.ObjectId()];
+    const distinctContactIdsForOwner = jest.fn().mockResolvedValue(contactIds);
+    const listForOrganization = jest.fn().mockResolvedValue([]);
+    const service = makeReadContactsService({
+      leadRepository: { distinctContactIdsForOwner },
+      contactRepository: { listForOrganization },
+    });
+
+    await service.listContacts({ organizationId, ownerPositionId, limit: 20 });
+
+    expect(distinctContactIdsForOwner).toHaveBeenCalledWith(organizationId, ownerPositionId);
+    expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
+      contactIds,
+      q: undefined,
+      cursor: undefined,
+      limit: 21,
+    });
+  });
+
+  it('q передаётся как экранированный regex, метасимволы не интерпретируются', async () => {
+    const organizationId = new Types.ObjectId();
+    const listForOrganization = jest.fn().mockResolvedValue([]);
+    const service = makeReadContactsService({
+      contactRepository: { listForOrganization },
+    });
+
+    await service.listContacts({ organizationId, q: 'a.b+c', limit: 20 });
+
+    const callArgs = listForOrganization.mock.calls[0]![1] as { q: RegExp };
+    expect(callArgs.q).toBeInstanceOf(RegExp);
+    expect(callArgs.q.source).toBe('a\\.b\\+c');
+    expect(callArgs.q.flags).toBe('i');
+  });
+
+  it('limit+1: nextCursor указывает на последнюю ВОЗВРАЩЁННУЮ запись, лишняя отбрасывается', async () => {
+    const organizationId = new Types.ObjectId();
+    const contactIds = [new Types.ObjectId(), new Types.ObjectId()];
+    const rows = contactIds.map((id) => ({
+      _id: id,
+      organizationId,
+      name: 'Иван',
+      phone: '+79990000000',
+      createdAt: new Date('2026-08-30T10:00:00Z'),
+    }));
+    const service = makeReadContactsService({
+      contactRepository: { listForOrganization: jest.fn().mockResolvedValue(rows) },
+    });
+
+    const result = await service.listContacts({ organizationId, limit: 1 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.nextCursor).toBe(contactIds[0]!.toString());
+  });
+
+  it('маппит ContactDocument в CrmContactReadModel — email:null, если отсутствует', async () => {
+    const organizationId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+    const service = makeReadContactsService({
+      contactRepository: {
+        listForOrganization: jest.fn().mockResolvedValue([
+          {
+            _id: contactId,
+            organizationId,
+            name: 'Иван',
+            phone: '+79990000000',
+            createdAt: new Date('2026-08-30T10:00:00Z'),
+          },
+        ]),
+      },
+    });
+
+    const result = await service.listContacts({ organizationId, limit: 20 });
+
+    expect(result.items).toEqual([
+      {
+        id: contactId.toString(),
+        organizationId: organizationId.toString(),
+        name: 'Иван',
+        phone: '+79990000000',
+        email: null,
+        createdAt: '2026-08-30T10:00:00.000Z',
+      },
+    ]);
+  });
+});
+
+describe('CrmService.getContact', () => {
+  function makeReadContactService(overrides: { leadRepository?: unknown; contactRepository?: unknown }) {
+    const service = createTestCrmService(overrides);
+    return service as unknown as {
+      getContact(params: {
+        contactId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        ownerPositionId?: Types.ObjectId;
+      }): Promise<unknown>;
+    };
+  }
+
+  it('organization-scope: не резолвит contactIds, читает напрямую по organizationId', async () => {
+    const contactId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const distinctContactIdsForOwner = jest.fn();
+    const findByIdForOrganizationScoped = jest.fn().mockResolvedValue({
+      _id: contactId,
+      organizationId,
+      name: 'Иван',
+      phone: '+79990000000',
+      createdAt: new Date('2026-08-30T10:00:00Z'),
+    });
+    const service = makeReadContactService({
+      leadRepository: { distinctContactIdsForOwner },
+      contactRepository: { findByIdForOrganizationScoped },
+    });
+
+    await service.getContact({ contactId, organizationId });
+
+    expect(distinctContactIdsForOwner).not.toHaveBeenCalled();
+    expect(findByIdForOrganizationScoped).toHaveBeenCalledWith(contactId, organizationId, undefined);
+  });
+
+  it('own-scope: резолвит contactIds ДО чтения, передаёт в findByIdForOrganizationScoped', async () => {
+    const contactId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+    const contactIds = [contactId];
+    const distinctContactIdsForOwner = jest.fn().mockResolvedValue(contactIds);
+    const findByIdForOrganizationScoped = jest.fn().mockResolvedValue({
+      _id: contactId,
+      organizationId,
+      name: 'Иван',
+      phone: '+79990000000',
+      createdAt: new Date('2026-08-30T10:00:00Z'),
+    });
+    const service = makeReadContactService({
+      leadRepository: { distinctContactIdsForOwner },
+      contactRepository: { findByIdForOrganizationScoped },
+    });
+
+    await service.getContact({ contactId, organizationId, ownerPositionId });
+
+    expect(distinctContactIdsForOwner).toHaveBeenCalledWith(organizationId, ownerPositionId);
+    expect(findByIdForOrganizationScoped).toHaveBeenCalledWith(contactId, organizationId, contactIds);
+  });
+
+  it('чужой (другая организация) контакт — NotFoundException', async () => {
+    const service = makeReadContactService({
+      contactRepository: { findByIdForOrganizationScoped: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.getContact({ contactId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('несуществующий contactId даёт ТОТ ЖЕ NotFoundException, что чужой (non-disclosure)', async () => {
+    const service = makeReadContactService({
+      contactRepository: { findByIdForOrganizationScoped: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.getContact({ contactId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
+    ).rejects.toThrow('Contact not found');
+  });
+
+  it('own-scope: контакт вне множества "своих" — NotFoundException (репозиторий возвращает null)', async () => {
+    const contactId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+    const service = makeReadContactService({
+      leadRepository: { distinctContactIdsForOwner: jest.fn().mockResolvedValue([new Types.ObjectId()]) },
+      contactRepository: { findByIdForOrganizationScoped: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.getContact({ contactId, organizationId, ownerPositionId }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

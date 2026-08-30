@@ -24,6 +24,7 @@ import { CrmService } from './crm.service';
 import { CrmController } from './crm.controller';
 import { ListingCrmController } from './listing-crm.controller';
 import { LeadController } from './lead.controller';
+import { ContactController } from './contact.controller';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -47,7 +48,7 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     PublicRevealIdempotencyModule,
     RateLimitModule,
   ],
-  controllers: [CrmController, ListingCrmController, LeadController],
+  controllers: [CrmController, ListingCrmController, LeadController, ContactController],
   providers: [
     ContactRepository,
     LeadRepository,

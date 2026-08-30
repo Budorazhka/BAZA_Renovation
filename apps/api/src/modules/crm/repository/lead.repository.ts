@@ -51,6 +51,25 @@ export class LeadRepository {
   }
 
   /**
+   * GET /contacts own-scope (contact.read scope:'own', permission-matrix.md):
+   * Contact сам по себе не хранит ownerPositionId — "свой" контакт для
+   * manager'а определён transитивно через Lead (contact связан с лидом,
+   * ownerPositionId которого — эта Position). distinct() возвращает
+   * уникальные contactId без дублей, даже если у Position несколько лидов
+   * на один и тот же Contact (повторный reveal того же телефона — см.
+   * CrmService.resolveContact докстринг). ContactController/CrmService
+   * резолвит это множество ОДИН раз в начале запроса, передаёт как
+   * ContactRepository.listForOrganization({contactIds}) — не постфильтрация
+   * уже прочитанного списка контактов.
+   */
+  async distinctContactIdsForOwner(
+    organizationId: Types.ObjectId,
+    ownerPositionId: Types.ObjectId,
+  ): Promise<Types.ObjectId[]> {
+    return this.model.distinct('contactId', { organizationId, ownerPositionId }).exec();
+  }
+
+  /**
    * assignLead (permission-matrix.md `lead.assign.organization`) — не
    * версионировано (в отличие от Development/Unit): concurrent assign той
    * же lead двумя РОПами одновременно — редкий edge case на MVP-масштабе,

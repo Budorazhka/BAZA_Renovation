@@ -493,6 +493,77 @@ paths:
           description: NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
           $ref: '#/components/responses/Error'
 
+  /contacts:
+    get:
+      operationId: listContacts
+      summary: >
+        Список контактов текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/administrator) видит весь
+        tenant; own-scope (manager) видит только контакты, связанные хотя бы
+        с одним ЕГО лидом (Contact сам по себе не хранит ownerPositionId —
+        own-scope резолвится транзитивно через Lead ДО чтения contacts, не
+        постфильтрацией уже прочитанной страницы). `q` — единый поиск по
+        name/phone (partial, регистронезависимый), не два отдельных
+        query-параметра.
+      tags: [erp-crm]
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 200}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Контакты текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный q/cursor/limit
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+
+  /contacts/{contactId}:
+    get:
+      operationId: getContact
+      summary: >
+        Контакт по id. Tenant И own-scope (транзитивно через Lead)
+        проверяются ДО чтения — чужой (другая организация, либо не связан
+        ни с одним "своим" лидом при own-scope) и несуществующий contactId
+        дают ОДИНАКОВЫЙ 404 (non-disclosure). Ответ не содержит session/
+        password/internal-полей — явная whitelist-проекция на backend.
+      tags: [erp-crm]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Контакт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactView'
+        '400':
+          description: VALIDATION_FAILED — невалидный contactId
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
   /admin/publications:
     get:
       operationId: adminListPublications
@@ -1800,6 +1871,31 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LeadEvent'
+        nextCursor: {type: string, nullable: true}
+
+    ContactView:
+      type: object
+      description: >
+        GET /contacts, GET /contacts/{contactId} item shape
+        (CrmService.CrmContactReadModel) — явная whitelist-проекция
+        (ContactDocument.roles, служебные поля НЕ включены), никогда
+        session/password/internal-поля.
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time}
+
+    ContactListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactView'
         nextCursor: {type: string, nullable: true}
 
     PublicListingList:

@@ -2,6 +2,20 @@ import { Types } from 'mongoose';
 import { LeadRepository } from './lead.repository';
 
 describe('LeadRepository', () => {
+  describe('distinctContactIdsForOwner', () => {
+    it('фильтр включает organizationId И ownerPositionId, distinct по contactId', async () => {
+      const organizationId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const distinctSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ distinct: distinctSpy } as never);
+
+      await repository.distinctContactIdsForOwner(organizationId, ownerPositionId);
+
+      expect(distinctSpy).toHaveBeenCalledWith('contactId', { organizationId, ownerPositionId });
+    });
+  });
+
   describe('assignOwner', () => {
     it('фильтр включает organizationId, не только _id — tenant-escape защита', async () => {
       const id = new Types.ObjectId();

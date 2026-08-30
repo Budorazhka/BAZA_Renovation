@@ -46,4 +46,60 @@ export class ContactRepository {
     if (ids.length === 0) return [];
     return this.model.find({ _id: { $in: ids }, organizationId }).exec();
   }
+
+  /**
+   * GET /contacts/:contactId — тот же non-disclosure паттерн, что
+   * LeadRepository.findByIdForOrganization: organizationId в фильтре
+   * обязателен, чужой контакт неотличим от несуществующего.
+   */
+  async findByIdForOrganizationScoped(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    contactIds?: Types.ObjectId[],
+  ): Promise<ContactDocument | null> {
+    if (contactIds && !contactIds.some((candidate) => candidate.equals(id))) {
+      // own-scope: contactId вне множества "своих" контактов — тот же
+      // 404, что просто отсутствующий id (CrmService решает код ответа,
+      // здесь только null vs документ).
+      return null;
+    }
+    return this.model.findOne({ _id: id, organizationId }).exec();
+  }
+
+  /**
+   * GET /contacts — cursor pagination по `_id` (тот же принцип, что
+   * LeadRepository.listForOrganization/AuditEventRepository.listForAdmin):
+   * ObjectId монотонно возрастает и уникален, `_id`-курсор не имеет
+   * дублей/пропусков. contactIds (own-scope сужение — резолвится ДО
+   * вызова этого метода из LeadRepository.distinctContactIdsForOwner,
+   * repository не знает про Lead/scope) применяется как AND-условие
+   * `_id: {$in: contactIds}`, никогда постфильтрацией уже прочитанного
+   * списка. `q` — регистронезависимый partial-match по name ИЛИ phone,
+   * метасимволы regex экранируются вызывающим кодом (см. escapeRegex в
+   * crm.service.ts) до попадания сюда — repository сам по себе не
+   * защищает от ReDoS/injection, это ответственность caller'а, единого
+   * места сборки $regex во всём CRM read-path.
+   */
+  async listForOrganization(
+    organizationId: Types.ObjectId,
+    params: { contactIds?: Types.ObjectId[]; q?: RegExp; cursor?: Types.ObjectId; limit: number },
+  ): Promise<ContactDocument[]> {
+    if (params.contactIds && params.contactIds.length === 0) {
+      // own-scope с пустым множеством лидов у этой Position — не 0 ни для
+      // одной организации (Mongo $in:[] всегда пусто), явный early-return
+      // экономит бесполезный поход в базу.
+      return [];
+    }
+    const filter: Record<string, unknown> = {
+      organizationId,
+      ...(params.contactIds ? { _id: { $in: params.contactIds } } : {}),
+      ...(params.q ? { $or: [{ name: params.q }, { phone: params.q }] } : {}),
+    };
+    if (params.cursor) {
+      filter._id = params.contactIds
+        ? { $in: params.contactIds, $lt: params.cursor }
+        : { $lt: params.cursor };
+    }
+    return this.model.find(filter).sort({ _id: -1 }).limit(params.limit).exec();
+  }
 }

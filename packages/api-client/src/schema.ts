@@ -318,6 +318,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список контактов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только контакты, связанные хотя бы с одним ЕГО лидом (Contact сам по себе не хранит ownerPositionId — own-scope резолвится транзитивно через Lead ДО чтения contacts, не постфильтрацией уже прочитанной страницы). `q` — единый поиск по name/phone (partial, регистронезависимый), не два отдельных query-параметра. */
+        get: operations["listContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Контакт по id. Tenant И own-scope (транзитивно через Lead) проверяются ДО чтения — чужой (другая организация, либо не связан ни с одним "своим" лидом при own-scope) и несуществующий contactId дают ОДИНАКОВЫЙ 404 (non-disclosure). Ответ не содержит session/ password/internal-полей — явная whitelist-проекция на backend. */
+        get: operations["getContact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -1017,6 +1051,20 @@ export interface components {
         };
         LeadEventListResponse: {
             items: components["schemas"]["LeadEvent"][];
+            nextCursor: string | null;
+        };
+        /** @description GET /contacts, GET /contacts/{contactId} item shape (CrmService.CrmContactReadModel) — явная whitelist-проекция (ContactDocument.roles, служебные поля НЕ включены), никогда session/password/internal-поля. */
+        ContactView: {
+            id?: string;
+            organizationId?: string;
+            name?: string;
+            phone?: string;
+            email?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ContactListResponse: {
+            items: components["schemas"]["ContactView"][];
             nextCursor: string | null;
         };
         PublicListingList: {
@@ -1837,6 +1885,67 @@ export interface operations {
             /** @description FORBIDDEN — нет lead.read */
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
+        };
+    };
+    listContacts: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контакты текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный q/cursor/limit */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    getContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контакт */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный contactId */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
             404: components["responses"]["Error"];
         };
     };
