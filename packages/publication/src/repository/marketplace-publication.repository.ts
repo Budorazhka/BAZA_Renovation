@@ -129,13 +129,27 @@ export class MarketplacePublicationRepository {
     return existing !== null;
   }
 
+  /**
+   * Public developments list — filtered by sourceType:'development', not
+   * just status:'published'. PublicationSourceType also includes 'unit'
+   * and 'listing'; without this filter, a future unit-sourceType publish
+   * mapper (not implemented yet — the worker currently marks every 'unit'
+   * PublicationRequested event build_failed) could silently start mixing
+   * unit publications into the developments list once that mapper exists,
+   * rendering them through toPublicCard's development-shaped fields
+   * (name/classType/startDate — all undefined for a unit's denormalizedFields
+   * shape) instead of a clean, intentional decision about where units
+   * belong. Not reachable today, closed now so it can't become a silent
+   * surprise later — mirrors the sourceType filter listPublishedByFilter
+   * already applies for the listings side.
+   */
   async listPublished(params: {
     cursor?: Types.ObjectId;
     limit: number;
     city?: string;
     bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
   }): Promise<MarketplacePublicationDocument[]> {
-    const filter: Record<string, unknown> = { status: 'published' };
+    const filter: Record<string, unknown> = { status: 'published', sourceType: 'development' };
     if (params.cursor) {
       filter._id = { $gt: params.cursor };
     }

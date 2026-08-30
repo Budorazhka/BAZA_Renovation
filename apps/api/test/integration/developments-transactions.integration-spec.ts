@@ -59,6 +59,7 @@ describe('DevelopmentsService — integration (real MongoDB transactions)', () =
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
     const moduleRef = await Test.createTestingModule({
       imports: [

@@ -1272,6 +1272,8 @@ export interface components {
         ListingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
+        /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+        IdempotencyKeyHeaderOptional: string;
     };
     requestBodies: never;
     headers: never;
@@ -1636,7 +1638,10 @@ export interface operations {
     revealContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKeyHeaderOptional"];
+            };
             path: {
                 slug: string;
             };
@@ -1657,6 +1662,8 @@ export interface operations {
                     "application/json": components["schemas"]["RevealContactResponse"];
                 };
             };
+            /** @description IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса */
+            409: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
         };
@@ -2668,7 +2675,10 @@ export interface operations {
     revealListingContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKeyHeaderOptional"];
+            };
             path: {
                 slug: string;
             };
@@ -2693,6 +2703,8 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом */
             404: components["responses"]["Error"];
+            /** @description IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса */
+            409: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
         };

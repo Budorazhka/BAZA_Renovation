@@ -5,9 +5,11 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import fastifyCookie from '@fastify/cookie';
+import RedisMock from 'ioredis-mock';
 import { AppModule } from '../../src/app.module';
 import { AppExceptionFilter } from '../../src/shared/errors/app-exception.filter';
 import { CorrelationIdMiddleware } from '../../src/shared/errors/correlation-id.middleware';
+import { RedisService } from '../../src/shared/redis/redis.service';
 
 describe('public catalog sort + total (real HTTP + MongoDB)', () => {
   let replSet: MongoMemoryReplSet;
@@ -23,8 +25,13 @@ describe('public catalog sort + total (real HTTP + MongoDB)', () => {
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const redisMockClient = new RedisMock();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue({ client: redisMockClient, onModuleDestroy: async () => {} })
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();

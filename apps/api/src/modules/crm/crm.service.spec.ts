@@ -11,6 +11,7 @@ import type { LeadRepository } from './repository/lead.repository';
 import type { LeadEventRepository } from './repository/lead-event.repository';
 import type { AuditService } from '../audit/audit.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
+import type { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
 
 function makeMockConnection() {
   return {
@@ -32,6 +33,7 @@ function createTestCrmService(overrides: {
   leadEventRepository?: unknown;
   auditService?: unknown;
   organizationsService?: unknown;
+  publicRevealIdempotencyService?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -46,6 +48,10 @@ function createTestCrmService(overrides: {
     (overrides.organizationsService ?? {
       findAssignablePosition: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'vacant' }),
     }) as unknown as OrganizationsService,
+    (overrides.publicRevealIdempotencyService ?? {
+      checkReplay: jest.fn().mockResolvedValue(null),
+      record: jest.fn().mockResolvedValue(undefined),
+    }) as unknown as PublicRevealIdempotencyService,
   );
 }
 
@@ -241,6 +247,178 @@ describe('CrmService.revealContact', () => {
         correlationId: 'test-correlation-id',
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CrmService.revealListingContact — Idempotency-Key (опциональный гостевой механизм)', () => {
+  function seedPublishedListingMocks() {
+    const organizationId = new Types.ObjectId();
+    const propertyAsset = makePropertyAsset({
+      publisherScope: { type: 'organization', organizationId },
+      representativePhone: '+995555123456',
+    });
+    const listing = makeListing({ propertyAssetId: propertyAsset._id });
+    const publication = makePublication({ sourceType: 'listing', sourceId: listing._id, slug: 'batumi-flat-85k' });
+    return { organizationId, propertyAsset, listing, publication };
+  }
+
+  it('без заголовка Idempotency-Key — полностью обратно совместимо: не вызывает checkReplay/record', async () => {
+    const { propertyAsset, listing, publication } = seedPublishedListingMocks();
+    const checkReplaySpy = jest.fn();
+    const recordSpy = jest.fn();
+    const createLeadSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      contactRepository: { findByPhone: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      publicRevealIdempotencyService: { checkReplay: checkReplaySpy, record: recordSpy },
+    });
+
+    await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterPhone: '+995599887766',
+      correlationId: 'test-correlation',
+    });
+
+    expect(checkReplaySpy).not.toHaveBeenCalled();
+    expect(recordSpy).not.toHaveBeenCalled();
+    expect(createLeadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('с заголовком, найдена совпадающая запись — возвращает сохранённый ответ, НЕ создаёт новый Lead/audit', async () => {
+    const { propertyAsset, listing, publication } = seedPublishedListingMocks();
+    const storedLeadId = new Types.ObjectId();
+    const checkReplaySpy = jest.fn().mockResolvedValue({
+      responseStatus: 200,
+      responseBody: { phone: '+995555123456', leadId: storedLeadId.toString() },
+    });
+    const createLeadSpy = jest.fn();
+    const auditAppendSpy = jest.fn();
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      leadRepository: { create: createLeadSpy },
+      auditService: { append: auditAppendSpy },
+      publicRevealIdempotencyService: { checkReplay: checkReplaySpy, record: jest.fn() },
+    });
+
+    const result = await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterPhone: '+995599887766',
+      correlationId: 'test-correlation',
+      idempotencyKey: 'client-key-1',
+    });
+
+    expect(result).toEqual({ phone: '+995555123456', whatsapp: undefined, telegram: undefined, leadId: storedLeadId });
+    expect(createLeadSpy).not.toHaveBeenCalled();
+    expect(auditAppendSpy).not.toHaveBeenCalled();
+  });
+
+  it('с заголовком, записи нет — создаёт Lead, записывает idempotency-запись ВНУТРИ транзакции', async () => {
+    const { propertyAsset, listing, publication } = seedPublishedListingMocks();
+    const leadId = new Types.ObjectId();
+    const checkReplaySpy = jest.fn().mockResolvedValue(null);
+    const recordSpy = jest.fn().mockResolvedValue(undefined);
+    const createLeadSpy = jest.fn().mockResolvedValue({ _id: leadId });
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      contactRepository: { findByPhone: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      publicRevealIdempotencyService: { checkReplay: checkReplaySpy, record: recordSpy },
+    });
+
+    const result = await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterPhone: '+995599887766',
+      correlationId: 'test-correlation',
+      idempotencyKey: 'client-key-2',
+    });
+
+    expect(result.leadId).toEqual(leadId);
+    expect(recordSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publicationSlug: 'batumi-flat-85k',
+        idempotencyKey: 'client-key-2',
+        responseStatus: 200,
+        responseBody: expect.objectContaining({ phone: '+995555123456', leadId: leadId.toString() }),
+        leadId,
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('гонка: duplicate key при record() — повторный checkReplay находит запись победителя, возвращает её как replay', async () => {
+    const { propertyAsset, listing, publication } = seedPublishedListingMocks();
+    const winnerLeadId = new Types.ObjectId();
+    const duplicateKeyError = Object.assign(new Error('E11000 duplicate key error'), { code: 11000 });
+    const checkReplaySpy = jest
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        responseStatus: 200,
+        responseBody: { phone: '+995555123456', leadId: winnerLeadId.toString() },
+      });
+    const recordSpy = jest.fn().mockRejectedValue(duplicateKeyError);
+    const createLeadSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      contactRepository: { findByPhone: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      publicRevealIdempotencyService: { checkReplay: checkReplaySpy, record: recordSpy },
+    });
+
+    const result = await service.revealListingContact({
+      slug: 'batumi-flat-85k',
+      requesterPhone: '+995599887766',
+      correlationId: 'test-correlation',
+      idempotencyKey: 'race-key',
+    });
+
+    expect(result.leadId).toEqual(winnerLeadId);
+    expect(checkReplaySpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('другой requestHash под тем же ключом — пробрасывает IDEMPOTENCY_KEY_CONFLICT (409), не создаёт Lead', async () => {
+    const { propertyAsset, listing, publication } = seedPublishedListingMocks();
+    const conflictError = new AppException(ErrorCode.IDEMPOTENCY_KEY_CONFLICT, 'conflict');
+    const checkReplaySpy = jest.fn().mockRejectedValue(conflictError);
+    const createLeadSpy = jest.fn();
+
+    const service = createTestCrmService({
+      publicationRepository: { findBySlug: jest.fn().mockResolvedValue(publication) },
+      listingRepository: { findById: jest.fn().mockResolvedValue(listing) },
+      propertyAssetRepository: { findById: jest.fn().mockResolvedValue(propertyAsset) },
+      leadRepository: { create: createLeadSpy },
+      publicRevealIdempotencyService: { checkReplay: checkReplaySpy, record: jest.fn() },
+    });
+
+    await expect(
+      service.revealListingContact({
+        slug: 'batumi-flat-85k',
+        requesterPhone: '+995599887766',
+        correlationId: 'test-correlation',
+        idempotencyKey: 'conflict-key',
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.IDEMPOTENCY_KEY_CONFLICT });
+
+    expect(createLeadSpy).not.toHaveBeenCalled();
   });
 });
 

@@ -7,6 +7,16 @@ import type { TenantContext, VerifiedTenantContext } from './tenant-context';
 declare module 'fastify' {
   interface FastifyRequest {
     tenantContext?: VerifiedTenantContext;
+    /**
+     * Mirrors AdminContextMiddleware's hadSessionCookie (see that file's
+     * comment for the full rationale) — lets TenantGuard distinguish "guest,
+     * no baza_session cookie at all" (401 AUTH_NO_SESSION) from "cookie
+     * present but doesn't resolve to a valid TenantContext" (403 FORBIDDEN,
+     * non-disclosure of the exact reason). Previously TenantGuard had no
+     * such distinction and always threw 403, unlike AdminGuard — this
+     * closes that asymmetry between the two audiences.
+     */
+    hadSessionCookieErp?: boolean;
   }
 }
 
@@ -28,6 +38,8 @@ export class TenantContextMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: FastifyRequest, _res: FastifyReply, next: () => void): Promise<void> {
+    req.hadSessionCookieErp = this.sessionService.getRawTokenFromRequest(req) !== undefined;
+
     const session = await this.sessionService.getActiveSessionFromRequest(req, 'erp');
     if (!session) {
       next();

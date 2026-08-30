@@ -27,6 +27,8 @@ import { LeadController } from './lead.controller';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { PublicRevealIdempotencyModule } from '../../shared/idempotency/public-reveal-idempotency.module';
+import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { OrganizationsModule } from '../organizations/organizations.module';
     AuditModule,
     AuthorizationModule,
     OrganizationsModule,
+    PublicRevealIdempotencyModule,
+    RateLimitModule,
   ],
   controllers: [CrmController, ListingCrmController, LeadController],
   providers: [

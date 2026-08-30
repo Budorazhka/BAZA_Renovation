@@ -118,4 +118,51 @@ describe('MediaAssetRepository', () => {
       expect(limitSpy).toHaveBeenCalledWith(50);
     });
   });
+
+  describe('claimForCleanup', () => {
+    it('CAS-фильтр: status:pending И (без claim ИЛИ claim протух до staleClaimCutoff)', async () => {
+      const id = new Types.ObjectId();
+      const staleClaimCutoff = new Date('2026-01-01');
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { updateOne: updateOneSpy };
+
+      const repository = new MediaAssetRepository(mockModel as never);
+      const result = await repository.claimForCleanup(id, staleClaimCutoff);
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        {
+          _id: id,
+          status: 'pending',
+          $or: [{ orphanCleanupClaimedAt: { $exists: false } }, { orphanCleanupClaimedAt: { $lt: staleClaimCutoff } }],
+        },
+        { $set: { orphanCleanupClaimedAt: expect.any(Date) } },
+      );
+      expect(result).toEqual({ modifiedCount: 1 });
+    });
+
+    it('возвращает modifiedCount:0, если гонка с confirmUpload (asset уже не pending) или свежий claim конкурента', async () => {
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+      const mockModel = { updateOne: jest.fn().mockReturnValue({ exec: execSpy }) };
+
+      const repository = new MediaAssetRepository(mockModel as never);
+      const result = await repository.claimForCleanup(new Types.ObjectId(), new Date());
+
+      expect(result).toEqual({ modifiedCount: 0 });
+    });
+  });
+
+  describe('deletePermanently', () => {
+    it('удаляет документ по _id', async () => {
+      const id = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ deletedCount: 1 });
+      const deleteOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const mockModel = { deleteOne: deleteOneSpy };
+
+      const repository = new MediaAssetRepository(mockModel as never);
+      await repository.deletePermanently(id);
+
+      expect(deleteOneSpy).toHaveBeenCalledWith({ _id: id });
+    });
+  });
 });

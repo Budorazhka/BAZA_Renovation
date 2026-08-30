@@ -366,6 +366,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderOptional'
       requestBody:
         required: true
         content:
@@ -379,6 +380,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RevealContactResponse'
+        '409':
+          description: IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса
+          $ref: '#/components/responses/Error'
         '429':
           description: RATE_LIMITED
           $ref: '#/components/responses/Error'
@@ -1396,6 +1400,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderOptional'
       requestBody:
         required: true
         content:
@@ -1414,6 +1419,9 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом
+          $ref: '#/components/responses/Error'
+        '409':
+          description: IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса
           $ref: '#/components/responses/Error'
         '429':
           description: RATE_LIMITED
@@ -1464,6 +1472,16 @@ components:
       required: true
       schema: {type: string, format: uuid}
       description: ADR-006 — обязателен для publish/book/cancel/manual-ledger
+    IdempotencyKeyHeaderOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, format: uuid}
+      description: >
+        Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) —
+        повтор без ключа сохраняет текущую совместимость (всегда новый Lead).
+        С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает
+        сохранённый ответ, не создаёт новый Lead.
 
   responses:
     Error:

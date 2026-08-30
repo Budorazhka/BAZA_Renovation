@@ -87,11 +87,60 @@ export class MediaAssetRepository {
   /**
    * Cleanup-очередь ADR-008 Consequences: intent'ы, застрявшие в pending
    * дольше presigned URL TTL — клиент запросил intent, не завершил загрузку.
+   * orphanCleanupClaimedAt намеренно НЕ фильтруется здесь ($exists:false
+   * или что-либо ещё) — кандидатов на claim ищет caller (media-cleanup.job.ts),
+   * решение "этот claim свежий (пропустить, кто-то другой обрабатывает
+   * прямо сейчас) или протух (retry safe)" принимается в job'е через
+   * claimForCleanup ниже, не здесь: findStalePending — просто "кто вообще
+   * подходит по возрасту", claimForCleanup — атомарный gate поверх этого.
    */
   async findStalePending(olderThan: Date, limit: number): Promise<MediaAssetDocument[]> {
     return this.model
       .find({ status: 'pending', createdAt: { $lt: olderThan } })
       .limit(limit)
       .exec();
+  }
+
+  /**
+   * Атомарная claim-транзакция pending → orphan-cleanup-in-progress — тот же
+   * CAS-принцип, что MediaService.confirmUpload (markVerified/markRejected):
+   * matchCondition в фильтре, не read-then-write. Два одновременных запуска
+   * cleanup (или cleanup vs. гость, реально завершающий upload через
+   * confirmUpload ПОСЛЕ того, как cleanup уже нашёл asset как "stale") не
+   * могут оба выиграть — modifiedCount:0 означает "кто-то другой уже
+   * claimed ИЛИ confirmUpload успел перевести asset в verified/rejected
+   * первым", в обоих случаях caller обязан трактовать это как "безопасно
+   * пропущено", не как ошибку (см. media-cleanup.job.ts).
+   *
+   * staleClaimCutoff — retry предыдущего упавшего прогона: claim, который
+   * старше этого cutoff, считается протухшим (прошлый процесс claimed asset,
+   * но упал ДО удаления Mongo-документа) — этот вызов молча переклеймивает
+   * его же, не требует отдельного unclaim-шага.
+   */
+  async claimForCleanup(
+    id: Types.ObjectId,
+    staleClaimCutoff: Date,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        {
+          _id: id,
+          status: 'pending',
+          $or: [{ orphanCleanupClaimedAt: { $exists: false } }, { orphanCleanupClaimedAt: { $lt: staleClaimCutoff } }],
+        },
+        { $set: { orphanCleanupClaimedAt: new Date() } },
+      )
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /**
+   * Финальный шаг успешного cleanup — вызывается ТОЛЬКО после успешного
+   * MediaStorageService.deleteObject (см. job докстринг: если storage-
+   * delete упал, эта функция не вызывается вообще, документ остаётся
+   * claimed для retry следующим прогоном).
+   */
+  async deletePermanently(id: Types.ObjectId): Promise<void> {
+    await this.model.deleteOne({ _id: id }).exec();
   }
 }

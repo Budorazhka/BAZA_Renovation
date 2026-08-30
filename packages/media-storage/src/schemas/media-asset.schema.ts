@@ -98,6 +98,22 @@ export class MediaAssetDocument extends Document {
   @Prop()
   rejectionReason?: string;
 
+  /**
+   * Orphaned pending media cleanup (media-cleanup.job.ts) claim-marker —
+   * НЕ новое значение в MediaAssetStatus enum (это добавило бы 4-е
+   * состояние, которое пришлось бы учитывать во ВСЕХ местах, читающих
+   * status как 'pending'|'verified'|'rejected' — MediaService, TeamService,
+   * property-assets read models и т.д., см. их докстринги). Отдельное поле
+   * держит cleanup-claim независимым от бизнес-статуса: claim и unclaim не
+   * меняют status вообще, asset остаётся 'pending' с точки зрения любого
+   * другого кода, кроме самой cleanup-job. Timestamp (не boolean) — чтобы
+   * повторный запуск мог отличить "claimed недавно, ещё in-flight" от
+   * "claimed предыдущим прогоном, который упал между claim и storage-delete"
+   * и безопасно повторить попытку для второго случая (см. job докстринг).
+   */
+  @Prop()
+  orphanCleanupClaimedAt?: Date;
+
   declare createdAt: Date;
 }
 

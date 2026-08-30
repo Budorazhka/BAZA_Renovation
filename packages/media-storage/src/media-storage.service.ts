@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { MediaBucket } from './schemas/media-asset.schema';
 
@@ -131,6 +131,20 @@ export class MediaStorageService {
       Key: params.key,
       Body: params.body,
       ContentType: params.contentType,
+    });
+    await this.client.send(command);
+  }
+
+  /**
+   * Удаление объекта — orphaned pending media cleanup (media-cleanup.job.ts).
+   * S3/MinIO DeleteObject идемпотентен по контракту (удаление уже
+   * отсутствующего ключа не ошибка) — вызывающий код не обязан проверять
+   * существование объекта заранее.
+   */
+  async deleteObject(params: { bucket: MediaBucket; key: string }): Promise<void> {
+    const command = new DeleteObjectCommand({
+      Bucket: this.bucketNames[params.bucket],
+      Key: params.key,
     });
     await this.client.send(command);
   }

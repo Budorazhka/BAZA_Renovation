@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { IdentityModule } from './modules/identity/identity.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { AuthorizationModule } from './modules/authorization/authorization.module';
@@ -31,10 +30,13 @@ import { PropertyAssetsModule } from './modules/property-assets/property-assets.
     // D-05: master plan явно требует "reveal — отдельная rate-limited
     // команда" — не глобальный guard на все endpoints (тот же принцип
     // explicit application, что TenantGuard/PermissionGuard), применяется
-    // точечно через @UseGuards(ThrottlerGuard) на конкретном контроллере
-    // (CrmController.revealContact). По IP (req.ip, Fastify-совместимо),
-    // не по identity-сессии — reveal-contact вызывается гостями без сессии.
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
+    // точечно через @UseGuards(RedisRateLimitGuard) на конкретных
+    // контроллерах (CrmController/ListingCrmController.revealContact).
+    // Redis-backed (shared/rate-limit/redis-rate-limit.guard.ts) — заменил
+    // @nestjs/throttler ThrottlerModule.forRoot (in-memory, не shared между
+    // API-инстансами за балансировщиком, см. guard докстринг). По IP
+    // (req.ip, Fastify-совместимо) + по listing/development slug, не по
+    // identity-сессии — reveal-contact вызывается гостями без сессии.
     IdentityModule,
     OrganizationsModule,
     AuthorizationModule,
