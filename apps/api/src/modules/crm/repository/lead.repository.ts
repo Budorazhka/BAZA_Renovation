@@ -26,15 +26,28 @@ export class LeadRepository {
     return this.model.findOne({ _id: id, organizationId, ...(ownerPositionId ? { ownerPositionId } : {}) }).exec();
   }
 
+  /**
+   * Cursor pagination по `_id` (не `createdAt`) — тот же принцип, что
+   * AuditEventRepository.listForAdmin: ObjectId монотонно возрастает и
+   * уникален, поэтому `_id`-курсор не имеет дублей/пропусков даже когда
+   * несколько лидов созданы в одну и ту же миллисекунду. Newest-first
+   * (`$lt` на курсор), симметрично AuditEventRepository. limit+1 — на одну
+   * запись больше, чем запрошено, вызывающий код (CrmService.listLeads)
+   * решает hasMore/nextCursor по факту лишней записи, не отдельным count().
+   */
   async listForOrganization(
     organizationId: Types.ObjectId,
-    params: { ownerPositionId?: Types.ObjectId; stage?: LeadStage; limit: number },
+    params: { ownerPositionId?: Types.ObjectId; stage?: LeadStage; cursor?: Types.ObjectId; limit: number },
   ): Promise<LeadDocument[]> {
-    return this.model
-      .find({ organizationId, ...(params.ownerPositionId ? { ownerPositionId: params.ownerPositionId } : {}), ...(params.stage ? { stage: params.stage } : {}) })
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(params.limit)
-      .exec();
+    const filter: Record<string, unknown> = {
+      organizationId,
+      ...(params.ownerPositionId ? { ownerPositionId: params.ownerPositionId } : {}),
+      ...(params.stage ? { stage: params.stage } : {}),
+    };
+    if (params.cursor) {
+      filter._id = { $lt: params.cursor };
+    }
+    return this.model.find(filter).sort({ _id: -1 }).limit(params.limit).exec();
   }
 
   /**

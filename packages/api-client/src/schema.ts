@@ -284,6 +284,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список лидов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только лиды, где ownerPositionId совпадает с его собственной Position — сужение применяется на backend до чтения, не постфильтрацией. ownerPositionId в query — дополнительное клиентское сужение поверх уже резолвленного scope, никогда не расширяет его (own-scope с чужим ownerPositionId в query — 400, не 403 и не расширение видимости). */
+        get: operations["listLeads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Append-only история stage-переходов ОДНОГО лида, newest-first, cursor-paginated. Tenant и owner/own-scope проверяются ДО чтения lead_events (тот же findByIdForOrganization, что GET /leads/{leadId}) — чужой (другая организация, либо не «свой» лид при own-scope) и несуществующий leadId дают ОДИНАКОВЫЙ 404 (non-disclosure). */
+        get: operations["listLeadEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -942,6 +976,48 @@ export interface components {
             source?: {
                 [key: string]: unknown;
             };
+        };
+        /** @description GET /leads item shape (CrmService.CrmLeadReadModel) — contact встроен как whitelist-проекция {id, name, phone, email?}, никогда весь Contact-документ; ownerPositionId — null, если лид ещё не назначен ни на одну Position. */
+        LeadListItem: {
+            id?: string;
+            organizationId?: string;
+            ownerPositionId?: string | null;
+            /** @enum {string} */
+            stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+            version?: number;
+            source?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt?: string;
+            contact?: {
+                id?: string;
+                name?: string;
+                phone?: string;
+                email?: string | null;
+            } | null;
+        };
+        LeadListResponse: {
+            items: components["schemas"]["LeadListItem"][];
+            nextCursor: string | null;
+        };
+        /** @description Один immutable append-only переход стадии лида (LeadEventDocument). */
+        LeadEvent: {
+            id?: string;
+            leadId?: string;
+            /** @enum {string} */
+            stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+            changedBy?: {
+                /** @enum {string} */
+                type?: "position" | "system";
+                positionId?: string | null;
+            };
+            /** Format: date-time */
+            changedAt?: string;
+        };
+        LeadEventListResponse: {
+            items: components["schemas"]["LeadEvent"][];
+            nextCursor: string | null;
         };
         PublicListingList: {
             items: components["schemas"]["PublicListingCard"][];
@@ -1696,6 +1772,72 @@ export interface operations {
             };
             /** @description FORBIDDEN — нет lead.assign.organization */
             403: components["responses"]["Error"];
+        };
+    };
+    listLeads: {
+        parameters: {
+            query?: {
+                stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+                ownerPositionId?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лиды текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный stage/ownerPositionId/cursor/limit, либо ownerPositionId вне permission scope вызывающего */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    listLeadEvents: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description История переходов лида, newest-first (может быть пустой) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadEventListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный leadId/cursor/limit */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
         };
     };
     adminListPublications: {
