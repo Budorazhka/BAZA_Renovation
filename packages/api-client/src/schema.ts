@@ -76,6 +76,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Проверка текущей сессии без побочных эффектов.
+         * @description Audience определяется сервером по Origin. Отсутствующая, просроченная, отозванная или выданная для другого продукта cookie намеренно не различаются и возвращают authenticated=false.
+         */
+        get: operations["checkSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/register": {
         parameters: {
             query?: never;
@@ -879,8 +899,10 @@ export interface components {
             unpublishReason?: string | null;
         };
         PublicDevelopmentList: {
-            items?: components["schemas"]["PublicDevelopmentCard"][];
-            nextCursor?: string | null;
+            items: components["schemas"]["PublicDevelopmentCard"][];
+            nextCursor: string | null;
+            /** @description Точное число опубликованных карточек с теми же фильтрами, без учёта cursor. */
+            total: number;
         };
         /** @description Только whitelist-поля из MarketplacePublication.denormalizedFields (ADR-005) — никогда внутренние комиссии/notes/tenant-only контакты */
         PublicDevelopmentCard: {
@@ -922,8 +944,10 @@ export interface components {
             };
         };
         PublicListingList: {
-            items?: components["schemas"]["PublicListingCard"][];
-            nextCursor?: string | null;
+            items: components["schemas"]["PublicListingCard"][];
+            nextCursor: string | null;
+            /** @description Точное число опубликованных карточек с теми же фильтрами, без учёта cursor. */
+            total: number;
         };
         /** @description MKT-002: только whitelist-поля из MarketplacePublication.denormalizedFields (ADR-005, apps/worker/src/handlers/listing-publication.mapper.ts) — никогда organizationId/publisherScope/contact/duplicate signals/audit/ commission. media намеренно отсутствует — PropertyAsset/Listing схема не содержит media-поля в этом проходе (PROP-001 не включал). */
         PublicListingCard: {
@@ -1239,6 +1263,7 @@ export interface components {
         };
     };
     parameters: {
+        /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
         Cursor: string;
         Limit: number;
         DevelopmentId: string;
@@ -1319,6 +1344,30 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    checkSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние сессии. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        authenticated: boolean;
+                    };
+                };
+            };
+            /** @description Origin отсутствует или не относится к известному продукту. */
+            401: components["responses"]["Error"];
+        };
+    };
     registerOrganization: {
         parameters: {
             query?: never;
@@ -1352,6 +1401,7 @@ export interface operations {
     listDevelopments: {
         parameters: {
             query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1531,11 +1581,14 @@ export interface operations {
     searchPublicDevelopments: {
         parameters: {
             query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
                 /** @description bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat */
                 bbox?: string;
                 city?: string;
+                /** @description Порядок выдачи. Для ЖК поддерживается только newest. */
+                sort?: "newest";
             };
             header?: never;
             path?: never;
@@ -1643,6 +1696,7 @@ export interface operations {
             query?: {
                 sourceType?: "development" | "unit" | "listing";
                 city?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1736,6 +1790,7 @@ export interface operations {
     adminListAccounts: {
         parameters: {
             query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1955,6 +2010,7 @@ export interface operations {
                 actorId?: string;
                 from?: string;
                 to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -1985,6 +2041,7 @@ export interface operations {
                 action?: string;
                 from?: string;
                 to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -2553,6 +2610,7 @@ export interface operations {
     searchPublicListings: {
         parameters: {
             query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
                 /** @description bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat */
@@ -2561,6 +2619,8 @@ export interface operations {
                 dealType?: "sale" | "rent_long" | "rent_short";
                 propertyType?: "apartment" | "house" | "land" | "commercial";
                 commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose";
+                /** @description Порядок выдачи: newest, price_asc/desc или area_asc/desc. */
+                sort?: "newest" | "price_asc" | "price_desc" | "area_asc" | "area_desc";
             };
             header?: never;
             path?: never;

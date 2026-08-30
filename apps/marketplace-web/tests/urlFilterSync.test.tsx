@@ -173,4 +173,38 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
       )
     })
   })
+
+  it('parses bbox parameter and passes it to API when view=map', async () => {
+    render(
+      <MemoryRouter initialEntries={['/?tab=listings&view=map&bbox=41.60000,41.60000,41.70000,41.70000']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(marketplaceApi.listListings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bbox: { minLng: 41.6, minLat: 41.6, maxLng: 41.7, maxLat: 41.7 },
+        }),
+        expect.any(Object),
+      )
+    })
+  })
+
+  it('does not send bbox to API when view is list (default)', async () => {
+    render(
+      <MemoryRouter initialEntries={['/?tab=developments&bbox=41.60000,41.60000,41.70000,41.70000']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(marketplaceApi.listDevelopments).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bbox: undefined,
+        }),
+        expect.any(Object),
+      )
+    })
+  })
 })

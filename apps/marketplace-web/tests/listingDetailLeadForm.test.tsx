@@ -108,6 +108,36 @@ describe('ListingContactForm Component', () => {
     })
   })
 
+  it('a rapid double-submit before the disabled state commits only sends one request', async () => {
+    let resolveReveal: (value: unknown) => void
+    const revealSpy = vi.spyOn(marketplaceApi, 'revealListingContact').mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReveal = resolve
+        }),
+    )
+
+    render(<ListingContactForm slug="batumi-sea-flat" />)
+
+    const phoneInput = screen.getByLabelText(/Телефон/i)
+    fireEvent.change(phoneInput, { target: { value: '+995 555 12 34 56' } })
+
+    const form = phoneInput.closest('form')!
+    // Firing submit twice back-to-back models two events dispatched before
+    // React has committed the first setStatus('submitting') re-render.
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(revealSpy).toHaveBeenCalledTimes(1)
+    })
+
+    resolveReveal!({ phone: '+995 599 11 22 33', leadId: 'lead-once' })
+    await waitFor(() => {
+      expect(screen.getByText('✓ Заявка отправлена')).toBeDefined()
+    })
+  })
+
   it('handles network error and allows retry', async () => {
     const revealSpy = vi.spyOn(marketplaceApi, 'revealListingContact')
       .mockRejectedValueOnce(new Error('Network error'))

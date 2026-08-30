@@ -128,6 +128,45 @@ describe('Publishing Wizard Auth & Session Flow', () => {
     })
   })
 
+  it('logout clears in-progress form data so the next login on the same tab starts clean', async () => {
+    ;(authApi.checkSession as any).mockResolvedValue(false)
+    ;(authApi.login as any).mockResolvedValue({ identityId: 'user-a', requires2fa: false })
+    ;(authApi.logout as any).mockResolvedValue({ loggedOut: true })
+
+    render(
+      <MemoryRouter>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('auth-input-login')).toBeDefined())
+    fireEvent.change(screen.getByTestId('auth-input-login'), { target: { value: 'user-a@test.local' } })
+    fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'pass-a-123' } })
+    fireEvent.click(screen.getByTestId('auth-submit-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-location')).toBeDefined())
+
+    // User A fills in real PII before logging out without submitting.
+    fireEvent.change(screen.getByTestId('location-input-address'), {
+      target: { value: 'User A private address 42' },
+    })
+
+    fireEvent.click(screen.getByTestId('wizard-logout-btn'))
+    await waitFor(() => expect(screen.getByTestId('wizard-step-auth')).toBeDefined())
+
+    // A second identity logs in on the same tab, same component instance.
+    ;(authApi.login as any).mockResolvedValue({ identityId: 'user-b', requires2fa: false })
+    fireEvent.change(screen.getByTestId('auth-input-login'), { target: { value: 'user-b@test.local' } })
+    fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'pass-b-456' } })
+    fireEvent.click(screen.getByTestId('auth-submit-btn'))
+
+    await waitFor(() => expect(screen.getByTestId('wizard-step-location')).toBeDefined())
+
+    // User B must never see User A's address pre-filled.
+    const addressInput = screen.getByTestId('location-input-address') as HTMLInputElement
+    expect(addressInput.value).toBe('')
+  })
+
   it('shows a real login error instead of silently leaving the form unchanged', async () => {
     ;(authApi.checkSession as any).mockResolvedValue(false)
     ;(authApi.login as any).mockRejectedValue(new Error('Неверный логин или пароль'))

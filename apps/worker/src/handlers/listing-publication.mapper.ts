@@ -89,5 +89,6 @@ export function buildListingSearchProjection(listing: ListingDocument, asset: Pr
     commercialSubtype: asset.commercialSubtype,
     priceAmountMinorUnits: listing.price.amountMinorUnits,
     priceCurrency: listing.price.currency,
+    area: asset.characteristics.area,
   };
 }

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { marketplaceApi, MarketplaceApiError } from '../api/marketplace-api'
 
 export interface ListingContactFormProps {
@@ -28,10 +28,15 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
   const [revealedPhone, setRevealedPhone] = useState<string | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [errorStatus, setErrorStatus] = useState<number | null>(null)
+  // React state updates are not synchronous, so two submit events dispatched
+  // before the first re-render commits would both read status === 'idle' and
+  // both fire a real network request. This ref is checked and flipped
+  // immediately, ahead of any state/await, to close that window.
+  const isSubmittingRef = useRef(false)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (status === 'submitting') return
+    if (isSubmittingRef.current) return
 
     const trimmedPhone = phone.trim()
     if (!trimmedPhone) {
@@ -41,6 +46,7 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
       return
     }
 
+    isSubmittingRef.current = true
     setStatus('submitting')
     setErrorMessage(null)
     setErrorStatus(null)
@@ -66,6 +72,8 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
         setErrorStatus(500)
         setErrorMessage('Не удалось отправить заявку. Пожалуйста, проверьте соединение и попробуйте ещё раз.')
       }
+    } finally {
+      isSubmittingRef.current = false
     }
   }
 

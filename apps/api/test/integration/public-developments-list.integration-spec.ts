@@ -153,12 +153,14 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
     expect(first.statusCode).toBe(200);
     const firstItems = first.body.items as Array<Record<string, unknown>>;
     expect(firstItems).toHaveLength(2);
+    expect(first.body.total).toBe(3);
     expect(first.body.nextCursor).toBe(seeded[1]!.id.toString());
     expect(firstItems[0]!.location).toMatchObject({ geo: { type: 'Point', coordinates: [41.6, 41.6] } });
 
     const second = await get(`?limit=2&cursor=${first.body.nextCursor}`);
     expect(second.statusCode).toBe(200);
     expect((second.body.items as unknown[]).length).toBe(1);
+    expect(second.body.total).toBe(3);
     expect(second.body.nextCursor).toBeNull();
   });
 
@@ -169,6 +171,7 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
     const response = await get('?limit=2');
     expect(response.statusCode).toBe(200);
     expect((response.body.items as unknown[]).length).toBe(2);
+    expect(response.body.total).toBe(2);
     expect(response.body.nextCursor).toBeNull();
   });
 
@@ -248,7 +251,7 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
   it('пустой результат — 200 с items:[] и nextCursor:null, не ошибка', async () => {
     const response = await get('?city=nonexistent-city');
     expect(response.statusCode).toBe(200);
-    expect(response.body).toEqual({ items: [], nextCursor: null });
+    expect(response.body).toEqual({ items: [], nextCursor: null, total: 0 });
   });
 
   it('publication_pending/unpublished/build_failed не попадают в list — только published', async () => {

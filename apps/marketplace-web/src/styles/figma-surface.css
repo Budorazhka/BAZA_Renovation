@@ -1,0 +1,575 @@
+/* Final visual contract for the active marketplace routes.
+ * Source: local Figma handoff (home, catalogue, listing/detail, wizard).
+ * This file is intentionally loaded after app.css so functional scaffold rules
+ * remain available while the approved surface wins at every breakpoint. */
+
+:root {
+  --surface-green: #169600;
+  --surface-green-dark: #107d07;
+  --surface-green-soft: #e5f3dc;
+  --surface-paper: #f1f7eb;
+  --surface-ink: #151515;
+  --surface-muted: #555454;
+  --surface-line: #c8d5c0;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  max-width: 100%;
+}
+
+body {
+  background: var(--surface-paper);
+  color: var(--surface-ink);
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+.wordmark,
+.listing-card-price,
+.detail-price-main {
+  font-family: var(--font-display);
+}
+
+/* The legacy stylesheet contains an older Inter fallback. Keep the approved
+ * Figma families explicit on card headings as well. */
+.development-card h2,
+.listing-card h2,
+.listing-card-price,
+.detail-price-main {
+  font-family: var(--font-display);
+}
+
+/* Shared surfaces */
+.site-header {
+  min-width: 0;
+  background: var(--surface-green);
+  border: 0;
+  border-radius: 0 0 30px 30px;
+  box-shadow: 0 6px 22px rgba(22, 150, 0, 0.16);
+}
+
+.header-actions,
+.main-nav,
+.catalogue-toolbar__actions {
+  min-width: 0;
+}
+
+.header-action--primary {
+  color: var(--surface-green);
+  background: #fff;
+}
+
+.header-action--dark {
+  color: #fff;
+  background: var(--surface-green-dark);
+}
+
+.header-action--primary:hover,
+.header-action--dark:hover {
+  transform: translateY(-1px);
+}
+
+.catalogue-toolbar {
+  border: 1px solid rgba(22, 150, 0, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 8px 28px rgba(21, 21, 21, 0.035);
+}
+
+.catalogue-count {
+  background: transparent;
+}
+
+.catalogue-count strong {
+  color: var(--surface-ink);
+  font-family: var(--font-display);
+}
+
+.catalogue-count span,
+.filters-drawer,
+.catalogue-end-note {
+  color: var(--surface-muted);
+}
+
+.city-form--compact,
+.sort-control,
+.view-toggle {
+  border-color: var(--surface-line);
+}
+
+.city-form--compact {
+  max-width: 100%;
+  background: #fff;
+}
+
+.city-form--compact input {
+  min-width: 0;
+  color: var(--surface-ink);
+}
+
+.sort-control {
+  color: var(--surface-green-dark);
+  background: #fff;
+}
+
+.sort-control:hover {
+  color: #fff;
+  background: var(--surface-green);
+}
+
+.view-toggle__link.is-active,
+.filter-chip.is-active {
+  background: var(--surface-green);
+}
+
+.filters-drawer .catalogue-filters-panel {
+  border: 1px solid rgba(22, 150, 0, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.filter-chip {
+  border-color: var(--surface-line);
+  background: #fff;
+  color: var(--surface-muted);
+}
+
+.filter-chip:hover:not(:disabled) {
+  color: var(--surface-green-dark);
+  background: var(--surface-green-soft);
+}
+
+/* The result heading is part of the catalogue frame, not a screen-reader-only
+ * helper: it carries the current scope and exact server total. */
+.catalogue-section > .section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 0 4px 14px;
+  border-bottom: 1px solid var(--surface-line);
+}
+
+.catalogue-section > .section-heading h2 {
+  margin: 0;
+  color: var(--surface-ink);
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+.catalogue-section > .section-heading span {
+  flex: 0 0 auto;
+  color: var(--surface-muted);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+/* Cards match the catalogue frames: quiet white cards, green affordances. */
+.development-card,
+.listing-card {
+  min-width: 0;
+  border: 1px solid rgba(21, 21, 21, 0.07);
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(21, 21, 21, 0.045);
+}
+
+.development-card:hover,
+.listing-card:hover {
+  border-color: rgba(22, 150, 0, 0.38);
+  box-shadow: 0 14px 30px rgba(22, 150, 0, 0.11);
+}
+
+.development-card .building-placeholder,
+.listing-card .building-placeholder,
+.listing-card-media {
+  background: var(--surface-green-soft);
+}
+
+.development-card__body {
+  min-height: 156px;
+  padding: 18px 20px 20px;
+}
+
+.listing-card__body {
+  min-height: 265px;
+}
+
+.listing-card-price {
+  color: var(--surface-green);
+}
+
+.listing-card .listing-badge,
+.listing-card__contact-actions span:first-child {
+  background: var(--surface-green);
+}
+
+.listing-card__contact-actions span {
+  border-color: var(--surface-green);
+  color: var(--surface-green-dark);
+}
+
+.state-panel,
+.pagination-error-panel {
+  max-width: 100%;
+  border-radius: 14px;
+}
+
+.state-panel {
+  min-height: 180px;
+  display: grid;
+  place-content: center;
+  gap: 12px;
+  padding: 32px;
+  overflow-wrap: anywhere;
+}
+
+.state-panel p,
+.pagination-error-panel p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.retry-btn,
+.back-to-catalogue-btn,
+.load-more {
+  border-radius: 999px;
+  background: var(--surface-green);
+}
+
+.retry-btn:hover,
+.back-to-catalogue-btn:hover,
+.load-more:hover {
+  background: var(--surface-green-dark);
+}
+
+/* Detail screens */
+.detail-page {
+  width: min(100%, 1180px);
+  margin: 0 auto;
+}
+
+.detail-hero,
+.detail-hero--listing {
+  gap: 22px;
+}
+
+.detail-hero > .building-placeholder,
+.detail-hero--listing .listing-gallery {
+  min-height: 420px;
+  border-radius: 18px;
+  box-shadow: 0 12px 35px rgba(21, 21, 21, 0.08);
+}
+
+.detail-hero__copy {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 40px);
+  border: 1px solid rgba(21, 21, 21, 0.08);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.detail-hero__copy h1 {
+  color: var(--surface-ink);
+}
+
+.detail-facts {
+  gap: 0;
+}
+
+.detail-facts div {
+  padding: 16px;
+  border-color: var(--surface-line);
+}
+
+.detail-facts span,
+.detail-description p {
+  color: var(--surface-muted);
+}
+
+.detail-price-box {
+  margin-top: 24px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface-green-soft);
+}
+
+.detail-price-main {
+  color: var(--surface-green);
+}
+
+.listing-gallery__main,
+.listing-gallery__thumb {
+  border-color: var(--surface-line);
+  border-radius: 14px;
+}
+
+.listing-gallery__thumb.is-active {
+  border-color: var(--surface-green);
+}
+
+.listing-lead-card {
+  border: 1px solid rgba(22, 150, 0, 0.2);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(21, 21, 21, 0.045);
+}
+
+.listing-lead-card--success {
+  border-color: rgba(22, 150, 0, 0.36);
+  background: var(--surface-green-soft);
+}
+
+.listing-lead-form__field input {
+  border-color: var(--surface-line);
+  background: var(--surface-paper);
+}
+
+.listing-lead-form__submit {
+  border-radius: 999px;
+  background: var(--surface-green);
+}
+
+/* Global marketplace footer from the approved Figma surface. Publishing has
+ * no catalogue-only floating controls, while the footer remains useful on
+ * public detail pages. */
+.site-footer {
+  display: block;
+  margin-top: clamp(48px, 8vw, 96px);
+  padding: 28px clamp(18px, 5vw, 52px) 36px;
+  border-top: 1px solid var(--surface-line);
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.site-footer__inner {
+  width: min(100%, 1741px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2fr) auto;
+  align-items: start;
+  gap: 28px;
+}
+
+.site-footer__brand,
+.site-footer__brand p,
+.site-footer__copyright {
+  margin: 0;
+}
+
+.site-footer__wordmark {
+  color: var(--surface-ink);
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.05em;
+  text-decoration: none;
+}
+
+.site-footer__wordmark span {
+  color: var(--surface-green);
+}
+
+.site-footer__brand p,
+.site-footer__copyright {
+  margin-top: 8px;
+  color: var(--surface-muted);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.site-footer__nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 18px;
+}
+
+.site-footer__nav a {
+  color: var(--surface-muted);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  text-decoration: none;
+}
+
+.site-footer__nav a:hover {
+  color: var(--surface-green-dark);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.site-footer__copyright {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+/* Tight widths preserve the Figma hierarchy without horizontal clipping. */
+@media (max-width: 900px) {
+  .main-nav { gap: 14px; }
+  .development-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .site-header {
+    min-height: 62px;
+    padding-inline: 14px;
+    gap: 10px;
+    border-radius: 0 0 22px 22px;
+  }
+
+  .main-nav { display: none; }
+  .header-actions { gap: 6px; overflow: hidden; }
+  .header-location,
+  .header-locale,
+  .header-profile { display: none; }
+  .header-action { max-width: 100%; padding-inline: 10px; overflow: hidden; text-overflow: ellipsis; }
+
+  main { padding-inline: 12px; }
+
+  .catalogue-toolbar { align-items: stretch; flex-direction: column; gap: 9px; padding: 10px; }
+  .catalogue-toolbar__actions { width: 100%; flex-wrap: wrap; justify-content: stretch; gap: 8px; }
+  .city-form--compact { flex: 1 1 140px; min-width: 0; }
+  .city-form--compact input { width: 100%; }
+  .sort-control { flex: 0 1 auto; min-width: 0; max-width: 145px; overflow: hidden; text-overflow: ellipsis; }
+  .view-toggle { flex: 0 0 auto; }
+  .clear-filter--compact { flex: 0 0 auto; }
+
+  .development-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .detail-page { padding-top: 22px; }
+  .detail-hero,
+  .detail-hero--listing { grid-template-columns: minmax(0, 1fr); }
+  .detail-hero > .building-placeholder,
+  .detail-hero--listing .listing-gallery { min-height: 280px; }
+  .detail-hero__copy { padding: 22px; }
+  .detail-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .detail-facts div:nth-child(2n) { border-right: 0; }
+  .listing-lead-card { padding: 18px; }
+
+  .catalogue-section > .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+    padding-inline: 0;
+  }
+
+  .site-footer {
+    margin-top: 48px;
+    padding-inline: 12px;
+  }
+
+  .site-footer__inner {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .site-footer__nav {
+    justify-content: flex-start;
+  }
+
+  .site-footer__copyright {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 420px) {
+  .header-action--primary { display: none; }
+  .header-action--dark { font-size: 11px; padding-inline: 9px; }
+  .catalogue-toolbar__actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .city-form--compact { grid-column: 1 / -1; width: 100%; }
+  .sort-control { max-width: 100%; }
+  .development-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-facts { grid-template-columns: minmax(0, 1fr); }
+  .detail-facts div,
+  .detail-facts div:nth-child(2n) { border-right: 0; border-bottom: 1px solid var(--surface-line); }
+  .detail-facts div:last-child { border-bottom: 0; }
+  .state-panel { padding: 24px 16px; }
+}
+
+.route-error-boundary {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 16px;
+}
+
+.route-error-boundary__card {
+  width: min(100%, 560px);
+  padding: clamp(24px, 5vw, 52px);
+  border: 1px solid var(--surface-line);
+  border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 12px 34px rgba(21, 21, 21, 0.08);
+  text-align: center;
+}
+
+.route-error-boundary__eyebrow {
+  margin: 0 0 12px;
+  color: var(--surface-green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.route-error-boundary__card h1 {
+  margin: 0 0 12px;
+  color: var(--surface-ink);
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1.05;
+}
+
+.route-error-boundary__card > p:not(.route-error-boundary__eyebrow) {
+  margin: 0;
+  color: var(--surface-muted);
+  line-height: 1.65;
+}
+
+.route-error-boundary__actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.route-error-boundary__actions button,
+.route-error-boundary__actions a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 1px solid var(--surface-green);
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.route-error-boundary__actions button {
+  color: #fff;
+  background: var(--surface-green);
+}
+
+.route-error-boundary__actions a {
+  color: var(--surface-green);
+  background: transparent;
+}
+
+@media (max-width: 480px) {
+  .route-error-boundary { padding-block: 28px; }
+  .route-error-boundary__actions { flex-direction: column; }
+  .route-error-boundary__actions button,
+  .route-error-boundary__actions a { width: 100%; }
+}

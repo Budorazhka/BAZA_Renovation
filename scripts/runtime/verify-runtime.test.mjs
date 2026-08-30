@@ -45,5 +45,8 @@ test('verifyRuntime checks API and both web origins with defaults', async () => 
     'http://localhost:4173',
     'http://localhost:4174',
   ]);
+  // 4173 == marketplace-web, 4174 == admin-web (ADMIN_WEB replaces the
+  // stale ERP_WEB default previously at the same port — apps/erp-web does
+  // not exist in this worktree).
   assert.equal(results.every((result) => result.ok), true);
 });

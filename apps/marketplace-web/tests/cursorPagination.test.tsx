@@ -40,6 +40,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
           { id: 'item-2', slug: 'item-2', dealType: 'sale', price: { amountMinorUnits: 12000000, currency: 'USD' }, location: { city: 'Batumi' } },
         ],
         nextCursor: 'cur-page-2',
+        total: 3,
       })
       .mockResolvedValueOnce({
         items: [
@@ -47,6 +48,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
           { id: 'item-3', slug: 'item-3', dealType: 'sale', price: { amountMinorUnits: 15000000, currency: 'USD' }, location: { city: 'Batumi' } },
         ],
         nextCursor: null,
+        total: 3,
       })
 
     render(
@@ -56,15 +58,18 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 2')).toBeDefined()
+      expect(screen.getByText('Показано: 2 из 3')).toBeDefined()
     })
+
+    const resultsHeading = screen.getByRole('heading', { name: 'Все опубликованные объекты' })
+    expect(resultsHeading.parentElement?.className).toBe('section-heading')
 
     const loadMoreBtn = screen.getByRole('button', { name: /показать ещё/i })
     fireEvent.click(loadMoreBtn)
 
     await waitFor(() => {
       // 2 initial + 1 new (deduplicated item-2) = 3 total
-      expect(screen.getByText('Показано: 3')).toBeDefined()
+      expect(screen.getByText('Показано: 3 из 3')).toBeDefined()
     })
 
     // Next cursor is null, button disappears and end note is shown
@@ -79,6 +84,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
           { id: 'item-1', slug: 'item-1', dealType: 'sale', price: { amountMinorUnits: 10000000, currency: 'USD' }, location: { city: 'Batumi' } },
         ],
         nextCursor: 'cur-page-2',
+        total: 2,
       })
       .mockRejectedValueOnce(new Error('Network connection timeout'))
       .mockResolvedValueOnce({
@@ -86,6 +92,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
           { id: 'item-2', slug: 'item-2', dealType: 'sale', price: { amountMinorUnits: 20000000, currency: 'USD' }, location: { city: 'Batumi' } },
         ],
         nextCursor: null,
+        total: 2,
       })
 
     render(
@@ -95,7 +102,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 1')).toBeDefined()
+      expect(screen.getByText('Показано: 1 из 2')).toBeDefined()
     })
 
     const loadMoreBtn = screen.getByRole('button', { name: /показать ещё/i })
@@ -104,14 +111,14 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     // Error alert is shown, but initial item-1 is still visible!
     await waitFor(() => {
       expect(screen.getByText('Network connection timeout')).toBeDefined()
-      expect(screen.getByText('Показано: 1')).toBeDefined()
+       expect(screen.getByText('Показано: 1 из 2')).toBeDefined()
     })
 
     const retryBtn = screen.getByRole('button', { name: /попробовать снова/i })
     fireEvent.click(retryBtn)
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 2')).toBeDefined()
+      expect(screen.getByText('Показано: 2 из 2')).toBeDefined()
     })
   })
 })

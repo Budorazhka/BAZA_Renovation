@@ -10,6 +10,12 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 
+# Playwright D-07 runtime E2E gate artifacts (apps/e2e-runtime) — traces/
+# screenshots/videos/HTML report, all regenerated per run, retain-on-failure
+# only per playwright.config.ts, never meant to be committed.
+/apps/e2e-runtime/playwright-report/
+/apps/e2e-runtime/test-results/
+
 # apps/erp-web — отдельный git-репозиторий (свой .git, origin
 # github.com/Berega-team/bz26-client-erp, ветка Nazarov), не поддерево
 # этого монорепо. Коммиты для него делаются внутри apps/erp-web отдельно.

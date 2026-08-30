@@ -20,6 +20,9 @@
     "runtime:ps": "docker compose -f infrastructure/compose/compose.runtime.yml ps",
     "runtime:logs": "docker compose -f infrastructure/compose/compose.runtime.yml logs -f --tail=100",
     "runtime:verify": "node scripts/runtime/verify-runtime.mjs",
+    "runtime:preflight": "node scripts/runtime/preflight.mjs",
+    "runtime:e2e": "pnpm --filter @baza/e2e-runtime test:e2e",
+    "runtime:e2e:list": "pnpm --filter @baza/e2e-runtime test:e2e:list",
     "clean": "turbo run clean && rm -rf node_modules"
   },
   "devDependencies": {

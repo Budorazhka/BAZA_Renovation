@@ -104,6 +104,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
       }
       if (query.cursor) params.set('cursor', query.cursor)
       if (query.limit) params.set('limit', String(query.limit))
+      if (query.sort) params.set('sort', query.sort)
       const suffix = params.size > 0 ? `?${params.toString()}` : ''
       const response = await fetcher(`${apiBaseUrl}/public/developments${suffix}`, {
         headers: { Accept: 'application/json' },
@@ -152,6 +153,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
       }
       if (query.cursor) params.set('cursor', query.cursor)
       if (query.limit) params.set('limit', String(query.limit))
+      if (query.sort) params.set('sort', query.sort)
       const suffix = params.size > 0 ? `?${params.toString()}` : ''
       const response = await fetcher(`${apiBaseUrl}/public/listings${suffix}`, {
         headers: { Accept: 'application/json' },

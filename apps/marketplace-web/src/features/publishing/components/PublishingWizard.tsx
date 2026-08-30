@@ -31,6 +31,7 @@ export function PublishingWizard() {
     submitCharacteristics,
     submitDealTerms,
     uploadPhoto,
+    retryPhoto,
     deletePhoto,
     setCoverPhoto,
     prepareReview,
@@ -143,6 +144,7 @@ export function PublishingWizard() {
             mediaItems={state.mediaItems}
             isUploading={state.isUploadingMedia}
             onUploadPhoto={uploadPhoto}
+            onRetryPhoto={retryPhoto}
             onDeletePhoto={deletePhoto}
             onSetCover={setCoverPhoto}
             onBack={() => setStep('deal')}

@@ -43,6 +43,14 @@ function setCanonical(url: string) {
   element.href = url
 }
 
+function removeCanonical() {
+  if (typeof document === 'undefined') return
+  const element = document.querySelector('link[rel="canonical"]')
+  if (element && element.parentNode) {
+    element.parentNode.removeChild(element)
+  }
+}
+
 function setJsonLd(data: Record<string, unknown> | undefined) {
   if (typeof document === 'undefined') return
   const SCRIPT_ID = 'baza-seo-jsonld'
@@ -69,7 +77,6 @@ export function useSeoMetadata(config: SeoConfig) {
   useEffect(() => {
     if (typeof document === 'undefined') return
 
-    const previousTitle = document.title
     const title = config.title ? `${config.title} — BAZA.sale` : DEFAULT_TITLE
     const description = config.description?.trim() || DEFAULT_DESCRIPTION
     const canonical =
@@ -96,6 +103,7 @@ export function useSeoMetadata(config: SeoConfig) {
       removeMetaTag('og:description', 'property')
       removeMetaTag('og:image', 'property')
       removeMetaTag('og:url', 'property')
+      removeCanonical()
       setJsonLd(undefined)
     }
   }, [config.title, config.description, config.canonicalUrl, config.imageUrl, config.jsonLd])

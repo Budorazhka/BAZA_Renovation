@@ -1,0 +1,21 @@
+{
+  "name": "@baza/e2e-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "D-07 runtime release gate: Playwright suite against real HTTP processes (api + marketplace-web + admin-web + Mongo/Redis/MinIO), not mongodb-memory-server unit/integration tests.",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list",
+    "preflight": "node ../../scripts/runtime/preflight.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@baza/tsconfig": "workspace:*",
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.10.0",
+    "argon2": "^0.41.1",
+    "mongoose": "^8.9.0",
+    "typescript": "^5.7.0"
+  }
+}

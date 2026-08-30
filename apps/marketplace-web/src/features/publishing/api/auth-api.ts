@@ -61,11 +61,8 @@ export const authApi = {
 
   async checkSession(): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE_URL}/marketplace/property-assets`, {
-        method: 'GET',
-        credentials: 'include',
-      })
-      return res.status === 200
+      const response = await request<{ authenticated: boolean }>('/auth/session', { method: 'GET' })
+      return response.authenticated
     } catch {
       return false
     }

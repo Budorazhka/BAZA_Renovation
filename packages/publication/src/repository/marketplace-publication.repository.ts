@@ -8,6 +8,25 @@ import {
   PublicationSourceType,
 } from '../schemas/marketplace-publication.schema';
 
+export type PublicCatalogSort = 'newest' | 'price_asc' | 'price_desc' | 'area_asc' | 'area_desc';
+
+export interface PublicCatalogCursor {
+  id: Types.ObjectId;
+  value?: number | null;
+}
+
+export interface PublicCatalogPage {
+  items: MarketplacePublicationDocument[];
+  total: number;
+}
+
+const SORT_FIELDS: Record<Exclude<PublicCatalogSort, 'newest'>, { field: string; direction: 1 | -1 }> = {
+  price_asc: { field: 'searchProjection.priceAmountMinorUnits', direction: 1 },
+  price_desc: { field: 'searchProjection.priceAmountMinorUnits', direction: -1 },
+  area_asc: { field: 'searchProjection.area', direction: 1 },
+  area_desc: { field: 'searchProjection.area', direction: -1 },
+};
+
 /**
  * Единственная точка доступа к коллекции marketplace_publications
  * (ADR-002 требование 2 применён и здесь). Используется API-процессом
@@ -184,6 +203,104 @@ export class MarketplacePublicationRepository {
       };
     }
     return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
+  }
+
+  /**
+   * Public catalogue page with an exact total and a stable, compound cursor.
+   * The cursor is applied only to the page query; the count always uses the
+   * same visibility/filter predicate without the cursor so it remains honest
+   * across subsequent requests.
+   */
+  async listPublishedPage(params: {
+    cursor?: PublicCatalogCursor;
+    limit: number;
+    city?: string;
+    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    sort?: PublicCatalogSort;
+  }): Promise<PublicCatalogPage> {
+    return this.queryPublicPage({ ...params, sourceType: 'development', sort: params.sort ?? 'newest' });
+  }
+
+  async listPublishedByFilterPage(params: {
+    sourceType: PublicationSourceType;
+    cursor?: PublicCatalogCursor;
+    limit: number;
+    city?: string;
+    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    dealType?: string;
+    propertyType?: string;
+    commercialSubtype?: string;
+    sort?: PublicCatalogSort;
+  }): Promise<PublicCatalogPage> {
+    return this.queryPublicPage({ ...params, sort: params.sort ?? 'newest' });
+  }
+
+  private async queryPublicPage(params: {
+    sourceType: PublicationSourceType;
+    cursor?: PublicCatalogCursor;
+    limit: number;
+    city?: string;
+    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    dealType?: string;
+    propertyType?: string;
+    commercialSubtype?: string;
+    sort: PublicCatalogSort;
+  }): Promise<PublicCatalogPage> {
+    const baseFilter: Record<string, unknown> = { status: 'published', sourceType: params.sourceType };
+    if (params.city) baseFilter['searchProjection.city'] = params.city;
+    if (params.dealType) baseFilter['searchProjection.dealType'] = params.dealType;
+    if (params.propertyType) baseFilter['searchProjection.propertyType'] = params.propertyType;
+    if (params.commercialSubtype) baseFilter['searchProjection.commercialSubtype'] = params.commercialSubtype;
+    if (params.bbox) {
+      baseFilter['searchProjection.geo'] = {
+        $geoWithin: {
+          $box: [
+            [params.bbox.minLng, params.bbox.minLat],
+            [params.bbox.maxLng, params.bbox.maxLat],
+          ],
+        },
+      };
+    }
+
+    const filter: Record<string, unknown> = { ...baseFilter };
+    if (params.cursor) {
+      if (params.sort === 'newest') {
+        filter._id = { $gt: params.cursor.id };
+      } else {
+        const sortField = SORT_FIELDS[params.sort];
+        const value = params.cursor.value;
+        if (value === null || value === undefined) {
+          // Mongo sorts missing values first for ascending order. Once a
+          // client has consumed that prefix, only numeric values remain.
+          if (sortField.direction === 1) filter[sortField.field] = { $exists: true };
+          else filter._id = { $exists: false };
+        } else if (sortField.direction === 1) {
+          filter.$or = [
+            { [sortField.field]: { $gt: value } },
+            { [sortField.field]: value, _id: { $gt: params.cursor.id } },
+          ];
+        } else {
+          filter.$or = [
+            { [sortField.field]: { $lt: value } },
+            { [sortField.field]: value, _id: { $lt: params.cursor.id } },
+            { [sortField.field]: { $exists: false } },
+          ];
+        }
+      }
+    }
+
+    const sortSpec = params.sort === 'newest'
+      ? { _id: 1 as const }
+      : (() => {
+          const sortField = SORT_FIELDS[params.sort];
+          return { [sortField.field]: sortField.direction, _id: sortField.direction };
+        })();
+
+    const [items, total] = await Promise.all([
+      this.model.find(filter).sort(sortSpec).limit(params.limit).exec(),
+      this.model.countDocuments(baseFilter).exec(),
+    ]);
+    return { items, total };
   }
 
   /**

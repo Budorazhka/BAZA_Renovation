@@ -178,6 +178,48 @@ describe('MarketplacePublicationRepository', () => {
     });
   });
 
+  describe('public page methods', () => {
+    it('returns total from the same visibility filter and applies a stable price cursor', async () => {
+      const id = new Types.ObjectId();
+      const document = { _id: id };
+      const findExec = jest.fn().mockResolvedValue([document]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: findExec });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const countExec = jest.fn().mockResolvedValue(7);
+      const countDocumentsSpy = jest.fn().mockReturnValue({ exec: countExec });
+      const mockModel = { find: findSpy, countDocuments: countDocumentsSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const result = await repository.listPublishedByFilterPage({
+        sourceType: 'listing',
+        city: 'Batumi',
+        sort: 'price_asc',
+        cursor: { id, value: 100 },
+        limit: 3,
+      });
+
+      expect(findSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'published',
+          sourceType: 'listing',
+          'searchProjection.city': 'Batumi',
+          $or: [
+            { 'searchProjection.priceAmountMinorUnits': { $gt: 100 } },
+            { 'searchProjection.priceAmountMinorUnits': 100, _id: { $gt: id } },
+          ],
+        }),
+      );
+      expect(sortSpy).toHaveBeenCalledWith({ 'searchProjection.priceAmountMinorUnits': 1, _id: 1 });
+      expect(countDocumentsSpy).toHaveBeenCalledWith({
+        status: 'published',
+        sourceType: 'listing',
+        'searchProjection.city': 'Batumi',
+      });
+      expect(result).toEqual({ items: [document], total: 7 });
+    });
+  });
+
   describe('listForAdmin', () => {
     it('НЕ добавляет status:published — admin видит publication в любом статусе', async () => {
       const execSpy = jest.fn().mockResolvedValue([]);

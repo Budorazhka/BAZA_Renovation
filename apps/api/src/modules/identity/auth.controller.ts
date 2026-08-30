@@ -1,4 +1,4 @@
-import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
@@ -62,6 +62,20 @@ export class AuthController {
   async register(@Body() dto: RegisterRequestDto): Promise<{ identityId: string }> {
     const identityId = await this.authService.registerIdentity({ login: dto.login, password: dto.password });
     return { identityId: identityId.toString() };
+  }
+
+  /**
+   * Read-only session probe for product clients. Audience is still resolved
+   * exclusively from the configured Origin (ADR-004); a missing, expired,
+   * revoked, or wrong-audience cookie is intentionally indistinguishable from
+   * a guest and returns the same `{ authenticated: false }` body.
+   */
+  @Get('session')
+  @HttpCode(200)
+  async checkSession(@Req() req: FastifyRequest): Promise<{ authenticated: boolean }> {
+    const audience = resolveProductAudienceFromOrigin(req.headers.origin);
+    const session = await this.sessionService.getActiveSessionFromRequest(req, audience);
+    return { authenticated: session !== null };
   }
 
   /**

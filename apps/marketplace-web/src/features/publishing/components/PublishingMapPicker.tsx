@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { resolveMapStyleUrl } from '../../../lib/map-config'
 
 type Coordinates = [number, number]
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -28,7 +29,7 @@ export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPick
   const coordinatesRef = useRef(coordinates)
   const onChangeRef = useRef(onChange)
   const [mapError, setMapError] = useState<string | null>(null)
-  const styleUrl = import.meta.env.VITE_MAP_STYLE_URL?.trim()
+  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL)
 
   coordinatesRef.current = coordinates
   onChangeRef.current = onChange

@@ -87,7 +87,7 @@ describe('PublicListingsController — whitelist границы public response'
 
   function makeController(listPublishedResult: unknown[], findBySlugResult: unknown) {
     const repository = {
-      listPublishedByFilter: jest.fn().mockResolvedValue(listPublishedResult),
+      listPublishedByFilterPage: jest.fn().mockResolvedValue({ items: listPublishedResult, total: listPublishedResult.length }),
       findBySlug: jest.fn().mockResolvedValue(findBySlugResult),
     } as unknown as MarketplacePublicationRepository;
     return new PublicListingsController(repository);
@@ -119,6 +119,23 @@ describe('PublicListingsController — whitelist границы public response'
         title: 'Квартира — Продажа — Batumi',
         canonicalUrl: '/listings/apartment-sale-batumi',
       });
+    });
+
+    it('возвращает total и непрозрачный составной cursor для price-сортировки', async () => {
+      const first = makeContaminatedPublication();
+      const second = { ...makeContaminatedPublication(), _id: new Types.ObjectId(), slug: 'second' };
+      const repository = {
+        listPublishedByFilterPage: jest.fn().mockResolvedValue({ items: [first, second], total: 4 }),
+      } as unknown as MarketplacePublicationRepository;
+      const controller = new PublicListingsController(repository);
+      const query = Object.assign(new SearchPublicListingsQueryDto(), { limit: 1, sort: 'price_asc' });
+
+      const result = await controller.searchPublicListings(query);
+
+      expect(result.total).toBe(4);
+      expect(result.items).toHaveLength(1);
+      expect(result.nextCursor).toBeTruthy();
+      expect(result.nextCursor).not.toBe(first._id.toString());
     });
   });
 

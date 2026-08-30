@@ -594,3 +594,304 @@
   margin-top: 1.5rem;
   flex-wrap: wrap;
 }
+
+/* Approved Figma wizard surface. The rules intentionally live after the
+ * scaffold styles so every step shares the same UI-kit language while the
+ * reducer/API contracts remain untouched. */
+:root {
+  --wizard-green: #169600;
+  --wizard-green-dark: #107d07;
+  --wizard-green-soft: #e5f3dc;
+  --wizard-paper: #f1f7eb;
+  --wizard-ink: #151515;
+  --wizard-muted: #555454;
+  --wizard-line: #c8d5c0;
+}
+
+.wizard-container {
+  width: min(100%, 1180px);
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 3vw, 2.5rem) 0 4rem;
+}
+
+.wizard-header {
+  margin-bottom: 1.25rem;
+  padding: 0 0 1.25rem;
+  border-bottom: 1px solid var(--wizard-line);
+}
+
+.wizard-title {
+  color: var(--wizard-ink);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  line-height: 1;
+}
+
+.wizard-caption,
+.wizard-step__subtitle,
+.wizard-field-hint {
+  color: var(--wizard-muted);
+  font-family: var(--font-body);
+}
+
+.wizard-logout-btn {
+  border-color: var(--wizard-line);
+  border-radius: 999px;
+  color: var(--wizard-muted);
+  background: transparent;
+}
+
+.wizard-logout-btn:hover {
+  color: var(--wizard-green-dark);
+  background: var(--wizard-green-soft);
+}
+
+.wizard-progress-nav {
+  gap: 0.8rem;
+  margin-top: 1.25rem;
+  padding-bottom: 0.4rem;
+}
+
+.wizard-progress-nav__item {
+  color: #8c8c8c;
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.wizard-progress-nav__num {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--wizard-line);
+  background: #fff;
+  color: var(--wizard-muted);
+}
+
+.wizard-progress-nav__item.is-current,
+.wizard-progress-nav__item.is-completed {
+  color: var(--wizard-green-dark);
+}
+
+.wizard-progress-nav__item.is-current .wizard-progress-nav__num,
+.wizard-progress-nav__item.is-completed .wizard-progress-nav__num {
+  border-color: var(--wizard-green);
+  background: var(--wizard-green);
+}
+
+.wizard-step {
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+  border: 1px solid var(--wizard-line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(21, 21, 21, 0.055);
+}
+
+.wizard-step__header {
+  margin-bottom: 1.75rem;
+}
+
+.wizard-step__header h2 {
+  color: var(--wizard-ink);
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.wizard-auth-toggle {
+  padding: 4px;
+  border: 1px solid var(--wizard-line);
+  border-radius: 999px;
+  background: var(--wizard-paper);
+}
+
+.wizard-auth-toggle__btn {
+  border-radius: 999px;
+  color: var(--wizard-muted);
+  font-family: var(--font-body);
+}
+
+.wizard-auth-toggle__btn.is-active {
+  color: var(--wizard-green-dark);
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(21, 21, 21, 0.08);
+}
+
+.wizard-field label {
+  color: var(--wizard-muted);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.wizard-field input,
+.wizard-field select,
+.wizard-field textarea {
+  border-color: var(--wizard-line);
+  border-radius: 10px;
+  background: var(--wizard-paper);
+  color: var(--wizard-ink);
+  font-family: var(--font-body);
+}
+
+.wizard-field input:focus,
+.wizard-field select:focus,
+.wizard-field textarea:focus {
+  border-color: var(--wizard-green);
+  box-shadow: 0 0 0 3px rgba(22, 150, 0, 0.14);
+}
+
+.wizard-chip {
+  border-color: var(--wizard-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--wizard-muted);
+  font-family: var(--font-body);
+}
+
+.wizard-chip:hover {
+  background: var(--wizard-green-soft);
+}
+
+.wizard-chip.is-active {
+  border-color: var(--wizard-green);
+  background: var(--wizard-green);
+}
+
+.wizard-map-picker,
+.publishing-map-picker {
+  border-color: var(--wizard-line);
+  border-radius: 14px;
+  background: var(--wizard-paper);
+}
+
+.publishing-map-picker__marker {
+  background: var(--wizard-green);
+}
+
+.wizard-alert--error {
+  border-color: rgba(200, 50, 39, 0.38);
+  background: #fff3f1;
+  color: #9f2d23;
+}
+
+.wizard-alert--warning {
+  border-color: #dcae36;
+  background: #fff8df;
+  color: #705514;
+}
+
+.wizard-price-preview,
+.wizard-summary-card {
+  border-color: var(--wizard-line);
+  border-radius: 14px;
+  background: var(--wizard-green-soft);
+}
+
+.wizard-price-preview__label,
+.wizard-summary-label {
+  color: var(--wizard-muted);
+}
+
+.wizard-price-preview__val {
+  color: var(--wizard-green-dark);
+  font-family: var(--font-display);
+}
+
+.wizard-actions {
+  margin-top: 1.5rem;
+}
+
+.wizard-btn {
+  min-height: 44px;
+  border-radius: 999px;
+  font-family: var(--font-body);
+  font-weight: 700;
+}
+
+.wizard-btn--primary,
+.wizard-btn--success {
+  background: var(--wizard-green);
+}
+
+.wizard-btn--primary:hover:not(:disabled),
+.wizard-btn--success:hover:not(:disabled) {
+  background: var(--wizard-green-dark);
+}
+
+.wizard-btn--secondary {
+  border-color: var(--wizard-line);
+  background: #fff;
+  color: var(--wizard-muted);
+}
+
+.wizard-btn--secondary:hover:not(:disabled) {
+  background: var(--wizard-green-soft);
+}
+
+.wizard-btn--warning {
+  background: #c88b16;
+}
+
+.wizard-upload-dropzone {
+  border-color: var(--wizard-green);
+  border-radius: 16px;
+  background: var(--wizard-paper);
+}
+
+.wizard-upload-dropzone:hover {
+  border-color: var(--wizard-green-dark);
+  background: var(--wizard-green-soft);
+}
+
+.wizard-upload-dropzone__label {
+  color: var(--wizard-muted);
+  font-family: var(--font-body);
+}
+
+.wizard-media-card {
+  border-color: var(--wizard-line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.wizard-media-card.is-cover {
+  border-color: var(--wizard-green);
+  box-shadow: 0 0 0 2px rgba(22, 150, 0, 0.16);
+}
+
+.wizard-media-card__badge {
+  background: var(--wizard-green);
+}
+
+.wizard-btn-link {
+  color: var(--wizard-green-dark);
+}
+
+.wizard-summary-row {
+  border-bottom-color: rgba(22, 150, 0, 0.18);
+}
+
+.wizard-result-box h2 {
+  color: var(--wizard-ink);
+  font-family: var(--font-display);
+}
+
+.wizard-spinner {
+  border-color: var(--wizard-line);
+  border-top-color: var(--wizard-green);
+}
+
+@media (max-width: 680px) {
+  .wizard-container { padding: 1.25rem 0 2.5rem; }
+  .wizard-header__row { gap: 16px; }
+  .wizard-title { font-size: 2.1rem; }
+  .wizard-progress-nav { margin-inline: -0.25rem; }
+  .wizard-step { padding: 1.1rem; border-radius: 14px; }
+  .wizard-actions { flex-direction: column-reverse; }
+  .wizard-actions .wizard-btn { width: 100%; }
+  .wizard-published-actions { flex-direction: column; }
+  .wizard-published-actions .wizard-btn { width: 100%; }
+}

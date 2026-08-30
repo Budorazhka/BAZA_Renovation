@@ -51,6 +51,10 @@ export interface WizardMediaItem {
   status: 'pending' | 'uploading' | 'verified' | 'rejected'
   progressPercent?: number
   isPrivate?: boolean
+  // Which 3-phase upload step failed, so a retry can resume there instead of
+  // restarting the whole upload (and re-running phase 1 for a file that
+  // already has a real backend upload-intent from a previous attempt).
+  failedPhase?: 'intent' | 'upload' | 'confirm'
 }
 
 export interface DuplicateCandidate {

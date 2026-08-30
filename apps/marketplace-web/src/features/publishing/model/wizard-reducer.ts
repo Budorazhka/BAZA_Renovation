@@ -91,13 +91,25 @@ export type WizardAction =
 
 export function wizardReducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
-    case 'SET_AUTH_STATUS':
+    case 'SET_AUTH_STATUS': {
+      if (!action.isAuthenticated) {
+        // Logging out (explicit click, or session expiry detected on the next
+        // request) must not leave a previous identity's address, phone,
+        // price, or uploaded media sitting in memory for whoever authenticates
+        // next in the same tab. Only the step/auth fields survive the reset.
+        return {
+          ...initialWizardState,
+          isAuthenticated: false,
+          step: 'auth',
+        }
+      }
       return {
         ...state,
-        isAuthenticated: action.isAuthenticated,
+        isAuthenticated: true,
         identityId: action.identityId,
-        step: action.isAuthenticated && state.step === 'auth' ? 'location' : !action.isAuthenticated ? 'auth' : state.step,
+        step: state.step === 'auth' ? 'location' : state.step,
       }
+    }
 
     case 'SET_STEP':
       return {

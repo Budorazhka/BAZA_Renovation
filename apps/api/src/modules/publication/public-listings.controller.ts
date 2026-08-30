@@ -1,9 +1,13 @@
 import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
-import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicListingsQueryDto } from './dto/search-public-listings-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
 import { toPublicGeoPoint } from './public-geo';
+import {
+  decodePublicCatalogCursor,
+  encodePublicCatalogCursor,
+  getPublicCatalogCursorValue,
+} from './public-catalog-cursor';
 
 @Controller('public/listings')
 export class PublicListingsController {
@@ -13,23 +17,36 @@ export class PublicListingsController {
   async searchPublicListings(@Query() query: SearchPublicListingsQueryDto) {
     const bbox = query.bbox ? parseBboxOrThrow(query.bbox) : undefined;
 
-    const items = await this.publicationRepository.listPublishedByFilter({
+    const sort = query.sort ?? 'newest';
+    const cursor = query.cursor ? decodePublicCatalogCursor(query.cursor, sort) : undefined;
+    const page = await this.publicationRepository.listPublishedByFilterPage({
       sourceType: 'listing',
-      cursor: query.cursor ? new Types.ObjectId(query.cursor) : undefined,
+      cursor,
       limit: query.limit + 1,
       city: query.city,
       bbox,
       dealType: query.dealType,
       propertyType: query.propertyType,
       commercialSubtype: query.commercialSubtype,
+      sort,
     });
-    const hasMore = items.length > query.limit;
-    const pageItems = hasMore ? items.slice(0, query.limit) : items;
-    const nextCursor = hasMore ? pageItems[pageItems.length - 1]!._id.toString() : null;
+    const hasMore = page.items.length > query.limit;
+    const pageItems = hasMore ? page.items.slice(0, query.limit) : page.items;
+    const last = pageItems[pageItems.length - 1];
+    const nextCursor = hasMore && last
+      ? sort === 'newest'
+        ? last._id.toString()
+        : encodePublicCatalogCursor({
+            sort,
+            id: last._id,
+            value: getPublicCatalogCursorValue(last, sort),
+          })
+      : null;
 
     return {
       items: pageItems.map(toPublicListingCard),
       nextCursor,
+      total: page.total,
     };
   }
 

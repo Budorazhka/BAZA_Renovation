@@ -1,9 +1,13 @@
 import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
-import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
 import { toPublicGeoPoint } from './public-geo';
+import {
+  decodePublicCatalogCursor,
+  encodePublicCatalogCursor,
+  getPublicCatalogCursorValue,
+} from './public-catalog-cursor';
 
 /**
  * D-04/OpenAPI v1-first-vertical-slice.yaml: публичные marketplace
@@ -28,24 +32,32 @@ export class PublicController {
     // метод — parseBboxOrThrow безопасно вызывать без повторной проверки.
     const bbox = query.bbox ? parseBboxOrThrow(query.bbox) : undefined;
 
-    // limit+1 паттерн: если пришло limit+1 записей — есть следующая
-    // страница, обрезаем лишнюю и её _id становится nextCursor. Раньше
-    // (items.length === limit) было двусмысленно — тот же результат давал
-    // "есть следующая страница", даже когда реальных оставшихся записей
-    // ровно limit (следующий запрос вернул бы пустую страницу впустую).
-    const items = await this.publicationRepository.listPublished({
-      cursor: query.cursor ? new Types.ObjectId(query.cursor) : undefined,
+    const sort = query.sort ?? 'newest';
+    const cursor = query.cursor ? decodePublicCatalogCursor(query.cursor, sort) : undefined;
+    const page = await this.publicationRepository.listPublishedPage({
+      cursor,
       limit: query.limit + 1,
       city: query.city,
       bbox,
+      sort,
     });
-    const hasMore = items.length > query.limit;
-    const pageItems = hasMore ? items.slice(0, query.limit) : items;
-    const nextCursor = hasMore ? pageItems[pageItems.length - 1]!._id.toString() : null;
+    const hasMore = page.items.length > query.limit;
+    const pageItems = hasMore ? page.items.slice(0, query.limit) : page.items;
+    const last = pageItems[pageItems.length - 1];
+    const nextCursor = hasMore && last
+      ? sort === 'newest'
+        ? last._id.toString()
+        : encodePublicCatalogCursor({
+            sort,
+            id: last._id,
+            value: getPublicCatalogCursorValue(last, sort),
+          })
+      : null;
 
     return {
       items: pageItems.map(toPublicCard),
       nextCursor,
+      total: page.total,
     };
   }
 

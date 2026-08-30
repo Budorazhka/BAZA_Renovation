@@ -19,22 +19,27 @@ import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
 import { MarketplaceMap } from './components/MarketplaceMap'
 import { PublishingWizard } from './features/publishing'
+import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
   PublicDevelopmentCard,
   PublicListingCard,
   ListingDealType,
   ListingPropertyType,
+  PublicListingSort,
 } from './types/marketplace'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const isCatalogueRoute = location.pathname === '/'
   const listingsActive = location.search.includes('tab=listings')
   const mapQuery = new URLSearchParams(location.search)
   mapQuery.set('view', 'map')
+  mapQuery.delete('cursor')
   const listQuery = new URLSearchParams(location.search)
   listQuery.delete('view')
   listQuery.delete('bbox')
+  listQuery.delete('cursor')
   const isMapView = location.search.includes('view=map')
   return (
     <div className="app-shell">
@@ -66,18 +71,33 @@ function Shell({ children }: { children: React.ReactNode }) {
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
-      <div className="floating-controls" aria-label="Инструменты каталога">
-        <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
-        <Link
-          to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
-          className="floating-control floating-control--map"
-          aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
-        >
-          {isMapView ? '▤' : '♧'}
-        </Link>
-      </div>
+      {isCatalogueRoute ? (
+        <div className="floating-controls" aria-label="Инструменты каталога">
+          <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
+          <Link
+            to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
+            className="floating-control floating-control--map"
+            aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
+          >
+            {isMapView ? '▤' : '♧'}
+          </Link>
+        </div>
+      ) : null}
       <footer className="site-footer" role="contentinfo">
-        <p>BAZA.sale · проверенный каталог объектов недвижимости</p>
+        <div className="site-footer__inner">
+          <div className="site-footer__brand">
+            <Link className="site-footer__wordmark" to="/" aria-label="BAZA, каталог объектов недвижимости">BAZA<span>.sale</span></Link>
+            <p>Проверенный каталог недвижимости в Грузии</p>
+          </div>
+          <nav className="site-footer__nav" aria-label="Навигация в подвале">
+            <Link to="/">Новостройки</Link>
+            <Link to="/?tab=listings">Вторичка</Link>
+            <Link to="/?tab=listings&dealType=rent_long">Аренда</Link>
+            <Link to="/?tab=listings&propertyType=commercial">Коммерция</Link>
+            <Link to="/publish">Разместить объект</Link>
+          </nav>
+          <p className="site-footer__copyright">© {new Date().getFullYear()} BAZA.sale</p>
+        </div>
       </footer>
     </div>
   )
@@ -188,6 +208,7 @@ function ListingCardItem({ item }: { item: PublicListingCard }) {
 }
 
 type CatalogueTab = 'developments' | 'listings'
+const LISTING_SORTS = ['newest', 'price_asc', 'price_desc', 'area_asc', 'area_desc'] as const
 
 function parseBoundingBox(value: string | null): BoundingBox | undefined {
   if (!value) return undefined
@@ -215,6 +236,10 @@ function CataloguePage() {
   const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
   const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
   const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
+  const rawSortParam = searchParams.get('sort')
+  const sortParam: PublicListingSort = LISTING_SORTS.includes(rawSortParam as PublicListingSort)
+    ? (rawSortParam as PublicListingSort)
+    : 'newest'
   const isMapView = searchParams.get('view') === 'map'
   const bboxParam = parseBoundingBox(searchParams.get('bbox'))
 
@@ -237,6 +262,7 @@ function CataloguePage() {
     propertyType: propertyTypeParam,
     commercialSubtype: commercialSubtypeParam,
     bbox: isMapView ? bboxParam : undefined,
+    sort: sortParam,
   })
 
   const isDev = tabParam === 'developments'
@@ -295,27 +321,82 @@ function CataloguePage() {
 
   return (
     <Shell>
+      {isDev ? (
+        <section className="home-hero" aria-labelledby="home-hero-title">
+          <div className="home-hero__copy">
+            <p className="home-hero__eyebrow">Каталог недвижимости</p>
+            <h1 id="home-hero-title">ПОИСК НЕДВИЖИМОСТИ <span>В ГРУЗИИ</span></h1>
+            <div className="home-hero__search-card">
+              <div className="home-hero__tabs" role="tablist" aria-label="Тип операции">
+                <Link className="home-hero__tab is-active" role="tab" aria-selected="true" to="/">Купить</Link>
+                <Link className="home-hero__tab" role="tab" aria-selected="false" to="/?tab=listings&dealType=rent_long">Снять</Link>
+              </div>
+              <form className="home-search" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+                <label htmlFor="city">Город</label>
+                <div className="home-search__control">
+                  <input
+                    id="city"
+                    name="city"
+                    type="search"
+                    autoComplete="address-level2"
+                    value={cityInput}
+                    onChange={(event) => setCityInput(event.target.value)}
+                    placeholder="Например, Батуми"
+                  />
+                  <button type="submit" aria-label="Найти объекты в городе">Найти</button>
+                </div>
+              </form>
+            </div>
+          </div>
+          <div className="home-hero__promos" aria-label="Возможности BAZA">
+            <Link className="home-promo home-promo--light" to="/publish">
+              <strong>Хотите продать квартиру, дом или участок?</strong>
+              <span>Бесплатно разместите свое объявление на BAZA и быстро найдите покупателей.</span>
+              <span className="home-promo__action">Разместить объект <span aria-hidden="true">→</span></span>
+            </Link>
+            <Link className="home-promo home-promo--green" to="/?tab=listings">
+              <strong>Эксклюзивные предложения от BAZA</strong>
+              <span>Уникальные предложения по стоимости и комиссиям только для партнёров.</span>
+              <span className="home-promo__action">Смотреть предложения <span aria-hidden="true">→</span></span>
+            </Link>
+          </div>
+        </section>
+      ) : null}
       <section className="catalogue-toolbar" aria-labelledby="catalogue-heading">
-        <h1 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h1>
+        <h2 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h2>
         <div className="catalogue-count">
           <strong>{state.status === 'ready' ? state.items.length.toLocaleString('ru-RU') : '—'}</strong>
           <span>объектов найдено</span>
         </div>
         <div className="catalogue-toolbar__actions">
-          <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-            <label className="visually-hidden" htmlFor="city">Город</label>
-            <input
-              id="city"
-              name="city"
-              type="search"
-              autoComplete="address-level2"
-              value={cityInput}
-              onChange={(event) => setCityInput(event.target.value)}
-              placeholder="Город"
-            />
-            <button type="submit" aria-label="Найти объекты в городе">⌕</button>
-          </form>
-          <button className="sort-control" type="button" aria-label="Сортировка объектов">Сначала дешевле⌄</button>
+          {!isDev ? (
+            <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+              <label className="visually-hidden" htmlFor="city">Город</label>
+              <input
+                id="city"
+                name="city"
+                type="search"
+                autoComplete="address-level2"
+                value={cityInput}
+                onChange={(event) => setCityInput(event.target.value)}
+                placeholder="Город"
+              />
+              <button type="submit" aria-label="Найти объекты в городе">⌕</button>
+            </form>
+          ) : null}
+          <label className="sort-control" aria-label="Сортировка объектов">
+            <span className="visually-hidden">Сортировка объектов</span>
+            <select
+              value={isDev ? 'newest' : sortParam}
+              onChange={(event) => updateFilters({ sort: event.target.value })}
+            >
+              <option value="newest">Сначала новые</option>
+              {!isDev ? <option value="price_asc">Сначала дешевле</option> : null}
+              {!isDev ? <option value="price_desc">Сначала дороже</option> : null}
+              {!isDev ? <option value="area_asc">Меньше площадь</option> : null}
+              {!isDev ? <option value="area_desc">Больше площадь</option> : null}
+            </select>
+          </label>
           <div className="view-toggle" role="group" aria-label="Вид каталога">
             <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
             <Link className={`view-toggle__link${isMapView ? ' is-active' : ''}`} to={viewUrl('map')}>Карта</Link>
@@ -358,13 +439,13 @@ function CataloguePage() {
       ) : null}
 
       <section className="catalogue-section" aria-live="polite" aria-labelledby="catalogue-results-heading">
-        <div className="section-heading section-heading--sr-only">
+        <div className="section-heading">
           <h2 id="catalogue-results-heading">
             {cityParam
               ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
               : `Все опубликованные ${isDev ? 'ЖК' : 'объекты'}`}
           </h2>
-          {state.status === 'ready' ? <span>{`Показано: ${state.items.length}`}</span> : null}
+          {state.status === 'ready' ? <span>{`Показано: ${state.items.length} из ${state.total}`}</span> : null}
           {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
         </div>
 
@@ -400,10 +481,6 @@ function CataloguePage() {
               <MarketplaceMap
                 items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
                 onBoundsChange={handleMapBoundsChange}
-                onSelect={(item) => {
-                  if (!item.slug) return
-                  navigate(isDev ? `/developments/${item.slug}` : `/listings/${item.slug}`)
-                }}
               />
             ) : (
               <div className="development-grid">
@@ -663,12 +740,14 @@ function PublishingWizardPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<CataloguePage />} />
-      <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
-      <Route path="/listings/:slug" element={<ListingDetailPage />} />
-      <Route path="/publish" element={<PublishingWizardPage />} />
-      <Route path="*" element={<CataloguePage />} />
-    </Routes>
+    <RouteErrorBoundary>
+      <Routes>
+        <Route path="/" element={<CataloguePage />} />
+        <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
+        <Route path="/listings/:slug" element={<ListingDetailPage />} />
+        <Route path="/publish" element={<PublishingWizardPage />} />
+        <Route path="*" element={<CataloguePage />} />
+      </Routes>
+    </RouteErrorBoundary>
   )
 }
