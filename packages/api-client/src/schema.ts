@@ -471,7 +471,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Частичное обновление сделки (заголовок, описание, ответственный, комиссия) */
+        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия) */
         patch: operations["updateDeal"];
         trace?: never;
     };
@@ -501,7 +501,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Добавление участника сделки */
+        /** Добавление участника сделки с optimistic concurrency */
         post: operations["addDealParticipant"];
         delete?: never;
         options?: never;
@@ -519,7 +519,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Удаление участника из сделки */
+        /** Удаление участника из сделки с optimistic concurrency */
         delete: operations["removeDealParticipant"];
         options?: never;
         head?: never;
@@ -539,7 +539,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Атомарное обновление чек-листа сделки */
+        /** Атомарное обновление чек-листа сделки с optimistic concurrency */
         patch: operations["updateDealChecklist"];
         trace?: never;
     };
@@ -1693,6 +1693,7 @@ export interface components {
             }[];
         };
         UpdateDealRequest: {
+            expectedVersion: number;
             title?: string;
             description?: string | null;
             ownerPositionId?: string;
@@ -1704,6 +1705,7 @@ export interface components {
             reason?: string;
         };
         AddDealParticipantRequest: {
+            expectedVersion: number;
             contactId: string;
             role: string;
         };
@@ -1713,6 +1715,7 @@ export interface components {
             done: boolean;
         };
         UpdateDealChecklistRequest: {
+            expectedVersion: number;
             items: components["schemas"]["DealChecklistItemInput"][];
         };
     };
@@ -2656,6 +2659,8 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
         };
     };
     changeDealStage: {
@@ -2726,13 +2731,15 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — сделка или контакт участника не найден */
             404: components["responses"]["Error"];
-            /** @description DUPLICATE_DETECTED — контакт уже является участником */
+            /** @description VERSION_CONFLICT или DUPLICATE_DETECTED — сделка изменилась параллельно либо контакт уже является участником */
             409: components["responses"]["Error"];
         };
     };
     removeDealParticipant: {
         parameters: {
-            query?: never;
+            query: {
+                expectedVersion: number;
+            };
             header?: never;
             path: {
                 dealId: string;
@@ -2759,6 +2766,8 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — участник или сделка не найдены */
             404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
         };
     };
     updateDealChecklist: {
@@ -2793,6 +2802,8 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
         };
     };
     adminListPublications: {

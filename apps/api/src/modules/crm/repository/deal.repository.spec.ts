@@ -157,6 +157,50 @@ describe('DealRepository', () => {
     });
   });
 
+  describe('updateDeal', () => {
+    it('uses expectedVersion in the conditional update filter', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const fakeSession = {} as never;
+      const findOneAndUpdateSpy = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: id }),
+      });
+      const repository = new DealRepository({ findOneAndUpdate: findOneAndUpdateSpy } as never);
+
+      await repository.updateDeal(id, organizationId, 3, { title: 'CAS protected' }, fakeSession);
+
+      expect(findOneAndUpdateSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, version: 3 },
+        { $inc: { version: 1 }, $set: { title: 'CAS protected' } },
+        { new: true, session: fakeSession },
+      );
+    });
+  });
+
+  describe('updateChecklist', () => {
+    it('uses expectedVersion in the conditional update filter', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const fakeSession = {} as never;
+      const checklistItems = [{ id: 'due-diligence', label: 'Due diligence', done: false }];
+      const findOneAndUpdateSpy = jest.fn().mockReturnValue({
+        exec: jest.fn().mockResolvedValue({ _id: id }),
+      });
+      const repository = new DealRepository({ findOneAndUpdate: findOneAndUpdateSpy } as never);
+
+      await repository.updateChecklist(id, organizationId, 7, checklistItems, fakeSession);
+
+      expect(findOneAndUpdateSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, version: 7 },
+        {
+          $set: expect.objectContaining({ checklistItems, updatedAt: expect.any(Date) }),
+          $inc: { version: 1 },
+        },
+        { new: true, session: fakeSession },
+      );
+    });
+  });
+
   describe('addParticipant and removeParticipant', () => {
     it('addParticipant pushes unique participant and increments version', async () => {
       const id = new Types.ObjectId();
@@ -172,6 +216,7 @@ describe('DealRepository', () => {
       await repository.addParticipant(
         id,
         organizationId,
+        4,
         { role: 'lawyer', contactId },
         fakeSession,
       );
@@ -180,6 +225,7 @@ describe('DealRepository', () => {
         {
           _id: id,
           organizationId,
+          version: 4,
           'participants.contactId': { $ne: contactId },
         },
         {
@@ -202,12 +248,13 @@ describe('DealRepository', () => {
       });
       const repository = new DealRepository({ findOneAndUpdate: findOneAndUpdateSpy } as never);
 
-      await repository.removeParticipant(id, organizationId, contactId, fakeSession);
+      await repository.removeParticipant(id, organizationId, 5, contactId, fakeSession);
 
       expect(findOneAndUpdateSpy).toHaveBeenCalledWith(
         {
           _id: id,
           organizationId,
+          version: 5,
           'participants.contactId': contactId,
         },
         {

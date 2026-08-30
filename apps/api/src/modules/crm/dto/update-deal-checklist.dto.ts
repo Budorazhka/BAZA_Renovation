@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 
 export class DealChecklistItemInputDto {
   @IsOptional()
@@ -16,6 +16,10 @@ export class DealChecklistItemInputDto {
 }
 
 export class UpdateDealChecklistDto {
+  @IsInt()
+  @Min(0)
+  expectedVersion!: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => DealChecklistItemInputDto)

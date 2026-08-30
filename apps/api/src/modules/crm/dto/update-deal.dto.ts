@@ -1,8 +1,12 @@
 import { Type } from 'class-transformer';
-import { IsMongoId, IsOptional, IsString, MaxLength, MinLength, ValidateNested } from 'class-validator';
+import { IsInt, IsMongoId, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { MoneyAmountDto } from './money-amount.dto';
 
 export class UpdateDealDto {
+  @IsInt()
+  @Min(0)
+  expectedVersion!: number;
+
   @IsOptional()
   @IsString()
   @MinLength(1)

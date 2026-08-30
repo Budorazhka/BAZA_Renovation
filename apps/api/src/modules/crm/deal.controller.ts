@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -144,6 +145,7 @@ export class DealController {
       description: dto.description,
       ownerPositionId: dto.ownerPositionId ? new Types.ObjectId(dto.ownerPositionId) : undefined,
       expectedCommission: dto.expectedCommission,
+      expectedVersion: dto.expectedVersion,
       actorPositionId,
       actorIdentityId,
       correlationId: req.correlationId,
@@ -187,6 +189,7 @@ export class DealController {
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'edit'),
       contactId: new Types.ObjectId(dto.contactId),
       role: dto.role,
+      expectedVersion: dto.expectedVersion,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,
@@ -200,13 +203,18 @@ export class DealController {
     @Req() req: FastifyRequest,
     @Param('dealId', ParseObjectIdPipe) dealId: Types.ObjectId,
     @Param('contactId', ParseObjectIdPipe) contactId: Types.ObjectId,
+    @Query('expectedVersion', ParseIntPipe) expectedVersion: number,
   ) {
+    if (expectedVersion < 0) {
+      throw new BadRequestException('expectedVersion must be at least 0');
+    }
     const tenantContext = requireTenantContext(req);
     return this.crmService.removeDealParticipant({
       dealId,
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'edit'),
       contactId,
+      expectedVersion,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,
@@ -227,6 +235,7 @@ export class DealController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'edit'),
       items: dto.items,
+      expectedVersion: dto.expectedVersion,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,

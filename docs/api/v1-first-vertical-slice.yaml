@@ -934,7 +934,7 @@ paths:
 
     patch:
       operationId: updateDeal
-      summary: Частичное обновление сделки (заголовок, описание, ответственный, комиссия)
+      summary: Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия)
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -965,6 +965,9 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
           $ref: '#/components/responses/Error'
 
   /deals/{dealId}/stage:
@@ -1010,7 +1013,7 @@ paths:
   /deals/{dealId}/participants:
     post:
       operationId: addDealParticipant
-      summary: Добавление участника сделки
+      summary: Добавление участника сделки с optimistic concurrency
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -1043,13 +1046,13 @@ paths:
           description: NOT_FOUND — сделка или контакт участника не найден
           $ref: '#/components/responses/Error'
         '409':
-          description: DUPLICATE_DETECTED — контакт уже является участником
+          description: VERSION_CONFLICT или DUPLICATE_DETECTED — сделка изменилась параллельно либо контакт уже является участником
           $ref: '#/components/responses/Error'
 
   /deals/{dealId}/participants/{contactId}:
     delete:
       operationId: removeDealParticipant
-      summary: Удаление участника из сделки
+      summary: Удаление участника из сделки с optimistic concurrency
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -1060,6 +1063,10 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - name: expectedVersion
+          in: query
+          required: true
+          schema: {type: integer, minimum: 0}
       responses:
         '200':
           description: Участник удалён
@@ -1079,11 +1086,14 @@ paths:
         '404':
           description: NOT_FOUND — участник или сделка не найдены
           $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
 
   /deals/{dealId}/checklist:
     patch:
       operationId: updateDealChecklist
-      summary: Атомарное обновление чек-листа сделки
+      summary: Атомарное обновление чек-листа сделки с optimistic concurrency
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -1114,6 +1124,9 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
           $ref: '#/components/responses/Error'
 
   /admin/publications:
@@ -3068,7 +3081,9 @@ components:
 
     UpdateDealRequest:
       type: object
+      required: [expectedVersion]
       properties:
+        expectedVersion: {type: integer, minimum: 0}
         title: {type: string, minLength: 1, maxLength: 255}
         description: {type: string, maxLength: 2000, nullable: true}
         ownerPositionId: {type: string}
@@ -3086,8 +3101,9 @@ components:
 
     AddDealParticipantRequest:
       type: object
-      required: [contactId, role]
+      required: [contactId, role, expectedVersion]
       properties:
+        expectedVersion: {type: integer, minimum: 0}
         contactId: {type: string}
         role: {type: string, minLength: 1, maxLength: 50}
 
@@ -3101,8 +3117,9 @@ components:
 
     UpdateDealChecklistRequest:
       type: object
-      required: [items]
+      required: [items, expectedVersion]
       properties:
+        expectedVersion: {type: integer, minimum: 0}
         items:
           type: array
           items:

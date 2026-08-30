@@ -1584,6 +1584,12 @@ export class CrmService {
     const initialStage = params.stage ?? 'showing';
 
     return runInTransaction(this.connection, async (session) => {
+      await this.organizationsService.findAssignablePosition(
+        params.ownerPositionId,
+        params.organizationId,
+        session,
+      );
+
       const created = await this.dealRepository.create(
         {
           organizationId: params.organizationId,
@@ -1649,6 +1655,7 @@ export class CrmService {
     description?: string | null;
     ownerPositionId?: Types.ObjectId;
     expectedCommission?: MoneyAmount | null;
+    expectedVersion: number;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
@@ -1661,11 +1668,23 @@ export class CrmService {
     if (!existing) {
       throw new NotFoundException('Deal not found');
     }
+    if ((existing.version ?? 0) !== params.expectedVersion) {
+      throw new ConflictException('Deal was modified by another request — refresh and retry');
+    }
 
     return runInTransaction(this.connection, async (session) => {
+      if (params.ownerPositionId) {
+        await this.organizationsService.findAssignablePosition(
+          params.ownerPositionId,
+          params.organizationId,
+          session,
+        );
+      }
+
       const updated = await this.dealRepository.updateDeal(
         params.dealId,
         params.organizationId,
+        params.expectedVersion,
         {
           title: params.title,
           description: params.description,
@@ -1675,7 +1694,15 @@ export class CrmService {
         session,
       );
       if (!updated) {
-        throw new NotFoundException('Deal not found');
+        const current = await this.dealRepository.findByIdForOrganization(
+          params.dealId,
+          params.organizationId,
+          params.requiredOwnerPositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Deal not found');
+        }
+        throw new ConflictException('Deal was modified by another request — refresh and retry');
       }
 
       await this.auditService.append(
@@ -1833,6 +1860,7 @@ export class CrmService {
     requiredOwnerPositionId?: Types.ObjectId;
     contactId: Types.ObjectId;
     role: string;
+    expectedVersion: number;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
@@ -1844,6 +1872,9 @@ export class CrmService {
     );
     if (!deal) {
       throw new NotFoundException('Deal not found');
+    }
+    if ((deal.version ?? 0) !== params.expectedVersion) {
+      throw new ConflictException('Deal was modified by another request — refresh and retry');
     }
 
     const participantContact = await this.contactRepository.findByIdForOrganization(
@@ -1862,11 +1893,20 @@ export class CrmService {
       const updated = await this.dealRepository.addParticipant(
         deal._id,
         params.organizationId,
+        params.expectedVersion,
         { role: params.role, contactId: params.contactId },
         session,
       );
       if (!updated) {
-        throw new NotFoundException('Deal not found');
+        const current = await this.dealRepository.findByIdForOrganization(
+          params.dealId,
+          params.organizationId,
+          params.requiredOwnerPositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Deal not found');
+        }
+        throw new ConflictException('Deal was modified by another request — refresh and retry');
       }
 
       await this.auditService.append(
@@ -1902,6 +1942,7 @@ export class CrmService {
     organizationId: Types.ObjectId;
     requiredOwnerPositionId?: Types.ObjectId;
     contactId: Types.ObjectId;
+    expectedVersion: number;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
@@ -1914,6 +1955,9 @@ export class CrmService {
     if (!deal) {
       throw new NotFoundException('Deal not found');
     }
+    if ((deal.version ?? 0) !== params.expectedVersion) {
+      throw new ConflictException('Deal was modified by another request — refresh and retry');
+    }
 
     if (!deal.participants?.some((p) => p.contactId.equals(params.contactId))) {
       throw new NotFoundException('Participant not found in deal');
@@ -1923,11 +1967,20 @@ export class CrmService {
       const updated = await this.dealRepository.removeParticipant(
         deal._id,
         params.organizationId,
+        params.expectedVersion,
         params.contactId,
         session,
       );
       if (!updated) {
-        throw new NotFoundException('Deal not found');
+        const current = await this.dealRepository.findByIdForOrganization(
+          params.dealId,
+          params.organizationId,
+          params.requiredOwnerPositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Deal not found');
+        }
+        throw new ConflictException('Deal was modified by another request — refresh and retry');
       }
 
       await this.auditService.append(
@@ -1962,6 +2015,7 @@ export class CrmService {
     organizationId: Types.ObjectId;
     requiredOwnerPositionId?: Types.ObjectId;
     items: Array<{ id?: string; label: string; done: boolean }>;
+    expectedVersion: number;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
@@ -1973,6 +2027,9 @@ export class CrmService {
     );
     if (!deal) {
       throw new NotFoundException('Deal not found');
+    }
+    if ((deal.version ?? 0) !== params.expectedVersion) {
+      throw new ConflictException('Deal was modified by another request — refresh and retry');
     }
 
     const existingMap = new Map<string, DealChecklistItem>(
@@ -2012,11 +2069,20 @@ export class CrmService {
       const updated = await this.dealRepository.updateChecklist(
         deal._id,
         params.organizationId,
+        params.expectedVersion,
         mergedItems,
         session,
       );
       if (!updated) {
-        throw new NotFoundException('Deal not found');
+        const current = await this.dealRepository.findByIdForOrganization(
+          params.dealId,
+          params.organizationId,
+          params.requiredOwnerPositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Deal not found');
+        }
+        throw new ConflictException('Deal was modified by another request — refresh and retry');
       }
 
       await this.auditService.append(

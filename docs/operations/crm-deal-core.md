@@ -62,8 +62,8 @@ Deal stages represent the strict pipeline of a real estate transaction. Transiti
 
 ## 3. Optimistic Concurrency Control
 
-To prevent race conditions during concurrent updates (such as two managers simultaneously updating a deal's stage or checklist):
-1. The client must supply `expectedVersion` when submitting a `PATCH /deals/:dealId/stage`.
+To prevent lost updates during concurrent mutations (such as two managers simultaneously updating a deal's stage, details, participants, or checklist):
+1. The client must supply `expectedVersion` for every mutation of an existing deal: `PATCH /deals/:dealId`, `PATCH /deals/:dealId/stage`, `POST /deals/:dealId/participants`, `DELETE /deals/:dealId/participants/:contactId?expectedVersion=…`, and `PATCH /deals/:dealId/checklist`.
 2. The database updates the document conditionally:
    ```typescript
    {
@@ -73,8 +73,9 @@ To prevent race conditions during concurrent updates (such as two managers simul
      stage: { $in: allowedFromStages }
    }
    ```
-   with `$inc: { version: 1 }, $set: { stage: newStage, updatedAt: new Date() }`.
-3. If zero documents match (due to version mismatch or illegal transition), a `409 VERSION_CONFLICT` error is returned.
+   with `$inc: { version: 1 }` and the requested mutation.
+3. If zero documents match because another request already advanced the version, a `409 VERSION_CONFLICT` error is returned. A scoped-out or deleted deal remains a uniform `404 NOT_FOUND`.
+4. A created or reassigned `ownerPositionId` is resolved through `OrganizationsService.findAssignablePosition` in the same transaction: a cross-tenant, nonexistent, or closed position can never become a deal owner.
 
 ---
 
@@ -100,11 +101,11 @@ Permissions for `deal` are defined as follows:
 ### Participants
 - Each participant must reference a valid `contactId` belonging to the same `organizationId`.
 - Duplicate participant contacts on the same deal are rejected (`400` on create, `409` on add).
-- Adding or removing participants atomically increments the deal `version` and records an audit log entry.
+- Adding or removing participants requires `expectedVersion`, atomically increments the deal `version`, and records an audit log entry.
 
 ### Checklist
 - Items maintain a unique string `id`, `label`, `done` status, `completedAt`, and `completedByPositionId`.
-- Updating a checklist preserves existing `completedAt` timestamps for items that were already completed and remain completed.
+- Updating a checklist requires `expectedVersion`, preserves existing `completedAt` timestamps for items that were already completed and remain completed, and returns `409 VERSION_CONFLICT` rather than overwriting a newer checklist snapshot.
 - Marking an item as `done: true` sets `completedAt` to current timestamp and `completedByPositionId` to the caller.
 - Marking an item as `done: false` resets `completedAt` and `completedByPositionId` to `undefined`.
 
@@ -117,11 +118,11 @@ Permissions for `deal` are defined as follows:
 | `GET` | `/api/v1/deals` | `deal.read` | Lists tenant deals (newest-first, cursor pagination, filters: `stage`, `ownerPositionId`, `leadId`, `contactId`). |
 | `GET` | `/api/v1/deals/:dealId` | `deal.read` | Retrieves full deal details with primary contact and participant contact projections. |
 | `POST` | `/api/v1/deals` | `deal.create` | Creates a new deal. |
-| `PATCH` | `/api/v1/deals/:dealId` | `deal.edit` | Partially updates deal details (`title`, `description`, `ownerPositionId`, `expectedCommission`). |
+| `PATCH` | `/api/v1/deals/:dealId` | `deal.edit` | Partially updates deal details (`title`, `description`, `ownerPositionId`, `expectedCommission`) using required `expectedVersion`. |
 | `PATCH` | `/api/v1/deals/:dealId/stage` | `deal.changeStage` | Transitions stage with version lock and reason. |
-| `POST` | `/api/v1/deals/:dealId/participants` | `deal.edit` | Adds a participant to the deal. |
-| `DELETE` | `/api/v1/deals/:dealId/participants/:contactId` | `deal.edit` | Removes a participant from the deal. |
-| `PATCH` | `/api/v1/deals/:dealId/checklist` | `deal.edit` | Atomically updates checklist items. |
+| `POST` | `/api/v1/deals/:dealId/participants` | `deal.edit` | Adds a participant using required `expectedVersion`. |
+| `DELETE` | `/api/v1/deals/:dealId/participants/:contactId?expectedVersion=…` | `deal.edit` | Removes a participant using required `expectedVersion`. |
+| `PATCH` | `/api/v1/deals/:dealId/checklist` | `deal.edit` | Atomically updates checklist items using required `expectedVersion`. |
 
 ---
 

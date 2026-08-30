@@ -1667,6 +1667,70 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
   });
 
   describe('Deal Core (DEAL-001)', () => {
+    it('createDeal: rejects a non-assignable owner position before writing', async () => {
+      const organizationId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const findAssignablePosition = jest.fn().mockRejectedValue(new NotFoundException('Position not found'));
+      const dealRepository = { create: jest.fn() };
+      const service = createTestCrmService({
+        organizationsService: { findAssignablePosition },
+        contactRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: contactId, name: 'Alice', phone: '+995555111222' }),
+        },
+        dealRepository,
+      });
+
+      await expect(
+        service.createDeal({
+          organizationId,
+          contactId,
+          ownerPositionId,
+          title: 'Deal with validated owner',
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'corr-owner-validation',
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(findAssignablePosition).toHaveBeenCalledWith(ownerPositionId, organizationId, expect.anything());
+      expect(dealRepository.create).not.toHaveBeenCalled();
+    });
+
+    it('updateDealChecklist: rejects a stale expectedVersion before it can overwrite the checklist', async () => {
+      const organizationId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+      const dealRepository = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({
+          _id: dealId,
+          organizationId,
+          contactId: new Types.ObjectId(),
+          ownerPositionId: new Types.ObjectId(),
+          stage: 'showing',
+          title: 'Concurrent checklist',
+          version: 1,
+          participants: [],
+          checklistItems: [],
+        }),
+        updateChecklist: jest.fn(),
+      };
+      const service = createTestCrmService({ dealRepository });
+
+      await expect(
+        service.updateDealChecklist({
+          dealId,
+          organizationId,
+          items: [{ label: 'Cannot clobber a newer checklist', done: true }],
+          expectedVersion: 0,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'corr-stale-checklist',
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      expect(dealRepository.updateChecklist).not.toHaveBeenCalled();
+    });
+
     it('createDeal: throws NotFoundException when primary contact does not exist in organization', async () => {
       const organizationId = new Types.ObjectId();
       const contactId = new Types.ObjectId();

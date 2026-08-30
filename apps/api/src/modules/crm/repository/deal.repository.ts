@@ -114,6 +114,7 @@ export class DealRepository {
   async updateDeal(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
+    expectedVersion: number,
     params: UpdateDealParams,
     session?: ClientSession,
   ): Promise<DealDocument | null> {
@@ -142,7 +143,7 @@ export class DealRepository {
     if (Object.keys($unset).length > 0) updateDoc.$unset = $unset;
 
     return this.model
-      .findOneAndUpdate({ _id: id, organizationId }, updateDoc, { new: true, session })
+      .findOneAndUpdate({ _id: id, organizationId, version: expectedVersion }, updateDoc, { new: true, session })
       .exec();
   }
 
@@ -176,6 +177,7 @@ export class DealRepository {
   async addParticipant(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
+    expectedVersion: number,
     participant: DealParticipant,
     session?: ClientSession,
   ): Promise<DealDocument | null> {
@@ -184,6 +186,7 @@ export class DealRepository {
         {
           _id: id,
           organizationId,
+          version: expectedVersion,
           'participants.contactId': { $ne: participant.contactId },
         },
         {
@@ -199,6 +202,7 @@ export class DealRepository {
   async removeParticipant(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
+    expectedVersion: number,
     contactId: Types.ObjectId,
     session?: ClientSession,
   ): Promise<DealDocument | null> {
@@ -207,6 +211,7 @@ export class DealRepository {
         {
           _id: id,
           organizationId,
+          version: expectedVersion,
           'participants.contactId': contactId,
         },
         {
@@ -222,12 +227,13 @@ export class DealRepository {
   async updateChecklist(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
+    expectedVersion: number,
     checklistItems: DealChecklistItem[],
     session?: ClientSession,
   ): Promise<DealDocument | null> {
     return this.model
       .findOneAndUpdate(
-        { _id: id, organizationId },
+        { _id: id, organizationId, version: expectedVersion },
         {
           $set: { checklistItems, updatedAt: new Date() },
           $inc: { version: 1 },

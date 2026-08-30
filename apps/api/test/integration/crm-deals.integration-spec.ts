@@ -485,7 +485,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
         method: 'POST',
         url: `/api/v1/deals/${dealId}/participants`,
         headers: { cookie: owner.cookie },
-        payload: { role: 'architect', contactId: participantContactId.toString() },
+        payload: { role: 'architect', contactId: participantContactId.toString(), expectedVersion: 0 },
       });
       expect(addRes.statusCode).toBe(200);
       const addBody = JSON.parse(addRes.body);
@@ -498,14 +498,14 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
         method: 'POST',
         url: `/api/v1/deals/${dealId}/participants`,
         headers: { cookie: owner.cookie },
-        payload: { role: 'architect', contactId: participantContactId.toString() },
+        payload: { role: 'architect', contactId: participantContactId.toString(), expectedVersion: 1 },
       });
       expect(dupRes.statusCode).toBe(409);
 
       // Remove participant
       const remRes = await app.inject({
         method: 'DELETE',
-        url: `/api/v1/deals/${dealId}/participants/${participantContactId.toString()}`,
+        url: `/api/v1/deals/${dealId}/participants/${participantContactId.toString()}?expectedVersion=1`,
         headers: { cookie: owner.cookie },
       });
       expect(remRes.statusCode).toBe(200);
@@ -542,6 +542,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
         url: `/api/v1/deals/${dealId}/checklist`,
         headers: { cookie: owner.cookie },
         payload: {
+          expectedVersion: 0,
           items: [
             { id: item1Id, label: 'Пункт 1', done: true },
             { id: item2Id, label: 'Пункт 2', done: false },
@@ -560,6 +561,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
         url: `/api/v1/deals/${dealId}/checklist`,
         headers: { cookie: owner.cookie },
         payload: {
+          expectedVersion: 1,
           items: [
             { id: item1Id, label: 'Пункт 1', done: true },
             { id: item2Id, label: 'Пункт 2', done: false },
@@ -572,6 +574,43 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       expect(body2.checklistItems).toHaveLength(3);
       // CompletedAt preserved:
       expect(body2.checklistItems[0].completedAt).toBe(item1CompletedAt);
+    });
+
+    it('rejects one of two concurrent checklist writes with the same expectedVersion', async () => {
+      const owner = await seedOwnerSession();
+      const contactId = await seedContact(owner.organizationId);
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: owner.cookie },
+        payload: {
+          title: 'Гонка чек-листа',
+          contactId: contactId.toString(),
+          checklistItems: [{ label: 'Проверить выписку', done: false }],
+        },
+      });
+      const createdDeal = JSON.parse(createRes.body);
+      const dealId = createdDeal.id;
+      const itemId = createdDeal.checklistItems[0].id;
+
+      const [first, second] = await Promise.all([
+        app.inject({
+          method: 'PATCH',
+          url: `/api/v1/deals/${dealId}/checklist`,
+          headers: { cookie: owner.cookie },
+          payload: { expectedVersion: 0, items: [{ id: itemId, label: 'Проверить выписку', done: true }] },
+        }),
+        app.inject({
+          method: 'PATCH',
+          url: `/api/v1/deals/${dealId}/checklist`,
+          headers: { cookie: owner.cookie },
+          payload: { expectedVersion: 0, items: [{ id: itemId, label: 'Проверить выписку', done: false }] },
+        }),
+      ]);
+
+      expect([first.statusCode, second.statusCode].sort()).toEqual([200, 409]);
+      const persisted = await connection.collection('deals').findOne({ _id: new Types.ObjectId(dealId) });
+      expect(persisted?.version).toBe(1);
     });
   });
 
