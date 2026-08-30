@@ -55,16 +55,14 @@ test.describe('logout', () => {
     expect(sessionAfter.body.authenticated).toBe(false);
 
     // A previously-authenticated-only action must now really fail against
-    // the real protected endpoint (marketplace/property-assets requires
-    // MarketplaceAccountGuard, which always throws ErrorCode.FORBIDDEN ->
-    // 403 for "no active marketplace account context" — unlike AdminGuard,
-    // it does not differentiate a missing cookie from an invalid one; see
-    // apps/api/src/shared/marketplace-account/marketplace-account.guard.ts)
-    // — checking the real HTTP status, not a UI redirect.
+    // the real protected endpoint. With no cookie at all,
+    // MarketplaceAccountGuard follows the same explicit no-session contract
+    // as AdminGuard and returns 401 AUTH_NO_SESSION (an invalid cookie still
+    // returns 403). Check the real HTTP status, not a UI redirect.
     const protectedResponse = await page.request.get(apiUrl('/marketplace/property-assets'), {
       headers: { Origin: env.marketplaceOrigin },
     });
-    expect(protectedResponse.status()).toBe(403);
+    expect(protectedResponse.status()).toBe(401);
   });
 
   test('logout is idempotent: calling it twice, or with no session at all, still returns 200', async ({ request }) => {

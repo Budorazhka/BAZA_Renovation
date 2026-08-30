@@ -212,7 +212,7 @@ node apps/e2e-runtime/src/fixtures/seed-admin.ts my-admin@example.com "SomePassw
   появилось в публичном каталоге.
 - `04-logout.spec.ts` — реальная очистка cookie (`context.cookies()`),
   реальная server-side ревокация (повторный `/auth/session` →
-  `authenticated:false`), реальный 403 на защищённый endpoint после
+  `authenticated:false`), реальный 401 на защищённый endpoint после
   logout, идемпотентность повторного logout, logout через UI wizard'а.
 - `05-admin-panel.spec.ts` — вход super_admin, разница scoped admin vs
   super_admin (скрытая nav-ссылка + реальный 403
