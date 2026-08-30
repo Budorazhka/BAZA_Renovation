@@ -31,6 +31,7 @@ import type {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const isCatalogueRoute = location.pathname === '/'
   const listingsActive = location.search.includes('tab=listings')
   const mapQuery = new URLSearchParams(location.search)
   mapQuery.set('view', 'map')
@@ -70,18 +71,33 @@ function Shell({ children }: { children: React.ReactNode }) {
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
-      <div className="floating-controls" aria-label="Инструменты каталога">
-        <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
-        <Link
-          to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
-          className="floating-control floating-control--map"
-          aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
-        >
-          {isMapView ? '▤' : '♧'}
-        </Link>
-      </div>
+      {isCatalogueRoute ? (
+        <div className="floating-controls" aria-label="Инструменты каталога">
+          <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
+          <Link
+            to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
+            className="floating-control floating-control--map"
+            aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
+          >
+            {isMapView ? '▤' : '♧'}
+          </Link>
+        </div>
+      ) : null}
       <footer className="site-footer" role="contentinfo">
-        <p>BAZA.sale · проверенный каталог объектов недвижимости</p>
+        <div className="site-footer__inner">
+          <div className="site-footer__brand">
+            <Link className="site-footer__wordmark" to="/" aria-label="BAZA, каталог объектов недвижимости">BAZA<span>.sale</span></Link>
+            <p>Проверенный каталог недвижимости в Грузии</p>
+          </div>
+          <nav className="site-footer__nav" aria-label="Навигация в подвале">
+            <Link to="/">Новостройки</Link>
+            <Link to="/?tab=listings">Вторичка</Link>
+            <Link to="/?tab=listings&dealType=rent_long">Аренда</Link>
+            <Link to="/?tab=listings&propertyType=commercial">Коммерция</Link>
+            <Link to="/publish">Разместить объект</Link>
+          </nav>
+          <p className="site-footer__copyright">© {new Date().getFullYear()} BAZA.sale</p>
+        </div>
       </footer>
     </div>
   )
@@ -423,7 +439,7 @@ function CataloguePage() {
       ) : null}
 
       <section className="catalogue-section" aria-live="polite" aria-labelledby="catalogue-results-heading">
-        <div className="section-heading section-heading--sr-only">
+        <div className="section-heading">
           <h2 id="catalogue-results-heading">
             {cityParam
               ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
@@ -465,10 +481,6 @@ function CataloguePage() {
               <MarketplaceMap
                 items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
                 onBoundsChange={handleMapBoundsChange}
-                onSelect={(item) => {
-                  if (!item.slug) return
-                  navigate(isDev ? `/developments/${item.slug}` : `/listings/${item.slug}`)
-                }}
               />
             ) : (
               <div className="development-grid">
