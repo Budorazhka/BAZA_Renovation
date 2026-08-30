@@ -17,6 +17,8 @@ import { TaskRepository } from './repository/task.repository';
 import type { LeadStage } from './schemas/lead.schema';
 import type { TaskDocument, TaskStatus } from './schemas/task.schema';
 
+import type { TimelineEventType } from './dto/list-timeline.dto';
+
 type RevealContactResult = { phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId };
 
 export interface CrmLeadReadModel {
@@ -27,7 +29,21 @@ export interface CrmLeadReadModel {
   version: number;
   source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
   createdAt: string;
+  stalled: boolean;
   contact: { id: string; name: string; phone: string; email?: string } | null;
+}
+
+export interface CrmTimelineEventReadModel {
+  id: string;
+  type: TimelineEventType;
+  happenedAt: string;
+  title: string;
+  summary: string | null;
+  actor: {
+    type: 'position' | 'identity' | 'system' | 'admin_account';
+    id: string | null;
+  };
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CrmLeadEventReadModel {
@@ -131,12 +147,14 @@ export class CrmService {
     organizationId: Types.ObjectId;
     ownerPositionId?: Types.ObjectId;
     stage?: LeadStage;
+    stalled?: boolean;
     cursor?: Types.ObjectId;
     limit: number;
   }): Promise<{ items: CrmLeadReadModel[]; nextCursor: string | null }> {
     const rows = await this.leadRepository.listForOrganization(params.organizationId, {
       ownerPositionId: params.ownerPositionId,
       stage: params.stage,
+      stalled: params.stalled,
       cursor: params.cursor,
       limit: params.limit + 1,
     });
@@ -207,7 +225,288 @@ export class CrmService {
       throw new NotFoundException('Lead not found');
     }
     const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
-    return toLeadReadModel(lead, contact);
+    let stalled = false;
+    if (!['converted', 'lost'].includes(lead.stage)) {
+      const openCount = (await this.taskRepository.countOpenForLead?.(params.organizationId, lead._id)) ?? 0;
+      stalled = openCount === 0;
+    }
+    return toLeadReadModel(lead, contact, stalled);
+  }
+
+  /**
+   * GET /leads/:leadId/timeline.
+   * Агрегирует историю стадий, задачи и аудит-события лида в единый timeline.
+   */
+  async getLeadTimeline(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    type?: TimelineEventType;
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<{ items: CrmTimelineEventReadModel[]; nextCursor: string | null }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const [leadEvents, tasks, auditEvents] = await Promise.all([
+      this.leadEventRepository.listForLead(params.leadId, params.organizationId),
+      this.taskRepository.listForLead(params.organizationId, params.leadId),
+      this.auditService.findByResources([params.leadId]),
+    ]);
+
+    const events: CrmTimelineEventReadModel[] = [];
+
+    for (const le of leadEvents) {
+      events.push({
+        id: `le_${le._id.toString()}`,
+        type: 'lead_stage_changed',
+        happenedAt: le.changedAt ? le.changedAt.toISOString() : new Date().toISOString(),
+        title: `Стадия изменена на '${le.stage}'`,
+        summary: null,
+        actor: {
+          type: le.changedBy.type,
+          id: le.changedBy.positionId ? le.changedBy.positionId.toString() : null,
+        },
+        metadata: {
+          leadId: le.leadId.toString(),
+          stage: le.stage,
+        },
+      });
+    }
+
+    for (const task of tasks) {
+      events.push({
+        id: `tc_${task._id.toString()}`,
+        type: 'task_created',
+        happenedAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
+        title: `Создана задача: ${task.title}`,
+        summary: task.description ?? null,
+        actor: {
+          type: task.assignedPositionId ? 'position' : 'system',
+          id: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+        },
+        metadata: {
+          taskId: task._id.toString(),
+          status: task.status,
+          dueAt: task.dueAt ? task.dueAt.toISOString() : null,
+          leadId: task.leadId ? task.leadId.toString() : null,
+          contactId: task.contactId ? task.contactId.toString() : null,
+        },
+      });
+
+      if (task.status === 'completed' && task.completedAt) {
+        events.push({
+          id: `td_${task._id.toString()}`,
+          type: 'task_completed',
+          happenedAt: task.completedAt.toISOString(),
+          title: `Задача завершена: ${task.title}`,
+          summary: null,
+          actor: {
+            type: task.completedByPositionId ? 'position' : 'system',
+            id: task.completedByPositionId ? task.completedByPositionId.toString() : null,
+          },
+          metadata: {
+            taskId: task._id.toString(),
+            status: 'completed',
+          },
+        });
+      }
+
+      if (task.status === 'cancelled' && task.updatedAt) {
+        events.push({
+          id: `tx_${task._id.toString()}`,
+          type: 'task_cancelled',
+          happenedAt: task.updatedAt.toISOString(),
+          title: `Задача отменена: ${task.title}`,
+          summary: null,
+          actor: {
+            type: task.assignedPositionId ? 'position' : 'system',
+            id: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+          },
+          metadata: {
+            taskId: task._id.toString(),
+            status: 'cancelled',
+          },
+        });
+      }
+    }
+
+    for (const ae of auditEvents) {
+      if (ae.action === 'lead.assign') {
+        events.push({
+          id: `ae_${ae._id.toString()}`,
+          type: 'lead_assigned',
+          happenedAt: ae.createdAt ? ae.createdAt.toISOString() : new Date().toISOString(),
+          title: 'Назначен ответственный по лиду',
+          summary: ae.reason ?? null,
+          actor: {
+            type: ae.actor.type,
+            id: ae.actor.id ? ae.actor.id.toString() : null,
+          },
+          metadata: {
+            leadId: ae.resourceId.toString(),
+            assigneePositionId: ae.after?.ownerPositionId ? String(ae.after.ownerPositionId) : null,
+          },
+        });
+      }
+    }
+
+    return paginateTimelineEvents(events, params);
+  }
+
+  /**
+   * GET /contacts/:contactId/timeline.
+   * Агрегирует события контакта и связанных лидов/задач с учётом tenant и own scope.
+   */
+  async getContactTimeline(params: {
+    contactId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    type?: TimelineEventType;
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit: number;
+  }): Promise<{ items: CrmTimelineEventReadModel[]; nextCursor: string | null }> {
+    const contact = await this.contactRepository.findByIdForOrganization(
+      params.contactId,
+      params.organizationId,
+    );
+    if (!contact) {
+      throw new NotFoundException('Contact not found');
+    }
+
+    const leadIds = await this.leadRepository.findLeadIdsForContact(
+      params.organizationId,
+      params.contactId,
+      params.ownerPositionId,
+    );
+
+    if (params.ownerPositionId && leadIds.length === 0) {
+      throw new NotFoundException('Contact not found');
+    }
+
+    const [leadEvents, tasks, auditEvents] = await Promise.all([
+      this.leadEventRepository.listForLeadIds(params.organizationId, leadIds),
+      this.taskRepository.listForContact(params.organizationId, params.contactId),
+      this.auditService.findByResources([params.contactId, ...leadIds]),
+    ]);
+
+    const visibleTasks = params.ownerPositionId
+      ? tasks.filter(
+          (t) =>
+            t.assignedPositionId?.equals(params.ownerPositionId!) ||
+            (t.leadId && leadIds.some((lId) => lId.equals(t.leadId!))),
+        )
+      : tasks;
+
+    const events: CrmTimelineEventReadModel[] = [];
+
+    for (const le of leadEvents) {
+      events.push({
+        id: `le_${le._id.toString()}`,
+        type: 'lead_stage_changed',
+        happenedAt: le.changedAt ? le.changedAt.toISOString() : new Date().toISOString(),
+        title: `Стадия изменена на '${le.stage}'`,
+        summary: null,
+        actor: {
+          type: le.changedBy.type,
+          id: le.changedBy.positionId ? le.changedBy.positionId.toString() : null,
+        },
+        metadata: {
+          leadId: le.leadId.toString(),
+          contactId: params.contactId.toString(),
+          stage: le.stage,
+        },
+      });
+    }
+
+    for (const task of visibleTasks) {
+      events.push({
+        id: `tc_${task._id.toString()}`,
+        type: 'task_created',
+        happenedAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
+        title: `Создана задача: ${task.title}`,
+        summary: task.description ?? null,
+        actor: {
+          type: task.assignedPositionId ? 'position' : 'system',
+          id: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+        },
+        metadata: {
+          taskId: task._id.toString(),
+          status: task.status,
+          dueAt: task.dueAt ? task.dueAt.toISOString() : null,
+          leadId: task.leadId ? task.leadId.toString() : null,
+          contactId: params.contactId.toString(),
+        },
+      });
+
+      if (task.status === 'completed' && task.completedAt) {
+        events.push({
+          id: `td_${task._id.toString()}`,
+          type: 'task_completed',
+          happenedAt: task.completedAt.toISOString(),
+          title: `Задача завершена: ${task.title}`,
+          summary: null,
+          actor: {
+            type: task.completedByPositionId ? 'position' : 'system',
+            id: task.completedByPositionId ? task.completedByPositionId.toString() : null,
+          },
+          metadata: {
+            taskId: task._id.toString(),
+            status: 'completed',
+          },
+        });
+      }
+
+      if (task.status === 'cancelled' && task.updatedAt) {
+        events.push({
+          id: `tx_${task._id.toString()}`,
+          type: 'task_cancelled',
+          happenedAt: task.updatedAt.toISOString(),
+          title: `Задача отменена: ${task.title}`,
+          summary: null,
+          actor: {
+            type: task.assignedPositionId ? 'position' : 'system',
+            id: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+          },
+          metadata: {
+            taskId: task._id.toString(),
+            status: 'cancelled',
+          },
+        });
+      }
+    }
+
+    for (const ae of auditEvents) {
+      if (ae.action === 'lead.assign') {
+        events.push({
+          id: `ae_${ae._id.toString()}`,
+          type: 'lead_assigned',
+          happenedAt: ae.createdAt ? ae.createdAt.toISOString() : new Date().toISOString(),
+          title: 'Назначен ответственный по лиду',
+          summary: ae.reason ?? null,
+          actor: {
+            type: ae.actor.type,
+            id: ae.actor.id ? ae.actor.id.toString() : null,
+          },
+          metadata: {
+            leadId: ae.resourceId.toString(),
+            assigneePositionId: ae.after?.ownerPositionId ? String(ae.after.ownerPositionId) : null,
+          },
+        });
+      }
+    }
+
+    return paginateTimelineEvents(events, params);
   }
 
   /**
@@ -1149,22 +1448,25 @@ function toLeadReadModel(
     _id: Types.ObjectId;
     organizationId: Types.ObjectId;
     contactId: Types.ObjectId;
-    ownerPositionId?: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId | null;
     stage: LeadStage;
     version?: number;
     source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
     createdAt: Date;
+    stalled?: boolean;
   },
   contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
+  stalledOverride?: boolean,
 ): CrmLeadReadModel {
   return {
     id: lead._id.toString(),
     organizationId: lead.organizationId.toString(),
-    ownerPositionId: lead.ownerPositionId?.toString() ?? null,
+    ownerPositionId: lead.ownerPositionId ? lead.ownerPositionId.toString() : null,
     stage: lead.stage,
     version: lead.version ?? 0,
     source: lead.source,
     createdAt: lead.createdAt.toISOString(),
+    stalled: stalledOverride !== undefined ? stalledOverride : (lead.stalled ?? false),
     contact: contact
       ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
       : null,
@@ -1229,4 +1531,72 @@ function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
   };
+}
+
+function encodeTimelineCursor(happenedAt: string, id: string): string {
+  return Buffer.from(`${happenedAt}|${id}`, 'utf8').toString('base64url');
+}
+
+function decodeTimelineCursor(cursor: string): { happenedAt: string; id: string } | null {
+  try {
+    const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+    const separatorIndex = decoded.indexOf('|');
+    if (separatorIndex === -1) return null;
+    const happenedAt = decoded.slice(0, separatorIndex);
+    const id = decoded.slice(separatorIndex + 1);
+    if (!happenedAt || !id) return null;
+    return { happenedAt, id };
+  } catch {
+    return null;
+  }
+}
+
+function paginateTimelineEvents(
+  items: CrmTimelineEventReadModel[],
+  params: {
+    type?: TimelineEventType;
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit: number;
+  },
+): { items: CrmTimelineEventReadModel[]; nextCursor: string | null } {
+  let filtered = items;
+
+  if (params.type) {
+    filtered = filtered.filter((item) => item.type === params.type);
+  }
+  if (params.from) {
+    filtered = filtered.filter((item) => item.happenedAt >= params.from!);
+  }
+  if (params.to) {
+    filtered = filtered.filter((item) => item.happenedAt <= params.to!);
+  }
+
+  filtered.sort((a, b) => {
+    if (a.happenedAt !== b.happenedAt) {
+      return b.happenedAt.localeCompare(a.happenedAt);
+    }
+    return b.id.localeCompare(a.id);
+  });
+
+  if (params.cursor) {
+    const cursor = decodeTimelineCursor(params.cursor);
+    if (cursor) {
+      filtered = filtered.filter((item) => {
+        if (item.happenedAt < cursor.happenedAt) return true;
+        if (item.happenedAt === cursor.happenedAt && item.id < cursor.id) return true;
+        return false;
+      });
+    }
+  }
+
+  const hasMore = filtered.length > params.limit;
+  const pageItems = hasMore ? filtered.slice(0, params.limit) : filtered;
+  const nextCursor =
+    hasMore && pageItems.length > 0
+      ? encodeTimelineCursor(pageItems[pageItems.length - 1]!.happenedAt, pageItems[pageItems.length - 1]!.id)
+      : null;
+
+  return { items: pageItems, nextCursor };
 }

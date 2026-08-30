@@ -1082,6 +1082,7 @@ describe('CrmService — read leads', () => {
           version: 0,
           source: { route: '/developments/test' },
           createdAt: '2026-08-26T10:00:00.000Z',
+          stalled: false,
           contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
         },
       ],
@@ -1091,6 +1092,7 @@ describe('CrmService — read leads', () => {
     expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
       ownerPositionId,
       stage: 'new',
+      stalled: undefined,
       cursor: undefined,
       // limit+1: repository запрашивается на одну запись больше params.limit
       // для однозначного hasMore/nextCursor без отдельного count().
@@ -1148,6 +1150,7 @@ describe('CrmService — read leads', () => {
     expect(listForOrganization).toHaveBeenCalledWith(organizationId, {
       ownerPositionId: undefined,
       stage: undefined,
+      stalled: undefined,
       cursor,
       limit: 21,
     });
@@ -1171,6 +1174,7 @@ describe('CrmService — read leads', () => {
     const service = createTestCrmService({
       contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(contact) },
       leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead) },
+      taskRepository: { countOpenForLead: jest.fn().mockResolvedValue(1) },
     });
 
     const readService = service as unknown as {
@@ -1189,6 +1193,7 @@ describe('CrmService — read leads', () => {
       version: 0,
       source: { route: '/developments/test' },
       createdAt: '2026-08-26T10:00:00.000Z',
+      stalled: false,
       contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
     });
   });
@@ -1554,6 +1559,104 @@ describe('CrmService.getContact', () => {
 
     await expect(
       service.getContact({ contactId, organizationId, ownerPositionId }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CrmService — getLeadTimeline & getContactTimeline', () => {
+  it('getLeadTimeline: агрегирует lead_events, tasks и audit_events в хронологическом порядке', async () => {
+    const organizationId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const taskId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+
+    const lead = {
+      _id: leadId,
+      organizationId,
+      stage: 'contacted',
+      createdAt: new Date('2026-08-01T10:00:00Z'),
+    };
+
+    const leadEvents = [
+      {
+        _id: new Types.ObjectId(),
+        leadId,
+        stage: 'contacted',
+        changedBy: { type: 'position', positionId },
+        changedAt: new Date('2026-08-02T12:00:00Z'),
+      },
+    ];
+
+    const tasks = [
+      {
+        _id: taskId,
+        organizationId,
+        title: 'Перезвонить клиенту',
+        status: 'completed',
+        assignedPositionId: positionId,
+        completedByPositionId: positionId,
+        createdAt: new Date('2026-08-03T10:00:00Z'),
+        completedAt: new Date('2026-08-04T15:00:00Z'),
+      },
+    ];
+
+    const auditEvents = [
+      {
+        _id: new Types.ObjectId(),
+        action: 'lead.assign',
+        actor: { type: 'position', id: positionId },
+        createdAt: new Date('2026-08-02T11:00:00Z'),
+        resourceId: leadId,
+        after: { ownerPositionId: positionId.toString() },
+      },
+    ];
+
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead) },
+      leadEventRepository: { listForLead: jest.fn().mockResolvedValue(leadEvents) },
+      taskRepository: { listForLead: jest.fn().mockResolvedValue(tasks) },
+      auditService: { findByResources: jest.fn().mockResolvedValue(auditEvents) },
+    });
+
+    const readService = service as unknown as {
+      getLeadTimeline(params: {
+        leadId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        limit: number;
+      }): Promise<{ items: Array<{ id: string; type: string; happenedAt: string }>; nextCursor: string | null }>;
+    };
+
+    const result = await readService.getLeadTimeline({ leadId, organizationId, limit: 10 });
+
+    expect(result.items).toHaveLength(4);
+    // Newest first:
+    expect(result.items[0]!.type).toBe('task_completed');
+    expect(result.items[1]!.type).toBe('task_created');
+    expect(result.items[2]!.type).toBe('lead_stage_changed');
+    expect(result.items[3]!.type).toBe('lead_assigned');
+  });
+
+  it('getContactTimeline: own-scope non-disclosure: 404 если нет лидов у менеджера', async () => {
+    const organizationId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+
+    const service = createTestCrmService({
+      contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: contactId, organizationId }) },
+      leadRepository: { findLeadIdsForContact: jest.fn().mockResolvedValue([]) },
+    });
+
+    const readService = service as unknown as {
+      getContactTimeline(params: {
+        contactId: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        ownerPositionId: Types.ObjectId;
+        limit: number;
+      }): Promise<unknown>;
+    };
+
+    await expect(
+      readService.getContactTimeline({ contactId, organizationId, ownerPositionId, limit: 10 }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

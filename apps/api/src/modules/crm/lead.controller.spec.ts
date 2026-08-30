@@ -148,3 +148,35 @@ describe('LeadController — GET /leads/:leadId/events', () => {
     });
   });
 });
+
+describe('LeadController — GET /leads/:leadId/timeline', () => {
+  it('передаёт параметры запроса в CrmService.getLeadTimeline с учётом own-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const getLeadTimeline = jest.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const controller = new LeadController(
+      { getLeadTimeline } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+    );
+
+    await controller.getLeadTimeline(makeRequest(organizationId, positionId) as never, leadId, {
+      type: 'lead_stage_changed',
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-31T23:59:59.999Z',
+      cursor: 'cursor-123',
+      limit: 10,
+    });
+
+    expect(getLeadTimeline).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: positionId,
+      type: 'lead_stage_changed',
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-31T23:59:59.999Z',
+      cursor: 'cursor-123',
+      limit: 10,
+    });
+  });
+});

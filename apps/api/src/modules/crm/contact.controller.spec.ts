@@ -111,3 +111,35 @@ describe('ContactController — GET /contacts/:contactId', () => {
     expect(getContact).toHaveBeenCalledWith({ contactId, organizationId, ownerPositionId: positionId });
   });
 });
+
+describe('ContactController — GET /contacts/:contactId/timeline', () => {
+  it('передаёт параметры запроса в CrmService.getContactTimeline с учётом own-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+    const getContactTimeline = jest.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const controller = new ContactController(
+      { getContactTimeline } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+    );
+
+    await controller.getContactTimeline(makeRequest(organizationId, positionId) as never, contactId, {
+      type: 'task_completed',
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-31T23:59:59.999Z',
+      cursor: 'cursor-456',
+      limit: 15,
+    });
+
+    expect(getContactTimeline).toHaveBeenCalledWith({
+      contactId,
+      organizationId,
+      ownerPositionId: positionId,
+      type: 'task_completed',
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-31T23:59:59.999Z',
+      cursor: 'cursor-456',
+      limit: 15,
+    });
+  });
+});

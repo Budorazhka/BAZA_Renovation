@@ -10,6 +10,7 @@ import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { ListLeadEventsDto } from './dto/list-lead-events.dto';
+import { ListTimelineDto } from './dto/list-timeline.dto';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 
@@ -39,6 +40,7 @@ export class LeadController {
       organizationId,
       ownerPositionId,
       stage: dto.stage,
+      stalled: dto.stalled,
       cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
       limit: dto.limit,
     });
@@ -68,6 +70,26 @@ export class LeadController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
       cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      limit: dto.limit,
+    });
+  }
+
+  @Get(':leadId/timeline')
+  @RequirePermission('lead', 'read')
+  async getLeadTimeline(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Query() dto: ListTimelineDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.getLeadTimeline({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      type: dto.type,
+      from: dto.from,
+      to: dto.to,
+      cursor: dto.cursor,
       limit: dto.limit,
     });
   }

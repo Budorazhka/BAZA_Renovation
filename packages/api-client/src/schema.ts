@@ -318,6 +318,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leads/{leadId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Агрегированный timeline активности лида (переходы стадий, создание/завершение/отмена задач, CRM audit events). Сортировка newest-first с детерминированным тай-брейкером и курсорной пагинацией. Tenant и owner scope проверяются до чтения — чужой лид возвращает 404 (non-disclosure). */
+        get: operations["getLeadTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/contacts": {
         parameters: {
             query?: never;
@@ -344,6 +361,23 @@ export interface paths {
         };
         /** Контакт по id. Tenant И own-scope (транзитивно через Lead) проверяются ДО чтения — чужой (другая организация, либо не связан ни с одним "своим" лидом при own-scope) и несуществующий contactId дают ОДИНАКОВЫЙ 404 (non-disclosure). Ответ не содержит session/ password/internal-полей — явная whitelist-проекция на backend. */
         get: operations["getContact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Агрегированный timeline активности контакта и связанных с ним лидов и задач текущего tenant'а. Для own-scope проверяется транзитивная принадлежность контакта менеджеру через лиды. */
+        get: operations["getContactTimeline"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1063,6 +1097,7 @@ export interface components {
             source?: {
                 [key: string]: unknown;
             };
+            stalled?: boolean;
         };
         /** @description GET /leads item shape (CrmService.CrmLeadReadModel) — contact встроен как whitelist-проекция {id, name, phone, email?}, никогда весь Contact-документ; ownerPositionId — null, если лид ещё не назначен ни на одну Position. */
         LeadListItem: {
@@ -1077,6 +1112,7 @@ export interface components {
             };
             /** Format: date-time */
             createdAt?: string;
+            stalled?: boolean;
             contact?: {
                 id?: string;
                 name?: string;
@@ -1468,6 +1504,27 @@ export interface components {
             assignedPositionId?: string | null;
             /** @enum {string} */
             status?: "open" | "cancelled";
+        };
+        TimelineEventItem: {
+            id: string;
+            /** @enum {string} */
+            type: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+            /** Format: date-time */
+            happenedAt: string;
+            title: string;
+            summary?: string | null;
+            actor: {
+                /** @enum {string} */
+                type: "position" | "identity" | "system" | "admin_account";
+                id?: string | null;
+            };
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        TimelineResponse: {
+            items: components["schemas"]["TimelineEventItem"][];
+            nextCursor: string | null;
         };
     };
     responses: {
@@ -1922,6 +1979,8 @@ export interface operations {
             query?: {
                 stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
                 ownerPositionId?: string;
+                /** @description Фильтр по признаку stalled (активный лид без открытых задач) */
+                stalled?: boolean;
                 /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -1983,6 +2042,43 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    getLeadTimeline: {
+        parameters: {
+            query?: {
+                type?: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+                from?: string;
+                to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Timeline активности лида */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
     listContacts: {
         parameters: {
             query?: {
@@ -2041,6 +2137,43 @@ export interface operations {
             /** @description FORBIDDEN — нет contact.read */
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
+        };
+    };
+    getContactTimeline: {
+        parameters: {
+            query?: {
+                type?: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+                from?: string;
+                to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Timeline активности контакта */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — контакт не существует или вне permission scope */
             404: components["responses"]["Error"];
         };
     };

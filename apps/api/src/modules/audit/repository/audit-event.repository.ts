@@ -35,6 +35,11 @@ export class AuditEventRepository {
     return this.model.find({ resourceId }).sort({ createdAt: -1 }).exec();
   }
 
+  async findByResourceIds(resourceIds: Types.ObjectId[]): Promise<AuditEventDocument[]> {
+    if (resourceIds.length === 0) return [];
+    return this.model.find({ resourceId: { $in: resourceIds } }).sort({ createdAt: -1 }).exec();
+  }
+
   async findByActor(actorId: Types.ObjectId): Promise<AuditEventDocument[]> {
     return this.model.find({ 'actor.id': actorId }).sort({ createdAt: -1 }).exec();
   }

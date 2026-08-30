@@ -9,6 +9,7 @@ import { PolicyEvaluatorService } from '../authorization/policy-evaluator.servic
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { CrmService } from './crm.service';
 import { ListContactsDto } from './dto/list-contacts.dto';
+import { ListTimelineDto } from './dto/list-timeline.dto';
 
 /**
  * ERP tenant-scoped contact-read endpoints — тот же принцип разделения, что
@@ -47,6 +48,26 @@ export class ContactController {
       contactId,
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+    });
+  }
+
+  @Get(':contactId/timeline')
+  @RequirePermission('contact', 'read')
+  async getContactTimeline(
+    @Req() req: FastifyRequest,
+    @Param('contactId', ParseObjectIdPipe) contactId: Types.ObjectId,
+    @Query() dto: ListTimelineDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.getContactTimeline({
+      contactId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      type: dto.type,
+      from: dto.from,
+      to: dto.to,
+      cursor: dto.cursor,
+      limit: dto.limit,
     });
   }
 

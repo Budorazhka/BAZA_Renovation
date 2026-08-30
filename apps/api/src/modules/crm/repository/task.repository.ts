@@ -187,4 +187,12 @@ export class TaskRepository {
       .countDocuments({ organizationId, leadId, status: 'open' })
       .exec();
   }
+
+  async listForLead(organizationId: Types.ObjectId, leadId: Types.ObjectId): Promise<TaskDocument[]> {
+    return this.model.find({ organizationId, leadId }).sort({ _id: -1 }).exec();
+  }
+
+  async listForContact(organizationId: Types.ObjectId, contactId: Types.ObjectId): Promise<TaskDocument[]> {
+    return this.model.find({ organizationId, contactId }).sort({ _id: -1 }).exec();
+  }
 }

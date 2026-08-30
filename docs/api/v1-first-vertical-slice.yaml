@@ -437,6 +437,10 @@ paths:
         - name: ownerPositionId
           in: query
           schema: {type: string}
+        - name: stalled
+          in: query
+          schema: {type: boolean}
+          description: Фильтр по признаку stalled (активный лид без открытых задач)
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -491,6 +495,50 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/timeline:
+    get:
+      operationId: getLeadTimeline
+      summary: >
+        Агрегированный timeline активности лида (переходы стадий, создание/завершение/отмена задач,
+        CRM audit events). Сортировка newest-first с детерминированным тай-брейкером и курсорной пагинацией.
+        Tenant и owner scope проверяются до чтения — чужой лид возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: type
+          in: query
+          schema: {type: string, enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Timeline активности лида
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
           $ref: '#/components/responses/Error'
 
   /contacts:
@@ -562,6 +610,49 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
+  /contacts/{contactId}/timeline:
+    get:
+      operationId: getContactTimeline
+      summary: >
+        Агрегированный timeline активности контакта и связанных с ним лидов и задач текущего tenant'а.
+        Для own-scope проверяется транзитивная принадлежность контакта менеджеру через лиды.
+      tags: [erp-crm]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: type
+          in: query
+          schema: {type: string, enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Timeline активности контакта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — контакт не существует или вне permission scope
           $ref: '#/components/responses/Error'
 
   /tasks:
@@ -1988,6 +2079,7 @@ components:
         ownerPositionId: {type: string, nullable: true}
         stage: {type: string}
         source: {type: object, additionalProperties: true}
+        stalled: {type: boolean}
 
     LeadListItem:
       type: object
@@ -2004,6 +2096,7 @@ components:
         version: {type: integer}
         source: {type: object, additionalProperties: true}
         createdAt: {type: string, format: date-time}
+        stalled: {type: boolean}
         contact:
           type: object
           nullable: true
@@ -2551,3 +2644,35 @@ components:
         status:
           type: string
           enum: [open, cancelled]
+
+    TimelineEventItem:
+      type: object
+      required: [id, type, happenedAt, title, actor]
+      properties:
+        id: {type: string}
+        type:
+          type: string
+          enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]
+        happenedAt: {type: string, format: date-time}
+        title: {type: string}
+        summary: {type: string, nullable: true}
+        actor:
+          type: object
+          required: [type]
+          properties:
+            type: {type: string, enum: [position, identity, system, admin_account]}
+            id: {type: string, nullable: true}
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    TimelineResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEventItem'
+        nextCursor: {type: string, nullable: true}

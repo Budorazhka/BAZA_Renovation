@@ -79,47 +79,70 @@ describe('LeadRepository', () => {
   });
 
   describe('listForOrganization', () => {
-    it('без cursor — фильтр без _id, сортировка по _id desc', async () => {
+    it('без cursor — match без _id, сортировка по _id desc, lookup openTasks', async () => {
       const organizationId = new Types.ObjectId();
       const execSpy = jest.fn().mockResolvedValue([]);
-      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
-      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
-      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
-      const repository = new LeadRepository({ find: findSpy } as never);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
 
       await repository.listForOrganization(organizationId, { limit: 21 });
 
-      expect(findSpy).toHaveBeenCalledWith({ organizationId });
-      expect(sortSpy).toHaveBeenCalledWith({ _id: -1 });
-      expect(limitSpy).toHaveBeenCalledWith(21);
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { organizationId } },
+          { $sort: { _id: -1 } },
+          { $limit: 21 },
+          expect.objectContaining({ $lookup: expect.anything() }),
+        ]),
+      );
     });
 
-    it('с cursor — фильтр включает _id: {$lt: cursor}', async () => {
+    it('с cursor — match включает _id: {$lt: cursor}', async () => {
       const organizationId = new Types.ObjectId();
       const cursor = new Types.ObjectId();
       const execSpy = jest.fn().mockResolvedValue([]);
-      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
-      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
-      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
-      const repository = new LeadRepository({ find: findSpy } as never);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
 
       await repository.listForOrganization(organizationId, { cursor, limit: 21 });
 
-      expect(findSpy).toHaveBeenCalledWith({ organizationId, _id: { $lt: cursor } });
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { organizationId, _id: { $lt: cursor } } },
+          { $sort: { _id: -1 } },
+        ]),
+      );
     });
 
-    it('ownerPositionId и stage фильтры комбинируются с organizationId', async () => {
+    it('фильтр stalled:true добавляет match { stalled: true } после вычисления', async () => {
       const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.listForOrganization(organizationId, { stalled: true, limit: 21 });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { stalled: true } },
+          { $limit: 21 },
+        ]),
+      );
+    });
+  });
+
+  describe('findLeadIdsForContact', () => {
+    it('returns distinct lead IDs for contact and optional ownerPositionId', async () => {
+      const organizationId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
       const ownerPositionId = new Types.ObjectId();
       const execSpy = jest.fn().mockResolvedValue([]);
-      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
-      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
-      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
-      const repository = new LeadRepository({ find: findSpy } as never);
+      const distinctSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ distinct: distinctSpy } as never);
 
-      await repository.listForOrganization(organizationId, { ownerPositionId, stage: 'qualified', limit: 21 });
+      await repository.findLeadIdsForContact(organizationId, contactId, ownerPositionId);
 
-      expect(findSpy).toHaveBeenCalledWith({ organizationId, ownerPositionId, stage: 'qualified' });
+      expect(distinctSpy).toHaveBeenCalledWith('_id', { organizationId, contactId, ownerPositionId });
     });
   });
 

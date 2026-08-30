@@ -42,12 +42,24 @@ export class LeadEventRepository {
   async listForLead(
     leadId: Types.ObjectId,
     organizationId: Types.ObjectId,
-    params: { cursor?: Types.ObjectId; limit: number },
+    params?: { cursor?: Types.ObjectId; limit?: number },
   ): Promise<LeadEventDocument[]> {
     const filter: Record<string, unknown> = { leadId, organizationId };
-    if (params.cursor) {
+    if (params?.cursor) {
       filter._id = { $lt: params.cursor };
     }
-    return this.model.find(filter).sort({ _id: -1 }).limit(params.limit).exec();
+    const query = this.model.find(filter).sort({ _id: -1 });
+    if (params?.limit) {
+      query.limit(params.limit);
+    }
+    return query.exec();
+  }
+
+  async listForLeadIds(
+    organizationId: Types.ObjectId,
+    leadIds: Types.ObjectId[],
+  ): Promise<LeadEventDocument[]> {
+    if (leadIds.length === 0) return [];
+    return this.model.find({ organizationId, leadId: { $in: leadIds } }).sort({ _id: -1 }).exec();
   }
 }
