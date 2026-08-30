@@ -829,6 +829,293 @@ paths:
           description: NOT_FOUND
           $ref: '#/components/responses/Error'
 
+  /deals:
+    get:
+      operationId: listDeals
+      summary: >
+        Список сделок текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/developer) видит все сделки tenant'а;
+        own-scope (manager) видит только сделки, где ownerPositionId === собственная Position.
+      tags: [erp-crm]
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            $ref: '#/components/schemas/DealStage'
+        - name: ownerPositionId
+          in: query
+          schema: {type: string}
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: contactId
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Сделки текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидные фильтры или ownerPositionId вне scope
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.read
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: createDeal
+      summary: Создание новой CRM-сделки
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDealRequest'
+      responses:
+        '201':
+          description: Сделка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — указанный contactId или leadId не найден в организации
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}:
+    get:
+      operationId: getDeal
+      summary: >
+        Получение детальной информации о сделке.
+        Tenant и own-scope проверяются до чтения — чужая сделка возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Сделка найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка не найдена
+          $ref: '#/components/responses/Error'
+
+    patch:
+      operationId: updateDeal
+      summary: Частичное обновление сделки (заголовок, описание, ответственный, комиссия)
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDealRequest'
+      responses:
+        '200':
+          description: Сделка обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/stage:
+    patch:
+      operationId: changeDealStage
+      summary: >
+        Смена стадии сделки с проверкой матрицы допустимых переходов и optimistic concurrency (expectedVersion).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeDealStageRequest'
+      responses:
+        '200':
+          description: Стадия сделки изменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED — недопустимый переход стадии
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.changeStage
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/participants:
+    post:
+      operationId: addDealParticipant
+      summary: Добавление участника сделки
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDealParticipantRequest'
+      responses:
+        '200':
+          description: Участник добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка или контакт участника не найден
+          $ref: '#/components/responses/Error'
+        '409':
+          description: DUPLICATE_DETECTED — контакт уже является участником
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/participants/{contactId}:
+    delete:
+      operationId: removeDealParticipant
+      summary: Удаление участника из сделки
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Участник удалён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — участник или сделка не найдены
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/checklist:
+    patch:
+      operationId: updateDealChecklist
+      summary: Атомарное обновление чек-листа сделки
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDealChecklistRequest'
+      responses:
+        '200':
+          description: Чек-лист обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
   /admin/publications:
     get:
       operationId: adminListPublications
@@ -2676,3 +2963,147 @@ components:
           items:
             $ref: '#/components/schemas/TimelineEventItem'
         nextCursor: {type: string, nullable: true}
+
+    DealStage:
+      type: string
+      enum: [showing, deposit, deal, golden, check_in, referral, closed_lost]
+
+    CrmContactEmbed:
+      type: object
+      required: [id, name, phone]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, nullable: true}
+
+    DealParticipant:
+      type: object
+      required: [role, contactId]
+      properties:
+        role: {type: string}
+        contactId: {type: string}
+        contact:
+          $ref: '#/components/schemas/CrmContactEmbed'
+
+    DealChecklistItem:
+      type: object
+      required: [id, label, done]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        done: {type: boolean}
+        completedAt: {type: string, format: date-time, nullable: true}
+        completedByPositionId: {type: string, nullable: true}
+
+    DealView:
+      type: object
+      required: [id, organizationId, contactId, ownerPositionId, title, stage, participants, checklistItems, version, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        leadId: {type: string, nullable: true}
+        contactId: {type: string}
+        ownerPositionId: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealParticipant'
+        checklistItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealChecklistItem'
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        contact:
+          $ref: '#/components/schemas/CrmContactEmbed'
+
+    DealListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealView'
+        nextCursor: {type: string, nullable: true}
+
+    CreateDealRequest:
+      type: object
+      required: [contactId, title]
+      properties:
+        contactId: {type: string}
+        ownerPositionId: {type: string}
+        leadId: {type: string}
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+        participants:
+          type: array
+          items:
+            type: object
+            required: [role, contactId]
+            properties:
+              role: {type: string, minLength: 1, maxLength: 50}
+              contactId: {type: string}
+        checklistItems:
+          type: array
+          items:
+            type: object
+            required: [label]
+            properties:
+              id: {type: string}
+              label: {type: string, minLength: 1, maxLength: 500}
+              done: {type: boolean}
+
+    UpdateDealRequest:
+      type: object
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000, nullable: true}
+        ownerPositionId: {type: string}
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+
+    ChangeDealStageRequest:
+      type: object
+      required: [stage, expectedVersion]
+      properties:
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedVersion: {type: integer, minimum: 0}
+        reason: {type: string, maxLength: 2000}
+
+    AddDealParticipantRequest:
+      type: object
+      required: [contactId, role]
+      properties:
+        contactId: {type: string}
+        role: {type: string, minLength: 1, maxLength: 50}
+
+    DealChecklistItemInput:
+      type: object
+      required: [label, done]
+      properties:
+        id: {type: string}
+        label: {type: string, minLength: 1, maxLength: 500}
+        done: {type: boolean}
+
+    UpdateDealChecklistRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealChecklistItemInput'

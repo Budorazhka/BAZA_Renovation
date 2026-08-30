@@ -439,6 +439,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список сделок текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/developer) видит все сделки tenant'а; own-scope (manager) видит только сделки, где ownerPositionId === собственная Position. */
+        get: operations["listDeals"];
+        put?: never;
+        /** Создание новой CRM-сделки */
+        post: operations["createDeal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение детальной информации о сделке. Tenant и own-scope проверяются до чтения — чужая сделка возвращает 404 (non-disclosure). */
+        get: operations["getDeal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Частичное обновление сделки (заголовок, описание, ответственный, комиссия) */
+        patch: operations["updateDeal"];
+        trace?: never;
+    };
+    "/deals/{dealId}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена стадии сделки с проверкой матрицы допустимых переходов и optimistic concurrency (expectedVersion). */
+        patch: operations["changeDealStage"];
+        trace?: never;
+    };
+    "/deals/{dealId}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Добавление участника сделки */
+        post: operations["addDealParticipant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}/participants/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удаление участника из сделки */
+        delete: operations["removeDealParticipant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Атомарное обновление чек-листа сделки */
+        patch: operations["updateDealChecklist"];
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -1526,6 +1630,91 @@ export interface components {
             items: components["schemas"]["TimelineEventItem"][];
             nextCursor: string | null;
         };
+        /** @enum {string} */
+        DealStage: "showing" | "deposit" | "deal" | "golden" | "check_in" | "referral" | "closed_lost";
+        CrmContactEmbed: {
+            id: string;
+            name: string;
+            phone: string;
+            email?: string | null;
+        };
+        DealParticipant: {
+            role: string;
+            contactId: string;
+            contact?: components["schemas"]["CrmContactEmbed"];
+        };
+        DealChecklistItem: {
+            id: string;
+            label: string;
+            done: boolean;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedByPositionId?: string | null;
+        };
+        DealView: {
+            id: string;
+            organizationId: string;
+            leadId?: string | null;
+            contactId: string;
+            ownerPositionId: string;
+            title: string;
+            description?: string | null;
+            stage: components["schemas"]["DealStage"];
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+            participants: components["schemas"]["DealParticipant"][];
+            checklistItems: components["schemas"]["DealChecklistItem"][];
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            contact?: components["schemas"]["CrmContactEmbed"];
+        };
+        DealListResponse: {
+            items: components["schemas"]["DealView"][];
+            nextCursor: string | null;
+        };
+        CreateDealRequest: {
+            contactId: string;
+            ownerPositionId?: string;
+            leadId?: string;
+            title: string;
+            description?: string;
+            stage?: components["schemas"]["DealStage"];
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+            participants?: {
+                role: string;
+                contactId: string;
+            }[];
+            checklistItems?: {
+                id?: string;
+                label: string;
+                done?: boolean;
+            }[];
+        };
+        UpdateDealRequest: {
+            title?: string;
+            description?: string | null;
+            ownerPositionId?: string;
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+        };
+        ChangeDealStageRequest: {
+            stage: components["schemas"]["DealStage"];
+            expectedVersion: number;
+            reason?: string;
+        };
+        AddDealParticipantRequest: {
+            contactId: string;
+            role: string;
+        };
+        DealChecklistItemInput: {
+            id?: string;
+            label: string;
+            done: boolean;
+        };
+        UpdateDealChecklistRequest: {
+            items: components["schemas"]["DealChecklistItemInput"][];
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -2334,6 +2523,273 @@ export interface operations {
             /** @description AUTH_NO_SESSION */
             401: components["responses"]["Error"];
             /** @description FORBIDDEN — нет task.complete */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    listDeals: {
+        parameters: {
+            query?: {
+                stage?: components["schemas"]["DealStage"];
+                ownerPositionId?: string;
+                leadId?: string;
+                contactId?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сделки текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидные фильтры или ownerPositionId вне scope */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.create */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — указанный contactId или leadId не найден в организации */
+            404: components["responses"]["Error"];
+        };
+    };
+    getDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сделка найдена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка не найдена */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    changeDealStage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeDealStageRequest"];
+            };
+        };
+        responses: {
+            /** @description Стадия сделки изменена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — недопустимый переход стадии */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.changeStage */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    addDealParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDealParticipantRequest"];
+            };
+        };
+        responses: {
+            /** @description Участник добавлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка или контакт участника не найден */
+            404: components["responses"]["Error"];
+            /** @description DUPLICATE_DETECTED — контакт уже является участником */
+            409: components["responses"]["Error"];
+        };
+    };
+    removeDealParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Участник удалён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — участник или сделка не найдены */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateDealChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDealChecklistRequest"];
+            };
+        };
+        responses: {
+            /** @description Чек-лист обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
             403: components["responses"]["Error"];
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];

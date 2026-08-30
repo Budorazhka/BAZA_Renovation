@@ -48,9 +48,9 @@ export class LeadEventRepository {
     if (params?.cursor) {
       filter._id = { $lt: params.cursor };
     }
-    const query = this.model.find(filter).sort({ _id: -1 });
+    let query = this.model.find(filter).sort({ _id: -1 });
     if (params?.limit) {
-      query.limit(params.limit);
+      query = query.limit(params.limit);
     }
     return query.exec();
   }

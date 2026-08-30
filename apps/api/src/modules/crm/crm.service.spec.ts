@@ -14,6 +14,8 @@ import type { OrganizationsService } from '../organizations/organizations.servic
 import type { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
 
 import type { TaskRepository } from './repository/task.repository';
+import type { DealRepository } from './repository/deal.repository';
+import type { DealEventRepository } from './repository/deal-event.repository';
 
 function makeMockConnection() {
   return {
@@ -37,6 +39,8 @@ function createTestCrmService(overrides: {
   organizationsService?: unknown;
   publicRevealIdempotencyService?: unknown;
   taskRepository?: unknown;
+  dealRepository?: unknown;
+  dealEventRepository?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -56,6 +60,8 @@ function createTestCrmService(overrides: {
       record: jest.fn().mockResolvedValue(undefined),
     }) as unknown as PublicRevealIdempotencyService,
     (overrides.taskRepository ?? {}) as unknown as TaskRepository,
+    (overrides.dealRepository ?? {}) as unknown as DealRepository,
+    (overrides.dealEventRepository ?? {}) as unknown as DealEventRepository,
   );
 }
 
@@ -1658,5 +1664,234 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
     await expect(
       readService.getContactTimeline({ contactId, organizationId, ownerPositionId, limit: 10 }),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  describe('Deal Core (DEAL-001)', () => {
+    it('createDeal: throws NotFoundException when primary contact does not exist in organization', async () => {
+      const organizationId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const service = createTestCrmService({
+        contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.createDeal({
+          organizationId,
+          contactId,
+          ownerPositionId: new Types.ObjectId(),
+          title: 'Deal 1',
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'corr-1',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('createDeal: creates deal, appends deal event, records audit', async () => {
+      const organizationId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+
+      const createdDeal = {
+        _id: dealId,
+        organizationId,
+        contactId,
+        ownerPositionId,
+        title: 'Penthouse sale',
+        stage: 'showing',
+        version: 0,
+        participants: [],
+        checklistItems: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const dealRepo = {
+        create: jest.fn().mockResolvedValue(createdDeal),
+      };
+      const dealEventRepo = {
+        append: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+      };
+      const auditService = {
+        append: jest.fn().mockResolvedValue(undefined),
+      };
+      const contactRepo = {
+        findByIdForOrganization: jest.fn().mockResolvedValue({
+          _id: contactId,
+          name: 'Alice',
+          phone: '+995555111222',
+        }),
+        findByIdsForOrganization: jest.fn().mockResolvedValue([]),
+      };
+
+      const service = createTestCrmService({
+        dealRepository: dealRepo,
+        dealEventRepository: dealEventRepo,
+        auditService,
+        contactRepository: contactRepo,
+      });
+
+      const res = await service.createDeal({
+        organizationId,
+        contactId,
+        ownerPositionId,
+        title: 'Penthouse sale',
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'corr-create-deal',
+      });
+
+      expect(res.id).toBe(dealId.toString());
+      expect(res.title).toBe('Penthouse sale');
+      expect(res.stage).toBe('showing');
+      expect(dealRepo.create).toHaveBeenCalled();
+      expect(dealEventRepo.append).toHaveBeenCalledWith(
+        expect.objectContaining({ dealId, stage: 'showing' }),
+        expect.anything(),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'deal.create', resourceId: dealId }),
+        expect.anything(),
+      );
+    });
+
+    it('changeDealStage: throws AppException on invalid transition (showing -> referral)', async () => {
+      const organizationId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+      const deal = {
+        _id: dealId,
+        organizationId,
+        stage: 'showing',
+        version: 0,
+      };
+
+      const service = createTestCrmService({
+        dealRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(deal),
+        },
+      });
+
+      await expect(
+        service.changeDealStage({
+          dealId,
+          organizationId,
+          newStage: 'referral',
+          expectedVersion: 0,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'corr-stage',
+        }),
+      ).rejects.toThrow(AppException);
+    });
+
+    it('changeDealStage: throws ConflictException when expectedVersion mismatches', async () => {
+      const organizationId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+      const deal = {
+        _id: dealId,
+        organizationId,
+        stage: 'showing',
+        version: 2,
+      };
+
+      const service = createTestCrmService({
+        dealRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue(deal),
+        },
+      });
+
+      await expect(
+        service.changeDealStage({
+          dealId,
+          organizationId,
+          newStage: 'deposit',
+          expectedVersion: 1, // Expected 1, actual 2
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'corr-stage',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('changeDealStage: executes valid transition (showing -> deposit) and records audit', async () => {
+      const organizationId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const dealBefore = {
+        _id: dealId,
+        organizationId,
+        contactId,
+        ownerPositionId,
+        title: 'Deal 1',
+        stage: 'showing',
+        version: 0,
+        participants: [],
+        checklistItems: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const dealAfter = {
+        ...dealBefore,
+        stage: 'deposit',
+        version: 1,
+      };
+
+      const dealRepo = {
+        findByIdForOrganization: jest.fn()
+          .mockResolvedValueOnce(dealBefore)
+          .mockResolvedValueOnce(dealAfter),
+        changeStageWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      };
+      const dealEventRepo = {
+        append: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+      };
+      const auditService = {
+        append: jest.fn().mockResolvedValue(undefined),
+      };
+      const contactRepo = {
+        findByIdsForOrganization: jest.fn().mockResolvedValue([{ _id: contactId, name: 'Bob', phone: '+995555123456' }]),
+      };
+
+      const service = createTestCrmService({
+        dealRepository: dealRepo,
+        dealEventRepository: dealEventRepo,
+        auditService,
+        contactRepository: contactRepo,
+      });
+
+      const res = await service.changeDealStage({
+        dealId,
+        organizationId,
+        newStage: 'deposit',
+        expectedVersion: 0,
+        reason: 'Deposit payment received',
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'corr-stage-valid',
+      });
+
+      expect(res.stage).toBe('deposit');
+      expect(res.version).toBe(1);
+      expect(dealEventRepo.append).toHaveBeenCalledWith(
+        expect.objectContaining({ dealId, stage: 'deposit', fromStage: 'showing', reason: 'Deposit payment received' }),
+        expect.anything(),
+      );
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'deal.change_stage',
+          before: { stage: 'showing', version: 0 },
+          after: { stage: 'deposit', version: 1, reason: 'Deposit payment received' },
+        }),
+        expect.anything(),
+      );
+    });
   });
 });
