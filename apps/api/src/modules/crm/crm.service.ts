@@ -38,6 +38,15 @@ export interface CrmLeadReadModel {
   createdAt: string;
   stalled: boolean;
   contact: { id: string; name: string; phone: string; email?: string } | null;
+  /**
+   * CRM-003 "активный лид без следующего действия" (мягкое правило,
+   * owner-подтверждено 30.08.2026 — только read-only индикатор, не
+   * блокировка записи): true, если lead.stage активен (ACTIVE_LEAD_STAGES
+   * ниже) И у него есть хотя бы одна открытая Task (TaskRepository.
+   * countOpenForLead). Для converted/lost лидов — всегда false (правило
+   * их не касается, не значит "есть next action").
+   */
+  hasOpenNextAction: boolean;
 }
 
 export interface CrmDealParticipantReadModel {
@@ -114,9 +123,21 @@ export interface CrmTaskReadModel {
   contactId: string | null;
   completedAt: string | null;
   completedByPositionId: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string | null;
 }
+
+/**
+ * CRM-003 "активный лид без следующего действия" — мягкое правило
+ * (owner-подтверждено 30.08.2026: только read-only флаг, БЕЗ блокировки
+ * записи — changeLeadStage/assignLead не знают про Task вообще, эта
+ * константа используется ТОЛЬКО в toLeadReadModel ниже для вычисления
+ * hasOpenNextAction). converted/lost исключены: converted — сделка
+ * закрыта, lost — лид выпал из активной воронки (LEAD_STAGE_TRANSITIONS
+ * выше), ни тот ни другой не нуждается в "следующем действии".
+ */
+const ACTIVE_LEAD_STAGES: readonly LeadStage[] = ['new', 'contacted', 'qualified'];
 
 /**
  * D-05B: технически решение (не owner decision — тот же статус, что сам
@@ -207,8 +228,21 @@ export class CrmService {
     const contacts = await this.contactRepository.findByIdsForOrganization(params.organizationId, contactIds);
     const contactsById = new Map(contacts.map((contact) => [contact._id.toString(), contact]));
 
+    // CRM-003: один батч-запрос на всю страницу вместо N countOpenForLead —
+    // см. TaskRepository.distinctLeadIdsWithOpenTask докстринг.
+    const leadIdsWithOpenTask = new Set(
+      (await this.taskRepository.distinctLeadIdsWithOpenTask(
+        params.organizationId,
+        leads.map((lead) => lead._id),
+      )).map((id) => id.toString()),
+    );
+
     return {
-      items: leads.map((lead) => toLeadReadModel(lead, contactsById.get(lead.contactId.toString()))),
+      items: leads.map((lead) =>
+        toLeadReadModel(lead, contactsById.get(lead.contactId.toString()), {
+          hasOpenNextAction: isActiveLeadStage(lead.stage) && leadIdsWithOpenTask.has(lead._id.toString()),
+        }),
+      ),
       nextCursor,
     };
   }
@@ -266,12 +300,13 @@ export class CrmService {
       throw new NotFoundException('Lead not found');
     }
     const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
-    let stalled = false;
-    if (!['converted', 'lost'].includes(lead.stage)) {
-      const openCount = (await this.taskRepository.countOpenForLead?.(params.organizationId, lead._id)) ?? 0;
-      stalled = openCount === 0;
-    }
-    return toLeadReadModel(lead, contact, stalled);
+    const openTaskCount = isActiveLeadStage(lead.stage)
+      ? await this.taskRepository.countOpenForLead(params.organizationId, lead._id)
+      : 0;
+    return toLeadReadModel(lead, contact, {
+      stalled: isActiveLeadStage(lead.stage) && openTaskCount === 0,
+      hasOpenNextAction: openTaskCount > 0,
+    });
   }
 
   /**
@@ -778,7 +813,13 @@ export class CrmService {
   }
 
   /**
-   * PATCH /tasks/:taskId. Изменение задачи с проверкой own-scope и аудитом.
+   * PATCH /tasks/:taskId. Изменяет title/description/dueAt/status —
+   * НИКОГДА assignedPositionId (см. reassignTask ниже: task.reassign —
+   * отдельный action/grant от task.edit, тот же принцип, что lead.assign
+   * отделён от lead.changeStage в LeadController). conventions.md разд.5
+   * optimistic concurrency: expectedVersion проверяется атомарно в одном
+   * Mongo-фильтре (TaskRepository.updateTask), modifiedCount:0 после
+   * прохождения tenant/scope-проверки — конфликт версии (409), не 404.
    */
   async updateTask(params: {
     taskId: Types.ObjectId;
@@ -786,10 +827,10 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     requiredScopePositionId?: Types.ObjectId;
+    expectedVersion: number;
     title?: string;
     description?: string | null;
     dueAt?: Date | null;
-    assignedPositionId?: Types.ObjectId | null;
     status?: TaskStatus;
     correlationId: string;
   }): Promise<CrmTaskReadModel> {
@@ -806,34 +847,25 @@ export class CrmService {
       throw new BadRequestException('Cannot edit a completed task');
     }
 
-    const targetAssignee = params.assignedPositionId;
-    if (params.requiredScopePositionId && targetAssignee) {
-      if (!targetAssignee.equals(params.requiredScopePositionId)) {
-        throw new BadRequestException('Cannot reassign task outside caller scope');
-      }
-    }
-
     return runInTransaction(this.connection, async (session) => {
-      if (targetAssignee && !targetAssignee.equals(existingTask.assignedPositionId ?? Types.ObjectId.createFromTime(0))) {
-        await this.organizationsService.findAssignablePosition(
-          targetAssignee,
-          params.organizationId,
-          session,
-        );
-      }
-
-      await this.taskRepository.updateTask(
+      const { modifiedCount } = await this.taskRepository.updateTask(
         params.taskId,
         params.organizationId,
+        params.expectedVersion,
         {
           title: params.title,
           description: params.description,
           dueAt: params.dueAt,
-          assignedPositionId: targetAssignee,
           status: params.status,
         },
         session,
       );
+      if (modifiedCount === 0) {
+        // Tenant/scope уже подтверждены findByIdForOrganization выше — единственная
+        // причина modifiedCount:0 здесь это устаревший expectedVersion (тот же
+        // принцип disambiguation, что changeLeadStage/updateUnitPrice).
+        throw new ConflictException('Task was modified by another request — refresh and retry');
+      }
 
       const updated = await this.taskRepository.findByIdForOrganization(
         params.taskId,
@@ -850,13 +882,11 @@ export class CrmService {
           resourceId: params.taskId,
           before: {
             title: existingTask.title,
-            assignedPositionId: existingTask.assignedPositionId?.toString() ?? null,
             dueAt: existingTask.dueAt?.toISOString() ?? null,
             status: existingTask.status,
           },
           after: {
             title: updated!.title,
-            assignedPositionId: updated!.assignedPositionId?.toString() ?? null,
             dueAt: updated!.dueAt?.toISOString() ?? null,
             status: updated!.status,
           },
@@ -870,7 +900,94 @@ export class CrmService {
   }
 
   /**
-   * POST /tasks/:taskId/complete. Завершение задачи с фиксацией времени и исполнителя.
+   * PATCH /tasks/:taskId/reassign. Единственный путь смены
+   * assignedPositionId — task.reassign, отдельный action от task.edit
+   * (owner-подтверждено 30.08.2026, тот же паттерн, что lead.assign
+   * отделён от lead.changeStage). own-scope (manager, requiredScopePositionId
+   * задан) может переназначить ТОЛЬКО задачи, уже назначенные на себя, и
+   * ТОЛЬКО на себя же (own-scope не даёт передать задачу коллеге — это
+   * реассайн от лица владельца задачи на самого себя, реальный кейс —
+   * "снять себя" через null, если понадобится расширить это позже).
+   */
+  async reassignTask(params: {
+    taskId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    requiredScopePositionId?: Types.ObjectId;
+    expectedVersion: number;
+    assignedPositionId: Types.ObjectId | null;
+    correlationId: string;
+  }): Promise<CrmTaskReadModel> {
+    const existingTask = await this.taskRepository.findByIdForOrganization(
+      params.taskId,
+      params.organizationId,
+      params.requiredScopePositionId,
+    );
+    if (!existingTask) {
+      throw new NotFoundException('Task not found');
+    }
+
+    if (
+      params.requiredScopePositionId &&
+      params.assignedPositionId &&
+      !params.assignedPositionId.equals(params.requiredScopePositionId)
+    ) {
+      throw new BadRequestException('Cannot reassign task outside caller scope');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      if (params.assignedPositionId) {
+        await this.organizationsService.findAssignablePosition(
+          params.assignedPositionId,
+          params.organizationId,
+          session,
+        );
+      }
+
+      const { modifiedCount } = await this.taskRepository.reassignTask(
+        params.taskId,
+        params.organizationId,
+        params.expectedVersion,
+        params.assignedPositionId,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new ConflictException('Task was modified by another request — refresh and retry');
+      }
+
+      const updated = await this.taskRepository.findByIdForOrganization(
+        params.taskId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'task.reassign',
+          resource: 'task',
+          resourceId: params.taskId,
+          before: { assignedPositionId: existingTask.assignedPositionId?.toString() ?? null },
+          after: { assignedPositionId: updated!.assignedPositionId?.toString() ?? null },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toTaskReadModel(updated!);
+    });
+  }
+
+  /**
+   * POST /tasks/:taskId/complete. Завершение задачи с фиксацией времени и
+   * исполнителя. Идемпотентно на уровне "уже completed" — повторный вызов
+   * с ЛЮБЫМ expectedVersion после успешного завершения просто возвращает
+   * текущее состояние, не 409 (тот же UX, что описан в docs — "safe to
+   * invoke repeatedly"). Но САМ переход open→completed версионирован —
+   * два параллельных complete/update на ОТКРЫТОЙ задаче не оба проходят
+   * молча (conventions.md разд.5).
    */
   async completeTask(params: {
     taskId: Types.ObjectId;
@@ -878,6 +995,7 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     requiredScopePositionId?: Types.ObjectId;
+    expectedVersion: number;
     correlationId: string;
   }): Promise<CrmTaskReadModel> {
     const existingTask = await this.taskRepository.findByIdForOrganization(
@@ -894,12 +1012,19 @@ export class CrmService {
     }
 
     return runInTransaction(this.connection, async (session) => {
-      await this.taskRepository.completeTask(
+      const { modifiedCount } = await this.taskRepository.completeTask(
         params.taskId,
         params.organizationId,
+        params.expectedVersion,
         params.actorPositionId,
         session,
       );
+      if (modifiedCount === 0) {
+        // version устарела ПРОТИВ ещё открытой задачи — конфликт, не
+        // "кто-то уже завершил" (тот случай отловлен выше по свежему
+        // прочтению existingTask.status==='completed').
+        throw new ConflictException('Task was modified by another request — refresh and retry');
+      }
 
       const completed = await this.taskRepository.findByIdForOrganization(
         params.taskId,
@@ -2164,7 +2289,7 @@ function toLeadReadModel(
     stalled?: boolean;
   },
   contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
-  stalledOverride?: boolean,
+  state: { stalled?: boolean; hasOpenNextAction?: boolean } = {},
 ): CrmLeadReadModel {
   return {
     id: lead._id.toString(),
@@ -2174,11 +2299,17 @@ function toLeadReadModel(
     version: lead.version ?? 0,
     source: lead.source,
     createdAt: lead.createdAt.toISOString(),
-    stalled: stalledOverride !== undefined ? stalledOverride : (lead.stalled ?? false),
+    stalled: state.stalled ?? lead.stalled ?? false,
     contact: contact
       ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
       : null,
+    hasOpenNextAction: state.hasOpenNextAction ?? false,
   };
+}
+
+/** CRM-003: см. ACTIVE_LEAD_STAGES докстринг — converted/lost исключены из "активный лид без next action". */
+function isActiveLeadStage(stage: LeadStage): boolean {
+  return ACTIVE_LEAD_STAGES.includes(stage);
 }
 
 function toLeadEventReadModel(event: {
@@ -2236,6 +2367,7 @@ function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     contactId: task.contactId ? task.contactId.toString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     completedByPositionId: task.completedByPositionId ? task.completedByPositionId.toString() : null,
+    version: task.version ?? 0,
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
   };

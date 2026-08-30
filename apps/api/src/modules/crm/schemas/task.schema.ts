@@ -46,6 +46,17 @@ export class TaskDocument extends Document {
   @Prop({ type: Types.ObjectId, required: false })
   completedByPositionId?: Types.ObjectId;
 
+  /**
+   * conventions.md разд.5 optimistic concurrency — тот же паттерн, что
+   * LeadDocument.version/UnitDocument.version: PATCH /tasks/:taskId,
+   * POST /tasks/:taskId/complete и PATCH /tasks/:taskId/reassign
+   * принимают expectedVersion и атомарно проверяют его в одном Mongo
+   * updateOne (не read-then-write), чтобы два параллельных изменения
+   * одной задачи не затирали друг друга молча.
+   */
+  @Prop({ required: true, default: 0 })
+  version!: number;
+
   declare createdAt: Date;
   declare updatedAt: Date;
 }

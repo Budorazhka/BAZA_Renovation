@@ -59,7 +59,10 @@ function createTestCrmService(overrides: {
       checkReplay: jest.fn().mockResolvedValue(null),
       record: jest.fn().mockResolvedValue(undefined),
     }) as unknown as PublicRevealIdempotencyService,
-    (overrides.taskRepository ?? {}) as unknown as TaskRepository,
+    (overrides.taskRepository ?? {
+      distinctLeadIdsWithOpenTask: jest.fn().mockResolvedValue([]),
+      countOpenForLead: jest.fn().mockResolvedValue(0),
+    }) as unknown as TaskRepository,
     (overrides.dealRepository ?? {}) as unknown as DealRepository,
     (overrides.dealEventRepository ?? {}) as unknown as DealEventRepository,
   );
@@ -1090,6 +1093,7 @@ describe('CrmService — read leads', () => {
           createdAt: '2026-08-26T10:00:00.000Z',
           stalled: false,
           contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
+          hasOpenNextAction: false,
         },
       ],
       nextCursor: null,
@@ -1201,6 +1205,7 @@ describe('CrmService — read leads', () => {
       createdAt: '2026-08-26T10:00:00.000Z',
       stalled: false,
       contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
+      hasOpenNextAction: true,
     });
   });
 

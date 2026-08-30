@@ -22,6 +22,8 @@ import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe'
 import { CrmService } from './crm.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { ReassignTaskDto } from './dto/reassign-task.dto';
+import { CompleteTaskDto } from './dto/complete-task.dto';
 import { ListTasksDto } from './dto/list-tasks.dto';
 
 /**
@@ -108,16 +110,39 @@ export class TaskController {
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       requiredScopePositionId: await this.ownerFilterForAction(tenantContext.positionId, 'edit'),
+      expectedVersion: dto.expectedVersion,
       title: dto.title,
       description: dto.description,
       dueAt: dto.dueAt !== undefined ? (dto.dueAt ? new Date(dto.dueAt) : null) : undefined,
-      assignedPositionId:
-        dto.assignedPositionId !== undefined
-          ? dto.assignedPositionId
-            ? new Types.ObjectId(dto.assignedPositionId)
-            : null
-          : undefined,
       status: dto.status,
+      correlationId: req.correlationId,
+    });
+  }
+
+  /**
+   * task.reassign — отдельный grant от task.edit (см. CrmService.reassignTask
+   * докстринг). PATCH, не POST — идемпотентная замена значения поля
+   * assignedPositionId, тот же HTTP-семантический выбор, что PATCH
+   * /leads/:id/stage (не POST /leads/:id/assign — здесь endpoint новый,
+   * выбираем PATCH единообразно с остальными Task-мутациями по одному ресурсу).
+   */
+  @Patch(':taskId/reassign')
+  @HttpCode(200)
+  @RequirePermission('task', 'reassign')
+  async reassignTask(
+    @Req() req: FastifyRequest,
+    @Param('taskId', ParseObjectIdPipe) taskId: Types.ObjectId,
+    @Body() dto: ReassignTaskDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.reassignTask({
+      taskId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      requiredScopePositionId: await this.ownerFilterForAction(tenantContext.positionId, 'reassign'),
+      expectedVersion: dto.expectedVersion,
+      assignedPositionId: dto.assignedPositionId ? new Types.ObjectId(dto.assignedPositionId) : null,
       correlationId: req.correlationId,
     });
   }
@@ -128,6 +153,7 @@ export class TaskController {
   async completeTask(
     @Req() req: FastifyRequest,
     @Param('taskId', ParseObjectIdPipe) taskId: Types.ObjectId,
+    @Body() dto: CompleteTaskDto,
   ) {
     const tenantContext = requireTenantContext(req);
     return this.crmService.completeTask({
@@ -136,6 +162,7 @@ export class TaskController {
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       requiredScopePositionId: await this.ownerFilterForAction(tenantContext.positionId, 'complete'),
+      expectedVersion: dto.expectedVersion,
       correlationId: req.correlationId,
     });
   }

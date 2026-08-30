@@ -132,8 +132,85 @@ describe('TaskController', () => {
     });
   });
 
+  describe('updateTask', () => {
+    it('пробрасывает expectedVersion, НЕ передаёт assignedPositionId (task.reassign отдельно)', async () => {
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const taskId = new Types.ObjectId();
+      const updateTask = jest.fn().mockResolvedValue({ id: taskId.toString() });
+      const controller = new TaskController(
+        { updateTask } as unknown as CrmService,
+        { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      );
+
+      await controller.updateTask(makeRequest(organizationId, positionId) as never, taskId, {
+        expectedVersion: 2,
+        title: 'Новое название',
+      });
+
+      expect(updateTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          taskId,
+          organizationId,
+          expectedVersion: 2,
+          title: 'Новое название',
+          requiredScopePositionId: undefined,
+        }),
+      );
+      expect(updateTask.mock.calls[0]![0]).not.toHaveProperty('assignedPositionId');
+    });
+  });
+
+  describe('reassignTask', () => {
+    it('own-grant: requiredScopePositionId передаётся, assignedPositionId сконвертирован в ObjectId', async () => {
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const taskId = new Types.ObjectId();
+      const reassignTask = jest.fn().mockResolvedValue({ id: taskId.toString() });
+      const controller = new TaskController(
+        { reassignTask } as unknown as CrmService,
+        { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      );
+
+      await controller.reassignTask(makeRequest(organizationId, positionId) as never, taskId, {
+        expectedVersion: 1,
+        assignedPositionId: positionId.toString(),
+      });
+
+      expect(reassignTask).toHaveBeenCalledWith({
+        taskId,
+        organizationId,
+        actorPositionId: positionId,
+        actorIdentityId: expect.any(Types.ObjectId),
+        requiredScopePositionId: positionId,
+        expectedVersion: 1,
+        assignedPositionId: positionId,
+        correlationId: 'req-corr-123',
+      });
+    });
+
+    it('отсутствие assignedPositionId — передаёт null (снятие назначения)', async () => {
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const taskId = new Types.ObjectId();
+      const reassignTask = jest.fn().mockResolvedValue({ id: taskId.toString() });
+      const controller = new TaskController(
+        { reassignTask } as unknown as CrmService,
+        { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      );
+
+      await controller.reassignTask(makeRequest(organizationId, positionId) as never, taskId, {
+        expectedVersion: 1,
+      });
+
+      expect(reassignTask).toHaveBeenCalledWith(
+        expect.objectContaining({ assignedPositionId: null, requiredScopePositionId: undefined }),
+      );
+    });
+  });
+
   describe('completeTask', () => {
-    it('invokes crmService.completeTask with tenant and position context', async () => {
+    it('invokes crmService.completeTask with tenant, position context and expectedVersion', async () => {
       const organizationId = new Types.ObjectId();
       const positionId = new Types.ObjectId();
       const taskId = new Types.ObjectId();
@@ -143,7 +220,9 @@ describe('TaskController', () => {
         { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
       );
 
-      await controller.completeTask(makeRequest(organizationId, positionId) as never, taskId);
+      await controller.completeTask(makeRequest(organizationId, positionId) as never, taskId, {
+        expectedVersion: 3,
+      });
 
       expect(completeTask).toHaveBeenCalledWith({
         taskId,
@@ -151,6 +230,7 @@ describe('TaskController', () => {
         actorPositionId: positionId,
         actorIdentityId: expect.any(Types.ObjectId),
         requiredScopePositionId: undefined,
+        expectedVersion: 3,
         correlationId: 'req-corr-123',
       });
     });

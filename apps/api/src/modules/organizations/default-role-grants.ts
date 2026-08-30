@@ -75,6 +75,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'create', scope: 'organization' },
     { resource: 'deal', action: 'edit', scope: 'organization' },
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
+    { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
@@ -114,6 +115,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'create', scope: 'organization' },
     { resource: 'deal', action: 'edit', scope: 'organization' },
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
+    { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
@@ -152,6 +154,14 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'create', scope: 'organization' },
     { resource: 'deal', action: 'edit', scope: 'organization' },
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
+    // rop.task.reassign — 'organization', не 'team': PermissionScope 'team'
+    // существует в enum, но не имеет реальной реализации сужения нигде в
+    // кодовой базе (нет модели подчинённости/иерархии Position) — тот же
+    // выбор, что уже сделан для lead.reassign у rop НЕ применяется здесь
+    // буквально (там team ИСПОЛЬЗУЕТСЯ, хоть и без реального сужения);
+    // для task.reassign явно взят organization по решению владельца
+    // (30.08.2026) — team для task отложен до появления модели команды.
+    { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
@@ -202,6 +212,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'create', scope: 'organization' },
+    { resource: 'task', action: 'complete', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'unit', action: 'price.update', scope: 'organization' },
     { resource: 'unit', action: 'status.update', scope: 'organization' },
@@ -232,6 +243,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'create', scope: 'organization' },
     { resource: 'deal', action: 'edit', scope: 'organization' },
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
+    { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },

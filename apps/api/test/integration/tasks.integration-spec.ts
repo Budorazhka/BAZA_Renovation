@@ -132,6 +132,25 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
     return { cookie: `baza_session=${session.sessionToken}`, positionId, identityId };
   }
 
+  async function seedAdministratorSession(
+    organizationId: Types.ObjectId,
+  ): Promise<{ cookie: string; positionId: Types.ObjectId; identityId: Types.ObjectId }> {
+    const login = `administrator-${new Types.ObjectId().toString()}@example.test`;
+    const identityId = await authService.registerIdentity({ login, password: PASSWORD });
+    await authService.grantErpAccess(identityId);
+    const positionId = await organizationsService.createVacantPosition({ organizationId, fixedRole: 'administrator' });
+    await organizationsService.assignOccupant({
+      positionId,
+      identityId,
+      occupantDisplayName: 'Интеграционный администратор',
+      actorIdentityId: identityId,
+      expectedOrganizationId: organizationId,
+      correlationId: 'http-integration-test-seed',
+    });
+    const session = await authService.login({ login, password: PASSWORD, audience: 'erp' });
+    return { cookie: `baza_session=${session.sessionToken}`, positionId, identityId };
+  }
+
   async function seedContact(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
     const contactId = new Types.ObjectId();
     await connection.collection('contacts').insertOne({
@@ -157,6 +176,32 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       createdAt: new Date(),
     });
     return leadId;
+  }
+
+  /**
+   * version:0 обязателен — прямая вставка через native driver (не Mongoose)
+   * не применяет schema default:0 автоматически, а PATCH/complete/reassign
+   * фильтруют по version:expectedVersion атомарно (без $exists-fallback,
+   * см. TaskRepository.updateTask докстринг — Task новая схема, легаси-
+   * документов без version не существует, значит тест не должен их
+   * симулировать без явного version:0).
+   */
+  async function seedTask(
+    organizationId: Types.ObjectId,
+    overrides?: { title?: string; status?: string; assignedPositionId?: Types.ObjectId; leadId?: Types.ObjectId },
+  ): Promise<Types.ObjectId> {
+    const taskId = new Types.ObjectId();
+    await connection.collection('tasks').insertOne({
+      _id: taskId,
+      organizationId,
+      title: overrides?.title ?? 'Задача',
+      status: overrides?.status ?? 'open',
+      assignedPositionId: overrides?.assignedPositionId,
+      leadId: overrides?.leadId,
+      version: 0,
+      createdAt: new Date(),
+    });
+    return taskId;
   }
 
   describe('Authentication & Authorization Guards', () => {
@@ -262,6 +307,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
           title: `Task #${i}`,
           status: i === 3 ? 'completed' : 'open',
           assignedPositionId: positionId,
+          version: 0,
           createdAt: new Date(Date.now() + i * 100),
         });
       }
@@ -292,31 +338,15 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
     });
 
     it('manager with own-scope can only see their own tasks', async () => {
-      const { organizationId, positionId: ownerPositionId } = await seedOwnerSession();
+      const { organizationId } = await seedOwnerSession();
       const manager1 = await seedManagerSession(organizationId);
       const manager2 = await seedManagerSession(organizationId);
 
       // Task for Manager 1
-      const task1Id = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: task1Id,
-        organizationId,
-        title: 'Manager 1 task',
-        status: 'open',
-        assignedPositionId: manager1.positionId,
-        createdAt: new Date(),
-      });
+      await seedTask(organizationId, { title: 'Manager 1 task', assignedPositionId: manager1.positionId });
 
       // Task for Manager 2
-      const task2Id = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: task2Id,
-        organizationId,
-        title: 'Manager 2 task',
-        status: 'open',
-        assignedPositionId: manager2.positionId,
-        createdAt: new Date(),
-      });
+      const task2Id = await seedTask(organizationId, { title: 'Manager 2 task', assignedPositionId: manager2.positionId });
 
       // Manager 1 lists tasks
       const m1List = await app.inject({
@@ -350,14 +380,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const orgA = await seedOwnerSession();
       const orgB = await seedOwnerSession();
 
-      const taskBId = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: taskBId,
-        organizationId: orgB.organizationId,
-        title: 'Org B Secret Task',
-        status: 'open',
-        createdAt: new Date(),
-      });
+      const taskBId = await seedTask(orgB.organizationId, { title: 'Org B Secret Task' });
 
       const res = await app.inject({
         method: 'GET',
@@ -371,21 +394,14 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
   describe('PATCH /tasks/:taskId & POST /tasks/:taskId/complete', () => {
     it('updates task attributes and writes audit record', async () => {
       const { cookie, organizationId, positionId } = await seedOwnerSession();
-      const taskId = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: taskId,
-        organizationId,
-        title: 'Initial title',
-        status: 'open',
-        assignedPositionId: positionId,
-        createdAt: new Date(),
-      });
+      const taskId = await seedTask(organizationId, { title: 'Initial title', assignedPositionId: positionId });
 
       const patchRes = await app.inject({
         method: 'PATCH',
         url: `/api/v1/tasks/${taskId.toString()}`,
         headers: { cookie },
         payload: {
+          expectedVersion: 0,
           title: 'Updated title',
           description: 'Updated notes',
           status: 'cancelled',
@@ -412,20 +428,16 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const { organizationId } = await seedOwnerSession();
       const manager = await seedManagerSession(organizationId);
 
-      const taskId = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: taskId,
-        organizationId,
+      const taskId = await seedTask(organizationId, {
         title: 'Conduct phone interview',
-        status: 'open',
         assignedPositionId: manager.positionId,
-        createdAt: new Date(),
       });
 
       const completeRes = await app.inject({
         method: 'POST',
         url: `/api/v1/tasks/${taskId.toString()}/complete`,
         headers: { cookie: manager.cookie },
+        payload: { expectedVersion: 0 },
       });
 
       expect(completeRes.statusCode).toBe(200);
@@ -439,7 +451,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
         method: 'PATCH',
         url: `/api/v1/tasks/${taskId.toString()}`,
         headers: { cookie: manager.cookie },
-        payload: { title: 'New title after done' },
+        payload: { expectedVersion: 1, title: 'New title after done' },
       });
       expect(editCompleted.statusCode).toBe(400);
     });
@@ -449,22 +461,200 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const manager1 = await seedManagerSession(organizationId);
       const manager2 = await seedManagerSession(organizationId);
 
-      const task2Id = new Types.ObjectId();
-      await connection.collection('tasks').insertOne({
-        _id: task2Id,
-        organizationId,
-        title: 'Manager 2 task',
-        status: 'open',
-        assignedPositionId: manager2.positionId,
-        createdAt: new Date(),
-      });
+      const task2Id = await seedTask(organizationId, { title: 'Manager 2 task', assignedPositionId: manager2.positionId });
 
       const res = await app.inject({
         method: 'POST',
         url: `/api/v1/tasks/${task2Id.toString()}/complete`,
         headers: { cookie: manager1.cookie },
+        payload: { expectedVersion: 0 },
       });
       expect(res.statusCode).toBe(404);
+    });
+
+    it('stale expectedVersion on an open task — 409 CONFLICT, does not modify the task', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { assignedPositionId: positionId });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 99, title: 'Should not apply' },
+      });
+
+      expect(res.statusCode).toBe(409);
+      const taskDoc = await connection.collection('tasks').findOne({ _id: taskId });
+      expect(taskDoc?.title).toBe('Задача');
+    });
+
+    it('complete is idempotent: repeated call after completion returns 200 with the same state, ignoring stale expectedVersion', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { assignedPositionId: positionId });
+
+      const first = await app.inject({
+        method: 'POST',
+        url: `/api/v1/tasks/${taskId.toString()}/complete`,
+        headers: { cookie },
+        payload: { expectedVersion: 0 },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: 'POST',
+        url: `/api/v1/tasks/${taskId.toString()}/complete`,
+        headers: { cookie },
+        payload: { expectedVersion: 0 },
+      });
+      expect(second.statusCode).toBe(200);
+      expect(JSON.parse(second.body).status).toBe('completed');
+    });
+  });
+
+  describe('PATCH /tasks/:taskId/reassign — task.reassign (отдельный от task.edit)', () => {
+    it('owner переназначает задачу на другую Position, пишет audit task.reassign', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const oldAssignee = await organizationsService.createVacantPosition({ organizationId, fixedRole: 'manager' });
+      const newAssignee = await organizationsService.createVacantPosition({ organizationId, fixedRole: 'manager' });
+      const taskId = await seedTask(organizationId, { assignedPositionId: oldAssignee });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}/reassign`,
+        headers: { cookie },
+        payload: { expectedVersion: 0, assignedPositionId: newAssignee.toString() },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).assignedPositionId).toBe(newAssignee.toString());
+
+      const audit = await connection.collection('audit_events').findOne({ action: 'task.reassign', resourceId: taskId });
+      expect(audit).not.toBeNull();
+      expect(audit?.before?.assignedPositionId).toBe(oldAssignee.toString());
+      expect(audit?.after?.assignedPositionId).toBe(newAssignee.toString());
+    });
+
+    it('manager (own-scope, task.reassign нет гранта) — 403 FORBIDDEN', async () => {
+      const { organizationId } = await seedOwnerSession();
+      const manager = await seedManagerSession(organizationId);
+      const taskId = await seedTask(organizationId, { assignedPositionId: manager.positionId });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}/reassign`,
+        headers: { cookie: manager.cookie },
+        payload: { expectedVersion: 0, assignedPositionId: manager.positionId.toString() },
+      });
+
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('PATCH /tasks/:taskId (task.edit) больше НЕ принимает assignedPositionId — поле игнорируется/отклоняется ValidationPipe (whitelist)', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const otherPosition = await organizationsService.createVacantPosition({ organizationId, fixedRole: 'manager' });
+      const taskId = await seedTask(organizationId, { assignedPositionId: positionId });
+
+      const res = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 0, assignedPositionId: otherPosition.toString() },
+      });
+
+      // whitelist:true + forbidNonWhitelisted:true (main.api.ts ValidationPipe) —
+      // неизвестное для UpdateTaskDto поле assignedPositionId отклоняется 400,
+      // не молча игнорируется — тот же контракт, что остальные DTO этого API.
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  describe('administrator role — task.complete grant (owner-подтверждено 30.08.2026)', () => {
+    it('administrator может завершить любую задачу организации', async () => {
+      const { organizationId } = await seedOwnerSession();
+      const admin = await seedAdministratorSession(organizationId);
+      const managerSession = await seedManagerSession(organizationId);
+      const taskId = await seedTask(organizationId, { assignedPositionId: managerSession.positionId });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/v1/tasks/${taskId.toString()}/complete`,
+        headers: { cookie: admin.cookie },
+        payload: { expectedVersion: 0 },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).status).toBe('completed');
+    });
+
+    it('administrator НЕ имеет task.edit/task.reassign — 403 FORBIDDEN', async () => {
+      const { organizationId } = await seedOwnerSession();
+      const admin = await seedAdministratorSession(organizationId);
+      const taskId = await seedTask(organizationId);
+
+      const editRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie: admin.cookie },
+        payload: { expectedVersion: 0, title: 'x' },
+      });
+      expect(editRes.statusCode).toBe(403);
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}/reassign`,
+        headers: { cookie: admin.cookie },
+        payload: { expectedVersion: 0 },
+      });
+      expect(reassignRes.statusCode).toBe(403);
+    });
+  });
+
+  describe('CRM-003: hasOpenNextAction в GET /leads и GET /leads/:leadId (мягкое правило)', () => {
+    it('активный лид (new) с открытой задачей — hasOpenNextAction:true в GET /leads/:leadId', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadId = await seedLead(organizationId, contactId);
+      await seedTask(organizationId, { leadId, status: 'open' });
+
+      const res = await app.inject({ method: 'GET', url: `/api/v1/leads/${leadId.toString()}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).hasOpenNextAction).toBe(true);
+    });
+
+    it('активный лид (new) БЕЗ задач — hasOpenNextAction:false', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadId = await seedLead(organizationId, contactId);
+
+      const res = await app.inject({ method: 'GET', url: `/api/v1/leads/${leadId.toString()}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).hasOpenNextAction).toBe(false);
+    });
+
+    it('активный лид, у которого единственная задача cancelled (не open) — hasOpenNextAction:false', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadId = await seedLead(organizationId, contactId);
+      await seedTask(organizationId, { leadId, status: 'cancelled' });
+
+      const res = await app.inject({ method: 'GET', url: `/api/v1/leads/${leadId.toString()}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).hasOpenNextAction).toBe(false);
+    });
+
+    it('GET /leads (список) отражает hasOpenNextAction по каждому лиду независимо, одним батч-запросом', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadWithTask = await seedLead(organizationId, contactId);
+      const leadWithoutTask = await seedLead(organizationId, contactId);
+      await seedTask(organizationId, { leadId: leadWithTask, status: 'open' });
+
+      const res = await app.inject({ method: 'GET', url: '/api/v1/leads', headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      const items = JSON.parse(res.body).items as Array<{ id: string; hasOpenNextAction: boolean }>;
+      const byId = new Map(items.map((item) => [item.id, item.hasOpenNextAction]));
+      expect(byId.get(leadWithTask.toString())).toBe(true);
+      expect(byId.get(leadWithoutTask.toString())).toBe(false);
     });
   });
 });

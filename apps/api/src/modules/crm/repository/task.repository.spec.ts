@@ -112,8 +112,74 @@ describe('TaskRepository', () => {
     });
   });
 
+  describe('updateTask', () => {
+    it('фильтр включает organizationId И version:expectedVersion (CAS), $inc version:1', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const fakeSession = {} as never;
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ updateOne: updateOneSpy } as never);
+
+      await repository.updateTask(id, organizationId, 3, { title: 'Новое название' }, fakeSession);
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, version: 3 },
+        { $inc: { version: 1 }, $set: { title: 'Новое название' } },
+        { session: fakeSession },
+      );
+    });
+
+    it('устаревшая version — modifiedCount:0, не бросает здесь (CrmService решает 409)', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ updateOne: updateOneSpy } as never);
+
+      const result = await repository.updateTask(id, organizationId, 5, { title: 'x' });
+
+      expect(result).toEqual({ modifiedCount: 0 });
+    });
+  });
+
+  describe('reassignTask', () => {
+    it('assignedPositionId задан — $set + $inc version', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const assignedPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ updateOne: updateOneSpy } as never);
+
+      await repository.reassignTask(id, organizationId, 2, assignedPositionId);
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, version: 2 },
+        { $set: { assignedPositionId }, $inc: { version: 1 } },
+        { session: undefined },
+      );
+    });
+
+    it('assignedPositionId:null — $unset + $inc version (снятие назначения)', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ updateOne: updateOneSpy } as never);
+
+      await repository.reassignTask(id, organizationId, 2, null);
+
+      expect(updateOneSpy).toHaveBeenCalledWith(
+        { _id: id, organizationId, version: 2 },
+        { $unset: { assignedPositionId: 1 }, $inc: { version: 1 } },
+        { session: undefined },
+      );
+    });
+  });
+
   describe('completeTask', () => {
-    it('updates status to completed, sets completedAt and completedByPositionId within tenant', async () => {
+    it('фильтр включает version:expectedVersion (CAS), устанавливает status/completedAt/completedByPositionId, $inc version', async () => {
       const id = new Types.ObjectId();
       const organizationId = new Types.ObjectId();
       const completedByPositionId = new Types.ObjectId();
@@ -123,16 +189,17 @@ describe('TaskRepository', () => {
       const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
       const repository = new TaskRepository({ updateOne: updateOneSpy } as never);
 
-      const res = await repository.completeTask(id, organizationId, completedByPositionId, fakeSession);
+      const res = await repository.completeTask(id, organizationId, 4, completedByPositionId, fakeSession);
 
       expect(updateOneSpy).toHaveBeenCalledWith(
-        { _id: id, organizationId },
+        { _id: id, organizationId, version: 4 },
         {
           $set: {
             status: 'completed',
             completedAt: expect.any(Date),
             completedByPositionId,
           },
+          $inc: { version: 1 },
         },
         { session: fakeSession },
       );
@@ -153,6 +220,36 @@ describe('TaskRepository', () => {
 
       expect(countDocumentsSpy).toHaveBeenCalledWith({ organizationId, leadId, status: 'open' });
       expect(count).toBe(2);
+    });
+  });
+
+  describe('distinctLeadIdsWithOpenTask', () => {
+    it('пустой leadIds — [] без похода в базу', async () => {
+      const organizationId = new Types.ObjectId();
+      const distinctSpy = jest.fn();
+      const repository = new TaskRepository({ distinct: distinctSpy } as never);
+
+      const result = await repository.distinctLeadIdsWithOpenTask(organizationId, []);
+
+      expect(result).toEqual([]);
+      expect(distinctSpy).not.toHaveBeenCalled();
+    });
+
+    it('фильтр включает organizationId, leadId:{$in}, status:open', async () => {
+      const organizationId = new Types.ObjectId();
+      const leadIds = [new Types.ObjectId(), new Types.ObjectId()];
+      const execSpy = jest.fn().mockResolvedValue([leadIds[0]]);
+      const distinctSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ distinct: distinctSpy } as never);
+
+      const result = await repository.distinctLeadIdsWithOpenTask(organizationId, leadIds);
+
+      expect(distinctSpy).toHaveBeenCalledWith('leadId', {
+        organizationId,
+        leadId: { $in: leadIds },
+        status: 'open',
+      });
+      expect(result).toEqual([leadIds[0]]);
     });
   });
 });

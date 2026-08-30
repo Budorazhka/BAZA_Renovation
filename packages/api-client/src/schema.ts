@@ -393,7 +393,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Список задач текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop) видит все задачи tenant'а; own-scope (manager) видит только задачи, назначенные на его собственную Position — сужение применяется на backend до чтения. */
+        /** Список задач текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator/developer) видит все задачи tenant'а; own-scope (manager) видит только задачи, назначенные на его собственную Position — сужение применяется на backend до чтения. */
         get: operations["listTasks"];
         put?: never;
         /** Создание новой CRM-задачи с опциональной привязкой к лиду и контакту */
@@ -418,8 +418,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Частичное обновление задачи (заголовок, описание, срок, исполнитель, статус) */
+        /** Частичное обновление задачи (заголовок, описание, срок, статус) — НИКОГДА исполнителя (assignedPositionId): смена исполнителя только через PATCH /tasks/{taskId}/reassign, отдельный grant task.reassign, тот же принцип, что lead.assign отделён от lead.changeStage. expectedVersion обязателен (conventions.md разд.5 optimistic concurrency, тот же паттерн, что PATCH /leads/{leadId}/stage). */
         patch: operations["updateTask"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена исполнителя задачи (assignedPositionId) — отдельный grant task.reassign (owner-подтверждено 30.08.2026, не task.edit). own-scope (manager) может переназначить ТОЛЬКО задачу, уже назначенную на себя, и ТОЛЬКО на себя же (либо снять назначение через assignedPositionId:null) — не может передать задачу коллеге. expectedVersion обязателен (conventions.md разд.5). */
+        patch: operations["reassignTask"];
         trace?: never;
     };
     "/tasks/{taskId}/complete": {
@@ -431,7 +448,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Завершение задачи (перевод в статус completed с фиксацией времени и исполнителя) */
+        /** Завершение задачи (перевод в статус completed с фиксацией времени и исполнителя). Идемпотентно на уровне "уже completed" — повторный вызов ЛЮБЫМ expectedVersion после успешного завершения просто возвращает текущее состояние (200), не 409/404 — безопасно вызывать повторно. Сам переход open→completed версионирован (conventions.md разд.5): устаревший expectedVersion на ОТКРЫТОЙ задаче — 409, не молчаливый lost update. */
         post: operations["completeTask"];
         delete?: never;
         options?: never;
@@ -1205,24 +1222,26 @@ export interface components {
         };
         /** @description GET /leads item shape (CrmService.CrmLeadReadModel) — contact встроен как whitelist-проекция {id, name, phone, email?}, никогда весь Contact-документ; ownerPositionId — null, если лид ещё не назначен ни на одну Position. */
         LeadListItem: {
-            id?: string;
-            organizationId?: string;
-            ownerPositionId?: string | null;
+            id: string;
+            organizationId: string;
+            ownerPositionId: string | null;
             /** @enum {string} */
-            stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
-            version?: number;
-            source?: {
+            stage: "new" | "contacted" | "qualified" | "converted" | "lost";
+            version: number;
+            source: {
                 [key: string]: unknown;
             };
             /** Format: date-time */
-            createdAt?: string;
+            createdAt: string;
             stalled?: boolean;
-            contact?: {
+            contact: {
                 id?: string;
                 name?: string;
                 phone?: string;
                 email?: string | null;
             } | null;
+            /** @description CRM-003 мягкое правило (read-only индикатор, НЕ блокирует запись): true, если stage∈{new,contacted,qualified} И у лида есть хотя бы одна открытая (status:open) CRM Task. Для converted/lost — всегда false, правило их не касается. */
+            hasOpenNextAction: boolean;
         };
         LeadListResponse: {
             items: components["schemas"]["LeadListItem"][];
@@ -1582,6 +1601,8 @@ export interface components {
             /** Format: date-time */
             completedAt?: string | null;
             completedByPositionId?: string | null;
+            /** @description conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete */
+            version: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1600,14 +1621,23 @@ export interface components {
             leadId?: string;
             contactId?: string;
         };
+        /** @description НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign. */
         UpdateTaskRequest: {
+            expectedVersion: number;
             title?: string;
             description?: string | null;
             /** Format: date-time */
             dueAt?: string | null;
-            assignedPositionId?: string | null;
             /** @enum {string} */
             status?: "open" | "cancelled";
+        };
+        ReassignTaskRequest: {
+            expectedVersion: number;
+            /** @description Отсутствие/null — снять назначение (задача становится unassigned). */
+            assignedPositionId?: string | null;
+        };
+        CompleteTaskRequest: {
+            expectedVersion: number;
         };
         TimelineEventItem: {
             id: string;
@@ -2499,6 +2529,44 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
+            409: components["responses"]["Error"];
+        };
+    };
+    reassignTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача переназначена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — assignedPositionId вне permission scope вызывающего */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.reassign */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — задача или новый assignedPositionId (Position) не найдены/вне tenant */
+            404: components["responses"]["Error"];
+            /** @description Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition, тот же путь, что POST /leads/{leadId}/assign) ИЛИ VERSION_CONFLICT — expectedVersion устарел */
+            409: components["responses"]["Error"];
         };
     };
     completeTask: {
@@ -2510,9 +2578,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteTaskRequest"];
+            };
+        };
         responses: {
-            /** @description Задача завершена */
+            /** @description Задача завершена (или уже была завершена — идемпотентный повтор) */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2529,6 +2601,8 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел на ЕЩЁ ОТКРЫТОЙ задаче, обновите и повторите */
+            409: components["responses"]["Error"];
         };
     };
     listDeals: {
