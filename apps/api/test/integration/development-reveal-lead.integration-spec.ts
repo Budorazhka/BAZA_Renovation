@@ -14,7 +14,9 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { DevelopmentRepository } from '@baza/development';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
+import RedisMock from 'ioredis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { RedisService } from '../../src/shared/redis/redis.service';
 
 /**
  * Mirrors listing-reveal-lead.integration-spec.ts for the DEVELOPMENT side
@@ -31,6 +33,7 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
   let developmentRepository: DevelopmentRepository;
   let publicationRepository: MarketplacePublicationRepository;
   let publicationHandler: PublicationRequestedHandler;
+  let redisMockClient: InstanceType<typeof RedisMock>;
 
   beforeAll(async () => {
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
@@ -41,8 +44,19 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    // RedisRateLimitGuard (см. её докстринг) требует реальный atomic eval()
+    // против Redis — не MongoMemoryReplSet-style in-process сервер (не
+    // существует эквивалента для Redis), поэтому DI-override RedisService на
+    // ioredis-mock (полноценная эмуляция протокола, включая Lua eval) — тот
+    // же принцип подмены инфраструктуры под тестами, что MongoMemoryReplSet
+    // делает для MongoDB, адаптированный под то, что реально доступно для Redis.
+    redisMockClient = new RedisMock();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue({ client: redisMockClient, onModuleDestroy: async () => {} })
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();
@@ -93,9 +107,13 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
       'contacts',
       'leads',
       'lead_events',
+      'public_reveal_idempotency_records',
     ]) {
       await connection.collection(collection).deleteMany({});
     }
+    // См. listing-reveal-lead.integration-spec.ts — rate-limit счётчики в
+    // ioredis-mock должны сбрасываться между тестами так же, как коллекции.
+    await redisMockClient.flushall();
   });
 
   async function developerOwnerCookie(prefix: string) {
@@ -359,5 +377,9 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
       payload: { requesterPhone: '+995555019999' },
     });
     expect(blockedRes.statusCode).toBe(429);
+    // Retry-After должен реально долетать до HTTP-ответа (не только
+    // до внутреннего RateLimitResult) — RedisRateLimitGuard.
+    expect(blockedRes.headers['retry-after']).toBeDefined();
+    expect(Number(blockedRes.headers['retry-after'])).toBeGreaterThan(0);
   });
 });

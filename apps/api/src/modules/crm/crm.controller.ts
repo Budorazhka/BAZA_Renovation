@@ -1,29 +1,35 @@
-import { Body, Controller, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { Body, Controller, Headers, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CrmService } from './crm.service';
 import { RevealContactDto } from './dto/reveal-contact.dto';
+import { RedisRateLimitGuard } from '../../shared/rate-limit/redis-rate-limit.guard';
 
 /**
  * D-05/OpenAPI v1-first-vertical-slice.yaml: публичный (гостевой, БЕЗ
  * TenantGuard/PermissionGuard — тот же принцип, что PublicController)
  * reveal-contact endpoint. master plan явно требует "отдельная rate-
- * limited команда" — @UseGuards(ThrottlerGuard) применён точечно здесь,
- * не глобально на все контроллеры (ThrottlerModule.forRoot в app.module.ts
- * регистрирует конфигурацию лимитов, но не применяет guard сам по себе).
+ * limited команда" — @UseGuards(RedisRateLimitGuard) применён точечно
+ * здесь, не глобально на все контроллеры. Redis-backed (см. её докстринг)
+ * — shared между всеми API-инстансами, заменил @nestjs/throttler
+ * ThrottlerGuard (in-memory, не shared между процессами за балансировщиком).
  */
 @Controller('public/developments')
-@UseGuards(ThrottlerGuard)
+@UseGuards(RedisRateLimitGuard)
 export class CrmController {
   constructor(private readonly crmService: CrmService) {}
 
+  /**
+   * Idempotency-Key ОПЦИОНАЛЕН здесь (в отличие от ADR-006 publish/book/cancel
+   * — см. IdempotencyKeyHeader в OpenAPI) — повтор без ключа сохраняет
+   * текущую совместимость (всегда новый Lead), см. PublicRevealIdempotencyService.
+   */
   @Post(':slug/reveal-contact')
   @HttpCode(200)
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async revealContact(
     @Req() req: FastifyRequest,
     @Param('slug') slug: string,
     @Body() dto: RevealContactDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const result = await this.crmService.revealContact({
       slug,
@@ -32,6 +38,7 @@ export class CrmController {
       utm: dto.utm,
       referrer: req.headers.referer,
       correlationId: req.correlationId,
+      idempotencyKey,
     });
 
     return {

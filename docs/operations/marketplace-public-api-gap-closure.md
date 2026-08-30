@@ -115,3 +115,13 @@ UI-счётчик каталога честно продолжает показ�
 
 Отдельная сессия (`docs/operations/marketplace-functional-acceptance.md`, «Проход 2») зафиксировала три дополнительных backend-gap'а того же класса, что пп.3.1–3.3 выше (реальный контрактный/инфраструктурный разрыв, не изобретённое решение): in-memory rate limiter storage (не Redis-backed, риск при горизонтальном масштабировании), orphaned pending `MediaAsset` записи без TTL/cleanup, `overrideDuplicate` без `Idempotency-Key`-обёртки. Полные детали — в `frontend-marketplace-vertical.md` раздел 7 пп.6–8 и `marketplace-functional-acceptance.md` раздел 4 «Проход 2» — не дублируются здесь, чтобы не разойтись при будущих правках.
 - `docs/operations/marketplace-public-api-gap-closure.md` (новый — этот документ)
+
+## 9. Закрытие gaps раздела 8 (2026-08-30, `codex/marketplace-operational-hardening`, база `a465245`)
+
+Два из трёх backend-gap'ов раздела 8 закрыты этим проходом; третий (`overrideDuplicate` idempotency) вне scope — это была отдельная команда с уже существующим ADR-006-механизмом, не связанная с гостевым reveal-contact flow, который был предметом этого прохода.
+
+- **In-memory rate limiter storage** — закрыто. `reveal-contact` (оба варианта) переведён на Redis-backed distributed limiter, shared между всеми API-инстансами. Полное описание — `docs/operations/marketplace-operational-hardening-runbook.md` раздел 2.
+- **Orphaned pending `MediaAsset` без TTL/cleanup** — закрыто. `MediaAssetRepository.findStalePending()` (существовал с ADR-08, был без вызывающего кода) теперь используется в `apps/worker/src/jobs/media-cleanup.service.ts`, race-safe относительно конкурентного `confirmUpload`, TTL по умолчанию 24ч. Полное описание — `docs/operations/marketplace-operational-hardening-runbook.md` раздел 3.
+- **`reveal-contact` idempotency** (дополнительно к трём исходным gap'ам, отдельный запрос на этот проход) — закрыто. Гостевой idempotency-механизм (отдельный от ADR-006, без требования `identityId`), опциональный `Idempotency-Key` header, не ослабляет non-disclosure/единый 404. Полное описание — `docs/operations/marketplace-operational-hardening-runbook.md` раздел 1.
+
+Backend-контракт (`docs/api/v1-first-vertical-slice.yaml`) получил минимальное точечное изменение: опциональный `Idempotency-Key` header parameter на обоих `reveal-contact` operations и `409`-response для конфликта. `packages/api-client/src/schema.ts` регенерирован, `check-stale.mjs`/`verify-contract-layout.mjs` проходят.

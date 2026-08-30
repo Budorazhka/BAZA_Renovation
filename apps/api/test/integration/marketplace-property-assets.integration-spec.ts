@@ -48,6 +48,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
     // resolveProductAudienceFromOrigin (ADR-004) сравнивает req.headers.origin
     // с этой env-переменной — тесты используют реальный /auth/login flow, не
     // прямой session-bootstrap, поэтому она должна быть установлена ДО того,

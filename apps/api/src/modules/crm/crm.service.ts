@@ -7,12 +7,15 @@ import { ListingRepository, PropertyAssetRepository } from '@baza/property-asset
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
+import { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
 import { AuditService } from '../audit/audit.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
 import type { LeadStage } from './schemas/lead.schema';
+
+type RevealContactResult = { phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId };
 
 export interface CrmLeadReadModel {
   id: string;
@@ -72,6 +75,7 @@ export class CrmService {
     private readonly leadEventRepository: LeadEventRepository,
     private readonly auditService: AuditService,
     private readonly organizationsService: OrganizationsService,
+    private readonly publicRevealIdempotencyService: PublicRevealIdempotencyService,
   ) {}
 
   /**
@@ -136,7 +140,8 @@ export class CrmService {
     utm?: Record<string, string>;
     referrer?: string;
     correlationId: string;
-  }): Promise<{ phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId }> {
+    idempotencyKey?: string;
+  }): Promise<RevealContactResult> {
     const publication = await this.publicationRepository.findBySlug(params.slug);
     if (!publication || publication.sourceType !== 'development') {
       throw new NotFoundException('Publication not found');
@@ -152,57 +157,31 @@ export class CrmService {
 
     const organizationId = development.organizationId;
 
-    const leadId = await runInTransaction(this.connection, async (session) => {
-      const contact = await this.resolveContact(organizationId, params, session);
-
-      const lead = await this.leadRepository.create(
-        {
-          organizationId,
-          contactId: contact._id,
-          source: {
+    return this.revealWithIdempotency({
+      slug: params.slug,
+      idempotencyKey: params.idempotencyKey,
+      requestPayload: {
+        requesterName: params.requesterName,
+        requesterPhone: params.requesterPhone,
+        utm: params.utm,
+      },
+      buildResponse: (leadId) => ({ ...extractContactChannels(development.contact), leadId }),
+      createLead: (session) =>
+        this.createLeadForReveal(
+          {
+            organizationId,
+            slug: params.slug,
             route: `/developments/${params.slug}`,
             publicationId: publication._id,
+            requesterName: params.requesterName,
+            requesterPhone: params.requesterPhone,
             utm: params.utm,
             referrer: params.referrer,
+            correlationId: params.correlationId,
           },
-        },
-        session,
-      );
-
-      await this.leadEventRepository.append(
-        {
-          leadId: lead._id,
-          organizationId,
-          stage: 'new' as LeadStage,
-          changedBy: { type: 'system' },
-        },
-        session,
-      );
-
-      await this.auditService.append(
-        {
-          // Гость без сессии — нет identityId, значит НЕ actor.type:'identity'
-          // (тот тип подразумевает конкретную идентифицированную identity).
-          // 'system' — действие, инициированное автоматизированным
-          // reveal-flow'ом от лица анонимного гостя, тот же принцип, что
-          // и системные stage-переходы LeadEvent ниже.
-          actor: { type: 'system' },
-          action: 'lead.create_from_reveal',
-          resource: 'lead',
-          resourceId: lead._id,
-          after: { contactId: contact._id.toString(), publicationSlug: params.slug },
-          correlationId: params.correlationId,
-        },
-        session,
-      );
-
-      return lead._id;
+          session,
+        ),
     });
-
-    return {
-      ...extractContactChannels(development.contact),
-      leadId,
-    };
   }
 
   /**
@@ -225,7 +204,8 @@ export class CrmService {
     utm?: Record<string, string>;
     referrer?: string;
     correlationId: string;
-  }): Promise<{ phone: string; whatsapp?: string; telegram?: string; leadId: Types.ObjectId }> {
+    idempotencyKey?: string;
+  }): Promise<RevealContactResult> {
     const publication = await this.publicationRepository.findBySlug(params.slug);
     if (!publication || publication.sourceType !== 'listing') {
       throw new NotFoundException('Publication not found');
@@ -247,52 +227,31 @@ export class CrmService {
 
     const organizationId = propertyAsset.publisherScope.organizationId;
 
-    const leadId = await runInTransaction(this.connection, async (session) => {
-      const contact = await this.resolveContact(organizationId, params, session);
-
-      const lead = await this.leadRepository.create(
-        {
-          organizationId,
-          contactId: contact._id,
-          source: {
+    return this.revealWithIdempotency({
+      slug: params.slug,
+      idempotencyKey: params.idempotencyKey,
+      requestPayload: {
+        requesterName: params.requesterName,
+        requesterPhone: params.requesterPhone,
+        utm: params.utm,
+      },
+      buildResponse: (leadId) => ({ phone: propertyAsset.representativePhone, leadId }),
+      createLead: (session) =>
+        this.createLeadForReveal(
+          {
+            organizationId,
+            slug: params.slug,
             route: `/listings/${params.slug}`,
             publicationId: publication._id,
+            requesterName: params.requesterName,
+            requesterPhone: params.requesterPhone,
             utm: params.utm,
             referrer: params.referrer,
+            correlationId: params.correlationId,
           },
-        },
-        session,
-      );
-
-      await this.leadEventRepository.append(
-        {
-          leadId: lead._id,
-          organizationId,
-          stage: 'new' as LeadStage,
-          changedBy: { type: 'system' },
-        },
-        session,
-      );
-
-      await this.auditService.append(
-        {
-          actor: { type: 'system' },
-          action: 'lead.create_from_reveal',
-          resource: 'lead',
-          resourceId: lead._id,
-          after: { contactId: contact._id.toString(), publicationSlug: params.slug },
-          correlationId: params.correlationId,
-        },
-        session,
-      );
-
-      return lead._id;
+          session,
+        ),
     });
-
-    return {
-      phone: propertyAsset.representativePhone,
-      leadId,
-    };
   }
 
 
@@ -507,6 +466,137 @@ export class CrmService {
     });
   }
 
+  /**
+   * Общая идемпотентность-обвязка для revealContact/revealListingContact —
+   * обе команды 404/резолюцию slug делают по-разному (development vs
+   * listing), но сам Lead-create-транзакционный-flow идентичен, различается
+   * только route/response-shape (buildResponse) и conflict-check publication
+   * уже сделан вызывающим кодом до сюда. Idempotency-Key ОПЦИОНАЛЕН на этом
+   * endpoint (в отличие от ADR-006 publish/book/cancel) — без заголовка
+   * ведёт себя как раньше (createLead без всякой idempotency-бухгалтерии).
+   */
+  private async revealWithIdempotency(params: {
+    slug: string;
+    idempotencyKey?: string;
+    requestPayload: Record<string, unknown>;
+    buildResponse: (leadId: Types.ObjectId) => RevealContactResult;
+    createLead: (session: ClientSession) => Promise<Types.ObjectId>;
+  }): Promise<RevealContactResult> {
+    if (!params.idempotencyKey) {
+      const leadId = await runInTransaction(this.connection, params.createLead);
+      return params.buildResponse(leadId);
+    }
+
+    const idempotencyKey = params.idempotencyKey;
+    const replay = await this.publicRevealIdempotencyService.checkReplay({
+      publicationSlug: params.slug,
+      idempotencyKey,
+      requestBody: params.requestPayload,
+    });
+    if (replay) {
+      return replayToResult(replay.responseBody);
+    }
+
+    try {
+      return await runInTransaction(this.connection, async (session) => {
+        const leadId = await params.createLead(session);
+        const response = params.buildResponse(leadId);
+
+        await this.publicRevealIdempotencyService.record(
+          {
+            publicationSlug: params.slug,
+            idempotencyKey,
+            requestBody: params.requestPayload,
+            responseStatus: 200,
+            responseBody: sanitizeRevealResponse(response),
+            leadId,
+          },
+          session,
+        );
+
+        return response;
+      });
+    } catch (error) {
+      // Гонка двух параллельных reveal-contact с одним Idempotency-Key (см.
+      // PublicRevealIdempotencyService.record докстринг): проигравший здесь
+      // получает duplicate key error, ЕГО транзакция целиком откатывается
+      // (Lead/LeadEvent/audit проигравшего не коммитятся) — победитель уже
+      // закоммитил свою запись, повторный checkReplay() СНАРУЖИ транзакции
+      // находит её и возвращает как честный replay, не пробрасывает 500.
+      if (isDuplicateKeyError(error)) {
+        const raceReplay = await this.publicRevealIdempotencyService.checkReplay({
+          publicationSlug: params.slug,
+          idempotencyKey,
+          requestBody: params.requestPayload,
+        });
+        if (raceReplay) {
+          return replayToResult(raceReplay.responseBody);
+        }
+      }
+      throw error;
+    }
+  }
+
+  private async createLeadForReveal(
+    params: {
+      organizationId: Types.ObjectId;
+      slug: string;
+      route: string;
+      publicationId: Types.ObjectId;
+      requesterName?: string;
+      requesterPhone?: string;
+      utm?: Record<string, string>;
+      referrer?: string;
+      correlationId: string;
+    },
+    session: ClientSession,
+  ): Promise<Types.ObjectId> {
+    const contact = await this.resolveContact(params.organizationId, params, session);
+
+    const lead = await this.leadRepository.create(
+      {
+        organizationId: params.organizationId,
+        contactId: contact._id,
+        source: {
+          route: params.route,
+          publicationId: params.publicationId,
+          utm: params.utm,
+          referrer: params.referrer,
+        },
+      },
+      session,
+    );
+
+    await this.leadEventRepository.append(
+      {
+        leadId: lead._id,
+        organizationId: params.organizationId,
+        stage: 'new' as LeadStage,
+        changedBy: { type: 'system' },
+      },
+      session,
+    );
+
+    await this.auditService.append(
+      {
+        // Гость без сессии — нет identityId, значит НЕ actor.type:'identity'
+        // (тот тип подразумевает конкретную идентифицированную identity).
+        // 'system' — действие, инициированное автоматизированным
+        // reveal-flow'ом от лица анонимного гостя, тот же принцип, что
+        // и системные stage-переходы LeadEvent выше.
+        actor: { type: 'system' },
+        action: 'lead.create_from_reveal',
+        resource: 'lead',
+        resourceId: lead._id,
+        after: { contactId: contact._id.toString(), publicationSlug: params.slug },
+        correlationId: params.correlationId,
+      },
+      session,
+    );
+
+    return lead._id;
+  }
+
   private async resolveContact(
     organizationId: Types.ObjectId,
     params: { requesterName?: string; requesterPhone?: string },
@@ -546,6 +636,35 @@ function extractContactChannels(contact: DevelopmentContact): {
   telegram?: string;
 } {
   return { phone: contact.phone, whatsapp: contact.whatsapp, telegram: contact.telegram };
+}
+
+/**
+ * Non-disclosure инвариант reveal-contact (см. crm.service.ts докстринг
+ * revealListingContact) — сохранённый idempotency-response обязан содержать
+ * ТОЛЬКО {phone, whatsapp?, telegram?, leadId}, никогда organizationId/
+ * publisherScope/identityId, даже случайно через spread где-то выше.
+ */
+function sanitizeRevealResponse(response: RevealContactResult): Record<string, unknown> {
+  return {
+    phone: response.phone,
+    whatsapp: response.whatsapp,
+    telegram: response.telegram,
+    leadId: response.leadId.toString(),
+  };
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 11000;
+}
+
+/** Сохранённый responseBody хранит leadId как string (JSON-совместимая форма Mongo Object) — reconstruct обратно в ObjectId для единообразного внутреннего типа RevealContactResult. */
+function replayToResult(responseBody: Record<string, unknown>): RevealContactResult {
+  return {
+    phone: responseBody.phone as string,
+    whatsapp: responseBody.whatsapp as string | undefined,
+    telegram: responseBody.telegram as string | undefined,
+    leadId: new Types.ObjectId(responseBody.leadId as string),
+  };
 }
 
 function toLeadReadModel(

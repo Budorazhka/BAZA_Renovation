@@ -1,7 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
 import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -24,6 +23,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
   let connection: Connection;
   let crmService: CrmService;
   let organizationsService: OrganizationsService;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
@@ -39,17 +39,17 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    // CrmModule → RateLimitModule → RedisModule (RedisService конструирует
+    // ioredis-клиент в конструкторе, тот же паттерн, что MediaStorageService/
+    // S3Client выше) — ни один тест здесь не проходит через
+    // RedisRateLimitGuard (нет HTTP-слоя, только CrmService напрямую),
+    // реального подключения не требуется, ioredis сам переподключается в
+    // фоне без синхронного throw (см. RedisService докстринг).
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({
-      // ThrottlerModule — CrmModule содержит CrmController с
-      // @UseGuards(ThrottlerGuard) (rate-limit на reveal-contact), в
-      // реальном приложении регистрируется глобально в AppModule
-      // (app.module.ts) — здесь модульный граф собирается вручную, минуя
-      // AppModule (тот же паттерн, что developments-transactions.
-      // integration-spec.ts), поэтому нужно явно.
+    moduleRef = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
-        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 5 }]),
         MongooseModule.forRoot(uri),
         CrmModule,
         OrganizationsModule,
@@ -62,6 +62,10 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
   }, 120_000);
 
   afterAll(async () => {
+    // moduleRef.close() — триггерит RedisService.onModuleDestroy (закрывает
+    // ioredis-соединение), иначе открытый TCP-хендл держит jest-процесс
+    // (тот же риск, что незакрытый MongoDB connection).
+    await moduleRef?.close();
     await connection?.close();
     await replSet?.stop();
   });
