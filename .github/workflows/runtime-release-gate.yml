@@ -1,0 +1,118 @@
+name: Runtime release gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/integration
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-release-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: Compose + Playwright runtime gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Keep CI deterministic and separate from any hosted runner defaults.
+      MONGO_REPLICA_SET_NAME: rs0
+      MONGO_PORT: 27017
+      REDIS_PASSWORD: dev_redis_password
+      REDIS_PORT: 6379
+      MINIO_ACCESS_KEY: dev_minio_access
+      MINIO_SECRET_KEY: dev_minio_secret
+      MINIO_BUCKET_PRIVATE: baza-private
+      MINIO_BUCKET_PUBLIC: baza-public
+      MINIO_PORT: 9000
+      MINIO_CONSOLE_PORT: 9001
+      API_PORT: 3000
+      ADMIN_WEB_PORT: 4174
+      MARKETPLACE_WEB_PORT: 4173
+      CORS_ALLOWED_ORIGIN_MARKETPLACE: http://localhost:4173
+      CORS_ALLOWED_ORIGIN_ADMIN: http://localhost:4174
+      # The browser runs on the runner, while API/worker run in containers.
+      # extra_hosts in compose.runtime.yml makes this name resolve on Linux.
+      MINIO_ENDPOINT: http://host.docker.internal:9000
+      MINIO_PUBLIC_BASE_URL: http://localhost:9000/baza-public
+      RUNTIME_API_URL: http://localhost:3000
+      RUNTIME_API_BASE_PATH: /api/v1
+      RUNTIME_MARKETPLACE_URL: http://localhost:4173
+      RUNTIME_MARKETPLACE_ORIGIN: http://localhost:4173
+      RUNTIME_ADMIN_URL: http://localhost:4174
+      RUNTIME_ADMIN_ORIGIN: http://localhost:4174
+      RUNTIME_MONGO_URI: mongodb://localhost:27017/baza?replicaSet=rs0&directConnection=true
+      RUNTIME_MONGO_HOST: localhost
+      RUNTIME_MONGO_PORT: 27017
+      RUNTIME_REDIS_HOST: localhost
+      RUNTIME_REDIS_PORT: 6379
+      RUNTIME_MINIO_URL: http://localhost:9000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Enable pnpm
+        shell: bash
+        run: corepack enable && corepack prepare pnpm@11.23.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Build workspace
+        run: pnpm build
+
+      - name: Install Chromium and system dependencies
+        run: pnpm --filter @baza/e2e-runtime exec playwright install --with-deps chromium
+
+      - name: Validate runtime Compose configuration
+        run: pnpm runtime:config
+
+      - name: Start runtime Compose stack
+        run: pnpm runtime:up
+
+      - name: Run runtime preflight
+        run: pnpm runtime:preflight
+
+      - name: Run real Playwright runtime gate
+        run: pnpm runtime:e2e -- --project chromium --reporter=list --retries=1
+
+      - name: Upload Playwright artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-playwright-artifacts
+          path: |
+            apps/e2e-runtime/playwright-report
+            apps/e2e-runtime/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Dump runtime service status on failure
+        if: failure()
+        run: pnpm runtime:ps && docker compose -f infrastructure/compose/compose.runtime.yml logs --no-color --tail=200
+
+      - name: Stop runtime Compose stack
+        if: always()
+        run: pnpm runtime:down

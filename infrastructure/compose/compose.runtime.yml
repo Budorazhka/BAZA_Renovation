@@ -73,12 +73,25 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.api
     restart: unless-stopped
+    # Docker Desktop provides this name on Windows/macOS. The explicit
+    # host-gateway mapping keeps the same host-browser MinIO flow working on
+    # Linux GitHub runners as well.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       API_PORT: 3000
       MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
-      MINIO_ENDPOINT: http://minio:9000
+      # For host-browser E2E runs, set MINIO_ENDPOINT to an address reachable
+      # by both this container and the browser (for example
+      # http://host.docker.internal:9100). The default keeps the stack
+      # self-contained for server-only/local compose usage.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      # Public derivative URLs are returned by the API and consumed by the
+      # host browser. For host-browser E2E runs set this to the published
+      # MinIO port (for example http://localhost:9100/baza-public).
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://minio:9000/baza-public}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}
@@ -118,11 +131,16 @@ services:
       context: ../..
       dockerfile: infrastructure/docker/Dockerfile.worker
     restart: unless-stopped
+    # Keep the worker's presigned-upload endpoint resolvable on Linux runners
+    # when CI points MINIO_ENDPOINT at the published host port.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       NODE_ENV: production
       MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
       REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
-      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://minio:9000/baza-public}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
       MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}

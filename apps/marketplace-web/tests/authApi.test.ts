@@ -38,4 +38,24 @@ describe('authApi.checkSession', () => {
 
     await expect(authApi.checkSession()).resolves.toBe(false)
   })
+
+  it('does not send a JSON content type for the empty logout request', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ loggedOut: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(authApi.logout()).resolves.toEqual({ loggedOut: true })
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/logout',
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        headers: expect.not.objectContaining({ 'Content-Type': expect.anything() }),
+      }),
+    )
+  })
 })

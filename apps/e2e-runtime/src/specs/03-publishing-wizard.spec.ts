@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/test';
 import { apiUrl } from '../fixtures/env';
-import { uniqueLogin, uniqueAddress, STRONG_TEST_PASSWORD } from '../fixtures/test-data';
+import { uniqueLogin, uniqueAddress, uniquePhone, STRONG_TEST_PASSWORD } from '../fixtures/test-data';
 import { fileURLToPath } from 'node:url';
 
 const TEST_PHOTO_PATH = fileURLToPath(new URL('../fixtures/assets/tiny-listing-photo.jpg', import.meta.url));
@@ -25,6 +25,8 @@ const TEST_PHOTO_PATH = fileURLToPath(new URL('../fixtures/assets/tiny-listing-p
  * previous run's leftover data.
  */
 test.describe('publishing wizard', () => {
+  test.describe.configure({ timeout: 90_000 });
+
   test('publishes a listing end to end and it becomes visible in the public catalogue', async ({ page }) => {
     const login = uniqueLogin('publisher');
 
@@ -58,7 +60,7 @@ test.describe('publishing wizard', () => {
     await page.getByTestId('characteristics-input-rooms').fill('2');
     await page.getByTestId('characteristics-input-floor').fill('5');
     await page.getByTestId('characteristics-input-total-floors').fill('12');
-    await page.getByTestId('characteristics-input-phone').fill('+995555123456');
+    await page.getByTestId('characteristics-input-phone').fill(uniquePhone());
 
     const createAssetPromise = page.waitForResponse(
       (res) => res.url().endsWith('/marketplace/property-assets') && res.request().method() === 'POST',

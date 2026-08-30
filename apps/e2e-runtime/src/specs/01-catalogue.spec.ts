@@ -24,7 +24,7 @@ test.describe('marketplace catalogue', () => {
     const response = await responsePromise;
     expect(response.status()).toBe(200);
 
-    await expect(page.getByRole('link', { name: 'Вторичка и аренда' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Вторичка и аренда' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('city filter re-queries the API with the city parameter', async ({ page }) => {
@@ -34,7 +34,7 @@ test.describe('marketplace catalogue', () => {
     const filteredResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/public/listings') && res.url().includes('city=Batumi-e2e'),
     );
-    await page.getByRole('searchbox', { name: 'Поиск по городу' }).first().fill('Batumi-e2e');
+    await page.getByRole('searchbox', { name: 'Город' }).first().fill('Batumi-e2e');
     await page.getByRole('button', { name: 'Найти объекты в городе' }).first().click();
     const response = await filteredResponsePromise;
     expect(response.status()).toBe(200);
@@ -64,7 +64,7 @@ test.describe('marketplace catalogue', () => {
     const sortedResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/public/listings') && res.url().includes('sort=price_asc'),
     );
-    await page.getByLabel('Сортировка объектов').selectOption('price_asc');
+    await page.locator('label.sort-control select').selectOption('price_asc');
     const response = await sortedResponsePromise;
     expect(response.status()).toBe(200);
   });
@@ -85,7 +85,11 @@ test.describe('marketplace catalogue', () => {
     await page.waitForResponse((res) => res.url().includes('/public/developments'));
 
     if (!firstPageBody.nextCursor) {
-      await expect(page.locator('.catalogue-end-note')).toBeVisible();
+      if (firstPageBody.items?.length === 0) {
+        await expect(page.locator('.state-panel--empty')).toBeVisible();
+      } else {
+        await expect(page.locator('.catalogue-end-note')).toBeVisible();
+      }
       return;
     }
 

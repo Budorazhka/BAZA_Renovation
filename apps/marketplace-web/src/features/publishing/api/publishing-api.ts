@@ -23,7 +23,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body !== undefined && options.body !== null ? { 'Content-Type': 'application/json' } : {}),
       ...options.headers,
     },
   })

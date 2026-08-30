@@ -16,7 +16,10 @@ test.describe('baseline smoke', () => {
 
     await page.goto('/');
     await expect(page.getByRole('banner')).toBeVisible();
-    await expect(page.getByRole('link', { name: /BAZA/ })).toBeVisible();
+    // The wordmark is rendered in both the sticky header and the footer;
+    // scope this assertion to the header so the locator remains strict after
+    // the footer is mounted on the catalogue root.
+    await expect(page.getByRole('banner').getByRole('link', { name: 'BAZA, каталог объектов недвижимости' })).toBeVisible();
   });
 
   test('public catalogue API responds with a valid page shape', async ({ request }) => {

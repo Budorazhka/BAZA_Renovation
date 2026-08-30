@@ -121,9 +121,11 @@ export class ActualityService {
   }
 
   private async buildActualityState(listing: {
+    _id: Types.ObjectId;
     propertyAssetId: Types.ObjectId;
     dealType: ListingDealType;
     status: ListingStatus;
+    version: number;
     lastConfirmedAt?: Date;
     createdAt: Date;
   }) {
@@ -140,7 +142,15 @@ export class ActualityService {
         ? computeActualityState({ dealType: listing.dealType, propertyType: asset.propertyType, lastConfirmedAt, now: new Date() })
         : null;
 
-    return { status: listing.status, category, thresholds, lastConfirmedAt: lastConfirmedAt.toISOString(), state };
+    return {
+      listingId: listing._id.toString(),
+      status: listing.status,
+      category,
+      thresholds,
+      lastConfirmedAt: lastConfirmedAt.toISOString(),
+      state,
+      version: listing.version,
+    };
   }
 
   /**

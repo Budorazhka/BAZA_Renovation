@@ -878,6 +878,26 @@ describe('CrmService.changeLeadStage', () => {
   });
 
   describe('optimistic concurrency (27.08.2026) — modifiedCount:0 disambiguation', () => {
+    it('устаревшая version отклоняется как ConflictException до проверки перехода по старому snapshot', async () => {
+      const organizationId = new Types.ObjectId();
+      const lead = makeLead({ organizationId, stage: 'lost', version: 1 });
+      const changeStageSpy = jest.fn();
+      const service = makeChangeStageService(lead, changeStageSpy);
+
+      await expect(
+        service.changeLeadStage({
+          leadId: lead._id,
+          newStage: 'contacted',
+          expectedVersion: 0,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedOrganizationId: organizationId,
+          correlationId: 'test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(changeStageSpy).not.toHaveBeenCalled();
+    });
+
     it('version устарела (current.version !== expectedVersion) — ConflictException 409, даже если newStage недостижим из НОВОГО current.stage', async () => {
       const organizationId = new Types.ObjectId();
       const lead = makeLead({ organizationId, stage: 'new', version: 0 });
