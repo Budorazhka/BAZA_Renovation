@@ -1,10 +1,24 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/**
+ * Lightweight HTTP-only smoke check (api liveness/readiness + both web
+ * roots). Kept intentionally small and dependency-free — `pnpm runtime:verify`
+ * is meant as a quick "did `runtime:up` actually come up" sanity check after
+ * `docker compose up`, run manually by a human.
+ *
+ * For the full, honest D-07 gate (Node/pnpm/Docker/Mongo/Redis/MinIO checks,
+ * BLOCKED_INFRASTRUCTURE reporting with remediation commands, and the thing
+ * Playwright's globalSetup actually imports) see scripts/runtime/preflight.mjs.
+ *
+ * ADMIN_WEB replaces the previous stale ERP_WEB entry — apps/erp-web does
+ * not exist in this worktree; infrastructure/compose/compose.runtime.yml's
+ * fourth app service is now `admin-web` (see infrastructure/docker/Dockerfile.admin-web).
+ */
 const DEFAULTS = {
   api: 'http://localhost:3000',
   marketplace: 'http://localhost:4173',
-  erp: 'http://localhost:4174',
+  admin: 'http://localhost:4174',
 };
 
 function withPath(origin, path) {
@@ -33,13 +47,13 @@ export async function checkEndpoint(label, url, { fetcher = fetch, timeoutMs = 5
 export async function verifyRuntime({ env = process.env, fetcher = fetch } = {}) {
   const api = env.RUNTIME_API_URL || DEFAULTS.api;
   const marketplace = env.RUNTIME_MARKETPLACE_URL || DEFAULTS.marketplace;
-  const erp = env.RUNTIME_ERP_URL || DEFAULTS.erp;
+  const admin = env.RUNTIME_ADMIN_URL || DEFAULTS.admin;
 
   return Promise.all([
     checkEndpoint('api liveness', withPath(api, '/health'), { fetcher }),
     checkEndpoint('api readiness', withPath(api, '/health/ready'), { fetcher }),
     checkEndpoint('marketplace web', marketplace, { fetcher }),
-    checkEndpoint('erp web', erp, { fetcher }),
+    checkEndpoint('admin web', admin, { fetcher }),
   ]);
 }
 
