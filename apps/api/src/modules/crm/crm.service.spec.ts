@@ -766,6 +766,185 @@ describe('CrmService.assignLead', () => {
   });
 });
 
+describe('CrmService.createLead', () => {
+  function makeContact(overrides: Partial<{ _id: Types.ObjectId; name: string; phone: string }> = {}) {
+    return {
+      _id: overrides._id ?? new Types.ObjectId(),
+      name: overrides.name ?? 'Иван Иванов',
+      phone: overrides.phone ?? '+995500000001',
+    };
+  }
+
+  it('с contactId: использует существующий контакт, НЕ вызывает resolveContact/create нового контакта', async () => {
+    const organizationId = new Types.ObjectId();
+    const contact = makeContact();
+    const findContactSpy = jest.fn().mockResolvedValue(contact);
+    const createContactSpy = jest.fn();
+    const leadId = new Types.ObjectId();
+    const createLeadSpy = jest.fn().mockResolvedValue({
+      _id: leadId,
+      organizationId,
+      contactId: contact._id,
+      ownerPositionId: undefined,
+      stage: 'new',
+      version: 0,
+      source: { route: 'manual' },
+      createdAt: new Date('2026-08-31T10:00:00.000Z'),
+    });
+    const appendEventSpy = jest.fn().mockResolvedValue(undefined);
+    const auditSpy = jest.fn().mockResolvedValue(undefined);
+    const actorPositionId = new Types.ObjectId();
+    const actorIdentityId = new Types.ObjectId();
+
+    const service = createTestCrmService({
+      contactRepository: { findByIdForOrganization: findContactSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditSpy },
+    });
+
+    const result = await service.createLead({
+      organizationId,
+      contactId: contact._id,
+      actorPositionId,
+      actorIdentityId,
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(findContactSpy).toHaveBeenCalledWith(contact._id, organizationId);
+    expect(createContactSpy).not.toHaveBeenCalled();
+    expect(createLeadSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, contactId: contact._id, source: { route: 'manual' } }),
+      expect.anything(),
+    );
+    // Не auto-assign на actor'а — ownerPositionId остаётся unassigned (owner decision).
+    expect(result.ownerPositionId).toBeNull();
+    expect(result.stage).toBe('new');
+    expect(appendEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leadId,
+        stage: 'new',
+        changedBy: { type: 'position', positionId: actorPositionId },
+      }),
+      expect.anything(),
+    );
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'identity', id: actorIdentityId },
+        action: 'lead.create',
+        resourceId: leadId,
+        after: { contactId: contact._id.toString(), source: 'manual' },
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('с contactId чужой организации — NotFoundException, не создаёт лид', async () => {
+    const createLeadSpy = jest.fn();
+    const service = createTestCrmService({
+      contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      leadRepository: { create: createLeadSpy },
+    });
+
+    await expect(
+      service.createLead({
+        organizationId: new Types.ObjectId(),
+        contactId: new Types.ObjectId(),
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(createLeadSpy).not.toHaveBeenCalled();
+  });
+
+  it('с requesterPhone (без contactId): находит существующий контакт по телефону в организации, не создаёт новый', async () => {
+    const organizationId = new Types.ObjectId();
+    const contact = makeContact({ phone: '+995500000002' });
+    const findByPhoneSpy = jest.fn().mockResolvedValue(contact);
+    const createContactSpy = jest.fn();
+    const createLeadSpy = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId(),
+      organizationId,
+      contactId: contact._id,
+      stage: 'new',
+      version: 0,
+      source: { route: 'manual' },
+      createdAt: new Date(),
+    });
+
+    const service = createTestCrmService({
+      contactRepository: { findByPhone: findByPhoneSpy, create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    await service.createLead({
+      organizationId,
+      requesterName: 'Пётр Петров',
+      requesterPhone: '+995500000002',
+      actorPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(findByPhoneSpy).toHaveBeenCalledWith(organizationId, '+995500000002');
+    expect(createContactSpy).not.toHaveBeenCalled();
+  });
+
+  it('с requesterPhone, для которого контакта ещё нет: создаёт новый Contact в этой организации', async () => {
+    const organizationId = new Types.ObjectId();
+    const newContact = { _id: new Types.ObjectId(), name: 'Новый Клиент', phone: '+995500000003' };
+    const createContactSpy = jest.fn().mockResolvedValue(newContact);
+    const createLeadSpy = jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId(),
+      organizationId,
+      contactId: newContact._id,
+      stage: 'new',
+      version: 0,
+      source: { route: 'manual' },
+      createdAt: new Date(),
+    });
+
+    const service = createTestCrmService({
+      contactRepository: { findByPhone: jest.fn().mockResolvedValue(null), create: createContactSpy },
+      leadRepository: { create: createLeadSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    await service.createLead({
+      organizationId,
+      requesterName: 'Новый Клиент',
+      requesterPhone: '+995500000003',
+      actorPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(createContactSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, name: 'Новый Клиент', phone: '+995500000003', roles: ['buyer'] }),
+      expect.anything(),
+    );
+  });
+
+  it('ни contactId, ни requesterPhone — VALIDATION_FAILED, не создаёт лид', async () => {
+    const createLeadSpy = jest.fn();
+    const service = createTestCrmService({ leadRepository: { create: createLeadSpy } });
+
+    await expect(
+      service.createLead({
+        organizationId: new Types.ObjectId(),
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+    expect(createLeadSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('CrmService.changeLeadStage', () => {
   it('меняет stage, пишет LeadEvent с НОВЫМ stage и audit before/after', async () => {
     const organizationId = new Types.ObjectId();

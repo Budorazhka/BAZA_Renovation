@@ -6,6 +6,7 @@ import { requireTenantContext } from '../../shared/tenant/tenant-context.middlew
 import { PermissionGuard } from '../authorization/permission.guard';
 import { RequirePermission } from '../authorization/require-permission.decorator';
 import { CrmService } from './crm.service';
+import { CreateLeadDto } from './dto/create-lead.dto';
 import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
@@ -26,6 +27,29 @@ export class LeadController {
     private readonly crmService: CrmService,
     private readonly policyEvaluator: PolicyEvaluatorService,
   ) {}
+
+  /**
+   * lead.create.organization — CrmService.createLead докстринг: ровно один
+   * из contactId/requesterPhone, лид создаётся unassigned (не auto-
+   * assign на actor'а — assignLead отдельная explicit команда). Idempotency-
+   * Key НЕ требуется (тот же паттерн, что createDeal — не входит в ADR-006
+   * "publish/book/cancel/manual-ledger" список critical commands).
+   */
+  @Post()
+  @HttpCode(201)
+  @RequirePermission('lead', 'create')
+  async createLead(@Req() req: FastifyRequest, @Body() dto: CreateLeadDto) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.createLead({
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
+      requesterName: dto.requesterName,
+      requesterPhone: dto.requesterPhone,
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
 
   @Get()
   @RequirePermission('lead', 'read')

@@ -365,7 +365,8 @@ export interface paths {
         /** Список лидов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только лиды, где ownerPositionId совпадает с его собственной Position — сужение применяется на backend до чтения, не постфильтрацией. ownerPositionId в query — дополнительное клиентское сужение поверх уже резолвленного scope, никогда не расширяет его (own-scope с чужим ownerPositionId в query — 400, не 403 и не расширение видимости). */
         get: operations["listLeads"];
         put?: never;
-        post?: never;
+        /** Ручное создание лида в CRM (lead.create.organization) — security review 31.08.2026: грант был выдан всем ролям, но до этого прохода не существовало ни одного HTTP-пути завести лид вручную (единственный источник — публичный reveal-contact). Ровно один способ указать контакт: contactId (уже существующий) либо requesterPhone (find-or-create по телефону в этой организации, тот же tenant-local dedupe, что reveal-contact). ownerPositionId НЕ проставляется автоматически на создателя — лид стартует unassigned, как и лиды с сайта; назначение — отдельный вызов POST /leads/{leadId}/assign (owner decision: "Автоматическая раздача... не является стартовым поведением"). */
+        post: operations["createLead"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2553,6 +2554,41 @@ export interface operations {
             401: components["responses"]["Error"];
             /** @description FORBIDDEN — нет lead.read */
             403: components["responses"]["Error"];
+        };
+    };
+    createLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    contactId?: string;
+                    requesterName?: string;
+                    requesterPhone?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Лид создан, stage=new, ownerPositionId=null */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListItem"];
+                };
+            };
+            /** @description VALIDATION_FAILED — ни contactId, ни requesterPhone не переданы */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.create */
+            403: components["responses"]["Error"];
+            /** @description contactId указывает на несуществующий/чужой контакт */
+            404: components["responses"]["Error"];
         };
     };
     listLeadEvents: {

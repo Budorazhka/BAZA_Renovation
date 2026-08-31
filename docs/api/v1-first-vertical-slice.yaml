@@ -574,6 +574,49 @@ paths:
           $ref: '#/components/responses/Error'
 
   /leads:
+    post:
+      operationId: createLead
+      summary: >
+        Ручное создание лида в CRM (lead.create.organization) — security review
+        31.08.2026: грант был выдан всем ролям, но до этого прохода не
+        существовало ни одного HTTP-пути завести лид вручную (единственный
+        источник — публичный reveal-contact). Ровно один способ указать
+        контакт: contactId (уже существующий) либо requesterPhone
+        (find-or-create по телефону в этой организации, тот же tenant-local
+        dedupe, что reveal-contact). ownerPositionId НЕ проставляется
+        автоматически на создателя — лид стартует unassigned, как и лиды с
+        сайта; назначение — отдельный вызов POST /leads/{leadId}/assign
+        (owner decision: "Автоматическая раздача... не является стартовым
+        поведением").
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contactId: {type: string}
+                requesterName: {type: string}
+                requesterPhone: {type: string}
+      responses:
+        '201':
+          description: Лид создан, stage=new, ownerPositionId=null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListItem'
+        '400':
+          description: VALIDATION_FAILED — ни contactId, ни requesterPhone не переданы
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: contactId указывает на несуществующий/чужой контакт
+          $ref: '#/components/responses/Error'
     get:
       operationId: listLeads
       summary: >

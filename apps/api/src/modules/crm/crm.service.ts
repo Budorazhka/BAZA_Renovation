@@ -1639,6 +1639,83 @@ export class CrmService {
     return lead._id;
   }
 
+  /**
+   * lead.create.organization — security review 31.08.2026: грант выдан
+   * ВСЕМ ролям (owner/director/rop/manager/administrator/developer) в
+   * DEFAULT_ROLE_GRANTS, но до этого прохода не существовало НИ ОДНОГО
+   * HTTP-пути вручную завести лид в CRM — единственный способ появления
+   * Lead был createLeadForReveal (только из анонимного публичного
+   * reveal-contact потока). Честный gap, найденный чтением кода, не
+   * документа.
+   *
+   * НЕ назначает ownerPositionId автоматически на actor'а — LeadDocument.
+   * ownerPositionId докстринг прямо фиксирует owner decision: "Изначально
+   * null... назначается explicit командой assignLead, НЕ auto-assignment
+   * по умолчанию" (master plan: "Новый лид назначается РОПом, Директором
+   * или Собственником"). Вручную заведённый лид — тот же 'new'/unassigned
+   * старт, что и лид с сайта; owner/director/rop назначают его отдельным
+   * вызовом assignLead, та же дисциплина для обоих источников.
+   *
+   * contactId ИЛИ requesterPhone — ровно один способ указать контакт
+   * (CreateLeadDto докстринг). resolveContact переиспользует тот же
+   * find-by-phone-or-create tenant-local dedupe, что уже применяется в
+   * reveal-контуре — не отдельная логика для ERP-стороны.
+   */
+  async createLead(params: {
+    organizationId: Types.ObjectId;
+    contactId?: Types.ObjectId;
+    requesterName?: string;
+    requesterPhone?: string;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadReadModel> {
+    return runInTransaction(this.connection, async (session) => {
+      const contact = params.contactId
+        ? await (async () => {
+            const found = await this.contactRepository.findByIdForOrganization(params.contactId!, params.organizationId);
+            if (!found) {
+              throw new NotFoundException('Contact not found');
+            }
+            return found;
+          })()
+        : await this.resolveContact(params.organizationId, params, session);
+
+      const lead = await this.leadRepository.create(
+        {
+          organizationId: params.organizationId,
+          contactId: contact._id,
+          source: { route: 'manual' },
+        },
+        session,
+      );
+
+      await this.leadEventRepository.append(
+        {
+          leadId: lead._id,
+          organizationId: params.organizationId,
+          stage: 'new' as LeadStage,
+          changedBy: { type: 'position', positionId: params.actorPositionId },
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.create',
+          resource: 'lead',
+          resourceId: lead._id,
+          after: { contactId: contact._id.toString(), source: 'manual' },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+    });
+  }
+
   private async resolveContact(
     organizationId: Types.ObjectId,
     params: { requesterName?: string; requesterPhone?: string },

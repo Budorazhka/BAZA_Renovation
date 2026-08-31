@@ -413,4 +413,109 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     });
   });
 
+  describe('createLead — lead.create.organization (security review 31.08.2026)', () => {
+    it('с requesterPhone: находит существующий контакт по телефону в этой организации, создаёт unassigned лид со stage:new', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const contactId = new Types.ObjectId();
+      await connection.collection('contacts').insertOne({
+        _id: contactId,
+        organizationId,
+        name: 'Существующий Клиент',
+        phone: '+995500000042',
+        roles: ['buyer'],
+        createdAt: new Date(),
+      });
+      const actorPositionId = await seedVacantPosition(organizationId);
+
+      const result = await crmService.createLead({
+        organizationId,
+        requesterName: 'Другое имя (игнорируется, контакт уже есть)',
+        requesterPhone: '+995500000042',
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id',
+      });
+
+      expect(result.stage).toBe('new');
+      expect(result.ownerPositionId).toBeNull();
+      expect(result.contact?.id).toBe(contactId.toString());
+      expect(await connection.collection('contacts').countDocuments({ organizationId })).toBe(1);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: new Types.ObjectId(result.id) });
+      expect(leadDoc?.source).toMatchObject({ route: 'manual' });
+
+      const eventDoc = await connection.collection('lead_events').findOne({ leadId: leadDoc?._id });
+      expect(eventDoc).toMatchObject({ stage: 'new', changedBy: { type: 'position', positionId: actorPositionId } });
+
+      const auditDoc = await connection.collection('audit_events').findOne({ action: 'lead.create' });
+      expect(auditDoc).toMatchObject({ actor: { type: 'identity' } });
+    });
+
+    it('с requesterPhone, для которого контакта ещё нет: создаёт новый Contact в этой организации', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const actorPositionId = await seedVacantPosition(organizationId);
+
+      const result = await crmService.createLead({
+        organizationId,
+        requesterName: 'Новый Клиент',
+        requesterPhone: '+995500000043',
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id',
+      });
+
+      expect(result.contact).toMatchObject({ name: 'Новый Клиент', phone: '+995500000043' });
+      const contactDoc = await connection
+        .collection('contacts')
+        .findOne({ organizationId, phone: '+995500000043' });
+      expect(contactDoc).toBeTruthy();
+    });
+
+    it('с contactId чужой организации — NotFoundException (non-disclosure), лид не создаётся', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const foreignContactId = new Types.ObjectId();
+      await connection.collection('contacts').insertOne({
+        _id: foreignContactId,
+        organizationId: orgB,
+        name: 'Чужой контакт',
+        phone: '+995500000044',
+        roles: ['buyer'],
+        createdAt: new Date(),
+      });
+
+      await expect(
+        crmService.createLead({
+          organizationId: orgA,
+          contactId: foreignContactId,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(await connection.collection('leads').countDocuments({ organizationId: orgA })).toBe(0);
+    });
+
+    it('ни contactId, ни requesterPhone — VALIDATION_FAILED (AppException), лид не создаётся', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+
+      await expect(
+        crmService.createLead({
+          organizationId,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+
+      expect(await connection.collection('leads').countDocuments({ organizationId })).toBe(0);
+    });
+  });
+
 });
