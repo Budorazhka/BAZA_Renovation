@@ -322,33 +322,35 @@ function CataloguePage() {
   return (
     <Shell>
       {isDev ? (
-        <section className="home-hero" aria-labelledby="home-hero-title">
-          <div className="home-hero__copy">
-            <p className="home-hero__eyebrow">Каталог недвижимости</p>
-            <h1 id="home-hero-title">ПОИСК НЕДВИЖИМОСТИ <span>В ГРУЗИИ</span></h1>
-            <div className="home-hero__search-card">
-              <div className="home-hero__tabs" role="tablist" aria-label="Тип операции">
-                <Link className="home-hero__tab is-active" role="tab" aria-selected="true" to="/">Купить</Link>
-                <Link className="home-hero__tab" role="tab" aria-selected="false" to="/?tab=listings&dealType=rent_long">Снять</Link>
-              </div>
-              <form className="home-search" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-                <label htmlFor="city">Город</label>
-                <div className="home-search__control">
-                  <input
-                    id="city"
-                    name="city"
-                    type="search"
-                    autoComplete="address-level2"
-                    value={cityInput}
-                    onChange={(event) => setCityInput(event.target.value)}
-                    placeholder="Например, Батуми"
-                  />
-                  <button type="submit" aria-label="Найти объекты в городе">Найти</button>
+        <>
+          <section className="home-hero" aria-labelledby="home-hero-title">
+            <div className="home-hero__copy">
+              <p className="home-hero__eyebrow">Каталог недвижимости</p>
+              <h1 id="home-hero-title">ПОИСК НЕДВИЖИМОСТИ <span>В ГРУЗИИ</span></h1>
+              <div className="home-hero__search-card">
+                <div className="home-hero__tabs" role="tablist" aria-label="Тип операции">
+                  <Link className="home-hero__tab is-active" role="tab" aria-selected="true" to="/">Купить</Link>
+                  <Link className="home-hero__tab" role="tab" aria-selected="false" to="/?tab=listings&dealType=rent_long">Снять</Link>
                 </div>
-              </form>
+                <form className="home-search" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
+                  <label htmlFor="city">Город</label>
+                  <div className="home-search__control">
+                    <input
+                      id="city"
+                      name="city"
+                      type="search"
+                      autoComplete="address-level2"
+                      value={cityInput}
+                      onChange={(event) => setCityInput(event.target.value)}
+                      placeholder="Например, Батуми"
+                    />
+                    <button type="submit" aria-label="Найти объекты в городе">Найти</button>
+                  </div>
+                </form>
+              </div>
             </div>
-          </div>
-          <div className="home-hero__promos" aria-label="Возможности BAZA">
+          </section>
+          <section className="home-hero__promos" aria-label="Возможности BAZA">
             <Link className="home-promo home-promo--light" to="/publish">
               <strong>Хотите продать квартиру, дом или участок?</strong>
               <span>Бесплатно разместите свое объявление на BAZA и быстро найдите покупателей.</span>
@@ -359,8 +361,8 @@ function CataloguePage() {
               <span>Уникальные предложения по стоимости и комиссиям только для партнёров.</span>
               <span className="home-promo__action">Смотреть предложения <span aria-hidden="true">→</span></span>
             </Link>
-          </div>
-        </section>
+          </section>
+        </>
       ) : null}
       <section className="catalogue-toolbar" aria-labelledby="catalogue-heading">
         <h2 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h2>

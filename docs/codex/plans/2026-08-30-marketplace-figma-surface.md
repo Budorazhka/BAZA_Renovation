@@ -7,6 +7,19 @@ Figma-aligned surface for the approved catalogue, detail, map, and publishing
 wizard flows, while preserving the existing real API behavior and security
 boundaries.
 
+## Progress (2026-08-30)
+
+- Route/DOM inventory completed against the local Figma handoff and current
+  marketplace tests.
+- Home surface aligned to the selected `Home page` composition: hero/search is
+  a dedicated section and the two real BAZA promos form a separate responsive
+  two-column section on desktop, stacking on mobile.
+- Catalogue/list/map, detail/reveal-contact, and publishing wizard surfaces were
+  reviewed against the approved references and kept on their existing real
+  stateful implementations; no speculative Figma-only screens were added.
+- `PRODUCT.md` and `DESIGN.md` now capture the approved product scope, tokens,
+  responsive rules and accessibility constraints for the remaining parity work.
+
 ## Non-Goals
 
 - No backend, OpenAPI, worker, persistence, or authorization changes.
@@ -26,7 +39,7 @@ boundaries.
 
 ## Tasks
 
-- [ ] Step 1: Audit the current routes and visual primitives
+- [x] Step 1: Audit the current routes and visual primitives
   - Files: `apps/marketplace-web/src/App.tsx`, `src/components/**`,
     `src/features/publishing/**`, `src/styles/**`.
   - Change: Identify the existing DOM contracts and preserve selectors/ARIA
@@ -34,7 +47,7 @@ boundaries.
   - Tests: existing marketplace test suite remains green.
   - Depends on: none.
 
-- [ ] Step 2: Align catalogue/list/map presentation
+- [x] Step 2: Align catalogue/list/map presentation
   - Files: `src/App.tsx`, `src/components/MarketplaceMap.tsx`,
     `src/styles/app.css`, `src/styles/tokens.css`.
   - Change: Implement the approved Figma catalogue hierarchy: compact header,
@@ -45,7 +58,7 @@ boundaries.
     and 320/375/414px layout assumptions where useful.
   - Depends on: Step 1.
 
-- [ ] Step 3: Align listing/development cards and detail surfaces
+- [x] Step 3: Align listing/development cards and detail surfaces
   - Files: `src/App.tsx`, `src/components/ListingMediaGallery.tsx`,
     `src/components/ListingContactForm.tsx`, `src/styles/app.css`.
   - Change: Match the selected Figma card/detail proportions, typography,
@@ -55,7 +68,7 @@ boundaries.
   - Tests: existing gallery/reveal/SEO tests plus focused responsive DOM checks.
   - Depends on: Step 2.
 
-- [ ] Step 4: Align publishing wizard shell and states
+- [x] Step 4: Align publishing wizard shell and states
   - Files: `src/features/publishing/components/PublishingWizard.tsx`,
     `src/features/publishing/components/steps/**`,
     `src/features/publishing/styles/publishing.css`.
@@ -66,7 +79,7 @@ boundaries.
     semantics checks.
   - Depends on: Step 1.
 
-- [ ] Step 5: Browser visual QA and regression pass
+- [x] Step 5: Browser visual QA and regression pass
   - Files: tests/docs only as needed.
   - Change: Run the built app in a local static/dev server and inspect desktop
     and mobile routes. Capture screenshots and record any infrastructure-only
@@ -75,7 +88,7 @@ boundaries.
     and browser smoke at 1440px and 375px.
   - Depends on: Steps 2–4.
 
-- [ ] Step 6: Verify and commit
+- [x] Step 6: Verify and commit
   - Change: Run the full repository checks, inspect the diff for accidental API
     or backend changes, and create one focused local commit. Do not push.
   - Depends on: Step 5.
