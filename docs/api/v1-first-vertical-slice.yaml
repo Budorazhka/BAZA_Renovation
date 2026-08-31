@@ -2680,7 +2680,21 @@ components:
       properties:
         requesterName: {type: string}
         requesterPhone: {type: string}
-        utm: {type: object, additionalProperties: true, nullable: true}
+        utm:
+          type: object
+          nullable: true
+          description: >
+            Строго 5 стандартных UTM-ключей (security review: без whitelist
+            публичный гость мог сохранить в Lead произвольный объект любого
+            размера/формы) — неизвестные поля отклоняются как VALIDATION_FAILED,
+            не отбрасываются молча.
+          additionalProperties: false
+          properties:
+            utm_source: {type: string, maxLength: 200}
+            utm_medium: {type: string, maxLength: 200}
+            utm_campaign: {type: string, maxLength: 200}
+            utm_term: {type: string, maxLength: 200}
+            utm_content: {type: string, maxLength: 200}
 
     RevealContactResponse:
       type: object

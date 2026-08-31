@@ -1336,8 +1336,13 @@ export interface components {
         RevealContactRequest: {
             requesterName?: string;
             requesterPhone?: string;
+            /** @description Строго 5 стандартных UTM-ключей (security review: без whitelist публичный гость мог сохранить в Lead произвольный объект любого размера/формы) — неизвестные поля отклоняются как VALIDATION_FAILED, не отбрасываются молча. */
             utm?: {
-                [key: string]: unknown;
+                utm_source?: string;
+                utm_medium?: string;
+                utm_campaign?: string;
+                utm_term?: string;
+                utm_content?: string;
             } | null;
         };
         RevealContactResponse: {
