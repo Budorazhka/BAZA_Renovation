@@ -299,6 +299,45 @@ paths:
           description: IDEMPOTENCY_KEY_CONFLICT
           $ref: '#/components/responses/Error'
 
+  /bookings:
+    post:
+      operationId: createBooking
+      summary: Создать атомарную бронь юнита (BOOK-001, ADR-006)
+      description: >
+        Бронь создаётся только внутри MongoDB-транзакции. BookingLock
+        сериализует операции на одном unitId, поэтому две пересекающиеся
+        активные брони не могут быть зафиксированы одновременно. Повтор с
+        тем же Idempotency-Key возвращает сохранённый ответ.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+      responses:
+        '201':
+          description: Бронь создана в статусе pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Некорректный диапазон дат или отсутствует Idempotency-Key
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Unit или lead не найдены в текущей организации
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Пересечение активной брони или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
   /public/developments:
     get:
       operationId: searchPublicDevelopments
@@ -2393,6 +2432,33 @@ components:
         price: {$ref: '#/components/schemas/MoneyAmount'}
         status: {type: string, enum: [available, reserved, sold, hidden]}
         version: {type: integer}
+
+    CreateBookingRequest:
+      type: object
+      required: [unitId, startsAt, expiresAt]
+      properties:
+        unitId: {type: string}
+        leadId: {type: string, nullable: true}
+        startsAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+
+    Booking:
+      type: object
+      required: [id, unitId, organizationId, leadId, dateRange, status, manager, createdAt]
+      properties:
+        id: {type: string}
+        unitId: {type: string}
+        organizationId: {type: string}
+        leadId: {type: string, nullable: true}
+        dateRange:
+          type: object
+          required: [startsAt, expiresAt]
+          properties:
+            startsAt: {type: string, format: date-time}
+            expiresAt: {type: string, format: date-time}
+        status: {type: string, enum: [pending, booked, rejected, expired, paid]}
+        manager: {type: string, description: Position that owns the booking}
+        createdAt: {type: string, format: date-time}
 
     PublicationStatus:
       type: object

@@ -20,6 +20,7 @@ import { EventHandlerRegistry } from '../outbox/event-handler.registry';
 import { MediaVerifiedHandler } from './media-verified.handler';
 import { PositionOccupantAssignedHandler } from './position-occupant-assigned.handler';
 import { PublicationRequestedHandler } from './publication-requested.handler';
+import { BookingCreatedHandler } from './booking-created.handler';
 import { ImageVariantService } from './image-variant.service';
 
 /**
@@ -49,6 +50,7 @@ import { ImageVariantService } from './image-variant.service';
     MediaVerifiedHandler,
     PositionOccupantAssignedHandler,
     PublicationRequestedHandler,
+    BookingCreatedHandler,
   ],
 })
 export class HandlersModule implements OnModuleInit {
@@ -57,11 +59,13 @@ export class HandlersModule implements OnModuleInit {
     private readonly mediaVerifiedHandler: MediaVerifiedHandler,
     private readonly positionOccupantAssignedHandler: PositionOccupantAssignedHandler,
     private readonly publicationRequestedHandler: PublicationRequestedHandler,
+    private readonly bookingCreatedHandler: BookingCreatedHandler,
   ) {}
 
   onModuleInit(): void {
     this.registry.register('MediaVerified', this.mediaVerifiedHandler);
     this.registry.register('PositionOccupantAssigned', this.positionOccupantAssignedHandler);
     this.registry.register('PublicationRequested', this.publicationRequestedHandler);
+    this.registry.register('BookingCreated', this.bookingCreatedHandler);
   }
 }

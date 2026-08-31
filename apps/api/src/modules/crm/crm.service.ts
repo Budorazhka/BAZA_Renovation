@@ -20,7 +20,7 @@ import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGES, DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
-import type { LeadStage } from './schemas/lead.schema';
+import type { LeadDocument, LeadStage } from './schemas/lead.schema';
 import type { TaskDocument, TaskStatus } from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
 import type { DealEventDocument } from './schemas/deal-event.schema';
@@ -193,6 +193,22 @@ export class CrmService {
     private readonly dealEventRepository: DealEventRepository,
     private readonly outboxService: OutboxService,
   ) {}
+
+  /** Tenant-scoped lead lookup for cross-module commands (for example
+   * Booking). Returning a single service method keeps LeadRepository behind
+   * the CRM module boundary and preserves the non-disclosure 404 semantics.
+   */
+  async getLeadForOrganization(
+    leadId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    ownerPositionId?: Types.ObjectId,
+  ): Promise<LeadDocument> {
+    const lead = await this.leadRepository.findByIdForOrganization(leadId, organizationId, ownerPositionId);
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+    return lead;
+  }
 
   /**
    * ERP CRM read-path. ownerPositionId передаётся только для own/assigned

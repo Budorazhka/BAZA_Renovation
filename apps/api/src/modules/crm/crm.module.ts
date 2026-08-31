@@ -82,6 +82,6 @@ import { OutboxModule } from '../outbox/outbox.module';
     ListingRepository,
     CrmService,
   ],
-  exports: [TaskRepository, DealRepository],
+  exports: [TaskRepository, DealRepository, CrmService],
 })
 export class CrmModule {}

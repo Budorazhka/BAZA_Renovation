@@ -216,6 +216,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Создать атомарную бронь юнита (BOOK-001, ADR-006)
+         * @description Бронь создаётся только внутри MongoDB-транзакции. BookingLock сериализует операции на одном unitId, поэтому две пересекающиеся активные брони не могут быть зафиксированы одновременно. Повтор с тем же Idempotency-Key возвращает сохранённый ответ.
+         */
+        post: operations["createBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/developments": {
         parameters: {
             query?: never;
@@ -1164,6 +1184,32 @@ export interface components {
             status?: "available" | "reserved" | "sold" | "hidden";
             version?: number;
         };
+        CreateBookingRequest: {
+            unitId: string;
+            leadId?: string | null;
+            /** Format: date-time */
+            startsAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        Booking: {
+            id: string;
+            unitId: string;
+            organizationId: string;
+            leadId: string | null;
+            dateRange: {
+                /** Format: date-time */
+                startsAt: string;
+                /** Format: date-time */
+                expiresAt: string;
+            };
+            /** @enum {string} */
+            status: "pending" | "booked" | "rejected" | "expired" | "paid";
+            /** @description Position that owns the booking */
+            manager: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
         PublicationStatus: {
             id?: string;
             /** @enum {string} */
@@ -2075,6 +2121,41 @@ export interface operations {
             /** @description PUBLICATION_SOURCE_NOT_READY */
             400: components["responses"]["Error"];
             /** @description IDEMPOTENCY_KEY_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    createBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Бронь создана в статусе pending */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Некорректный диапазон дат или отсутствует Idempotency-Key */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Unit или lead не найдены в текущей организации */
+            404: components["responses"]["Error"];
+            /** @description Пересечение активной брони или конфликт Idempotency-Key */
             409: components["responses"]["Error"];
         };
     };

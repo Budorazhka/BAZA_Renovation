@@ -16,6 +16,7 @@ import { TenantContextMiddleware } from './shared/tenant/tenant-context.middlewa
 import { AdminContextMiddleware } from './shared/admin/admin-context.middleware';
 import { MarketplaceAccountContextMiddleware } from './shared/marketplace-account/marketplace-account-context.middleware';
 import { PropertyAssetsModule } from './modules/property-assets/property-assets.module';
+import { BookingsModule } from './modules/bookings/bookings.module';
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { PropertyAssetsModule } from './modules/property-assets/property-assets.
     CrmModule,
     AdminModule,
     PropertyAssetsModule,
+    BookingsModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы
