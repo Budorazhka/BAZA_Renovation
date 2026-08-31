@@ -153,7 +153,6 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
         body: JSON.stringify(params),
       })
     },
-
     async listAuditEvents(query: AdminAuditEventListQuery = {}): Promise<AdminAuditEventList> {
       const params = new URLSearchParams()
       if (query.resource) params.set('resource', query.resource)

@@ -187,13 +187,14 @@ describe('useAdminAuth.logout — реально вызывает POST /auth/log
     mockAdminApiMeAndLogout(() => Promise.reject(new Error('network error')))
     const { AdminAuthProvider: Provider } = await import('../src/hooks/useAdminAuth')
     const { useAdminAuth: useAuth } = await import('../src/hooks/useAdminAuth')
+    let logoutPromise: Promise<void> | undefined
 
     function Probe() {
       const { state, logout } = useAuth()
       return (
         <div>
           <span data-testid="status">{state.status}</span>
-          <button onClick={() => void logout()}>logout</button>
+          <button onClick={() => { logoutPromise = logout() }}>logout</button>
         </div>
       )
     }
@@ -210,5 +211,6 @@ describe('useAdminAuth.logout — реально вызывает POST /auth/log
     screen.getByText('logout').click()
 
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('signed-out'))
+    await expect(logoutPromise).resolves.toBeUndefined()
   })
 })
