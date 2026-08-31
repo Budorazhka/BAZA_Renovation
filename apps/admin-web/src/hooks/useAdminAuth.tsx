@@ -10,6 +10,7 @@ export type AdminAuthState =
 interface AdminAuthContextValue {
   state: AdminAuthState
   login: (params: { login: string; password: string }) => Promise<void>
+  logout: () => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -55,7 +56,28 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     [refresh],
   )
 
-  return <AdminAuthContext.Provider value={{ state, login, refresh }}>{children}</AdminAuthContext.Provider>
+  /**
+   * POST /auth/logout очищает httpOnly cookie на сервере — здесь только
+   * переводим состояние в 'signed-out' сразу, не дожидаясь следующего
+   * /admin/me (тот тоже вернул бы 401 теперь, но локальный setState
+   * мгновенный, без лишнего round-trip). Идемпотентно на сервере (см.
+   * SessionService.revokeSession) — если запрос по какой-то причине не
+   * дошёл (сеть), всё равно переводим UI в signed-out: пользователь явно
+   * запросил выход, не должен оставаться на защищённом экране с
+   * недоступным API.
+   */
+  const logout = useCallback(async () => {
+    try {
+      await adminApi.logout()
+    } catch {
+      // Локальный выход намеренный: даже если сеть недоступна, не оставляем
+      // пользователя на защищённом экране и не возвращаем наружу unhandled rejection.
+    } finally {
+      setState({ status: 'signed-out' })
+    }
+  }, [])
+
+  return <AdminAuthContext.Provider value={{ state, login, logout, refresh }}>{children}</AdminAuthContext.Provider>
 }
 
 export function useAdminAuth(): AdminAuthContextValue {

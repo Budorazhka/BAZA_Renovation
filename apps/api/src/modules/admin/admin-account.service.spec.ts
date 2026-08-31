@@ -6,6 +6,7 @@ import type { AdminAccountRepository } from './repository/admin-account.reposito
 import type { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import type { AuditService } from '../audit/audit.service';
 import type { AuthService } from '../identity/auth.service';
+import type { SessionService } from '../identity/session.service';
 
 function makeAdminContext(overrides: Partial<AdminContext> = {}): AdminContext {
   return {
@@ -29,11 +30,16 @@ function makeTransactionConnection() {
   };
 }
 
+function makeSessionService(overrides: Partial<SessionService> = {}): SessionService {
+  return { revokeAllAdminSessions: jest.fn().mockResolvedValue(undefined), ...overrides } as unknown as SessionService;
+}
+
 function makeService(
   repository: Partial<AdminAccountRepository> = {},
   policyEvaluator: Partial<PolicyEvaluatorService> = {},
   auditService: AuditService = makeAuditService(),
   authService: Partial<AuthService> = { grantAdminAccess: jest.fn().mockResolvedValue(undefined) },
+  sessionService: Partial<SessionService> = makeSessionService(),
 ): AdminAccountService {
   return new AdminAccountService(
     makeTransactionConnection() as never,
@@ -41,6 +47,7 @@ function makeService(
     policyEvaluator as PolicyEvaluatorService,
     auditService,
     authService as AuthService,
+    sessionService as SessionService,
   );
 }
 
@@ -295,19 +302,24 @@ describe('AdminAccountService — listGrants', () => {
     ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
   });
 
-  it('для существующего target возвращает grants из PolicyEvaluatorService.listGrantsForSubject', async () => {
+  it('для существующего target возвращает grants из PolicyEvaluatorService.listAllGrantsForSubject (включая revoked)', async () => {
     const targetId = new Types.ObjectId();
-    const grants = [{ resource: 'development', action: 'read', scope: 'city' as const, scopeValue: 'batumi' }];
-    const listGrantsForSubjectSpy = jest.fn().mockResolvedValue(grants);
+    const grantId = new Types.ObjectId();
+    const grants = [
+      { id: grantId, resource: 'development', action: 'read', scope: 'city' as const, scopeValue: 'batumi', version: 1 },
+    ];
+    const listAllGrantsForSubjectSpy = jest.fn().mockResolvedValue(grants);
     const service = makeService(
       { findById: jest.fn().mockResolvedValue({ _id: targetId }) },
-      { listGrantsForSubject: listGrantsForSubjectSpy },
+      { listAllGrantsForSubject: listAllGrantsForSubjectSpy },
     );
 
     const result = await service.listGrants(makeAdminContext({ isSuperAdmin: true }), targetId);
 
-    expect(listGrantsForSubjectSpy).toHaveBeenCalledWith('admin_account', targetId);
-    expect(result).toBe(grants);
+    expect(listAllGrantsForSubjectSpy).toHaveBeenCalledWith('admin_account', targetId);
+    expect(result).toEqual([
+      { id: grantId.toString(), resource: 'development', action: 'read', scope: 'city', scopeValue: 'batumi', version: 1, revokedAt: undefined, revokedBy: undefined, revokeReason: undefined },
+    ]);
   });
 });
 
@@ -330,5 +342,406 @@ describe('AdminAccountService — product access', () => {
     });
 
     expect(grantAdminAccess).toHaveBeenCalledWith(identityId, expect.anything());
+  });
+});
+
+describe('AdminAccountService — deactivateAdminAccount', () => {
+  it('отклоняет вызов от НЕ-super_admin как SELF_ESCALATION_BLOCKED, не читает target', async () => {
+    const findByIdSpy = jest.fn();
+    const service = makeService({ findById: findByIdSpy });
+
+    await expect(
+      service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: false }), {
+        adminAccountId: new Types.ObjectId(),
+        reason: 'причина деактивации не менее 10 символов',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
+
+    expect(findByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('блокирует self-deactivation — ADMIN_SELF_DEACTIVATION_BLOCKED, не читает target', async () => {
+    const findByIdSpy = jest.fn();
+    const service = makeService({ findById: findByIdSpy });
+    const adminContext = makeAdminContext({ isSuperAdmin: true });
+
+    await expect(
+      service.deactivateAdminAccount(adminContext, {
+        adminAccountId: new Types.ObjectId(adminContext.adminAccountId),
+        reason: 'причина деактивации не менее 10 символов',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.ADMIN_SELF_DEACTIVATION_BLOCKED }));
+
+    expect(findByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('бросает NOT_FOUND, если target не существует', async () => {
+    const service = makeService({ findById: jest.fn().mockResolvedValue(null) });
+
+    await expect(
+      service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: new Types.ObjectId(),
+        reason: 'причина деактивации не менее 10 символов',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('запрещает деактивацию последнего активного super_admin — ADMIN_LAST_SUPER_ADMIN', async () => {
+    const targetId = new Types.ObjectId();
+    const updateStatusSpy = jest.fn();
+    const service = makeService({
+      findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: new Types.ObjectId(), status: 'active', isSuperAdmin: true }),
+      countActiveSuperAdmins: jest.fn().mockResolvedValue(1),
+      updateStatus: updateStatusSpy,
+    });
+
+    await expect(
+      service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: targetId,
+        reason: 'причина деактивации не менее 10 символов',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.ADMIN_LAST_SUPER_ADMIN }));
+
+    expect(updateStatusSpy).not.toHaveBeenCalled();
+  });
+
+  it('разрешает деактивацию super_admin, если есть ещё один активный super_admin', async () => {
+    const targetId = new Types.ObjectId();
+    const targetIdentityId = new Types.ObjectId();
+    const updateStatusSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const revokeAllAdminSessionsSpy = jest.fn().mockResolvedValue(undefined);
+    const appendSpy = jest.fn().mockResolvedValue(undefined);
+    const service = makeService(
+      {
+        findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: targetIdentityId, status: 'active', isSuperAdmin: true }),
+        countActiveSuperAdmins: jest.fn().mockResolvedValue(2),
+        updateStatus: updateStatusSpy,
+      },
+      {},
+      makeAuditService({ append: appendSpy }),
+      { grantAdminAccess: jest.fn() },
+      makeSessionService({ revokeAllAdminSessions: revokeAllAdminSessionsSpy }),
+    );
+
+    const result = await service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+      adminAccountId: targetId,
+      reason: 'причина деактивации не менее 10 символов',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result).toEqual({ status: 'deactivated' });
+    expect(updateStatusSpy).toHaveBeenCalledWith(targetId, { from: 'active', to: 'deactivated' }, expect.anything());
+    expect(revokeAllAdminSessionsSpy).toHaveBeenCalledWith(targetIdentityId);
+    expect(appendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin_account.deactivate',
+        reason: 'причина деактивации не менее 10 символов',
+        before: { status: 'active' },
+        after: { status: 'deactivated' },
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('идемпотентно: повторная деактивация уже деактивированного аккаунта — no-op, не бросает, не пишет audit', async () => {
+    const targetId = new Types.ObjectId();
+    const updateStatusSpy = jest.fn();
+    const appendSpy = jest.fn();
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: new Types.ObjectId(), status: 'deactivated', isSuperAdmin: false }), updateStatus: updateStatusSpy },
+      {},
+      makeAuditService({ append: appendSpy }),
+    );
+
+    const result = await service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+      adminAccountId: targetId,
+      reason: 'причина деактивации не менее 10 символов',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result).toEqual({ status: 'deactivated' });
+    expect(updateStatusSpy).not.toHaveBeenCalled();
+    expect(appendSpy).not.toHaveBeenCalled();
+  });
+
+  it('не считает scoped-admin (isSuperAdmin:false) target по last-super-admin инварианту вообще', async () => {
+    const targetId = new Types.ObjectId();
+    const countActiveSuperAdminsSpy = jest.fn();
+    const service = makeService({
+      findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: new Types.ObjectId(), status: 'active', isSuperAdmin: false }),
+      countActiveSuperAdmins: countActiveSuperAdminsSpy,
+      updateStatus: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    });
+
+    await service.deactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+      adminAccountId: targetId,
+      reason: 'причина деактивации не менее 10 символов',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(countActiveSuperAdminsSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminAccountService — reactivateAdminAccount', () => {
+  it('отклоняет вызов от НЕ-super_admin как SELF_ESCALATION_BLOCKED', async () => {
+    const findByIdSpy = jest.fn();
+    const service = makeService({ findById: findByIdSpy });
+
+    await expect(
+      service.reactivateAdminAccount(makeAdminContext({ isSuperAdmin: false }), {
+        adminAccountId: new Types.ObjectId(),
+        reason: 'причина восстановления доступа',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
+
+    expect(findByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('бросает NOT_FOUND, если target не существует', async () => {
+    const service = makeService({ findById: jest.fn().mockResolvedValue(null) });
+
+    await expect(
+      service.reactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: new Types.ObjectId(),
+        reason: 'причина восстановления доступа',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('восстанавливает деактивированный аккаунт и пишет audit', async () => {
+    const targetId = new Types.ObjectId();
+    const updateStatusSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const appendSpy = jest.fn().mockResolvedValue(undefined);
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: new Types.ObjectId(), status: 'deactivated', isSuperAdmin: false }), updateStatus: updateStatusSpy },
+      {},
+      makeAuditService({ append: appendSpy }),
+    );
+
+    const result = await service.reactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+      adminAccountId: targetId,
+      reason: 'причина восстановления доступа',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result).toEqual({ status: 'active' });
+    expect(updateStatusSpy).toHaveBeenCalledWith(targetId, { from: 'deactivated', to: 'active' }, expect.anything());
+    expect(appendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'admin_account.reactivate', before: { status: 'deactivated' }, after: { status: 'active' } }),
+      expect.anything(),
+    );
+  });
+
+  it('идемпотентно: повторная реактивация уже активного аккаунта — no-op', async () => {
+    const targetId = new Types.ObjectId();
+    const updateStatusSpy = jest.fn();
+    const service = makeService({
+      findById: jest.fn().mockResolvedValue({ _id: targetId, identityId: new Types.ObjectId(), status: 'active', isSuperAdmin: false }),
+      updateStatus: updateStatusSpy,
+    });
+
+    const result = await service.reactivateAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
+      adminAccountId: targetId,
+      reason: 'причина восстановления доступа',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result).toEqual({ status: 'active' });
+    expect(updateStatusSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminAccountService — revokeGrant', () => {
+  it('отклоняет вызов от НЕ-super_admin как SELF_ESCALATION_BLOCKED', async () => {
+    const findByIdSpy = jest.fn();
+    const service = makeService({ findById: findByIdSpy });
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: false }), {
+        adminAccountId: new Types.ObjectId(),
+        grantId: new Types.ObjectId(),
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
+
+    expect(findByIdSpy).not.toHaveBeenCalled();
+  });
+
+  it('бросает NOT_FOUND, если аккаунт не существует', async () => {
+    const service = makeService({ findById: jest.fn().mockResolvedValue(null) });
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: new Types.ObjectId(),
+        grantId: new Types.ObjectId(),
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('бросает NOT_FOUND, если grant не существует (не раскрывает разницу от "аккаунт не найден")', async () => {
+    const accountId = new Types.ObjectId();
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: accountId }) },
+      { findGrantById: jest.fn().mockResolvedValue(null) },
+    );
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: accountId,
+        grantId: new Types.ObjectId(),
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('бросает NOT_FOUND, если grant принадлежит другому аккаунту (IDOR prevention, не раскрывает существование)', async () => {
+    const accountId = new Types.ObjectId();
+    const otherAccountId = new Types.ObjectId();
+    const grantId = new Types.ObjectId();
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: accountId }) },
+      {
+        findGrantById: jest.fn().mockResolvedValue({
+          _id: grantId,
+          subjectType: 'admin_account',
+          subjectId: otherAccountId,
+          resource: 'development',
+          action: 'read',
+          scope: 'global',
+        }),
+      },
+    );
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: accountId,
+        grantId,
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.NOT_FOUND }));
+  });
+
+  it('бросает VERSION_CONFLICT, если grant уже отозван', async () => {
+    const accountId = new Types.ObjectId();
+    const grantId = new Types.ObjectId();
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: accountId }) },
+      {
+        findGrantById: jest.fn().mockResolvedValue({
+          _id: grantId,
+          subjectType: 'admin_account',
+          subjectId: accountId,
+          resource: 'development',
+          action: 'read',
+          scope: 'global',
+          revokedAt: new Date(),
+        }),
+      },
+    );
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: accountId,
+        grantId,
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.VERSION_CONFLICT }));
+  });
+
+  it('бросает VERSION_CONFLICT, если CAS-обновление не нашло совпадений (гонка/устаревший expectedVersion)', async () => {
+    const accountId = new Types.ObjectId();
+    const grantId = new Types.ObjectId();
+    const revokeGrantSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+    const appendSpy = jest.fn();
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: accountId }) },
+      {
+        findGrantById: jest.fn().mockResolvedValue({
+          _id: grantId,
+          subjectType: 'admin_account',
+          subjectId: accountId,
+          resource: 'development',
+          action: 'read',
+          scope: 'global',
+        }),
+        revokeGrant: revokeGrantSpy,
+      },
+      makeAuditService({ append: appendSpy }),
+    );
+
+    await expect(
+      service.revokeGrant(makeAdminContext({ isSuperAdmin: true }), {
+        adminAccountId: accountId,
+        grantId,
+        expectedVersion: 1,
+        reason: 'причина отзыва granta',
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.VERSION_CONFLICT }));
+
+    expect(appendSpy).not.toHaveBeenCalled();
+  });
+
+  it('успешный revoke пишет audit с before=grant details, after={revoked:true}', async () => {
+    const accountId = new Types.ObjectId();
+    const grantId = new Types.ObjectId();
+    const revokeGrantSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const appendSpy = jest.fn().mockResolvedValue(undefined);
+    const adminContext = makeAdminContext({ isSuperAdmin: true });
+    const service = makeService(
+      { findById: jest.fn().mockResolvedValue({ _id: accountId }) },
+      {
+        findGrantById: jest.fn().mockResolvedValue({
+          _id: grantId,
+          subjectType: 'admin_account',
+          subjectId: accountId,
+          resource: 'development',
+          action: 'read',
+          scope: 'city',
+          scopeValue: 'batumi',
+        }),
+        revokeGrant: revokeGrantSpy,
+      },
+      makeAuditService({ append: appendSpy }),
+    );
+
+    await service.revokeGrant(adminContext, {
+      adminAccountId: accountId,
+      grantId,
+      expectedVersion: 3,
+      reason: 'причина отзыва granta',
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(revokeGrantSpy).toHaveBeenCalledWith(grantId, 3, {
+      revokedBy: new Types.ObjectId(adminContext.adminAccountId),
+      reason: 'причина отзыва granta',
+    });
+    expect(appendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin_account.revoke_permission',
+        reason: 'причина отзыва granta',
+        before: { resource: 'development', action: 'read', scope: 'city', scopeValue: 'batumi' },
+        after: { revoked: true },
+      }),
+    );
   });
 });

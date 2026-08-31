@@ -61,10 +61,19 @@ export type PermissionScope =
   | 'domain'
 
 export interface PermissionGrant {
+  id: string
   resource: string
   action: string
   scope: PermissionScope
   scopeValue?: string
+  version: number
+  revokedAt?: string
+  revokedBy?: string
+  revokeReason?: string
+}
+
+export interface DeactivateReactivateResult {
+  status: 'active' | 'deactivated'
 }
 
 export interface PublicationReadScopeEntry {

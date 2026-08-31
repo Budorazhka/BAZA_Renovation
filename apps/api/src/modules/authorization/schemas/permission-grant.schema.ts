@@ -43,6 +43,37 @@ export class PermissionGrantDocument extends Document {
   @Prop()
   scopeValue?: string;
 
+  /**
+   * Revoke — append-only (ADR-006/master plan разд.6.3 audit-принцип):
+   * grant никогда не удаляется физически, только помечается revokedAt/
+   * revokedBy/revokeReason. findForSubject (repository) фильтрует
+   * revokedAt:{$exists:false} по умолчанию — отозванный grant немедленно
+   * перестаёт учитываться в evaluate()/resolveListScope(), но запись
+   * остаётся в коллекции для истории (audit_events дублирует факт revoke
+   * отдельной записью, но сам документ гранта — источник истины "что именно
+   * было отозвано и когда", не только audit-лог).
+   */
+  @Prop()
+  revokedAt?: Date;
+
+  @Prop({ type: Types.ObjectId })
+  revokedBy?: Types.ObjectId;
+
+  @Prop()
+  revokeReason?: string;
+
+  /**
+   * Optimistic concurrency (CAS) для revoke: клиент передаёт version,
+   * прочитанную вместе со списком grants (GET /admin/accounts/:id/grants) —
+   * revoke сравнивает его с текущим значением в фильтре updateOne, не
+   * читает-потом-пишет отдельными шагами. Начинается с 1 при создании,
+   * не инкрементируется больше нигде (revoke — единственная мутация
+   * существующего гранта), поэтому конфликт означает ровно "кто-то другой
+   * уже отозвал этот же grant между вашим чтением списка и этим вызовом".
+   */
+  @Prop({ required: true, default: 1 })
+  version!: number;
+
   declare createdAt: Date;
 }
 

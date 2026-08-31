@@ -101,12 +101,40 @@ export class SessionService {
     return undefined;
   }
 
+  /**
+   * POST /auth/logout: идемпотентно — мусорный/уже отозванный токен просто
+   * не находит совпадения по tokenHash (updateOne с 0 modifiedCount), не
+   * бросает. Вызывающий код (AuthController) не обязан заранее знать,
+   * валиден ли токен ещё.
+   */
   async revokeSession(rawToken: string): Promise<void> {
     await this.sessionRepository.revokeByTokenHash(this.hashToken(rawToken));
   }
 
   async revokeAllErpSessions(identityId: Types.ObjectId): Promise<void> {
     await this.sessionRepository.revokeAllForIdentity(identityId, 'erp');
+  }
+
+  /**
+   * AdminAccountService.deactivateAdminAccount: деактивация аккаунта должна
+   * немедленно обесценить уже выданные admin-audience сессии этой identity —
+   * иначе AdminGuard продолжал бы пускать по старому cookie до истечения
+   * TTL сессии (AdminContextMiddleware фильтрует по AdminAccount.status
+   * только на момент запроса, но сама сессия оставалась бы активной).
+   * Не трогает marketplace/erp-сессии того же человека — тот же ADR-004
+   * принцип изоляции audience, что revokeAllErpSessions выше.
+   */
+  async revokeAllAdminSessions(identityId: Types.ObjectId): Promise<void> {
+    await this.sessionRepository.revokeAllForIdentity(identityId, 'admin');
+  }
+
+  /**
+   * Извлекает сырой токен из cookie запроса без валидации по БД — нужен
+   * AuthController.logout ДО решения, есть ли активная сессия вообще
+   * (сам revokeSession делает поиск по hash, здесь только парсинг cookie).
+   */
+  getRawTokenFromRequest(req: FastifyRequest): string | undefined {
+    return this.parseCookie(req.headers.cookie, SESSION_COOKIE_NAME);
   }
 
   static readonly COOKIE_NAME = SESSION_COOKIE_NAME;

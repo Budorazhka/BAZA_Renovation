@@ -8,6 +8,15 @@ import type { AdminContext, VerifiedAdminContext } from './admin-context';
 declare module 'fastify' {
   interface FastifyRequest {
     adminContext?: VerifiedAdminContext;
+    /**
+     * Признак "cookie baza_session вообще присутствовала в запросе" —
+     * устанавливается независимо от того, удалось ли резолвить
+     * AdminContext. AdminGuard использует это, чтобы различить "гость без
+     * единой cookie" (401 — нет попытки аутентификации) от "cookie есть, но
+     * невалидна/нет активного AdminAccount" (403 — тот же non-disclosure
+     * принцип, что и раньше, не раскрываем причину отказа).
+     */
+    hadSessionCookie?: boolean;
   }
 }
 
@@ -30,6 +39,8 @@ export class AdminContextMiddleware implements NestMiddleware {
   ) {}
 
   async use(req: FastifyRequest, _res: FastifyReply, next: () => void): Promise<void> {
+    req.hadSessionCookie = this.sessionService.getRawTokenFromRequest(req) !== undefined;
+
     const session = await this.sessionService.getActiveSessionFromRequest(req, 'admin');
     if (!session) {
       next();

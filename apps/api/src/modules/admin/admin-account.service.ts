@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service';
 import type { PermissionScope } from '../authorization/schemas/permission-grant.schema';
 import type { AdminAccountDocument } from './schemas/admin-account.schema';
 import { AuthService } from '../identity/auth.service';
+import { SessionService } from '../identity/session.service';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 
 /**
@@ -30,6 +31,7 @@ export class AdminAccountService {
     private readonly policyEvaluator: PolicyEvaluatorService,
     private readonly auditService: AuditService,
     private readonly authService: AuthService,
+    private readonly sessionService: SessionService,
   ) {}
 
   /**
@@ -136,21 +138,250 @@ export class AdminAccountService {
   }
 
   /**
-   * GET /admin/accounts/:id/grants — просмотр текущих grants аккаунта.
-   * Тот же super_admin-only принцип, что listAdminAccounts: обычный
-   * scoped admin не должен уметь читать чужие grants, только свои
-   * (косвенно, через собственный список публикаций).
+   * super_admin-only, транзакционная: status→'deactivated' + отзыв всех
+   * admin-audience сессий этой identity + audit — одна атомарная операция
+   * (та же ADR-006 логика, что createAdminAccount выше). Без общей
+   * транзакции можно было бы деактивировать аккаунт, но забыть отозвать
+   * сессию (старый cookie продолжал бы пускать до истечения TTL), либо
+   * отозвать сессию без audit-следа причины.
+   *
+   * Инварианты (в этом порядке — self-deactivation проверяется раньше
+   * last-super-admin, чтобы попытка "деактивировать себя, будучи
+   * единственным super_admin" всегда возвращала один и тот же понятный код,
+   * не зависела от порядка проверок):
+   *  - self-deactivation запрещена полностью (owner decision после явного
+   *    уточнения задачи) — super_admin не может деактивировать сам себя ни
+   *    при каких обстоятельствах, только другой super_admin может это
+   *    сделать. Отдельный явный код ADMIN_SELF_DEACTIVATION_BLOCKED, не
+   *    generic FORBIDDEN — тот же принцип, что SELF_ESCALATION_BLOCKED
+   *    (клиент должен уметь показать точную причину отказа для ЭТОГО
+   *    конкретного действия, не общий "нет доступа").
+   *  - последний активный super_admin не может быть деактивирован НИКЕМ
+   *    (даже другим super_admin) — система не должна лишиться единственного
+   *    аккаунта, способного управлять составом админов/grants.
+   *  - идемпотентно: аккаунт уже в статусе 'deactivated' — no-op, второй
+   *    вызов не бросает и не пишет повторный audit (не "конфликт", target
+   *    и без того уже в желаемом состоянии — тот же принцип, что
+   *    IdentityRepository.updateStatus дальше по коду, condition в фильтре
+   *    просто не находит совпадения).
+   */
+  async deactivateAdminAccount(
+    requestedBy: AdminContext,
+    params: { adminAccountId: Types.ObjectId; reason: string; correlationId: string },
+  ): Promise<{ status: 'active' | 'deactivated' }> {
+    this.requireSuperAdmin(requestedBy);
+
+    if (params.adminAccountId.toString() === requestedBy.adminAccountId) {
+      throw new AppException(
+        ErrorCode.ADMIN_SELF_DEACTIVATION_BLOCKED,
+        'Нельзя деактивировать собственный admin-аккаунт — попросите другого super_admin',
+      );
+    }
+
+    const target = await this.adminAccountRepository.findById(params.adminAccountId);
+    if (!target) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'AdminAccount not found');
+    }
+
+    if (target.status === 'deactivated') {
+      return { status: 'deactivated' };
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      if (target.isSuperAdmin) {
+        const activeSuperAdmins = await this.adminAccountRepository.countActiveSuperAdmins(session);
+        if (activeSuperAdmins <= 1) {
+          throw new AppException(
+            ErrorCode.ADMIN_LAST_SUPER_ADMIN,
+            'Нельзя деактивировать последнего активного super_admin',
+          );
+        }
+      }
+
+      const { modifiedCount } = await this.adminAccountRepository.updateStatus(
+        params.adminAccountId,
+        { from: 'active', to: 'deactivated' },
+        session,
+      );
+      if (modifiedCount === 0) {
+        // Гонка: кто-то другой уже деактивировал этот же аккаунт в
+        // конкурентной транзакции между findById выше и этим updateOne —
+        // тот же итоговый статус, к которому стремился этот вызов, поэтому
+        // трактуем как уже достигнутую цель, не как ошибку.
+        return { status: 'deactivated' as const };
+      }
+
+      await this.sessionService.revokeAllAdminSessions(target.identityId);
+
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: new Types.ObjectId(requestedBy.adminAccountId) },
+          action: 'admin_account.deactivate',
+          resource: 'admin_account',
+          resourceId: params.adminAccountId,
+          reason: params.reason,
+          before: { status: 'active' },
+          after: { status: 'deactivated' },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return { status: 'deactivated' as const };
+    });
+  }
+
+  /**
+   * Симметрично deactivateAdminAccount, без last-super-admin/self-
+   * deactivation инвариантов (реактивация расширяет доступ обратно к уже
+   * существовавшему состоянию, не создаёт новый риск, которого не было бы
+   * до деактивации) — но с тем же transactional audit-паттерном. Не
+   * восстанавливает сессии, отозванные при деактивации (та же семантика,
+   * что AuthService.reactivateIdentity — человек логинится заново, не
+   * получает обратно старый cookie).
+   */
+  async reactivateAdminAccount(
+    requestedBy: AdminContext,
+    params: { adminAccountId: Types.ObjectId; reason: string; correlationId: string },
+  ): Promise<{ status: 'active' | 'deactivated' }> {
+    this.requireSuperAdmin(requestedBy);
+
+    const target = await this.adminAccountRepository.findById(params.adminAccountId);
+    if (!target) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'AdminAccount not found');
+    }
+
+    if (target.status === 'active') {
+      return { status: 'active' };
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.adminAccountRepository.updateStatus(
+        params.adminAccountId,
+        { from: 'deactivated', to: 'active' },
+        session,
+      );
+      if (modifiedCount === 0) {
+        return { status: 'active' as const };
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: new Types.ObjectId(requestedBy.adminAccountId) },
+          action: 'admin_account.reactivate',
+          resource: 'admin_account',
+          resourceId: params.adminAccountId,
+          reason: params.reason,
+          before: { status: 'deactivated' },
+          after: { status: 'active' },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return { status: 'active' as const };
+    });
+  }
+
+  /**
+   * GET /admin/accounts/:id/grants (ИЗМЕНЕНО — теперь включает revoked
+   * grants, см. PolicyEvaluatorService.listAllGrantsForSubject) — UI должен
+   * видеть полную историю, не только активное подмножество, чтобы кнопка
+   * "Отозвать" корректно скрывалась для уже отозванных записей.
    */
   async listGrants(
     requestedBy: AdminContext,
     adminAccountId: Types.ObjectId,
-  ): Promise<Array<{ resource: string; action: string; scope: PermissionScope; scopeValue?: string }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      resource: string;
+      action: string;
+      scope: PermissionScope;
+      scopeValue?: string;
+      version: number;
+      revokedAt?: string;
+      revokedBy?: string;
+      revokeReason?: string;
+    }>
+  > {
     this.requireSuperAdmin(requestedBy);
     const target = await this.adminAccountRepository.findById(adminAccountId);
     if (!target) {
       throw new AppException(ErrorCode.NOT_FOUND, 'AdminAccount not found');
     }
-    return this.policyEvaluator.listGrantsForSubject('admin_account', adminAccountId);
+    const grants = await this.policyEvaluator.listAllGrantsForSubject('admin_account', adminAccountId);
+    return grants.map((grant) => ({
+      id: grant.id.toString(),
+      resource: grant.resource,
+      action: grant.action,
+      scope: grant.scope,
+      scopeValue: grant.scopeValue,
+      version: grant.version,
+      revokedAt: grant.revokedAt?.toISOString(),
+      revokedBy: grant.revokedBy?.toString(),
+      revokeReason: grant.revokeReason,
+    }));
+  }
+
+  /**
+   * super_admin-only. Не удаляет запись физически (PolicyEvaluatorService.
+   * revokeGrant — append-only, ставит revokedAt/revokedBy/revokeReason).
+   * CAS через expectedVersion — конфликт (modifiedCount:0 при grant всё ещё
+   * существующем и невыданном) означает "кто-то уже отозвал этот же grant
+   * между вашим чтением списка и этим вызовом", возвращается как
+   * VERSION_CONFLICT, не тихо игнорируется и не трактуется как успех (в
+   * отличие от deactivate/reactivate выше, где повторный вызов на тот же
+   * target идемпотентен по dизайну — здесь версия защищает от двух РАЗНЫХ
+   * решений об отзыве, конкурирующих за одну и ту же запись, поэтому
+   * "уже отозвано" — честный конфликт, не эквивалентный результат).
+   *
+   * Чужой grant не раскрывается отдельно: NOT_FOUND и для "аккаунта не
+   * существует", и для "grant не принадлежит этому adminAccountId" — тот
+   * же non-disclosure принцип, что listGrants/grantPermission выше.
+   */
+  async revokeGrant(
+    requestedBy: AdminContext,
+    params: { adminAccountId: Types.ObjectId; grantId: Types.ObjectId; expectedVersion: number; reason: string; correlationId: string },
+  ): Promise<void> {
+    this.requireSuperAdmin(requestedBy);
+
+    const target = await this.adminAccountRepository.findById(params.adminAccountId);
+    if (!target) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'AdminAccount not found');
+    }
+
+    const grant = await this.policyEvaluator.findGrantById(params.grantId);
+    if (!grant || grant.subjectType !== 'admin_account' || !grant.subjectId.equals(params.adminAccountId)) {
+      throw new AppException(ErrorCode.NOT_FOUND, 'PermissionGrant not found');
+    }
+
+    if (grant.revokedAt) {
+      throw new AppException(ErrorCode.VERSION_CONFLICT, 'Этот grant уже отозван');
+    }
+
+    const { modifiedCount } = await this.policyEvaluator.revokeGrant(params.grantId, params.expectedVersion, {
+      revokedBy: new Types.ObjectId(requestedBy.adminAccountId),
+      reason: params.reason,
+    });
+
+    if (modifiedCount === 0) {
+      throw new AppException(
+        ErrorCode.VERSION_CONFLICT,
+        'Grant изменён другим запросом — обновите список и попробуйте снова',
+      );
+    }
+
+    await this.auditService.append({
+      actor: { type: 'admin_account', id: new Types.ObjectId(requestedBy.adminAccountId) },
+      action: 'admin_account.revoke_permission',
+      resource: 'admin_account',
+      resourceId: params.adminAccountId,
+      reason: params.reason,
+      before: { resource: grant.resource, action: grant.action, scope: grant.scope, scopeValue: grant.scopeValue },
+      after: { revoked: true },
+      correlationId: params.correlationId,
+    });
   }
 
   private requireSuperAdmin(requestedBy: AdminContext): void {

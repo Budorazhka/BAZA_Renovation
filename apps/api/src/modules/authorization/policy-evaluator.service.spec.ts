@@ -269,3 +269,72 @@ describe('PolicyEvaluatorService.grantMany', () => {
     expect(createManySpy).toHaveBeenCalledWith(items);
   });
 });
+
+describe('PolicyEvaluatorService.revokeGrant', () => {
+  it('делегирует в PermissionGrantRepository.revoke с id/expectedVersion/params без изменений', async () => {
+    const revokeSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const mockRepository = { revoke: revokeSpy } as unknown as PermissionGrantRepository;
+    const evaluator = new PolicyEvaluatorService(mockRepository);
+    const grantId = new Types.ObjectId();
+    const revokedBy = new Types.ObjectId();
+
+    const result = await evaluator.revokeGrant(grantId, 3, { revokedBy, reason: 'причина отзыва' });
+
+    expect(revokeSpy).toHaveBeenCalledWith(grantId, 3, { revokedBy, reason: 'причина отзыва' });
+    expect(result).toEqual({ modifiedCount: 1 });
+  });
+});
+
+describe('PolicyEvaluatorService.findGrantById', () => {
+  it('делегирует в PermissionGrantRepository.findById', async () => {
+    const grantId = new Types.ObjectId();
+    const grant = makeGrant({ _id: grantId } as never);
+    const findByIdSpy = jest.fn().mockResolvedValue(grant);
+    const evaluator = new PolicyEvaluatorService({ findById: findByIdSpy } as unknown as PermissionGrantRepository);
+
+    const result = await evaluator.findGrantById(grantId);
+
+    expect(findByIdSpy).toHaveBeenCalledWith(grantId);
+    expect(result).toBe(grant);
+  });
+});
+
+describe('PolicyEvaluatorService.listAllGrantsForSubject', () => {
+  it('включает revoked grants (в отличие от listGrantsForSubject/evaluate)', async () => {
+    const subjectId = new Types.ObjectId();
+    const grantId = new Types.ObjectId();
+    const revokedBy = new Types.ObjectId();
+    const revokedAt = new Date('2026-08-20T00:00:00.000Z');
+    const findAllForSubjectSpy = jest.fn().mockResolvedValue([
+      makeGrant({
+        _id: grantId,
+        resource: 'development',
+        action: 'read',
+        scope: 'city',
+        scopeValue: 'batumi',
+        version: 2,
+        revokedAt,
+        revokedBy,
+        revokeReason: 'больше не нужен доступ',
+      } as never),
+    ]);
+    const evaluator = new PolicyEvaluatorService({ findAllForSubject: findAllForSubjectSpy } as unknown as PermissionGrantRepository);
+
+    const result = await evaluator.listAllGrantsForSubject('admin_account', subjectId);
+
+    expect(findAllForSubjectSpy).toHaveBeenCalledWith('admin_account', subjectId);
+    expect(result).toEqual([
+      {
+        id: grantId,
+        resource: 'development',
+        action: 'read',
+        scope: 'city',
+        scopeValue: 'batumi',
+        version: 2,
+        revokedAt,
+        revokedBy,
+        revokeReason: 'больше не нужен доступ',
+      },
+    ]);
+  });
+});

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { PermissionGrantRepository } from './repository/permission-grant.repository';
-import type { PermissionScope, PermissionSubjectType } from './schemas/permission-grant.schema';
+import type { PermissionGrantDocument, PermissionScope, PermissionSubjectType } from './schemas/permission-grant.schema';
 
 export interface PermissionCheckRequest {
   subjectType: PermissionSubjectType;
@@ -126,6 +126,67 @@ export class PolicyEvaluatorService {
       scope: grant.scope,
       scopeValue: grant.scopeValue,
     }));
+  }
+
+  /**
+   * GET /admin/accounts/:id/grants (ИЗМЕНЕНО — теперь включает revoked):
+   * экран "Права доступа" должен показывать полную историю grant'ов
+   * аккаунта (включая уже отозванные, с revokedAt/revokedBy/revokeReason),
+   * не только активное подмножество — иначе кнопка "Отозвать" не может
+   * появиться/исчезнуть согласованно с реальным состоянием на сервере.
+   */
+  async listAllGrantsForSubject(
+    subjectType: PermissionSubjectType,
+    subjectId: Types.ObjectId,
+  ): Promise<
+    Array<{
+      id: Types.ObjectId;
+      resource: string;
+      action: string;
+      scope: PermissionScope;
+      scopeValue?: string;
+      version: number;
+      revokedAt?: Date;
+      revokedBy?: Types.ObjectId;
+      revokeReason?: string;
+    }>
+  > {
+    const grants = await this.permissionGrantRepository.findAllForSubject(subjectType, subjectId);
+    return grants.map((grant) => ({
+      id: grant._id,
+      resource: grant.resource,
+      action: grant.action,
+      scope: grant.scope,
+      scopeValue: grant.scopeValue,
+      version: grant.version,
+      revokedAt: grant.revokedAt,
+      revokedBy: grant.revokedBy,
+      revokeReason: grant.revokeReason,
+    }));
+  }
+
+  async findGrantById(id: Types.ObjectId): Promise<PermissionGrantDocument | null> {
+    return this.permissionGrantRepository.findById(id);
+  }
+
+  /**
+   * Revoke — единственная точка МУТАЦИИ существующего PermissionGrant
+   * (append-only: revokedAt/revokedBy/revokeReason, не physical delete),
+   * тот же module-boundary принцип, что grant()/grantMany() выше —
+   * AdminAccountService вызывает этот метод, не PermissionGrantRepository
+   * напрямую. CAS через expectedVersion — modifiedCount:0 сигнализирует
+   * вызывающему коду о конфликте (уже отозван кем-то другим или
+   * expectedVersion устарел), не бросает здесь сам: разница между "не
+   * найден" и "конфликт версии" — ответственность вызывающего кода
+   * (AdminAccountService.revokeGrant), у которого есть adminContext для
+   * audit-записи с точной причиной отказа.
+   */
+  async revokeGrant(
+    id: Types.ObjectId,
+    expectedVersion: number,
+    params: { revokedBy: Types.ObjectId; reason: string },
+  ): Promise<{ modifiedCount: number }> {
+    return this.permissionGrantRepository.revoke(id, expectedVersion, params);
   }
 
   /**

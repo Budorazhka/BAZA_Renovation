@@ -8,6 +8,14 @@ admin-аккаунтов и их grants.
 
 Ветка: `codex/admin-control-plane`, от коммита `6cfce25`.
 
+**ОБНОВЛЕНО** веткой `codex/admin-lifecycle-hardening` (от `fd08c94`,
+`origin/codex/integration`) — закрывает четыре ранее honest-gap пункта
+из "Что не реализовано" ниже: logout/session invalidation, деактивация/
+реактивация admin-аккаунта, revoke granta. Разделы ниже помечены
+"ИЗМЕНЕНО"/"НОВОЕ" там, где это применимо; OpenAPI-контракт теперь
+существует как `docs/api/v1-first-vertical-slice.yaml` (не существовал
+до этой ветки).
+
 ## Готовые сценарии
 
 1. **Вход.** `POST /auth/login` (уже существовал) — общий endpoint для
@@ -38,24 +46,69 @@ admin-аккаунтов и их grants.
    только super_admin, без него экран управления аккаунтами не мог бы
    отрендерить ничего.
 8. **Просмотр grants аккаунта.** `GET /admin/accounts/:id/grants`
-   (**новый**) — только super_admin, нужен, чтобы видеть, что уже
-   выдано, до выдачи нового grant.
+   (**ИЗМЕНЕНО** — теперь включает уже отозванные grants) — только
+   super_admin, нужен, чтобы видеть, что уже выдано (и что отозвано),
+   до выдачи нового grant.
+9. **Выход.** `POST /auth/logout` (**НОВОЕ**) — очищает httpOnly cookie
+   и инвалидирует серверную сессию. Идемпотентен: повторный вызов или
+   вызов без cookie — тот же `200`, не палит, была ли сессия валидна.
+   После logout `GET /admin/me` возвращает `401 AUTH_NO_SESSION` (см.
+   "401 vs 403" ниже — раньше был всегда `403`).
+10. **Деактивация/реактивация admin-аккаунта.** `POST
+    /admin/accounts/:id/deactivate` / `.../reactivate` (**НОВОЕ**) —
+    только super_admin. Деактивация транзакционно меняет статус,
+    отзывает все активные admin-сессии этой identity и пишет audit;
+    self-deactivation запрещена полностью, последний активный
+    super_admin не может быть деактивирован никем.
+11. **Отзыв granta.** `POST
+    /admin/accounts/:id/grants/:grantId/revoke` (**НОВОЕ**) — только
+    super_admin. Append-only (revokedAt/revokedBy/revokeReason, ничего
+    не удаляется физически), защищено optimistic concurrency
+    (expectedVersion) от гонки двух конкурентных revoke на один grant.
 
 ## API-контракты
 
-Все маршруты — под глобальным префиксом `/api/v1`, защищены `AdminGuard`
-(требует активный `AdminContext`, иначе `403 FORBIDDEN`).
+Полный формальный контракт — `docs/api/v1-first-vertical-slice.yaml`
+(создан этой веткой; не существовал в репозитории до
+`codex/admin-lifecycle-hardening`, несмотря на многочисленные ссылки на
+него в комментариях кода). Все маршруты — под глобальным префиксом
+`/api/v1`, защищены `AdminGuard` (требует активный `AdminContext`).
+
+**401 vs 403 (ИЗМЕНЕНО)** — `AdminGuard` раньше всегда бросал `403
+FORBIDDEN` для отсутствующего контекста. Теперь различает: `401
+AUTH_NO_SESSION`, если запрос вообще не содержит `baza_session` cookie
+(нет попытки аутентификации — безопасно раскрыть); `403 FORBIDDEN`, если
+cookie присутствует, но не резолвится в валидный `AdminContext`
+(мусорный токен, чужой audience, деактивированный аккаунт — причина
+намеренно не различается). Это единственное сохранившееся сужение
+non-disclosure: после logout cookie реально стёрта, следующий запрос
+идёт без неё — нужен именно `401`, не `403`.
 
 | Метод | Путь | Access | Статус |
 |---|---|---|---|
 | POST | `/auth/login` | публичный | существовал |
-| GET | `/admin/me` | любой admin | **новый** |
+| POST | `/auth/logout` | публичный (идемпотентен) | **новый** |
+| GET | `/admin/me` | любой admin | существовал |
 | GET | `/admin/publications` | scope-ограничен | существовал |
 | POST | `/admin/publications/:id/unpublish` | scope-ограничен | существовал |
-| GET | `/admin/accounts` | super_admin | **новый** |
+| GET | `/admin/accounts` | super_admin | существовал |
 | POST | `/admin/accounts` | super_admin | существовал |
+| POST | `/admin/accounts/:id/deactivate` | super_admin | **новый** |
+| POST | `/admin/accounts/:id/reactivate` | super_admin | **новый** |
 | POST | `/admin/accounts/:id/grants` | super_admin | существовал |
-| GET | `/admin/accounts/:id/grants` | super_admin | **новый** |
+| GET | `/admin/accounts/:id/grants` | super_admin | **ИЗМЕНЕНО** (включает revoked) |
+| POST | `/admin/accounts/:id/grants/:grantId/revoke` | super_admin | **новый** |
+
+### `POST /auth/logout`
+
+```
+200 { loggedOut: true }  — всегда, даже без cookie / с уже отозванным токеном
+```
+
+Очищает `baza_session` cookie (`clearCookie`, path `/`) и отзывает
+серверную сессию (`SessionService.revokeSession` — `updateOne` по хешу
+токена, 0 совпадений не считается ошибкой). Не логирует токен/cookie ни
+в каком виде.
 
 ### `GET /admin/me`
 
@@ -65,6 +118,8 @@ admin-аккаунтов и их grants.
   isSuperAdmin: boolean
   publicationReadScope: 'all' | Partial<Record<'development'|'unit'|'listing', { global: boolean; cities: string[] }>>
 }
+401 AUTH_NO_SESSION — нет cookie вообще
+403 FORBIDDEN — cookie есть, но не резолвится в валидный AdminContext
 ```
 
 ### `GET /admin/accounts`
@@ -76,20 +131,64 @@ Query: `cursor?: string (ObjectId)`, `limit?: number (1..100, default 20)`.
 403 SELF_ESCALATION_BLOCKED — вызвано не super_admin
 ```
 
-### `GET /admin/accounts/:id/grants`
+### `POST /admin/accounts/:id/deactivate` / `.../reactivate`
 
 ```
-200 { items: Array<{ resource, action, scope, scopeValue? }> }
+200 { status: 'active' | 'deactivated' }
+400 — DTO-валидация reason (minLength 10)
+403 SELF_ESCALATION_BLOCKED — вызвано не super_admin
+403 ADMIN_SELF_DEACTIVATION_BLOCKED — попытка деактивировать себя (только deactivate)
+403 ADMIN_LAST_SUPER_ADMIN — последний активный super_admin (только deactivate)
+404 NOT_FOUND — аккаунт не существует
+```
+
+Транзакционно (`runInTransaction`): status-переход + (для deactivate)
+`SessionService.revokeAllAdminSessions(identityId)` + audit-запись
+(`admin_account.deactivate`/`admin_account.reactivate`, actor/target/
+before/after/reason/correlationId) — одна атомарная операция. Повторный
+вызов на аккаунт, уже находящийся в целевом статусе — идемпотентный
+no-op (тот же `200`, без повторной audit-записи).
+
+### `GET /admin/accounts/:id/grants` (ИЗМЕНЕНО)
+
+```
+200 { items: Array<{ id, resource, action, scope, scopeValue?, version, revokedAt?, revokedBy?, revokeReason? }> }
 403 SELF_ESCALATION_BLOCKED — вызвано не super_admin
 404 NOT_FOUND — аккаунт не существует
 ```
 
-Новый метод на уровне сервиса: `PolicyEvaluatorService.listGrantsForSubject`
+Раньше возвращал только активные grants; теперь — полную историю
+(включая уже отозванные), с `version` на каждом элементе, обязательным
+для последующего revoke (CAS). Метод на уровне сервиса:
+`PolicyEvaluatorService.listAllGrantsForSubject`
 (`apps/api/src/modules/authorization/policy-evaluator.service.ts`) —
 единственный санкционированный способ прочитать полный список grants
 subject'а, не нарушая границу модуля (`PermissionGrantRepository`
 запрещено импортировать напрямую из другого модуля, см.
 `test/architecture/module-boundaries.test.ts`).
+
+### `POST /admin/accounts/:id/grants/:grantId/revoke` (НОВОЕ)
+
+```
+200 { revoked: true }
+400 — DTO-валидация (reason/expectedVersion)
+403 SELF_ESCALATION_BLOCKED — вызвано не super_admin
+404 NOT_FOUND — аккаунт/grant не существует, или grant принадлежит другому аккаунту (единый код)
+409 VERSION_CONFLICT — grant уже отозван, или expectedVersion устарел
+```
+
+Append-only: `PermissionGrantDocument` получает `revokedAt`/`revokedBy`/
+`revokeReason`, ничего не удаляется физически. CAS через `version`
+(инициализируется `1` при создании, revoke — единственная мутация
+существующего гранта): `PermissionGrantRepository.revoke` фильтрует
+`updateOne` по `{_id, revokedAt:{$exists:false}, version:expectedVersion}`
+— `modifiedCount:0` означает конфликт, переводится в `409
+VERSION_CONFLICT` на уровне сервиса. `PermissionGrantRepository.findForSubject`
+(путь авторизационных проверок — `evaluate`/`resolveListScope`/
+`listGrantsForSubject`) фильтрует `revokedAt:{$exists:false}` — отозванный
+grant немедленно перестаёт учитываться, `GET /admin/me` отражает его
+исчезновение на следующий же запрос, без отдельного кэша для
+инвалидации.
 
 ## Модель scope
 
