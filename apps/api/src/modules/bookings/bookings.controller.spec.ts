@@ -59,3 +59,65 @@ describe('BookingsController.createBooking', () => {
     expect(service.book).not.toHaveBeenCalled();
   });
 });
+
+describe('BookingsController.cancelBooking', () => {
+  it('requires Idempotency-Key before invoking the service', async () => {
+    const service = { cancelBooking: jest.fn() } as unknown as BookingsService;
+    const idempotency = { checkReplay: jest.fn() } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency);
+
+    await expect(
+      controller.cancelBooking(makeRequest(), { status: jest.fn() } as never, new Types.ObjectId(), {}),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REQUIRED' });
+    expect(service.cancelBooking).not.toHaveBeenCalled();
+    expect(idempotency.checkReplay).not.toHaveBeenCalled();
+  });
+
+  it('returns an idempotent replay without invoking the cancel command', async () => {
+    const service = { cancelBooking: jest.fn() } as unknown as BookingsService;
+    const idempotency = {
+      checkReplay: jest.fn().mockResolvedValue({ responseStatus: 200, responseBody: { id: 'cancelled' } }),
+    } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency);
+    const reply = { status: jest.fn() };
+
+    await expect(
+      controller.cancelBooking(makeRequest(), reply as never, new Types.ObjectId(), {}, 'same-key'),
+    ).resolves.toEqual({ id: 'cancelled' });
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(service.cancelBooking).not.toHaveBeenCalled();
+  });
+
+  it('delegates to BookingsService.cancelBooking with tenant-scoped params and returns 200', async () => {
+    const bookingId = new Types.ObjectId();
+    const cancelled = {
+      _id: bookingId,
+      unitId: new Types.ObjectId(),
+      organizationId: new Types.ObjectId(),
+      leadId: undefined,
+      manager: new Types.ObjectId(),
+      dateRange: { startsAt: new Date('2026-09-01T10:00:00.000Z'), expiresAt: new Date('2026-09-02T10:00:00.000Z') },
+      status: 'rejected',
+      createdAt: new Date('2026-08-31T10:00:00.000Z'),
+    };
+    const cancelSpy = jest.fn().mockResolvedValue(cancelled);
+    const service = { cancelBooking: cancelSpy } as unknown as BookingsService;
+    const idempotency = { checkReplay: jest.fn().mockResolvedValue(null) } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency);
+    const reply = { status: jest.fn() };
+
+    const result = await controller.cancelBooking(
+      makeRequest(),
+      reply as never,
+      bookingId,
+      { reason: 'клиент передумал' },
+      'cancel-key',
+    );
+
+    expect(cancelSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ bookingId, reason: 'клиент передумал', idempotencyKey: 'cancel-key' }),
+    );
+    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(result).toMatchObject({ id: bookingId.toString(), status: 'rejected' });
+  });
+});

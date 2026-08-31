@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { AppException } from '../../shared/errors/app-exception';
@@ -8,7 +8,9 @@ import { TenantGuard } from '../../shared/tenant/tenant.guard';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { PermissionGuard } from '../authorization/permission.guard';
 import { RequirePermission } from '../authorization/require-permission.decorator';
+import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { BookingsService, toBookingResponse } from './bookings.service';
 
 @Controller()
@@ -69,6 +71,58 @@ export class BookingsController {
     }
 
     reply.status(201);
+    return toBookingResponse(result);
+  }
+
+  /**
+   * BOOK-001 follow-up — booking.cancel.organization (не .own, см.
+   * BookingsService.cancelBooking докстринг). Тело запроса опционально
+   * (только reason) — Idempotency-Key всё равно обязателен, тот же принцип,
+   * что publish/cancel/manual-ledger (ADR-006, master plan разд.6.4).
+   */
+  @Post('bookings/:bookingId/cancel')
+  @HttpCode(200)
+  @RequirePermission('booking', 'cancel')
+  async cancelBooking(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Param('bookingId', ParseObjectIdPipe) bookingId: Types.ObjectId,
+    @Body() dto: CancelBookingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { bookingId: bookingId.toString(), reason: dto.reason ?? null };
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'cancelBooking',
+      key: idempotencyKey,
+      requestBody,
+    });
+    if (replay) {
+      reply.status(replay.responseStatus);
+      return replay.responseBody;
+    }
+
+    const result = await this.bookingsService.cancelBooking({
+      bookingId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      actorIdentityId,
+      reason: dto.reason,
+      idempotencyKey,
+      correlationId: req.correlationId,
+    });
+
+    if ('replay' in result) {
+      reply.status(result.replay.responseStatus);
+      return result.replay.responseBody;
+    }
+
+    reply.status(200);
     return toBookingResponse(result);
   }
 }

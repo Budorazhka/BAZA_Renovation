@@ -236,6 +236,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings/{bookingId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отменить бронь (BOOK-001 follow-up) — booking.cancel.organization, не booking.create.own: отменить может руководитель, не только автор брони. Разрешено только из pending/booked; paid (уже оплачена) и уже терминальные (rejected/expired) отклоняются как BOOKING_INVALID_STATE_TRANSITION — оплаченная бронь требует отдельного финансового процесса, вне этого среза. */
+        post: operations["cancelBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/developments": {
         parameters: {
             query?: never;
@@ -1814,6 +1831,7 @@ export interface components {
         AssetId: string;
         MediaAssetId: string;
         ListingId: string;
+        BookingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
         /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
@@ -2156,6 +2174,45 @@ export interface operations {
             /** @description Unit или lead не найдены в текущей организации */
             404: components["responses"]["Error"];
             /** @description Пересечение активной брони или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    cancelBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Бронь переведена в статус rejected, unit свободен для новых броней */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key */
             409: components["responses"]["Error"];
         };
     };

@@ -129,3 +129,139 @@ describe('BOOK-001 atomic booking (real MongoDB transaction)', () => {
   });
 
 });
+
+describe('BOOK-001 follow-up: cancelBooking (real MongoDB transaction)', () => {
+  let replSet: MongoMemoryReplSet;
+  let connection: Connection;
+  let bookingsService: BookingsService;
+  let unitRepository: UnitRepository;
+
+  beforeAll(async () => {
+    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    await replSet.waitUntilRunning();
+
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(replSet.getUri()), BookingsModule],
+    }).compile();
+
+    connection = moduleRef.get<Connection>(getConnectionToken());
+    bookingsService = moduleRef.get(BookingsService);
+    unitRepository = moduleRef.get(UnitRepository);
+  }, 120_000);
+
+  afterAll(async () => {
+    await connection?.close();
+    await replSet?.stop();
+  });
+
+  afterEach(async () => {
+    for (const collection of ['bookings', 'booking_locks', 'outbox_events', 'idempotency_records', 'audit_events', 'units']) {
+      await connection.collection(collection).deleteMany({});
+    }
+  });
+
+  async function createUnitAndBooking(organizationId: Types.ObjectId) {
+    const unit = await unitRepository.create({
+      buildingId: new Types.ObjectId(),
+      floorId: new Types.ObjectId(),
+      organizationId,
+      number: 'B-101',
+      kind: 'apartment',
+      area: 42,
+      price: { amountMinorUnits: 100_000, currency: 'USD' },
+    });
+    const booking = await bookingsService.book({
+      unitId: unit._id,
+      organizationId,
+      managerPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      startsAt: new Date('2026-09-01T10:00:00.000Z'),
+      expiresAt: new Date('2026-09-01T12:00:00.000Z'),
+      idempotencyKey: `booking-key-${unit._id.toString()}`,
+      correlationId: 'booking-integration',
+    });
+    if (!('_id' in booking)) throw new Error('expected a real booking, not a replay');
+    return { unit, booking };
+  }
+
+  it('переводит бронь в rejected и освобождает unit для новой пересекающейся брони', async () => {
+    const organizationId = new Types.ObjectId();
+    const { unit, booking } = await createUnitAndBooking(organizationId);
+
+    const cancelled = await bookingsService.cancelBooking({
+      bookingId: booking._id,
+      organizationId,
+      actorIdentityId: new Types.ObjectId(),
+      reason: 'клиент передумал',
+      idempotencyKey: 'cancel-key-a',
+      correlationId: 'booking-integration',
+    });
+    expect(cancelled).not.toHaveProperty('replay');
+    if ('replay' in cancelled) throw new Error('unreachable');
+    expect(cancelled.status).toBe('rejected');
+
+    // Unit теперь свободен — пересекающаяся бронь на те же даты проходит.
+    await expect(
+      bookingsService.book({
+        unitId: unit._id,
+        organizationId,
+        managerPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        startsAt: new Date('2026-09-01T10:00:00.000Z'),
+        expiresAt: new Date('2026-09-01T12:00:00.000Z'),
+        idempotencyKey: 'booking-key-after-cancel',
+        correlationId: 'booking-integration',
+      }),
+    ).resolves.toBeDefined();
+
+    expect(await connection.collection('outbox_events').countDocuments({ eventType: 'BookingCancelled' })).toBe(1);
+    expect(await connection.collection('audit_events').countDocuments({ action: 'booking.cancel' })).toBe(1);
+    expect(
+      await connection.collection('idempotency_records').countDocuments({ operation: 'cancelBooking' }),
+    ).toBe(1);
+  });
+
+  it('бросает BOOKING_NOT_FOUND при попытке отменить бронь чужой организации', async () => {
+    const { booking } = await createUnitAndBooking(new Types.ObjectId());
+
+    await expect(
+      bookingsService.cancelBooking({
+        bookingId: booking._id,
+        organizationId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        idempotencyKey: 'cancel-key-b',
+        correlationId: 'booking-integration',
+      }),
+    ).rejects.toMatchObject({ code: 'BOOKING_NOT_FOUND' });
+  });
+
+  it('бросает BOOKING_INVALID_STATE_TRANSITION при повторной отмене уже rejected брони', async () => {
+    const organizationId = new Types.ObjectId();
+    const { booking } = await createUnitAndBooking(organizationId);
+
+    await bookingsService.cancelBooking({
+      bookingId: booking._id,
+      organizationId,
+      actorIdentityId: new Types.ObjectId(),
+      idempotencyKey: 'cancel-key-c1',
+      correlationId: 'booking-integration',
+    });
+
+    await expect(
+      bookingsService.cancelBooking({
+        bookingId: booking._id,
+        organizationId,
+        actorIdentityId: new Types.ObjectId(),
+        idempotencyKey: 'cancel-key-c2',
+        correlationId: 'booking-integration',
+      }),
+    ).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE_TRANSITION' });
+  });
+});

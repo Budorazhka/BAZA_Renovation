@@ -21,6 +21,7 @@ import { MediaVerifiedHandler } from './media-verified.handler';
 import { PositionOccupantAssignedHandler } from './position-occupant-assigned.handler';
 import { PublicationRequestedHandler } from './publication-requested.handler';
 import { BookingCreatedHandler } from './booking-created.handler';
+import { BookingCancelledHandler } from './booking-cancelled.handler';
 import { ImageVariantService } from './image-variant.service';
 
 /**
@@ -51,6 +52,7 @@ import { ImageVariantService } from './image-variant.service';
     PositionOccupantAssignedHandler,
     PublicationRequestedHandler,
     BookingCreatedHandler,
+    BookingCancelledHandler,
   ],
 })
 export class HandlersModule implements OnModuleInit {
@@ -60,6 +62,7 @@ export class HandlersModule implements OnModuleInit {
     private readonly positionOccupantAssignedHandler: PositionOccupantAssignedHandler,
     private readonly publicationRequestedHandler: PublicationRequestedHandler,
     private readonly bookingCreatedHandler: BookingCreatedHandler,
+    private readonly bookingCancelledHandler: BookingCancelledHandler,
   ) {}
 
   onModuleInit(): void {
@@ -67,5 +70,6 @@ export class HandlersModule implements OnModuleInit {
     this.registry.register('PositionOccupantAssigned', this.positionOccupantAssignedHandler);
     this.registry.register('PublicationRequested', this.publicationRequestedHandler);
     this.registry.register('BookingCreated', this.bookingCreatedHandler);
+    this.registry.register('BookingCancelled', this.bookingCancelledHandler);
   }
 }

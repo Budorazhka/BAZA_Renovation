@@ -338,6 +338,49 @@ paths:
           description: Пересечение активной брони или конфликт Idempotency-Key
           $ref: '#/components/responses/Error'
 
+  /bookings/{bookingId}/cancel:
+    post:
+      operationId: cancelBooking
+      summary: >
+        Отменить бронь (BOOK-001 follow-up) — booking.cancel.organization,
+        не booking.create.own: отменить может руководитель, не только автор
+        брони. Разрешено только из pending/booked; paid (уже оплачена) и
+        уже терминальные (rejected/expired) отклоняются как
+        BOOKING_INVALID_STATE_TRANSITION — оплаченная бронь требует
+        отдельного финансового процесса, вне этого среза.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: {type: string, nullable: true}
+      responses:
+        '200':
+          description: Бронь переведена в статус rejected, unit свободен для новых броней
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
   /public/developments:
     get:
       operationId: searchPublicDevelopments
@@ -2287,6 +2330,11 @@ components:
       schema: {type: string}
     ListingId:
       name: listingId
+      in: path
+      required: true
+      schema: {type: string}
+    BookingId:
+      name: bookingId
       in: path
       required: true
       schema: {type: string}
