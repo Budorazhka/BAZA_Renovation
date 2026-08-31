@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
+import fastifyHelmet from '@fastify/helmet';
 import { AppModule } from './app.module';
 import { AppExceptionFilter } from './shared/errors/app-exception.filter';
 import { CorrelationIdMiddleware } from './shared/errors/correlation-id.middleware';
@@ -23,6 +24,25 @@ async function bootstrap(): Promise<void> {
   );
 
   await app.register(fastifyCookie);
+
+  // Security review: apps/api не имел ни одного security-заголовка (нет
+  // HSTS/X-Content-Type-Options/X-Frame-Options/Referrer-Policy) — master
+  // plan разд.10.2 п.2 прямо требует "Security headers и CSP проверяются
+  // автоматически" как обязательную регрессию из старого аудита.
+  // `contentSecurityPolicy: false` — этот процесс отдаёт только JSON
+  // (ValidationPipe/controllers), никогда HTML; CSP-директивы для несуществующего
+  // HTML-контента не защищают ничего и рискуют мешать будущим explicit
+  // HTML-ответам (health/ready, error pages), которые CSP здесь не учитывал бы.
+  // `crossOriginResourcePolicy: 'cross-origin'` — helmet-дефолт 'same-origin'
+  // блокировал бы браузером ЛЮБОЙ fetch с marketplace-web/erp-web/admin-web
+  // (три РАЗНЫХ origin, ADR-004) даже при разрешающем CORS: CORP проверяется
+  // независимо от Access-Control-Allow-Origin. Явный allowlist самого CORS
+  // (allowedOrigins ниже) — уже единственный слой, отвечающий "кому можно",
+  // CORP здесь не должен дублировать/конфликтовать с этим решением.
+  await app.register(fastifyHelmet, {
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  });
 
   // TenantContextMiddleware/AdminContextMiddleware — нативные Fastify
   // onRequest hooks, НЕ NestJS NestMiddleware (AppModule.configure()

@@ -24,6 +24,7 @@
     "@baza/publication": "workspace:*",
     "@baza/tenant-scope": "workspace:*",
     "@fastify/cookie": "^9.4.0",
+    "@fastify/helmet": "^11.1.1",
     "@nestjs/common": "^10.4.0",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.4.0",
