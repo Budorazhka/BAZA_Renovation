@@ -1,6 +1,8 @@
-import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Post, UseGuards } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service';
 import { ActivateInviteDto } from './dto/activate-invite.dto';
+import { IpRateLimitGuard } from '../../shared/rate-limit/ip-rate-limit.guard';
+import { RateLimit } from '../../shared/rate-limit/rate-limit.decorator';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -20,8 +22,15 @@ interface ApiResponse<T> {
 export class InvitationController {
   constructor(private readonly organizationsService: OrganizationsService) {}
 
+  /**
+   * Rate limit по IP (security review) — приглашение принимает password для
+   * новой Identity; без лимита это ещё один неограниченный auth-подобный
+   * вектор (перебор токена/попыток активации).
+   */
   @Post('invite/:token/activate')
   @HttpCode(200)
+  @UseGuards(IpRateLimitGuard)
+  @RateLimit({ keyPrefix: 'invite-activate', limit: 10, windowSeconds: 60 })
   async activate(
     @Param('token') token: string,
     @Body() dto: ActivateInviteDto,

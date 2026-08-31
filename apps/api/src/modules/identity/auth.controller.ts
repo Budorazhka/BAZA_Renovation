@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
 import { resolveProductAudienceFromOrigin } from './resolve-product-audience';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { RegisterRequestDto } from './dto/register-request.dto';
+import { IpRateLimitGuard } from '../../shared/rate-limit/ip-rate-limit.guard';
+import { RateLimit } from '../../shared/rate-limit/rate-limit.decorator';
 
 /**
  * OpenAPI `/auth/login` (security: [] — публичный, гость без сессии).
@@ -18,8 +20,18 @@ export class AuthController {
     private readonly sessionService: SessionService,
   ) {}
 
+  /**
+   * Rate limit по IP (security review: до этого /auth/login был единственным
+   * публичным auth-эндпоинтом вообще без анти-abuse защиты — credential
+   * stuffing + DoS через argon2id, 64МБ памяти на попытку). 10/60с — выше,
+   * чем на reveal-contact (5/60с), потому что легитимный пользователь может
+   * несколько раз опечататься в пароле подряд, а строгий лимит на listing-
+   * ключ (RedisRateLimitGuard) здесь неприменим — тут только IP.
+   */
   @Post('login')
   @HttpCode(200)
+  @UseGuards(IpRateLimitGuard)
+  @RateLimit({ keyPrefix: 'auth-login', limit: 10, windowSeconds: 60 })
   async login(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
@@ -59,6 +71,8 @@ export class AuthController {
    * побочную авторизационную операцию).
    */
   @Post('register')
+  @UseGuards(IpRateLimitGuard)
+  @RateLimit({ keyPrefix: 'auth-register', limit: 5, windowSeconds: 60 })
   async register(@Body() dto: RegisterRequestDto): Promise<{ identityId: string }> {
     const identityId = await this.authService.registerIdentity({ login: dto.login, password: dto.password });
     return { identityId: identityId.toString() };

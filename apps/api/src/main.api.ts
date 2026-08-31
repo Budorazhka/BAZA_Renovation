@@ -9,6 +9,7 @@ import { CorrelationIdMiddleware } from './shared/errors/correlation-id.middlewa
 import { TenantContextMiddleware } from './shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from './shared/admin/admin-context.middleware';
 import { MarketplaceAccountContextMiddleware } from './shared/marketplace-account/marketplace-account-context.middleware';
+import { parseTrustProxy } from './shared/network/parse-trust-proxy';
 
 /**
  * ADR-001: API-процесс — один из двух entrypoint'ов одного кодового
@@ -16,7 +17,10 @@ import { MarketplaceAccountContextMiddleware } from './shared/marketplace-accoun
  * (не Express), master plan разд.6.1.
  */
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter());
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({ trustProxy: parseTrustProxy(process.env.TRUST_PROXY) }),
+  );
 
   await app.register(fastifyCookie);
 

@@ -1,7 +1,16 @@
-import { S3Client } from '@aws-sdk/client-s3';
+import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Readable } from 'node:stream';
-import { MediaStorageService } from './media-storage.service';
+import { MediaObjectTooLargeError, MediaStorageService } from './media-storage.service';
 import type { ConfigService } from '@nestjs/config';
+
+// getSignedUrl — non-configurable named export в commonjs-интеропе этого
+// пакета (jest.spyOn падает с "Cannot redefine property") — jest.mock
+// подменяет весь модуль ДО импорта, единственный надёжный способ проверить,
+// с какими аргументами MediaStorageService.createUploadUrl его вызывает.
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(),
+}));
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 function makeConfigService(overrides: Record<string, string> = {}): ConfigService {
   const values: Record<string, string> = {
@@ -54,6 +63,83 @@ describe('MediaStorageService', () => {
     const result = await service.readObject({ bucket: 'public', key: 'x' });
 
     expect(result.toString('utf-8')).toBe('hello world');
+  });
+
+  /**
+   * Security review: presigned URL раньше не подписывал Content-Length —
+   * клиент мог заливать по этой ссылке произвольно большой файл, ничто на
+   * стороне S3/MinIO этого не проверяло. Подписанный ContentLength заставляет
+   * S3-совместимый backend отклонить PUT с несовпадающим заголовком ДО
+   * приёма байт.
+   */
+  it('createUploadUrl подписывает ContentLength вместе с Bucket/Key/ContentType', async () => {
+    const getSignedUrlSpy = jest.mocked(getSignedUrl);
+    getSignedUrlSpy.mockResolvedValue('https://minio.example.com/presigned-put');
+
+    const service = new MediaStorageService(makeConfigService());
+    const url = await service.createUploadUrl({
+      bucket: 'private',
+      key: 'assetId/original.jpg',
+      contentType: 'image/jpeg',
+      contentLength: 12_345,
+    });
+
+    expect(url).toBe('https://minio.example.com/presigned-put');
+    const command = getSignedUrlSpy.mock.calls[0]![1] as unknown as {
+      input: { Bucket: string; Key: string; ContentType: string; ContentLength: number };
+    };
+    expect(command.input.Bucket).toBe('baza-private-test');
+    expect(command.input.Key).toBe('assetId/original.jpg');
+    expect(command.input.ContentType).toBe('image/jpeg');
+    expect(command.input.ContentLength).toBe(12_345);
+  });
+
+  /**
+   * Security review: presigned upload раньше не имел серверной проверки
+   * фактического размера объекта в storage — HEAD ДО GetObject защищает от
+   * буферизации оверсайз-файла в память, даже если подписанный
+   * Content-Length (createUploadUrl) почему-либо не enforced backend'ом.
+   */
+  it('readObject с maxSizeBytes делает HEAD и бросает MediaObjectTooLargeError, если объект больше лимита', async () => {
+    const sendSpy = jest.spyOn(S3Client.prototype, 'send').mockImplementation(async (command) => {
+      if (command instanceof HeadObjectCommand) {
+        return { ContentLength: 50_000_000 } as never;
+      }
+      throw new Error('GetObject не должен вызываться, если HEAD уже показал превышение лимита');
+    });
+
+    const service = new MediaStorageService(makeConfigService());
+
+    await expect(
+      service.readObject({ bucket: 'public', key: 'x/original.jpg', maxSizeBytes: 20_000_000 }),
+    ).rejects.toBeInstanceOf(MediaObjectTooLargeError);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('readObject с maxSizeBytes читает Body как обычно, если объект в пределах лимита', async () => {
+    jest.spyOn(S3Client.prototype, 'send').mockImplementation(async (command) => {
+      if (command instanceof HeadObjectCommand) {
+        return { ContentLength: 1024 } as never;
+      }
+      return { Body: Readable.from([Buffer.from('ok')]) } as never;
+    });
+
+    const service = new MediaStorageService(makeConfigService());
+    const result = await service.readObject({ bucket: 'public', key: 'x', maxSizeBytes: 20_000_000 });
+
+    expect(result.toString('utf-8')).toBe('ok');
+  });
+
+  it('readObject без maxSizeBytes НЕ делает HEAD (обратная совместимость с worker-путём)', async () => {
+    const sendSpy = jest.spyOn(S3Client.prototype, 'send').mockResolvedValue({
+      Body: Readable.from([Buffer.from('data')]),
+    } as never);
+
+    const service = new MediaStorageService(makeConfigService());
+    await service.readObject({ bucket: 'public', key: 'x' });
+
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect(sendSpy.mock.calls[0]![0]).not.toBeInstanceOf(HeadObjectCommand);
   });
 
   it('readObject бросает, если Body отсутствует в ответе', async () => {
