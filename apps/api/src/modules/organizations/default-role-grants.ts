@@ -59,9 +59,24 @@ export interface DefaultGrant {
  * один PermissionGrant никогда не создаётся ни для одной Position — deny-
  * by-default PolicyEvaluatorService отклоняет ЛЮБОЙ authenticated ERP-запрос
  * даже для только что созданного owner, поскольку grants-таблица пуста.
+ *
+ * `position.read` (все роли, scope 'organization') — security review
+ * 31.08.2026: GET /team-users и POST /team-users/ensure-team не имели
+ * НИКАКОГО PermissionGuard (только TenantGuard), возвращая HR-PII
+ * (loginEmail/phone/birthDate/department/telegram/whatsapp/vk/instagram/
+ * website) всех сотрудников организации без проверки прав вызывающего —
+ * технический фикс deny-by-default разрыва, не новое бизнес-решение
+ * владельца об ограничении видимости команды: сохраняет текущее поведение
+ * (любой залогиненный сотрудник организации видит список команды), просто
+ * делает его explicit grant'ом, а не отсутствием guard'а по умолчанию.
+ * НЕ бэкфилится для Position, созданных до этого коммита (нет миграционной
+ * инфраструктуры в кодовой базе, тот же прецедент, что остальные grants
+ * этого файла) — существующие организации получат 403 на список команды,
+ * пока их Position не пересоздадут/не получат grant отдельно.
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
@@ -101,6 +116,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
   ],
   director: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
@@ -140,6 +156,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
   ],
   rop: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
@@ -180,6 +197,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
   ],
   manager: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'own' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     // D-05B: manager ведёт своих лидов по воронке — очевидная возможность,
@@ -207,6 +225,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'booking', action: 'confirm', scope: 'own' },
   ],
   administrator: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
@@ -220,6 +239,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
   ],
   marketer: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
   ],
@@ -230,6 +250,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   // owner+команда developer-организации видели и вели эти лиды в своём ERP,
   // тот же набор, что у agency owner.
   developer: [
+    { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
