@@ -1284,6 +1284,93 @@ paths:
           description: VERSION_CONFLICT — сделка была изменена параллельным запросом
           $ref: '#/components/responses/Error'
 
+  /admin/duplicate-candidates:
+    get:
+      operationId: adminListDuplicateCandidates
+      summary: >
+        Admin review queue для DEDUPE-001 (master plan разд.2.3: "Автор может
+        заявить, что это не дубль; такое исключение логируется и попадает в
+        административную проверку"). duplicate_candidate.read — global scope
+        (пара может involve organizations из разных городов, city-scoping
+        здесь структурно не подходит, в отличие от publications).
+        Отсутствие гранта — ошибка (403), НЕ пустой список (в отличие от
+        adminListPublications, где отсутствие read-scope даёт пустой
+        результат) — здесь единственный grant либо есть, либо нет, нет
+        частичного scope, который стоило бы молча сужать до пустоты.
+      tags: [admin]
+      parameters:
+        - name: status
+          in: query
+          description: "Без значения — очередь на проверку (detected + override_not_duplicate)"
+          schema: {type: string, enum: [detected, override_not_duplicate, confirmed_duplicate]}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список кандидатов с денормализованной парой PropertyAsset для визуального сравнения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminDuplicateCandidate'
+                  nextCursor: {type: string, nullable: true}
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.read
+          $ref: '#/components/responses/Error'
+
+  /admin/duplicate-candidates/{duplicateCandidateId}/confirm:
+    post:
+      operationId: adminConfirmDuplicateCandidate
+      summary: >
+        Admin critical action: подтверждает, что пара — реальный дубль.
+        Единственный actor, кто может confirm ИЗ override_not_duplicate
+        (отменяет решение владельца "не дубль"), не только ИЗ detected.
+        reason обязателен (permission-matrix.md разд.4).
+      tags: [admin]
+      parameters:
+        - name: duplicateCandidateId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '200':
+          description: Кандидат переведён в confirmed_duplicate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [confirmed_duplicate]}
+        '400':
+          description: ADMIN_REASON_REQUIRED — reason короче 10 символов
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.confirm
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Duplicate candidate не найден
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Уже confirmed_duplicate
+          $ref: '#/components/responses/Error'
+
   /admin/publications:
     get:
       operationId: adminListPublications
@@ -2517,6 +2604,52 @@ components:
         status: {type: string, enum: [publication_pending, published, unpublished, build_failed]}
         slug: {type: string, nullable: true}
         unpublishReason: {type: string, nullable: true}
+
+    AdminDuplicateCandidateAsset:
+      type: object
+      nullable: true
+      description: null, если PropertyAsset больше не существует (удалён/несогласован)
+      properties:
+        id: {type: string}
+        propertyType: {type: string, enum: [apartment, house, land, commercial]}
+        location:
+          type: object
+          properties:
+            city: {type: string}
+            address: {type: string}
+        characteristics:
+          type: object
+          properties:
+            area: {type: number}
+            rooms: {type: number, nullable: true}
+            floor: {type: number, nullable: true}
+        representativePhone: {type: string}
+        publisherScope:
+          type: object
+          properties:
+            type: {type: string, enum: [organization, marketplace_account]}
+            organizationId: {type: string, nullable: true}
+
+    AdminDuplicateCandidate:
+      type: object
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [detected, confirmed_duplicate, override_not_duplicate]}
+        signals:
+          type: object
+          properties:
+            phoneMatch: {type: boolean}
+            addressMatch: {type: boolean}
+            roomsAreaFloorMatch: {type: boolean}
+        detectedAt: {type: string, format: date-time}
+        overrideReason: {type: string, nullable: true}
+        overrideAt: {type: string, nullable: true, format: date-time}
+        confirmReason: {type: string, nullable: true}
+        confirmedAt: {type: string, nullable: true, format: date-time}
+        assetA:
+          $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
+        assetB:
+          $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
 
     PublicDevelopmentList:
       type: object

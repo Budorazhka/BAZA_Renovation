@@ -107,4 +107,79 @@ describe('DuplicateCandidateRepository', () => {
       );
     });
   });
+
+  describe('markConfirmedDuplicate', () => {
+    it('фильтр допускает confirm из detected И override_not_duplicate (не только detected) — admin может отменить override владельца', async () => {
+      const updateOne = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 1 }) });
+      const model = { updateOne } as never;
+      const repository = new DuplicateCandidateRepository(model);
+      const id = new Types.ObjectId();
+      const confirmByAdminAccountId = new Types.ObjectId();
+
+      const result = await repository.markConfirmedDuplicate(id, {
+        reason: 'Verified same physical unit by phone',
+        confirmByAdminAccountId,
+      });
+
+      expect(updateOne).toHaveBeenCalledWith(
+        { _id: id, status: { $ne: 'confirmed_duplicate' } },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            status: 'confirmed_duplicate',
+            confirmReason: 'Verified same physical unit by phone',
+            confirmByAdminAccountId,
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(result).toEqual({ modifiedCount: 1 });
+    });
+
+    it('не может confirm уже confirmed_duplicate (modifiedCount:0)', async () => {
+      const updateOne = jest.fn().mockReturnValue({ exec: jest.fn().mockResolvedValue({ modifiedCount: 0 }) });
+      const model = { updateOne } as never;
+      const repository = new DuplicateCandidateRepository(model);
+
+      const result = await repository.markConfirmedDuplicate(new Types.ObjectId(), {
+        reason: 'test',
+        confirmByAdminAccountId: new Types.ObjectId(),
+      });
+
+      expect(result).toEqual({ modifiedCount: 0 });
+    });
+  });
+
+  describe('listForReview', () => {
+    it('фильтрует по переданным статусам и cursor, сортирует по _id, лимитирует', async () => {
+      const sort = jest.fn().mockReturnThis();
+      const limit = jest.fn().mockReturnThis();
+      const exec = jest.fn().mockResolvedValue([]);
+      const find = jest.fn().mockReturnValue({ sort, limit, exec });
+      const model = { find } as never;
+      const repository = new DuplicateCandidateRepository(model);
+      const cursor = new Types.ObjectId();
+
+      await repository.listForReview(['detected', 'override_not_duplicate'], { cursor, limit: 20 });
+
+      expect(find).toHaveBeenCalledWith({
+        status: { $in: ['detected', 'override_not_duplicate'] },
+        _id: { $gt: cursor },
+      });
+      expect(sort).toHaveBeenCalledWith({ _id: 1 });
+      expect(limit).toHaveBeenCalledWith(20);
+    });
+
+    it('без cursor не добавляет _id-фильтр (первая страница)', async () => {
+      const sort = jest.fn().mockReturnThis();
+      const limit = jest.fn().mockReturnThis();
+      const exec = jest.fn().mockResolvedValue([]);
+      const find = jest.fn().mockReturnValue({ sort, limit, exec });
+      const model = { find } as never;
+      const repository = new DuplicateCandidateRepository(model);
+
+      await repository.listForReview(['detected'], { limit: 20 });
+
+      expect(find).toHaveBeenCalledWith({ status: { $in: ['detected'] } });
+    });
+  });
 });

@@ -314,4 +314,128 @@ describe('DedupeService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
+
+  describe('listForAdminReview', () => {
+    it('резолвит asset-пары для каждого кандидата по обеим сторонам без дублирующих findById для общего asset', async () => {
+      const assetAId = new Types.ObjectId();
+      const assetBId = new Types.ObjectId();
+      const assetCId = new Types.ObjectId();
+      const assetA = makeAsset({ _id: assetAId });
+      const assetB = makeAsset({ _id: assetBId });
+      const assetC = makeAsset({ _id: assetCId });
+      const findByIdSpy = jest.fn().mockImplementation((id: Types.ObjectId) => {
+        if (id.equals(assetAId)) return Promise.resolve(assetA);
+        if (id.equals(assetBId)) return Promise.resolve(assetB);
+        if (id.equals(assetCId)) return Promise.resolve(assetC);
+        return Promise.resolve(null);
+      });
+      const listForReviewSpy = jest.fn().mockResolvedValue([
+        { _id: new Types.ObjectId(), propertyAssetIdA: assetAId, propertyAssetIdB: assetBId, status: 'detected' },
+        // assetB встречается во второй паре тоже — не должен резолвиться дважды.
+        { _id: new Types.ObjectId(), propertyAssetIdA: assetBId, propertyAssetIdB: assetCId, status: 'detected' },
+      ]);
+
+      const service = makeService({
+        propertyAssetRepository: { findById: findByIdSpy } as never,
+        duplicateCandidateRepository: { listForReview: listForReviewSpy } as never,
+      });
+
+      const result = await service.listForAdminReview({ statuses: ['detected'], limit: 20 });
+
+      expect(listForReviewSpy).toHaveBeenCalledWith(['detected'], { cursor: undefined, limit: 20 });
+      expect(findByIdSpy).toHaveBeenCalledTimes(3); // A, B, C — не 4 (B резолвится один раз, не дважды)
+      expect(result).toHaveLength(2);
+      expect(result[0]).toMatchObject({ assetA, assetB });
+      expect(result[1]).toMatchObject({ assetA: assetB, assetB: assetC });
+    });
+
+    it('отсутствующий asset (удалён/несогласован) резолвится в null, не бросает', async () => {
+      const assetAId = new Types.ObjectId();
+      const assetBId = new Types.ObjectId();
+      const service = makeService({
+        propertyAssetRepository: { findById: jest.fn().mockResolvedValue(null) } as never,
+        duplicateCandidateRepository: {
+          listForReview: jest
+            .fn()
+            .mockResolvedValue([{ _id: new Types.ObjectId(), propertyAssetIdA: assetAId, propertyAssetIdB: assetBId, status: 'detected' }]),
+        } as never,
+      });
+
+      const result = await service.listForAdminReview({ statuses: ['detected'], limit: 20 });
+
+      expect(result[0]).toMatchObject({ assetA: null, assetB: null });
+    });
+  });
+
+  describe('confirmDuplicate', () => {
+    it('бросает NotFoundException, если candidate не найден', async () => {
+      const service = makeService({ duplicateCandidateRepository: { findById: jest.fn().mockResolvedValue(null) } as never });
+
+      await expect(
+        service.confirmDuplicate({
+          duplicateCandidateId: new Types.ObjectId(),
+          confirmByAdminAccountId: new Types.ObjectId(),
+          reason: 'Verified same physical unit by phone',
+          correlationId: 'corr',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('бросает ConflictException, если уже confirmed_duplicate (modifiedCount:0), не пишет audit', async () => {
+      const appendSpy = jest.fn();
+      const service = makeService({
+        duplicateCandidateRepository: {
+          findById: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'confirmed_duplicate' }),
+          markConfirmedDuplicate: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        } as never,
+        auditService: { append: appendSpy } as never,
+      });
+
+      await expect(
+        service.confirmDuplicate({
+          duplicateCandidateId: new Types.ObjectId(),
+          confirmByAdminAccountId: new Types.ObjectId(),
+          reason: 'Verified same physical unit by phone',
+          correlationId: 'corr',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(appendSpy).not.toHaveBeenCalled();
+    });
+
+    it('успешный confirm пишет audit с actor:admin_account, action и reason', async () => {
+      const appendSpy = jest.fn().mockResolvedValue(undefined);
+      const duplicateCandidateId = new Types.ObjectId();
+      const confirmByAdminAccountId = new Types.ObjectId();
+      const markSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const service = makeService({
+        duplicateCandidateRepository: {
+          findById: jest.fn().mockResolvedValue({ _id: duplicateCandidateId, status: 'detected' }),
+          markConfirmedDuplicate: markSpy,
+        } as never,
+        auditService: { append: appendSpy } as never,
+      });
+
+      await service.confirmDuplicate({
+        duplicateCandidateId,
+        confirmByAdminAccountId,
+        reason: 'Verified same physical unit by phone',
+        correlationId: 'corr',
+      });
+
+      expect(markSpy).toHaveBeenCalledWith(
+        duplicateCandidateId,
+        { reason: 'Verified same physical unit by phone', confirmByAdminAccountId },
+        expect.anything(),
+      );
+      expect(appendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actor: { type: 'admin_account', id: confirmByAdminAccountId },
+          action: 'duplicate_candidate.confirm',
+          resourceId: duplicateCandidateId,
+          reason: 'Verified same physical unit by phone',
+        }),
+        expect.anything(),
+      );
+    });
+  });
 });

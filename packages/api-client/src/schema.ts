@@ -597,6 +597,40 @@ export interface paths {
         patch: operations["updateDealChecklist"];
         trace?: never;
     };
+    "/admin/duplicate-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin review queue для DEDUPE-001 (master plan разд.2.3: "Автор может заявить, что это не дубль; такое исключение логируется и попадает в административную проверку"). duplicate_candidate.read — global scope (пара может involve organizations из разных городов, city-scoping здесь структурно не подходит, в отличие от publications). Отсутствие гранта — ошибка (403), НЕ пустой список (в отличие от adminListPublications, где отсутствие read-scope даёт пустой результат) — здесь единственный grant либо есть, либо нет, нет частичного scope, который стоило бы молча сужать до пустоты. */
+        get: operations["adminListDuplicateCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/duplicate-candidates/{duplicateCandidateId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin critical action: подтверждает, что пара — реальный дубль. Единственный actor, кто может confirm ИЗ override_not_duplicate (отменяет решение владельца "не дубль"), не только ИЗ detected. reason обязателен (permission-matrix.md разд.4). */
+        post: operations["adminConfirmDuplicateCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -1236,6 +1270,47 @@ export interface components {
             status?: "publication_pending" | "published" | "unpublished" | "build_failed";
             slug?: string | null;
             unpublishReason?: string | null;
+        };
+        /** @description null, если PropertyAsset больше не существует (удалён/несогласован) */
+        AdminDuplicateCandidateAsset: {
+            id?: string;
+            /** @enum {string} */
+            propertyType?: "apartment" | "house" | "land" | "commercial";
+            location?: {
+                city?: string;
+                address?: string;
+            };
+            characteristics?: {
+                area?: number;
+                rooms?: number | null;
+                floor?: number | null;
+            };
+            representativePhone?: string;
+            publisherScope?: {
+                /** @enum {string} */
+                type?: "organization" | "marketplace_account";
+                organizationId?: string | null;
+            };
+        } | null;
+        AdminDuplicateCandidate: {
+            id?: string;
+            /** @enum {string} */
+            status?: "detected" | "confirmed_duplicate" | "override_not_duplicate";
+            signals?: {
+                phoneMatch?: boolean;
+                addressMatch?: boolean;
+                roomsAreaFloorMatch?: boolean;
+            };
+            /** Format: date-time */
+            detectedAt?: string;
+            overrideReason?: string | null;
+            /** Format: date-time */
+            overrideAt?: string | null;
+            confirmReason?: string | null;
+            /** Format: date-time */
+            confirmedAt?: string | null;
+            assetA?: components["schemas"]["AdminDuplicateCandidateAsset"];
+            assetB?: components["schemas"]["AdminDuplicateCandidateAsset"];
         };
         PublicDevelopmentList: {
             items: components["schemas"]["PublicDevelopmentCard"][];
@@ -3015,6 +3090,79 @@ export interface operations {
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    adminListDuplicateCandidates: {
+        parameters: {
+            query?: {
+                /** @description Без значения — очередь на проверку (detected + override_not_duplicate) */
+                status?: "detected" | "override_not_duplicate" | "confirmed_duplicate";
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список кандидатов с денормализованной парой PropertyAsset для визуального сравнения */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["AdminDuplicateCandidate"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminConfirmDuplicateCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                duplicateCandidateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Кандидат переведён в confirmed_duplicate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "confirmed_duplicate";
+                    };
+                };
+            };
+            /** @description ADMIN_REASON_REQUIRED — reason короче 10 символов */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.confirm */
+            403: components["responses"]["Error"];
+            /** @description Duplicate candidate не найден */
+            404: components["responses"]["Error"];
+            /** @description Уже confirmed_duplicate */
             409: components["responses"]["Error"];
         };
     };

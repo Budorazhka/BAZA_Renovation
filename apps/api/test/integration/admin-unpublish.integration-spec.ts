@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -36,8 +37,20 @@ describe('AdminPublicationService.unpublish — integration (real MongoDB transa
     await replSet.waitUntilRunning();
     const uri = replSet.getUri();
 
+    // ConfigModule (ДОБАВЛЕНО): AdminModule теперь импортирует
+    // PropertyAssetsModule (admin duplicate-candidates review queue), которое
+    // транзитивно тянет MediaModule → MediaStorageService, а тот требует
+    // ConfigService в конструкторе (реальный S3Client) — тот же паттерн
+    // фикса, что уже применён в developments-transactions.integration-spec.ts.
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
     const moduleRef = await Test.createTestingModule({
-      imports: [MongooseModule.forRoot(uri), AdminModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(uri), AdminModule],
     }).compile();
 
     connection = moduleRef.get<Connection>(getConnectionToken());
@@ -231,8 +244,20 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
     await replSet.waitUntilRunning();
     const uri = replSet.getUri();
 
+    // ConfigModule (ДОБАВЛЕНО): AdminModule теперь импортирует
+    // PropertyAssetsModule (admin duplicate-candidates review queue), которое
+    // транзитивно тянет MediaModule → MediaStorageService, а тот требует
+    // ConfigService в конструкторе (реальный S3Client) — тот же паттерн
+    // фикса, что уже применён в developments-transactions.integration-spec.ts.
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
     const moduleRef = await Test.createTestingModule({
-      imports: [MongooseModule.forRoot(uri), AdminModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(uri), AdminModule],
     }).compile();
 
     connection = moduleRef.get<Connection>(getConnectionToken());

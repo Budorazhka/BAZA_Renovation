@@ -6,10 +6,19 @@ import {
   DuplicateCandidateRepository,
   computeDuplicateSignals,
   isExplicitDuplicateSignal,
+  type DuplicateCandidateDocument,
+  type DuplicateCandidateStatus,
+  type PropertyAssetDocument,
 } from '@baza/property-assets';
 import { ownerScopesEqual, type OwnerScope } from '@baza/tenant-scope';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
+
+export interface DuplicateCandidateReviewItem {
+  candidate: DuplicateCandidateDocument;
+  assetA: PropertyAssetDocument | null;
+  assetB: PropertyAssetDocument | null;
+}
 
 /**
  * DEDUPE-001 (domain-model.md Модуль 6, master plan разд.2.3: "Явный дубль
@@ -142,6 +151,97 @@ export class DedupeService {
         {
           actor: { type: 'identity', id: params.actorIdentityId },
           action: 'duplicate_candidate.override',
+          resource: 'duplicate_candidate',
+          resourceId: params.duplicateCandidateId,
+          reason: params.reason,
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+    });
+  }
+
+  /**
+   * Admin-очередь (mongodb-schema.md: "{status:1} обслуживает admin-очередь
+   * detected/override_not_duplicate для ручной проверки") — AdminModule не
+   * читает DuplicateCandidateRepository/PropertyAssetRepository напрямую
+   * (test/architecture/module-boundaries.test.ts запрещает cross-module
+   * repository reach-through, тот же принцип, что AdminPublicationService
+   * идёт через PublicationService, не через MarketplacePublicationRepository
+   * напрямую) — этот метод и confirmDuplicate ниже единственная точка входа
+   * для admin-стороны, PropertyAssetsModule уже экспортирует DedupeService.
+   *
+   * Batch-резолвинг asset-пар: N параллельных findById (MVP-масштаб, тот
+   * же принцип, что TeamService.listForOrganization avatar-резолвинг) —
+   * очередь на модерацию по построению небольшая (только детектированные/
+   * оспоренные пары), не полный listing catalog.
+   */
+  async listForAdminReview(params: {
+    statuses: DuplicateCandidateStatus[];
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<DuplicateCandidateReviewItem[]> {
+    const candidates = await this.duplicateCandidateRepository.listForReview(params.statuses, {
+      cursor: params.cursor,
+      limit: params.limit,
+    });
+
+    const assetIds = new Set<string>();
+    for (const candidate of candidates) {
+      assetIds.add(candidate.propertyAssetIdA.toString());
+      assetIds.add(candidate.propertyAssetIdB.toString());
+    }
+    const assetEntries = await Promise.all(
+      Array.from(assetIds, async (idHex) => {
+        const asset = await this.propertyAssetRepository.findById(new Types.ObjectId(idHex));
+        return [idHex, asset] as const;
+      }),
+    );
+    const assetsById = new Map(assetEntries);
+
+    return candidates.map((candidate) => ({
+      candidate,
+      assetA: assetsById.get(candidate.propertyAssetIdA.toString()) ?? null,
+      assetB: assetsById.get(candidate.propertyAssetIdB.toString()) ?? null,
+    }));
+  }
+
+  /**
+   * Admin critical action — единственный actor, кто может подтвердить дубль
+   * ИЗ override_not_duplicate (не только detected), то есть отменить
+   * решение владельца "не дубль" (DuplicateCandidateRepository.
+   * markConfirmedDuplicate докстринг). reason обязателен на уровне DTO
+   * (class-validator), не дублируется здесь отдельной рантайм-проверкой —
+   * этот сервис не HTTP-специфичен и не знает про AdminPolicyService.
+   * requireReason (тот вызывается в AdminModule до этого метода, тот же
+   * порядок, что AdminPublicationService.unpublish → requireReason →
+   * requireGrant → command).
+   */
+  async confirmDuplicate(params: {
+    duplicateCandidateId: Types.ObjectId;
+    confirmByAdminAccountId: Types.ObjectId;
+    reason: string;
+    correlationId: string;
+  }): Promise<void> {
+    await runInTransaction(this.connection, async (session) => {
+      const candidate = await this.duplicateCandidateRepository.findById(params.duplicateCandidateId);
+      if (!candidate) {
+        throw new NotFoundException('Duplicate candidate not found');
+      }
+
+      const { modifiedCount } = await this.duplicateCandidateRepository.markConfirmedDuplicate(
+        params.duplicateCandidateId,
+        { reason: params.reason, confirmByAdminAccountId: params.confirmByAdminAccountId },
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new ConflictException('Duplicate candidate is already confirmed_duplicate');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: params.confirmByAdminAccountId },
+          action: 'duplicate_candidate.confirm',
           resource: 'duplicate_candidate',
           resourceId: params.duplicateCandidateId,
           reason: params.reason,

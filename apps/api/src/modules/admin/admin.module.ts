@@ -11,8 +11,11 @@ import { AdminAccountController } from './admin-account.controller';
 import { AdminMeController } from './admin-me.controller';
 import { AdminAuditService } from './admin-audit.service';
 import { AdminAuditController } from './admin-audit.controller';
+import { AdminDuplicateCandidateService } from './admin-duplicate-candidate.service';
+import { AdminDuplicateCandidateController } from './admin-duplicate-candidate.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
+import { PropertyAssetsModule } from '../property-assets/property-assets.module';
 import { AuditModule } from '../audit/audit.module';
 import { IdentityModule } from '../identity/identity.module';
 
@@ -40,11 +43,25 @@ import { IdentityModule } from '../identity/identity.module';
     // независимых инстанса с одинаковым поведением поверх той же коллекции.
     AuthorizationModule,
     PublicationModule,
+    PropertyAssetsModule,
     AuditModule,
     IdentityModule,
   ],
-  controllers: [AdminPublicationController, AdminAccountController, AdminMeController, AdminAuditController],
-  providers: [AdminAccountRepository, AdminPolicyService, AdminAccountService, AdminPublicationService, AdminAuditService],
+  controllers: [
+    AdminPublicationController,
+    AdminAccountController,
+    AdminMeController,
+    AdminAuditController,
+    AdminDuplicateCandidateController,
+  ],
+  providers: [
+    AdminAccountRepository,
+    AdminPolicyService,
+    AdminAccountService,
+    AdminPublicationService,
+    AdminAuditService,
+    AdminDuplicateCandidateService,
+  ],
   exports: [AdminAccountRepository],
 })
 export class AdminModule {}
