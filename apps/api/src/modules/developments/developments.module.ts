@@ -12,6 +12,7 @@ import { FloorRepository } from './repository/floor.repository';
 import { FloorPlanRepository } from './repository/floor-plan.repository';
 import { UnitRepository } from './repository/unit.repository';
 import { DevelopmentsService } from './developments.service';
+import { ChessboardWorkbookService } from './chessboard-workbook.service';
 import { DevelopmentsController } from './developments.controller';
 import { AuditModule } from '../audit/audit.module';
 import { OutboxModule } from '../outbox/outbox.module';
@@ -49,6 +50,7 @@ import { OrganizationsModule } from '../organizations/organizations.module';
     FloorPlanRepository,
     UnitRepository,
     DevelopmentsService,
+    ChessboardWorkbookService,
   ],
   exports: [DevelopmentsService],
 })

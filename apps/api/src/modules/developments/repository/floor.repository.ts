@@ -43,4 +43,19 @@ export class FloorRepository {
   ): Promise<FloorDocument[]> {
     return this.model.find({ buildingId, organizationId }).sort({ floorNumber: 1 }).exec();
   }
+
+  /**
+   * chessboard.export: юнит хранит floorId, а в выгрузке нужен floorNumber —
+   * этажи всех корпусов ЖК читаются одним запросом, чтобы не делать N+1 по
+   * каждому юниту.
+   */
+  async listForBuildings(
+    buildingIds: Types.ObjectId[],
+    organizationId: Types.ObjectId,
+  ): Promise<FloorDocument[]> {
+    if (buildingIds.length === 0) {
+      return [];
+    }
+    return this.model.find({ buildingId: { $in: buildingIds }, organizationId }).exec();
+  }
 }

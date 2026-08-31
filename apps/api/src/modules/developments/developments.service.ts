@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
-import type { MoneyAmount } from '@baza/contracts';
+import type { Currency, MoneyAmount } from '@baza/contracts';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -23,6 +23,16 @@ import type { SectionDocument } from './schemas/section.schema';
 import type { FloorDocument } from './schemas/floor.schema';
 import type { FloorPlanDocument, GeoPolygon2D } from './schemas/floor-plan.schema';
 import type { UnitDocument, UnitKind, UnitStatus } from './schemas/unit.schema';
+import { sortChessboardUnits, type ChessboardUnitInput } from './chessboard-export';
+
+/**
+ * Потолок выгрузки шахматки. 20 000 квартир — заведомо больше любого
+ * реального ЖК (крупнейшие батумские комплексы — единицы тысяч юнитов),
+ * но конечен: без него один HTTP-запрос мог бы прочитать неограниченное
+ * число документов в память процесса. Не пагинация (файл по определению
+ * отдаётся целиком), а предохранитель.
+ */
+const MAX_CHESSBOARD_EXPORT_UNITS = 20_000;
 
 /**
  * Явная матрица допустимых переходов статуса Unit (source → allowed targets)
@@ -763,6 +773,83 @@ export class DevelopmentsService {
       throw new NotFoundException('Building not found');
     }
     return this.unitRepository.listForBuilding(buildingId, organizationId, filter);
+  }
+
+  /**
+   * chessboard.export: собирает строки шахматки по ВСЕМУ ЖК (все корпуса
+   * сразу — владелец подтвердил 31.08.2026: один файл на ЖК, корпус
+   * отдельной колонкой). Только kind:'apartment' — паркинги/кладовые/
+   * коммерция в шахматочную выгрузку не попадают (владелец, 31.08.2026),
+   * иначе любой подсчёт по файлу (средняя цена м², остатки) смешивает
+   * несопоставимые типы.
+   *
+   * Валюта: MoneyAmount хранится ПО-ЮНИТНО, а в формате выгрузки символ
+   * валюты стоит в ЗАГОЛОВКЕ колонки (наследие оригинала, где валюта —
+   * свойство проекта целиком). Если в одном ЖК встретились разные валюты,
+   * единый заголовок неизбежно соврал бы про часть строк — поэтому это
+   * явная ошибка 400, а не молчаливая выгрузка с неверной подписью.
+   *
+   * Потолок MAX_CHESSBOARD_EXPORT_UNITS проверяется ДО чтения самих
+   * юнитов (countDocuments, не длина уже прочитанного массива) — иначе
+   * защита от неограниченного чтения срабатывала бы уже после того, как
+   * весь массив оказался в памяти процесса.
+   */
+  async buildChessboardExport(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<{ developmentName: string; currency: Currency; units: ChessboardUnitInput[] }> {
+    const development = await this.developmentRepository.findByIdForOrganization(developmentId, organizationId);
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    const buildings = await this.buildingRepository.listForDevelopment(developmentId, organizationId);
+    const buildingIds = buildings.map((building) => building._id);
+
+    const unitCount = await this.unitRepository.countForBuildings(buildingIds, organizationId, {
+      kind: 'apartment',
+    });
+    if (unitCount > MAX_CHESSBOARD_EXPORT_UNITS) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `Chessboard export is limited to ${MAX_CHESSBOARD_EXPORT_UNITS} units, this development has ${unitCount}`,
+        { unitCount, limit: MAX_CHESSBOARD_EXPORT_UNITS },
+      );
+    }
+
+    const [units, floors] = await Promise.all([
+      this.unitRepository.listForBuildings(buildingIds, organizationId, { kind: 'apartment' }),
+      this.floorRepository.listForBuildings(buildingIds, organizationId),
+    ]);
+
+    const currencies = new Set(units.map((unit) => unit.price.currency));
+    if (currencies.size > 1) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'Chessboard export requires a single currency across the development',
+        { currencies: [...currencies] },
+      );
+    }
+
+    const buildingNameById = new Map(buildings.map((building) => [building._id.toString(), building.name]));
+    const floorNumberById = new Map(floors.map((floor) => [floor._id.toString(), floor.floorNumber]));
+
+    const rows: ChessboardUnitInput[] = units.map((unit) => ({
+      buildingName: buildingNameById.get(unit.buildingId.toString()) ?? '',
+      floorNumber: floorNumberById.get(unit.floorId.toString()) ?? 0,
+      number: unit.number,
+      rooms: unit.rooms,
+      area: unit.area,
+      priceMinorUnits: unit.price.amountMinorUnits,
+      status: unit.status,
+      promotion: unit.promotion,
+    }));
+
+    return {
+      developmentName: development.name,
+      currency: [...currencies][0] ?? 'USD',
+      units: sortChessboardUnits(rows),
+    };
   }
 
   /**

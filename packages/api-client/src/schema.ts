@@ -148,6 +148,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/developments/{developmentId}/chessboard/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Выгрузка шахматки ЖК в XLSX (chessboard.export). ЕДИНСТВЕННЫЙ эндпоинт API, отдающий не JSON, а бинарное тело файла. Формат воспроизводит выгрузку bz26-client-erp (владелец, 31.08.2026): лист «Шахматка», 15 колонок, русские подписи статусов, без стилей и итоговых строк. Пять колонок цен по кондициям и «Базовая цена за м²» всегда пустые — таких полей в доменной модели BAZA нет, колонки сохранены ради совместимости формы файла. Выгружаются ВСЕ корпуса ЖК одним файлом (корпус — первая колонка) и ТОЛЬКО kind=apartment. Строки отсортированы корпус → этаж → номер. */
+        get: operations["exportChessboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/developments/{developmentId}/buildings": {
         parameters: {
             query?: never;
@@ -2169,6 +2186,36 @@ export interface operations {
                     "application/json": components["schemas"]["Development"];
                 };
             };
+            404: components["responses"]["Error"];
+        };
+    };
+    exportChessboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XLSX-файл шахматки (Content-Disposition attachment, имя файла в filename* RFC 5987) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description VALIDATION_FAILED — в ЖК смешаны разные валюты (единый заголовок колонок соврал бы про часть строк) ИЛИ число квартир превышает потолок выгрузки */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет chessboard.export */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код) */
             404: components["responses"]["Error"];
         };
     };

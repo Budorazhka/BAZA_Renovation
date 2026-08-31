@@ -34,6 +34,7 @@
     "argon2": "^0.41.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "exceljs": "^4.4.0",
     "fastify": "^4.28.1",
     "file-type": "^22.0.2",
     "ioredis": "^5.4.1",

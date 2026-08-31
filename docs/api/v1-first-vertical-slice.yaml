@@ -206,6 +206,46 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /developments/{developmentId}/chessboard/export:
+    get:
+      operationId: exportChessboard
+      summary: >
+        Выгрузка шахматки ЖК в XLSX (chessboard.export). ЕДИНСТВЕННЫЙ
+        эндпоинт API, отдающий не JSON, а бинарное тело файла.
+        Формат воспроизводит выгрузку bz26-client-erp (владелец, 31.08.2026):
+        лист «Шахматка», 15 колонок, русские подписи статусов, без стилей и
+        итоговых строк. Пять колонок цен по кондициям и «Базовая цена за м²»
+        всегда пустые — таких полей в доменной модели BAZA нет, колонки
+        сохранены ради совместимости формы файла.
+        Выгружаются ВСЕ корпуса ЖК одним файлом (корпус — первая колонка) и
+        ТОЛЬКО kind=apartment. Строки отсортированы корпус → этаж → номер.
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      responses:
+        '200':
+          description: XLSX-файл шахматки (Content-Disposition attachment, имя файла в filename* RFC 5987)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: >
+            VALIDATION_FAILED — в ЖК смешаны разные валюты (единый заголовок
+            колонок соврал бы про часть строк) ИЛИ число квартир превышает
+            потолок выгрузки
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет chessboard.export
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+
   /developments/{developmentId}/buildings:
     post:
       operationId: createBuilding
