@@ -11,6 +11,8 @@ import { TenantContextMiddleware } from '../../src/shared/tenant/tenant-context.
 import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.middleware';
 import { AdminPublicationService } from '../../src/modules/admin/admin-publication.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 import { DevelopmentRepository } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
@@ -62,7 +64,10 @@ describe('Publish → outbox → worker → published projection → public read
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);

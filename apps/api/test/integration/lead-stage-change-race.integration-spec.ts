@@ -11,6 +11,8 @@ import { TenantContextMiddleware } from '../../src/shared/tenant/tenant-context.
 import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.middleware';
 import { ContactRepository } from '../../src/modules/crm/repository/contact.repository';
 import { LeadRepository } from '../../src/modules/crm/repository/lead.repository';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * Точный баг-репорт (найден при реализации, не гипотетически):
@@ -51,7 +53,10 @@ describe('PATCH /leads/:id/stage — гонка параллельных зап�
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);

@@ -14,6 +14,8 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplace-account/marketplace-account-context.middleware';
 import { MediaStorageService } from '@baza/media-storage';
 import { MediaMimeVerifierService } from '../../src/modules/media/media-mime-verifier.service';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 describe('Property Asset Media Vertical (real HTTP)', () => {
   let replSet: MongoMemoryReplSet;
@@ -31,6 +33,8 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
       .overrideProvider(MediaStorageService)
       .useValue({
         createUploadUrl: jest.fn().mockResolvedValue('https://minio.test/upload-presigned'),

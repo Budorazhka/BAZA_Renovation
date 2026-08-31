@@ -14,7 +14,7 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository } from '@baza/development';
-import RedisMock from 'ioredis-mock';
+import { createRedisMockService } from './support/redis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
 import { RedisService } from '../../src/shared/redis/redis.service';
 
@@ -26,7 +26,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
   let propertyAssetRepository: PropertyAssetRepository;
   let publicationRepository: MarketplacePublicationRepository;
   let publicationHandler: PublicationRequestedHandler;
-  let redisMockClient: InstanceType<typeof RedisMock>;
+  let redisMockService: ReturnType<typeof createRedisMockService>;
 
   beforeAll(async () => {
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
@@ -45,10 +45,10 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     // ioredis-mock (полноценная эмуляция протокола, включая Lua eval) — тот
     // же принцип подмены инфраструктуры под тестами, что MongoMemoryReplSet
     // делает для MongoDB, адаптированный под то, что реально доступно для Redis.
-    redisMockClient = new RedisMock();
+    redisMockService = createRedisMockService();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(RedisService)
-      .useValue({ client: redisMockClient, onModuleDestroy: async () => {} })
+      .useValue(redisMockService)
       .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
@@ -112,7 +112,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     // исчерпавший лимит для своего IP/slug, "протекает" в следующий тест
     // (ioredis-mock не имеет реального TTL-истечения синхронно с ходом
     // тестов, счётчики живут до explicit flush).
-    await redisMockClient.flushall();
+    await redisMockService.client.flushall();
   });
 
   async function ownerCookie(prefix: string) {
@@ -216,7 +216,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
       payload: {
         requesterName: 'Иван Покупатель',
         requesterPhone: '+995555112233',
-        utm: { source: 'google', campaign: 'promo' },
+        utm: { utm_source: 'google', utm_campaign: 'promo' },
       },
     });
 
@@ -244,7 +244,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     expect(lead!.source.route).toBe(`/listings/${listingData.slug}`);
     expect(lead!.source.publicationId.toString()).toBe(listingData.publicationId.toString());
     expect(lead!.source.referrer).toBe('https://baza.sale/catalogue');
-    expect(lead!.source.utm).toEqual({ source: 'google', campaign: 'promo' });
+    expect(lead!.source.utm).toEqual({ utm_source: 'google', utm_campaign: 'promo' });
 
     // Verify LeadEvent
     const leadEvent = await connection.collection('lead_events').findOne({ leadId: lead!._id });
