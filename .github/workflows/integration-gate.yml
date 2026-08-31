@@ -51,13 +51,14 @@ jobs:
           free -h || true
           ls -la ~/.cache/mongodb-binaries 2>/dev/null || echo "mongod binary not downloaded yet"
 
-      # --output-logs=stream / --log-order=stream: по умолчанию turbo
-      # буферизует вывод задачи и печатает его только после завершения.
-      # Именно поэтому оба прошлых падения выглядели как «19 минут тишины,
-      # затем отмена» — понять, висит сборка или тесты, было невозможно.
-      # Со стримом видно прогресс jest по файлам.
+      # --log-order=stream: по умолчанию turbo группирует вывод задачи и
+      # печатает его только после завершения. Именно поэтому оба прошлых
+      # падения выглядели как «19 минут тишины, затем отмена» — понять,
+      # висит сборка или тесты, было невозможно. Со стримом виден прогресс
+      # jest по файлам. (--output-logs принимает full/none/hash-only/
+      # new-only/errors-only, значения stream у него нет.)
       - name: Run HTTP and module integration tests
-        run: pnpm exec turbo run test:integration --output-logs=stream --log-order=stream
+        run: pnpm exec turbo run test:integration --output-logs=full --log-order=stream
 
       - name: Check git formatting and whitespace
         run: git diff --check
