@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "jest --config jest.config.js",
     "test:integration": "jest --config jest.integration.config.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "actuality:expire-overdue": "ts-node src/jobs/actuality-expire.command.ts"
   },
   "dependencies": {
     "@baza/config": "workspace:*",
