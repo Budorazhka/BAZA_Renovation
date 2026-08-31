@@ -25,6 +25,7 @@ import { createRedisMockService } from './support/redis-mock';
 // mongodb-memory-server инфраструктуру в двух местах. OutboxPollerService
 // сам не тестируется здесь (свой unit-тест в apps/worker).
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 describe('MKT-002: Listing publication + public secondary/rent data-layer (real HTTP + real MongoDB)', () => {
   let replSet: MongoMemoryReplSet;
@@ -79,6 +80,8 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
       moduleRef.get(DevelopmentRepository),
       listingRepository,
       propertyAssetRepository,
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

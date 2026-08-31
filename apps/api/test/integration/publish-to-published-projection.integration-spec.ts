@@ -28,6 +28,7 @@ import { MarketplacePublicationRepository } from '@baza/publication';
 // здесь эмулируется ровно то, что поллер бы сделал: найти pending
 // outbox-событие и передать его handler'у.
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 /**
  * D-03: главный critical-path integration-тест — доказывает ПОЛНУЮ цепочку
@@ -105,6 +106,8 @@ describe('Publish → outbox → worker → published projection → public read
       developmentRepository,
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

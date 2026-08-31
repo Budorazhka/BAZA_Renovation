@@ -9,6 +9,7 @@ import { AdminPublicationService } from '../../src/modules/admin/admin-publicati
 import { AdminAccountService } from '../../src/modules/admin/admin-account.service';
 import { AuthService } from '../../src/modules/identity/auth.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
+import { withSession } from './support/with-session';
 
 /**
  * Integration-тест против РЕАЛЬНОГО MongoDB single-node replica set
@@ -103,11 +104,11 @@ describe('AdminPublicationService.unpublish — integration (real MongoDB transa
   });
 
   async function seedPublishedPublication(sourceId: Types.ObjectId, organizationId: Types.ObjectId) {
-    await publicationRepository.upsertPending({
+    await withSession(connection, (session) => publicationRepository.upsertPending({
       sourceType: 'development',
       sourceId,
       publisherScope: { type: 'organization', organizationId },
-    });
+    }, session));
     await connection
       .collection('marketplace_publications')
       .updateOne({ sourceType: 'development', sourceId }, { $set: { status: 'published', slug: 'test-slug' } });
@@ -311,7 +312,7 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
   async function seedPublication(params: { sourceType: 'development' | 'unit' | 'listing'; city: string; status: 'published' | 'unpublished' | 'build_failed' | 'publication_pending' }) {
     const sourceId = new Types.ObjectId();
     const organizationId = new Types.ObjectId();
-    await publicationRepository.upsertPending({ sourceType: params.sourceType, sourceId, publisherScope: { type: 'organization', organizationId } });
+    await withSession(connection, (session) => publicationRepository.upsertPending({ sourceType: params.sourceType, sourceId, publisherScope: { type: 'organization', organizationId } }, session));
     await connection.collection('marketplace_publications').updateOne(
       { sourceType: params.sourceType, sourceId },
       { $set: { status: params.status, slug: `slug-${sourceId.toString()}`, searchProjection: { city: params.city } } },

@@ -17,6 +17,7 @@ import { ListingRepository, PropertyAssetRepository } from '@baza/property-asset
 import { createRedisMockService } from './support/redis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
 import { RedisService } from '../../src/shared/redis/redis.service';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 /**
  * Mirrors listing-reveal-lead.integration-spec.ts for the DEVELOPMENT side
@@ -83,6 +84,8 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
       developmentRepository,
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

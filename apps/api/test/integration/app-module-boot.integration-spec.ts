@@ -49,6 +49,10 @@ describe('AppModule — DI graph boots without error', () => {
     await replSet.stop();
   });
 
+  // Таймаут стоит на it, а не на describe: describe третьим аргументом
+  // таймаут НЕ принимает — он там молча игнорировался, и тест шёл с
+  // дефолтными 120_000 из jest.integration.config.js. Поймано, когда
+  // каталог test завели под tsc (TS2554: Expected 2 arguments, but got 3).
   it('компилирует весь AppModule (все модули/providers/guards резолвятся)', async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     // main.api.ts использует FastifyAdapter, не Express (ADR-001/master
@@ -58,5 +62,5 @@ describe('AppModule — DI graph boots without error', () => {
     const app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.init();
     await app.close();
-  });
-}, 60_000);
+  }, 60_000);
+});

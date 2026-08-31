@@ -20,6 +20,7 @@ import type { AdminContext } from '../../src/shared/admin/admin-context';
 import { RedisService } from '../../src/shared/redis/redis.service';
 import { createRedisMockService } from './support/redis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 const MARKETPLACE_ORIGIN = 'https://marketplace.test.local';
 
@@ -83,6 +84,8 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       moduleRef.get(DevelopmentRepository),
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

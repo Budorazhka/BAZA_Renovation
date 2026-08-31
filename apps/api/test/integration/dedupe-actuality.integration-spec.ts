@@ -22,6 +22,7 @@ import { createRedisMockService } from './support/redis-mock';
 import { DevelopmentRepository } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (real HTTP + real MongoDB)', () => {
   let replSet: MongoMemoryReplSet;
@@ -68,6 +69,8 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       moduleRef.get(DevelopmentRepository),
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

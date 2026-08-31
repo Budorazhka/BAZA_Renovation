@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import fastifyCookie from '@fastify/cookie';
 import { Workbook } from 'exceljs';
@@ -48,21 +49,21 @@ describe('chessboard.export — HTTP Integration (AppModule)', () => {
     const adminContextMiddleware = app.get(AdminContextMiddleware);
     const marketplaceAccountContextMiddleware = app.get(MarketplaceAccountContextMiddleware);
     const isHealthCheckPath = (url: string): boolean => url === '/health' || url === '/health/ready';
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await correlationIdMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await correlationIdMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await tenantContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await tenantContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await adminContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await adminContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await marketplaceAccountContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await marketplaceAccountContextMiddleware.use(req, reply, () => {});
     });
     app.useGlobalFilters(new AppExceptionFilter());
     const { ValidationPipe } = await import('@nestjs/common');
@@ -199,7 +200,10 @@ describe('chessboard.export — HTTP Integration (AppModule)', () => {
 
   async function readWorkbook(body: Buffer): Promise<Workbook> {
     const workbook = new Workbook();
-    await workbook.xlsx.load(body);
+    // exceljs типизирует load() своим Buffer из @types/node старого поколения,
+    // куда Buffer<ArrayBufferLike> из актуальных типов не присваивается.
+    // Расхождение чисто номинальное — на вход идут те же байты ответа.
+    await workbook.xlsx.load(body as unknown as Parameters<typeof workbook.xlsx.load>[0]);
     return workbook;
   }
 
