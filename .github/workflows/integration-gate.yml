@@ -19,7 +19,12 @@ jobs:
   integration:
     name: HTTP and module integration gate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 40, а не 20: за всю историю этот гейт не завершился НИ РАЗУ — оба
+    # прогона (31.08.2026 на codex/integration и 01.09.2026 на этой ветке)
+    # были убиты ровно на 20-й минуте, не оставив ни строки вывода тестов.
+    # Пока не измерена настоящая длительность сьюта на раннере, лимит
+    # держится выше неё; вернуть к жёсткому значению после замера.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
@@ -40,8 +45,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Report runner capacity
+        run: |
+          echo "CPU: $(nproc)"
+          free -h || true
+          ls -la ~/.cache/mongodb-binaries 2>/dev/null || echo "mongod binary not downloaded yet"
+
+      # --output-logs=stream / --log-order=stream: по умолчанию turbo
+      # буферизует вывод задачи и печатает его только после завершения.
+      # Именно поэтому оба прошлых падения выглядели как «19 минут тишины,
+      # затем отмена» — понять, висит сборка или тесты, было невозможно.
+      # Со стримом видно прогресс jest по файлам.
       - name: Run HTTP and module integration tests
-        run: pnpm test:integration
+        run: pnpm exec turbo run test:integration --output-logs=stream --log-order=stream
 
       - name: Check git formatting and whitespace
         run: git diff --check
