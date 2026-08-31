@@ -381,6 +381,80 @@ paths:
           description: Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key
           $ref: '#/components/responses/Error'
 
+  /bookings/{bookingId}/confirm:
+    post:
+      operationId: confirmBooking
+      summary: >
+        Подтвердить бронь (BOOK-001 follow-up) — booking.confirm.own, единственное
+        действие из триптиха confirm/cancel/extend, доступное manager'у для
+        СВОЕЙ брони (cancel/extend требуют organization grant). pending → booked.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200':
+          description: Бронь переведена в статус booked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация/не own (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Booking не в pending (уже booked/rejected/expired/paid) или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
+  /bookings/{bookingId}/extend:
+    post:
+      operationId: extendBooking
+      summary: >
+        Продлить бронь (BOOK-001 follow-up) — booking.extend.organization
+        (не .own, как cancel). Только вперёд: newExpiresAt строго позже
+        текущего expiresAt. Проверяется на пересечение с другими активными
+        бронями того же unit (исключая саму себя).
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newExpiresAt]
+              properties:
+                newExpiresAt: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Бронь продлена, dateRange.expiresAt обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key или newExpiresAt не позже текущего expiresAt
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
   /public/developments:
     get:
       operationId: searchPublicDevelopments

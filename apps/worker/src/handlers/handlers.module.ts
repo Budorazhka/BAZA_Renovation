@@ -22,6 +22,8 @@ import { PositionOccupantAssignedHandler } from './position-occupant-assigned.ha
 import { PublicationRequestedHandler } from './publication-requested.handler';
 import { BookingCreatedHandler } from './booking-created.handler';
 import { BookingCancelledHandler } from './booking-cancelled.handler';
+import { BookingConfirmedHandler } from './booking-confirmed.handler';
+import { BookingExtendedHandler } from './booking-extended.handler';
 import { ImageVariantService } from './image-variant.service';
 
 /**
@@ -53,6 +55,8 @@ import { ImageVariantService } from './image-variant.service';
     PublicationRequestedHandler,
     BookingCreatedHandler,
     BookingCancelledHandler,
+    BookingConfirmedHandler,
+    BookingExtendedHandler,
   ],
 })
 export class HandlersModule implements OnModuleInit {
@@ -63,6 +67,8 @@ export class HandlersModule implements OnModuleInit {
     private readonly publicationRequestedHandler: PublicationRequestedHandler,
     private readonly bookingCreatedHandler: BookingCreatedHandler,
     private readonly bookingCancelledHandler: BookingCancelledHandler,
+    private readonly bookingConfirmedHandler: BookingConfirmedHandler,
+    private readonly bookingExtendedHandler: BookingExtendedHandler,
   ) {}
 
   onModuleInit(): void {
@@ -71,5 +77,7 @@ export class HandlersModule implements OnModuleInit {
     this.registry.register('PublicationRequested', this.publicationRequestedHandler);
     this.registry.register('BookingCreated', this.bookingCreatedHandler);
     this.registry.register('BookingCancelled', this.bookingCancelledHandler);
+    this.registry.register('BookingConfirmed', this.bookingConfirmedHandler);
+    this.registry.register('BookingExtended', this.bookingExtendedHandler);
   }
 }

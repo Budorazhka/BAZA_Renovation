@@ -8,9 +8,11 @@ import { TenantGuard } from '../../shared/tenant/tenant.guard';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { PermissionGuard } from '../authorization/permission.guard';
 import { RequirePermission } from '../authorization/require-permission.decorator';
+import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
+import { ExtendBookingDto } from './dto/extend-booking.dto';
 import { BookingsService, toBookingResponse } from './bookings.service';
 
 @Controller()
@@ -19,6 +21,7 @@ export class BookingsController {
   constructor(
     private readonly bookingsService: BookingsService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly policyEvaluator: PolicyEvaluatorService,
   ) {}
 
   @Post('bookings')
@@ -124,5 +127,125 @@ export class BookingsController {
 
     reply.status(200);
     return toBookingResponse(result);
+  }
+
+  /**
+   * BOOK-001 follow-up — booking.confirm.own (см. BookingsService.
+   * confirmBooking докстринг: единственное действие этого триптиха,
+   * доступное manager'у, только для СВОЕЙ брони). ownerFilterForAction —
+   * тот же паттерн, что LeadController/DealController/TaskController: сам
+   * PermissionGuard проверяет только наличие гранта, own-scope сужение до
+   * конкретной Position делает repository-фильтр в сервисе.
+   */
+  @Post('bookings/:bookingId/confirm')
+  @HttpCode(200)
+  @RequirePermission('booking', 'confirm')
+  async confirmBooking(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Param('bookingId', ParseObjectIdPipe) bookingId: Types.ObjectId,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { bookingId: bookingId.toString() };
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'confirmBooking',
+      key: idempotencyKey,
+      requestBody,
+    });
+    if (replay) {
+      reply.status(replay.responseStatus);
+      return replay.responseBody;
+    }
+
+    const result = await this.bookingsService.confirmBooking({
+      bookingId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      actorIdentityId,
+      requiredManagerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'confirm'),
+      idempotencyKey,
+      correlationId: req.correlationId,
+    });
+
+    if ('replay' in result) {
+      reply.status(result.replay.responseStatus);
+      return result.replay.responseBody;
+    }
+
+    reply.status(200);
+    return toBookingResponse(result);
+  }
+
+  /**
+   * BOOK-001 follow-up — booking.extend.organization (не .own, см.
+   * BookingsService.extendBooking докстринг).
+   */
+  @Post('bookings/:bookingId/extend')
+  @HttpCode(200)
+  @RequirePermission('booking', 'extend')
+  async extendBooking(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Param('bookingId', ParseObjectIdPipe) bookingId: Types.ObjectId,
+    @Body() dto: ExtendBookingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { bookingId: bookingId.toString(), newExpiresAt: new Date(dto.newExpiresAt).toISOString() };
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'extendBooking',
+      key: idempotencyKey,
+      requestBody,
+    });
+    if (replay) {
+      reply.status(replay.responseStatus);
+      return replay.responseBody;
+    }
+
+    const result = await this.bookingsService.extendBooking({
+      bookingId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      actorIdentityId,
+      newExpiresAt: new Date(dto.newExpiresAt),
+      idempotencyKey,
+      correlationId: req.correlationId,
+    });
+
+    if ('replay' in result) {
+      reply.status(result.replay.responseStatus);
+      return result.replay.responseBody;
+    }
+
+    reply.status(200);
+    return toBookingResponse(result);
+  }
+
+  /**
+   * Сужает non-organization/non-global scope до конкретной Position — тот
+   * же паттерн, что LeadController.ownerFilterForAction. PermissionGuard
+   * уже подтвердил, что grant с данным action существует; этот метод решает
+   * ТОЛЬКО "весь tenant или только своя позиция", не allow/deny.
+   */
+  private async ownerFilterForAction(positionId: string, action: string): Promise<Types.ObjectId | undefined> {
+    const positionObjectId = new Types.ObjectId(positionId);
+    const scopes = await this.policyEvaluator.matchingScopes({
+      subjectType: 'position',
+      subjectId: positionObjectId,
+      resource: 'booking',
+      action,
+    });
+    return scopes.some((scope) => scope === 'organization' || scope === 'global') ? undefined : positionObjectId;
   }
 }

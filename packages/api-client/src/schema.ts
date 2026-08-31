@@ -253,6 +253,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings/{bookingId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подтвердить бронь (BOOK-001 follow-up) — booking.confirm.own, единственное действие из триптиха confirm/cancel/extend, доступное manager'у для СВОЕЙ брони (cancel/extend требуют organization grant). pending → booked. */
+        post: operations["confirmBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Продлить бронь (BOOK-001 follow-up) — booking.extend.organization (не .own, как cancel). Только вперёд: newExpiresAt строго позже текущего expiresAt. Проверяется на пересечение с другими активными бронями того же unit (исключая саму себя). */
+        post: operations["extendBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/developments": {
         parameters: {
             query?: never;
@@ -2293,6 +2327,79 @@ export interface operations {
             /** @description Booking не существует/чужая организация (non-disclosure) */
             404: components["responses"]["Error"];
             /** @description Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    confirmBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Бронь переведена в статус booked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация/не own (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Booking не в pending (уже booked/rejected/expired/paid) или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    extendBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    newExpiresAt: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Бронь продлена, dateRange.expiresAt обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key или newExpiresAt не позже текущего expiresAt */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key */
             409: components["responses"]["Error"];
         };
     };
