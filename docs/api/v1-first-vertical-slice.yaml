@@ -1206,7 +1206,11 @@ paths:
 
     patch:
       operationId: updateDeal
-      summary: Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия)
+      summary: >
+        Частичное обновление сделки с optimistic concurrency (заголовок,
+        описание, комиссия). НЕ меняет ownerPositionId — см.
+        PATCH /deals/{dealId}/reassign (client.reassign, отдельный grant
+        от deal.edit).
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -1240,6 +1244,54 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/reassign:
+    patch:
+      operationId: reassignDeal
+      summary: >
+        Смена ответственного за сделку (ownerPositionId) — отдельный grant
+        client.reassign (owner/director/rop, scope organization),
+        не deal.edit. Тот же принцип, что PATCH /tasks/{taskId}/reassign
+        отделён от task.edit. ownerPositionId у сделки обязательное поле —
+        endpoint не поддерживает "снять ответственного", только замену на
+        другую assignable позицию той же организации. expectedVersion
+        обязателен (conventions.md разд.5).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignDealRequest'
+      responses:
+        '200':
+          description: Сделка переназначена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет client.reassign
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка или новый ownerPositionId (Position) не найдены/вне tenant
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >
+            Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition)
+            ИЛИ VERSION_CONFLICT — expectedVersion устарел
           $ref: '#/components/responses/Error'
 
   /deals/{dealId}/stage:
@@ -3556,14 +3608,21 @@ components:
 
     UpdateDealRequest:
       type: object
+      description: "НЕ содержит ownerPositionId — см. PATCH /deals/{dealId}/reassign."
       required: [expectedVersion]
       properties:
         expectedVersion: {type: integer, minimum: 0}
         title: {type: string, minLength: 1, maxLength: 255}
         description: {type: string, maxLength: 2000, nullable: true}
-        ownerPositionId: {type: string}
         expectedCommission:
           $ref: '#/components/schemas/MoneyAmount'
+
+    ReassignDealRequest:
+      type: object
+      required: [expectedVersion, ownerPositionId]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        ownerPositionId: {type: string, description: "Обязательное поле — у Deal, в отличие от Task, нет 'unassigned' состояния."}
 
     ChangeDealStageRequest:
       type: object

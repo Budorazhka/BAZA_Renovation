@@ -560,8 +560,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия) */
+        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, комиссия). НЕ меняет ownerPositionId — см. PATCH /deals/{dealId}/reassign (client.reassign, отдельный grant от deal.edit). */
         patch: operations["updateDeal"];
+        trace?: never;
+    };
+    "/deals/{dealId}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена ответственного за сделку (ownerPositionId) — отдельный grant client.reassign (owner/director/rop, scope organization), не deal.edit. Тот же принцип, что PATCH /tasks/{taskId}/reassign отделён от task.edit. ownerPositionId у сделки обязательное поле — endpoint не поддерживает "снять ответственного", только замену на другую assignable позицию той же организации. expectedVersion обязателен (conventions.md разд.5). */
+        patch: operations["reassignDeal"];
         trace?: never;
     };
     "/deals/{dealId}/stage": {
@@ -1900,12 +1917,17 @@ export interface components {
                 done?: boolean;
             }[];
         };
+        /** @description НЕ содержит ownerPositionId — см. PATCH /deals/{dealId}/reassign. */
         UpdateDealRequest: {
             expectedVersion: number;
             title?: string;
             description?: string | null;
-            ownerPositionId?: string;
             expectedCommission?: components["schemas"]["MoneyAmount"];
+        };
+        ReassignDealRequest: {
+            expectedVersion: number;
+            /** @description Обязательное поле — у Deal, в отличие от Task, нет 'unassigned' состояния. */
+            ownerPositionId: string;
         };
         ChangeDealStageRequest: {
             stage: components["schemas"]["DealStage"];
@@ -3095,6 +3117,42 @@ export interface operations {
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    reassignDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка переназначена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет client.reassign */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка или новый ownerPositionId (Position) не найдены/вне tenant */
+            404: components["responses"]["Error"];
+            /** @description Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition) ИЛИ VERSION_CONFLICT — expectedVersion устарел */
             409: components["responses"]["Error"];
         };
     };

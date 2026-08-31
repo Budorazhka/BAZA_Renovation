@@ -1,7 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsMongoId, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsInt, IsOptional, IsString, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import { MoneyAmountDto } from './money-amount.dto';
 
+/**
+ * НЕ содержит ownerPositionId — смена владельца сделки ТОЛЬКО через
+ * PATCH /deals/:dealId/reassign (client.reassign — отдельный action от
+ * deal.edit, см. CrmService.updateDeal/reassignDeal докстринги, тот же
+ * принцип, что уже применён к UpdateTaskDto/task.reassign).
+ */
 export class UpdateDealDto {
   @IsInt()
   @Min(0)
@@ -17,10 +23,6 @@ export class UpdateDealDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
-
-  @IsOptional()
-  @IsMongoId()
-  ownerPositionId?: string;
 
   @IsOptional()
   @ValidateNested()
