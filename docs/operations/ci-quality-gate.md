@@ -12,15 +12,20 @@ The **Fast Quality Gate** (`quality-gate.yml`) provides immediate, deterministic
 
 ### Separation of CI Concerns
 
-BAZA maintains two distinct CI gates:
+BAZA maintains three tiered CI gates:
 
 1. **Fast Quality Gate (`quality-gate.yml`)**:
    - Pure workspace verification (TypeScript typecheck, unit tests, production build, OpenAPI contract drift checks, Git whitespace validation).
-   - Zero container or database dependencies (no Docker daemon, no Redis, no MongoDB, no MinIO, no Playwright runtime).
+   - Zero container or database dependencies.
    - Fast feedback loop (~2 minutes) to unblock code reviews immediately.
 
-2. **Runtime Release Gate (`runtime-release-gate.yml`)**:
-   - Heavy integration pipeline deploying Docker Compose (`compose.runtime.yml`), standalone services (API, Worker, Nginx web SPAs), Redis, MinIO, and MongoDB ReplicaSet.
+2. **Integration Gate (`integration-gate.yml`)**:
+   - Full HTTP and cross-module integration tests (`pnpm test:integration`).
+   - Runs against in-memory MongoDB ReplicaSet (`mongodb-memory-server`) with multi-document transactions.
+   - Fast execution (~2 minutes) without Docker or external network dependencies.
+
+3. **Runtime Release Gate (`runtime-release-gate.yml`)**:
+   - Heavy release gate deploying Docker Compose (`compose.runtime.yml`), standalone services (API, Worker, Nginx web SPAs), Redis, MinIO, and MongoDB ReplicaSet.
    - Executes the full 45-minute Playwright end-to-end browser test suite (`apps/e2e-runtime`).
 
 ---
