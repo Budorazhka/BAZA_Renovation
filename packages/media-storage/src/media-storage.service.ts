@@ -1,8 +1,30 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { MediaBucket } from './schemas/media-asset.schema';
+
+/**
+ * Отдельный тип ошибки (не generic Error) — media.service.ts::confirmUpload
+ * должен уметь отличить "объект больше лимита" (ожидаемый плохой ввод,
+ * трактуется как обычный reject) от инфраструктурного сбоя S3/MinIO
+ * (должен остаться 500, не тихо превращаться в "rejected").
+ */
+export class MediaObjectTooLargeError extends Error {
+  constructor(
+    public readonly actualSizeBytes: number,
+    public readonly maxSizeBytes: number,
+  ) {
+    super(`Object size ${actualSizeBytes} exceeds limit ${maxSizeBytes}`);
+    this.name = 'MediaObjectTooLargeError';
+  }
+}
 
 const PRESIGNED_UPLOAD_TTL_SECONDS = 300;
 const PRESIGNED_DOWNLOAD_TTL_SECONDS = 300;
@@ -46,16 +68,26 @@ export class MediaStorageService {
   /**
    * Короткоживущая presigned URL на ПРЯМУЮ загрузку клиента в storage
    * (ADR-008: файл не проходит через API-процесс целиком).
+   *
+   * `contentLength` подписывается вместе с остальными параметрами команды
+   * (SigV4) — S3/MinIO требует, чтобы клиентский PUT прислал ТОЧНО такой же
+   * `Content-Length`, иначе подпись не совпадает и запрос отклоняется ДО
+   * приёма байт. Без этого presigned URL был ограничен только тем, что
+   * заявил клиент в `sizeBytes` на уровне API — ничто на стороне storage не
+   * мешало залить произвольно большой файл по той же ссылке (security
+   * review: unbounded upload).
    */
   async createUploadUrl(params: {
     bucket: MediaBucket;
     key: string;
     contentType: string;
+    contentLength: number;
   }): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucketNames[params.bucket],
       Key: params.key,
       ContentType: params.contentType,
+      ContentLength: params.contentLength,
     });
     return getSignedUrl(this.client, command, { expiresIn: PRESIGNED_UPLOAD_TTL_SECONDS });
   }
@@ -95,8 +127,31 @@ export class MediaStorageService {
    * (следующий шаг того же confirm-flow) всё равно требует полного файла,
    * два отдельных частичных чтения были бы менее эффективны, чем одно
    * полное для MVP-объёмов (лимиты в media.constants.ts).
+   *
+   * `maxSizeBytes` — опциональная defense-in-depth проверка ДО чтения тела
+   * в память: `createUploadUrl` уже подписывает `Content-Length`, но это
+   * не гарантия для любого S3-совместимого backend'а (не все реализации
+   * строго проверяют подписанный заголовок) — HEAD здесь дешёвый (только
+   * метаданные), и вызывающий код (MediaService.confirmUpload) не должен
+   * буферизовать в памяти объект, который уже сейчас, по метаданным,
+   * превышает лимит. Без maxSizeBytes (worker-путь derivative-generation)
+   * поведение не меняется — та ветка читает уже прошедший этот же confirm
+   * оригинал.
    */
-  async readObject(params: { bucket: MediaBucket; key: string }): Promise<Buffer> {
+  async readObject(params: {
+    bucket: MediaBucket;
+    key: string;
+    maxSizeBytes?: number;
+  }): Promise<Buffer> {
+    if (params.maxSizeBytes !== undefined) {
+      const head = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucketNames[params.bucket], Key: params.key }),
+      );
+      if (typeof head.ContentLength === 'number' && head.ContentLength > params.maxSizeBytes) {
+        throw new MediaObjectTooLargeError(head.ContentLength, params.maxSizeBytes);
+      }
+    }
+
     const command = new GetObjectCommand({
       Bucket: this.bucketNames[params.bucket],
       Key: params.key,

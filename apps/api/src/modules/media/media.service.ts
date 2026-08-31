@@ -4,7 +4,13 @@ import { Connection, Types } from 'mongoose';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
-import { MediaAssetRepository, MediaStorageService, type MediaBucket, type MediaVariant } from '@baza/media-storage';
+import {
+  MediaAssetRepository,
+  MediaObjectTooLargeError,
+  MediaStorageService,
+  type MediaBucket,
+  type MediaVariant,
+} from '@baza/media-storage';
 import { ownerScopesEqual, type OwnerScope } from '@baza/tenant-scope';
 import { MediaMimeVerifierService } from './media-mime-verifier.service';
 import { MAX_UPLOAD_SIZE_BYTES } from './media.constants';
@@ -76,6 +82,7 @@ export class MediaService {
       bucket: params.bucket,
       key: originalPath,
       contentType: params.declaredMimeType,
+      contentLength: params.sizeBytes,
     });
 
     await this.mediaAssetRepository.create({
@@ -111,7 +118,48 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
-    const buffer = await this.storage.readObject({ bucket: asset.bucket, key: asset.originalPath });
+    // maxSizeBytes: HEAD-проверка реального размера объекта в storage ДО
+    // чтения тела в память — presigned URL уже подписывает Content-Length
+    // (MediaStorageService.createUploadUrl), но это defense-in-depth на
+    // случай backend'а, который не проверяет подписанный заголовок строго
+    // (security review: unbounded upload). Превышение лимита — тот же
+    // путь, что провал MIME-верификации: asset помечается rejected, не
+    // 500 — оверсайз-файл такой же ожидаемый "плохой ввод", как и
+    // неверный magic-byte.
+    let buffer: Buffer;
+    try {
+      buffer = await this.storage.readObject({
+        bucket: asset.bucket,
+        key: asset.originalPath,
+        maxSizeBytes: MAX_UPLOAD_SIZE_BYTES,
+      });
+    } catch (error) {
+      if (!(error instanceof MediaObjectTooLargeError)) {
+        throw error;
+      }
+      return runInTransaction(this.connection, async (session) => {
+        const { modifiedCount } = await this.mediaAssetRepository.markRejected(
+          asset._id,
+          'File exceeds size limit',
+          session,
+        );
+        if (modifiedCount === 0) {
+          return { status: 'rejected' as const };
+        }
+        await this.auditService.append(
+          {
+            actor: { type: 'identity', id: params.actorIdentityId },
+            action: 'media.reject',
+            resource: 'media_asset',
+            resourceId: asset._id,
+            reason: 'File exceeds size limit',
+            correlationId: params.correlationId,
+          },
+          session,
+        );
+        return { status: 'rejected' as const };
+      });
+    }
     const verifyResult = await this.mimeVerifier.verify(buffer);
 
     // Magic-byte verify подтверждает, что реальный MIME входит в allowlist,

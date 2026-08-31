@@ -22,6 +22,7 @@ import { AuditModule } from '../audit/audit.module';
 import { OutboxModule } from '../outbox/outbox.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { MediaModule } from '../media/media.module';
+import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { MediaModule } from '../media/media.module';
     OutboxModule,
     AuthorizationModule,
     MediaModule,
+    RateLimitModule,
   ],
   controllers: [OrganizationsController, OrganizationOnboardingController, TeamController, InvitationController],
   providers: [
