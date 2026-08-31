@@ -20,7 +20,31 @@ import { parseTrustProxy } from './shared/network/parse-trust-proxy';
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: parseTrustProxy(process.env.TRUST_PROXY) }),
+    new FastifyAdapter({
+      trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+      // skipMiddie — security review 31.08.2026. FastifyAdapter.init()
+      // регистрирует @fastify/middie БЕЗУСЛОВНО (не лениво), просто чтобы
+      // Nest умел Express-style middleware. На @fastify/middie висит целая
+      // серия адвизори класса "middleware bypass", включая critical
+      // (обход аутентифицирующего middleware подделкой пути), а фикс есть
+      // только в 9.3.2+, то есть в ветке под Fastify 5 — на Fastify 4
+      // обновиться нельзя в принципе.
+      //
+      // Этому приложению middie не нужен вообще: через него не
+      // зарегистрировано НИ ОДНОГО middleware. consumer.apply() не
+      // используется сознательно (см. app.module.ts: NestMiddleware на
+      // FastifyAdapter получает не тот объект запроса, что видят guards —
+      // nestjs/nest#8837), app.use() не вызывается нигде, а correlation-id/
+      // tenant/admin/marketplace-контексты подключены нативными
+      // onRequest-хуками ниже. Убирая middie из пайплайна, мы убираем и
+      // весь этот класс адвизори из поверхности атаки, не трогая фреймворк.
+      //
+      // Цена решения: если кто-то позже добавит Nest-middleware, приложение
+      // упадёт на старте, а не тихо потеряет middleware. Это желаемое
+      // поведение — молча неработающий middleware на этом адаптере уже
+      // однажды стоил реального бага (тот же #8837).
+      skipMiddie: true,
+    }),
   );
 
   await app.register(fastifyCookie);
