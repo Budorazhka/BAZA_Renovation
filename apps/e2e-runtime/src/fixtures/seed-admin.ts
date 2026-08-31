@@ -167,7 +167,7 @@ export async function seedAdminAccount(
 
 const isMain = process.argv[1]?.endsWith('seed-admin.ts') || process.argv[1]?.endsWith('seed-admin.js');
 if (isMain) {
-  const mongoUri = process.env.RUNTIME_MONGO_URI || 'mongodb://localhost:27017/baza?replicaSet=rs0';
+  const mongoUri = process.env.RUNTIME_MONGO_URI || 'mongodb://localhost:27017/baza?replicaSet=rs0&directConnection=true';
   const login = process.argv[2] || `manual-seed-${Date.now()}@e2e.baza.test`;
   const password = process.argv[3] || 'Manual-Seed-Password-1!';
   const isSuperAdmin = process.argv[4] !== 'scoped';

@@ -12,8 +12,11 @@ import { marketplaceApiClient } from '../fixtures/api-clients';
  * checking its status, not just observing a client-side route change.
  */
 test.describe('logout', () => {
-  test('logout clears the baza_session cookie and revokes the session server-side', async ({ context, request }) => {
-    const marketplace = marketplaceApiClient(request);
+  test('logout clears the baza_session cookie and revokes the session server-side', async ({ context, page }) => {
+    // page.request shares the browser context's cookie jar. The standalone
+    // request fixture is intentionally independent, so using it here would
+    // make a real login cookie invisible to context.cookies().
+    const marketplace = marketplaceApiClient(page.request);
     const login = uniqueLogin('logout');
 
     const registerResult = await marketplace.register(login, STRONG_TEST_PASSWORD);
@@ -52,16 +55,14 @@ test.describe('logout', () => {
     expect(sessionAfter.body.authenticated).toBe(false);
 
     // A previously-authenticated-only action must now really fail against
-    // the real protected endpoint (marketplace/property-assets requires
-    // MarketplaceAccountGuard, which always throws ErrorCode.FORBIDDEN ->
-    // 403 for "no active marketplace account context" — unlike AdminGuard,
-    // it does not differentiate a missing cookie from an invalid one; see
-    // apps/api/src/shared/marketplace-account/marketplace-account.guard.ts)
-    // — checking the real HTTP status, not a UI redirect.
-    const protectedResponse = await request.get(apiUrl('/marketplace/property-assets'), {
+    // the real protected endpoint. With no cookie at all,
+    // MarketplaceAccountGuard follows the same explicit no-session contract
+    // as AdminGuard and returns 401 AUTH_NO_SESSION (an invalid cookie still
+    // returns 403). Check the real HTTP status, not a UI redirect.
+    const protectedResponse = await page.request.get(apiUrl('/marketplace/property-assets'), {
       headers: { Origin: env.marketplaceOrigin },
     });
-    expect(protectedResponse.status()).toBe(403);
+    expect(protectedResponse.status()).toBe(401);
   });
 
   test('logout is idempotent: calling it twice, or with no session at all, still returns 200', async ({ request }) => {

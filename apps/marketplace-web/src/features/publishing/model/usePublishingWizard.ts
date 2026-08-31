@@ -359,8 +359,12 @@ export function usePublishingWizard(isAuthenticated: boolean) {
 
     try {
       // Confirm actuality first if needed
-      if (state.actualityState && state.actualityState.status !== 'confirmed') {
-        await publishingApi.confirmActuality(state.assetId, state.listingId, state.actualityState.version)
+      const actuality = state.actualityState
+      const actualityNeedsConfirmation =
+        actuality &&
+        (actuality.status === 'expired' || actuality.status === 'needs_confirmation' || actuality.state === 'needs_update')
+      if (actualityNeedsConfirmation && actuality) {
+        await publishingApi.confirmActuality(state.assetId, state.listingId, actuality.version)
       }
 
       const existingKey = idempotencyKeyRef.current

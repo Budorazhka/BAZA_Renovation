@@ -2,6 +2,20 @@ import { Types } from 'mongoose';
 import { LeadRepository } from './lead.repository';
 
 describe('LeadRepository', () => {
+  describe('distinctContactIdsForOwner', () => {
+    it('фильтр включает organizationId И ownerPositionId, distinct по contactId', async () => {
+      const organizationId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const distinctSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ distinct: distinctSpy } as never);
+
+      await repository.distinctContactIdsForOwner(organizationId, ownerPositionId);
+
+      expect(distinctSpy).toHaveBeenCalledWith('contactId', { organizationId, ownerPositionId });
+    });
+  });
+
   describe('assignOwner', () => {
     it('фильтр включает organizationId, не только _id — tenant-escape защита', async () => {
       const id = new Types.ObjectId();
@@ -61,6 +75,74 @@ describe('LeadRepository', () => {
         { $set: { stage: 'qualified' }, $inc: { version: 1 } },
         { session: fakeSession },
       );
+    });
+  });
+
+  describe('listForOrganization', () => {
+    it('без cursor — match без _id, сортировка по _id desc, lookup openTasks', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.listForOrganization(organizationId, { limit: 21 });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { organizationId } },
+          { $sort: { _id: -1 } },
+          { $limit: 21 },
+          expect.objectContaining({ $lookup: expect.anything() }),
+        ]),
+      );
+    });
+
+    it('с cursor — match включает _id: {$lt: cursor}', async () => {
+      const organizationId = new Types.ObjectId();
+      const cursor = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.listForOrganization(organizationId, { cursor, limit: 21 });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { organizationId, _id: { $lt: cursor } } },
+          { $sort: { _id: -1 } },
+        ]),
+      );
+    });
+
+    it('фильтр stalled:true добавляет match { stalled: true } после вычисления', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.listForOrganization(organizationId, { stalled: true, limit: 21 });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { stalled: true } },
+          { $limit: 21 },
+        ]),
+      );
+    });
+  });
+
+  describe('findLeadIdsForContact', () => {
+    it('returns distinct lead IDs for contact and optional ownerPositionId', async () => {
+      const organizationId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const ownerPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const distinctSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ distinct: distinctSpy } as never);
+
+      await repository.findLeadIdsForContact(organizationId, contactId, ownerPositionId);
+
+      expect(distinctSpy).toHaveBeenCalledWith('_id', { organizationId, contactId, ownerPositionId });
     });
   });
 

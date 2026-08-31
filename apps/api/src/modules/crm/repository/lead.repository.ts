@@ -1,7 +1,19 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model, Types } from 'mongoose';
+import { ClientSession, Model, PipelineStage, Types } from 'mongoose';
 import { LeadDocument, LeadSource, LeadStage } from '../schemas/lead.schema';
+
+export interface LeadWithStalled {
+  _id: Types.ObjectId;
+  organizationId: Types.ObjectId;
+  contactId: Types.ObjectId;
+  ownerPositionId?: Types.ObjectId;
+  stage: LeadStage;
+  version: number;
+  source: LeadSource;
+  createdAt: Date;
+  stalled: boolean;
+}
 
 /**
  * Единственная точка доступа к коллекции leads (ADR-002 требование 2).
@@ -26,15 +38,130 @@ export class LeadRepository {
     return this.model.findOne({ _id: id, organizationId, ...(ownerPositionId ? { ownerPositionId } : {}) }).exec();
   }
 
+  /**
+   * Cursor pagination по `_id` (не `createdAt`) — тот же принцип, что
+   * AuditEventRepository.listForAdmin: ObjectId монотонно возрастает и
+   * уникален, поэтому `_id`-курсор не имеет дублей/пропусков даже когда
+   * несколько лидов созданы в одну и ту же миллисекунду. Newest-first
+   * (`$lt` на курсор), симметрично AuditEventRepository. limit+1 — на одну
+   * запись больше, чем запрошено, вызывающий код (CrmService.listLeads)
+   * решает hasMore/nextCursor по факту лишней записи, не отдельным count().
+   *
+   * CRM-004: вычисляет `stalled` статус лида через $lookup на открытые задачи:
+   * stalled = true для активных стадий (new, contacted, qualified) без открытых задач;
+   * stalled = false для терминальных стадий (converted, lost) или при наличии >= 1 открытой задачи.
+   */
   async listForOrganization(
     organizationId: Types.ObjectId,
-    params: { ownerPositionId?: Types.ObjectId; stage?: LeadStage; limit: number },
-  ): Promise<LeadDocument[]> {
-    return this.model
-      .find({ organizationId, ...(params.ownerPositionId ? { ownerPositionId: params.ownerPositionId } : {}), ...(params.stage ? { stage: params.stage } : {}) })
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(params.limit)
-      .exec();
+    params: {
+      ownerPositionId?: Types.ObjectId;
+      stage?: LeadStage;
+      stalled?: boolean;
+      cursor?: Types.ObjectId;
+      limit: number;
+    },
+  ): Promise<LeadWithStalled[]> {
+    const matchStage: Record<string, unknown> = {
+      organizationId,
+      ...(params.ownerPositionId ? { ownerPositionId: params.ownerPositionId } : {}),
+      ...(params.stage ? { stage: params.stage } : {}),
+    };
+    if (params.cursor) {
+      matchStage._id = { $lt: params.cursor };
+    }
+
+    const openTasksLookup: PipelineStage = {
+      $lookup: {
+        from: 'tasks',
+        let: { leadId: '$_id', orgId: '$organizationId' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$leadId', '$$leadId'] },
+                  { $eq: ['$organizationId', '$$orgId'] },
+                  { $eq: ['$status', 'open'] },
+                ],
+              },
+            },
+          },
+          { $limit: 1 },
+        ],
+        as: 'openTasks',
+      },
+    };
+
+    const addStalledField: PipelineStage = {
+      $addFields: {
+        stalled: {
+          $cond: {
+            if: { $in: ['$stage', ['converted', 'lost']] },
+            then: false,
+            else: { $eq: [{ $size: '$openTasks' }, 0] },
+          },
+        },
+      },
+    };
+
+    const removeOpenTasks: PipelineStage = {
+      $project: { openTasks: 0 },
+    };
+
+    const pipeline: PipelineStage[] = [
+      { $match: matchStage },
+      { $sort: { _id: -1 } },
+    ];
+
+    if (params.stalled === undefined) {
+      pipeline.push(
+        { $limit: params.limit },
+        openTasksLookup,
+        addStalledField,
+        removeOpenTasks,
+      );
+    } else {
+      pipeline.push(
+        openTasksLookup,
+        addStalledField,
+        { $match: { stalled: params.stalled } },
+        { $limit: params.limit },
+        removeOpenTasks,
+      );
+    }
+
+    return this.model.aggregate<LeadWithStalled>(pipeline).exec();
+  }
+
+  async findLeadIdsForContact(
+    organizationId: Types.ObjectId,
+    contactId: Types.ObjectId,
+    ownerPositionId?: Types.ObjectId,
+  ): Promise<Types.ObjectId[]> {
+    const filter: Record<string, unknown> = { organizationId, contactId };
+    if (ownerPositionId) {
+      filter.ownerPositionId = ownerPositionId;
+    }
+    return this.model.distinct('_id', filter).exec();
+  }
+
+  /**
+   * GET /contacts own-scope (contact.read scope:'own', permission-matrix.md):
+   * Contact сам по себе не хранит ownerPositionId — "свой" контакт для
+   * manager'а определён transитивно через Lead (contact связан с лидом,
+   * ownerPositionId которого — эта Position). distinct() возвращает
+   * уникальные contactId без дублей, даже если у Position несколько лидов
+   * на один и тот же Contact (повторный reveal того же телефона — см.
+   * CrmService.resolveContact докстринг). ContactController/CrmService
+   * резолвит это множество ОДИН раз в начале запроса, передаёт как
+   * ContactRepository.listForOrganization({contactIds}) — не постфильтрация
+   * уже прочитанного списка контактов.
+   */
+  async distinctContactIdsForOwner(
+    organizationId: Types.ObjectId,
+    ownerPositionId: Types.ObjectId,
+  ): Promise<Types.ObjectId[]> {
+    return this.model.distinct('contactId', { organizationId, ownerPositionId }).exec();
   }
 
   /**

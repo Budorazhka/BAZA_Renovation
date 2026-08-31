@@ -17,7 +17,7 @@ import { adminApiClient } from '../fixtures/api-clients';
  */
 test.describe('admin panel', () => {
   test('super_admin can log in via the UI and sees /admin/me-derived role', async ({ page, seededSuperAdmin }) => {
-    await page.goto('/login');
+    await page.goto(`${env.adminUrl}/login`);
     await page.getByLabel('Логин').fill(seededSuperAdmin.login);
     await page.getByLabel('Пароль').fill(seededSuperAdmin.password);
 
@@ -41,7 +41,7 @@ test.describe('admin panel', () => {
   }) => {
     const scopedAdmin = await seedScopedAdmin('nav-visibility');
 
-    await page.goto('/login');
+    await page.goto(`${env.adminUrl}/login`);
     await page.getByLabel('Логин').fill(scopedAdmin.login);
     await page.getByLabel('Пароль').fill(scopedAdmin.password);
     await page.getByRole('button', { name: 'Войти' }).click();
@@ -52,7 +52,7 @@ test.describe('admin panel', () => {
 
     // Directly navigating to the super_admin-only route must render the
     // real client-side scope guard's rejection, not the accounts screen.
-    await page.goto('/accounts');
+    await page.goto(`${env.adminUrl}/accounts`);
     await expect(page.getByText('Раздел доступен только super_admin.')).toBeVisible();
   });
 
@@ -99,6 +99,12 @@ test.describe('admin panel', () => {
     // active AdminAccount, so /admin/me must reject even with a fresh cookie.
     const meAfterDeactivate = await admin.me();
     expect(meAfterDeactivate.status).toBe(403);
+
+    // The login attempt above intentionally replaced the request-context
+    // cookie with the deactivated account's session. Restore the acting
+    // super_admin session before exercising the reactivation endpoint.
+    const reauthResult = await admin.login(seededSuperAdmin.login, seededSuperAdmin.password);
+    expect(reauthResult.status).toBe(200);
 
     const reactivateResult = await admin.reactivateAccount(target.adminAccountId, 'E2E reactivate scenario — automated runtime gate test');
     expect(reactivateResult.status).toBe(200);

@@ -36,6 +36,19 @@ origin/портами, реальный MinIO presigned URL, реальный wo
 | `REDIS_PASSWORD` | `dev_redis_password` | Preflight Redis AUTH (тот же дефолт, что `compose.runtime.yml`) |
 | `RUNTIME_MINIO_URL` | `http://localhost:9000` | Preflight `/minio/health/live` проверка |
 
+Для сценария с загрузкой медиа через браузер compose должен получать два
+адреса MinIO, доступных с хоста: `MINIO_ENDPOINT` (presigned upload) и
+`MINIO_PUBLIC_BASE_URL` (URL derivative-файлов, возвращаемый API). Например,
+при занятом стандартном порту:
+
+```powershell
+$env:MINIO_ENDPOINT='http://host.docker.internal:9100'
+$env:MINIO_PUBLIC_BASE_URL='http://localhost:9100/baza-public'
+```
+
+Первый адрес виден из контейнеров и браузера, второй — именно из браузера;
+это разные роли и намеренно не объединяются в одну переменную.
+
 Переменные для самих web/api-процессов (`CORS_ALLOWED_ORIGIN_MARKETPLACE`,
 `CORS_ALLOWED_ORIGIN_ADMIN`, `VITE_API_BASE_URL`, Mongo/Redis/MinIO
 credentials) — см. `.env.runtime.example` и
@@ -103,10 +116,16 @@ admin-web, чтобы не путать два способа запуска о�
 pnpm --filter @baza/e2e-runtime test:e2e
 ```
 
-### CI (документируется на будущее — CI ещё не существует в этом worktree)
+### CI
 
-Ни `.github/workflows` нет ни один — эти команды документируют, что должен
-делать будущий CI-джоб, когда он появится (отдельная задача, не D-07):
+Workflow `.github/workflows/runtime-release-gate.yml` запускает тот же gate на
+чистом `ubuntu-latest`: frozen install, typecheck, unit/integration tests,
+build, Chromium с system dependencies, Compose runtime, preflight и реальный
+Playwright. Он срабатывает на каждый pull request, а также на push в `main` и
+`codex/integration`. При ошибке сохраняются Playwright report/trace/video и
+логи Compose; в любом исходе job останавливает только свой runtime stack.
+
+Ключевые команды workflow:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -116,6 +135,13 @@ pnpm --filter @baza/e2e-runtime exec playwright install --with-deps chromium
 pnpm runtime:e2e
 pnpm runtime:down
 ```
+
+CI намеренно задаёт `MINIO_ENDPOINT=http://host.docker.internal:9000` для
+presigned upload из контейнеров и `MINIO_PUBLIC_BASE_URL=http://localhost:9000/baza-public`
+для браузера. `compose.runtime.yml` добавляет Linux-compatible
+`host-gateway` mapping, поэтому схема одинакова на GitHub runner и Docker
+Desktop. Credentials в workflow — только локальные тестовые значения и не
+являются production secrets.
 
 ## Оркестрация: почему именно так
 
@@ -177,8 +203,8 @@ node apps/e2e-runtime/src/fixtures/seed-admin.ts my-admin@example.com "SomePassw
 - `02-reveal-contact.spec.ts` — реальный reveal-contact на listing
   detail-странице: реальный `{phone, leadId}` из ответа, non-disclosure
   (никаких `organizationId`/`contactId`/`propertyAssetId` в браузерном
-  ответе). Idempotency-Key тест написан, но `test.skip()` — см. "Известные
-  ограничения" ниже.
+  ответе), а также повтор запроса с тем же `Idempotency-Key` без создания
+  второго Lead.
 - `03-publishing-wizard.spec.ts` — полный wizard: register/login →
   property asset → listing → 3-фазная загрузка реального JPEG-фикстура →
   activate → publish с реальным `Idempotency-Key` → поллинг
@@ -186,7 +212,7 @@ node apps/e2e-runtime/src/fixtures/seed-admin.ts my-admin@example.com "SomePassw
   появилось в публичном каталоге.
 - `04-logout.spec.ts` — реальная очистка cookie (`context.cookies()`),
   реальная server-side ревокация (повторный `/auth/session` →
-  `authenticated:false`), реальный 403 на защищённый endpoint после
+  `authenticated:false`), реальный 401 на защищённый endpoint после
   logout, идемпотентность повторного logout, logout через UI wizard'а.
 - `05-admin-panel.spec.ts` — вход super_admin, разница scoped admin vs
   super_admin (скрытая nav-ссылка + реальный 403
@@ -201,37 +227,17 @@ node apps/e2e-runtime/src/fixtures/seed-admin.ts my-admin@example.com "SomePassw
   Mongo seed-скрипт (`fixtures/seed-admin.ts`), задокументированный выше и
   в самом файле. Это НЕ обходит `/auth/login` — только обходит
   отсутствующий HTTP-путь СОЗДАНИЯ первого аккаунта.
-- **Idempotency-Key на reveal-contact не реализован на этой ветке**
-  (`codex/marketplace-integration-gate` @ `6e81007`) — есть на
-  `codex/marketplace-operational-hardening`. Тест написан по полной (тот же
-  паттерн double-submit-same-key, что publish-listing тест), но
-  `test.skip(true, '...')` — сценарий не пропущен молча, не удалён из
-  файла, просто явно помечен как "ещё не применимо к этой ветке".
-  Активировать после мержа `operational-hardening` — снять `test.skip`.
-- **Docker daemon недоступен в среде разработки, где писался этот gate.**
-  Подтверждено явно (`docker version` не подключается к daemon, см. вывод
-  `pnpm runtime:preflight` ниже) — это ожидаемое, задокументированное
-  состояние среды выполнения, не баг гейта. Что БЫЛО реально проверено в
-  этой среде:
-  - `pnpm --filter @baza/e2e-runtime typecheck` — чисто, без ошибок.
-  - `playwright test --list` — успешно перечисляет все 25 тестов в 6
-    файлах (структурная/синтаксическая корректность suite'а).
-  - `node scripts/runtime/preflight.mjs` — корректно и honestly
-    репортит `BLOCKED_INFRASTRUCTURE` с точным списком провалившихся
-    проверок (`docker daemon`, `redis`, `minio`, `api liveness/readiness`,
-    `admin-web`) и remediation-командой на каждую.
-  - `npx playwright test` (реальная попытка прогона) — `globalSetup`
-    корректно бросает исключение с тем же `BLOCKED_INFRASTRUCTURE`
-    сообщением, Playwright репортит это как **hard failure всего прогона**
-    (не skip, не тихий partial-pass), exit code 1.
+- **Проверка зависит от Docker daemon.** Если daemon, base images или
+  обязательные сервисы недоступны, `runtime:preflight` возвращает
+  `BLOCKED_INFRASTRUCTURE`, а `globalSetup` завершает Playwright hard-failure
+  (не skip и не тихий partial-pass). Это проверено отдельным негативным
+  прогоном при разработке gate.
 
-  Что НЕ было проверено и остаётся честным пробелом: **реальный зелёный
-  прогон** всех 25 сценариев против живого Docker-стека. `playwright test
-  --list` подтверждает наличие тестов, но список — не доказательство
-  прохождения (этот самый урок уже зафиксирован в истории D-07 в
-  `BAZA_MASTER_PLAN.md`, повторная ошибка здесь недопустима). Первый
-  реальный прогон должен произойти в среде с работающим Docker daemon,
-  до того как этот gate можно объявить фактически зелёным.
+  После исправления runtime-окружения полный положительный прогон подтверждён
+  локально: `pnpm runtime:preflight` — READY, Playwright — **23 passed, 1
+  skipped** из 25. Единственный ожидаемый skip — detail-тест при пустом
+  каталоге. Поэтому список тестов сам по себе по-прежнему не считается
+  доказательством прохождения — нужен реальный запуск.
 
 - **`mongodb (tcp)`/`marketplace-web (root)` preflight-проверки могут
   ложно-PASS**, если ЛЮБОЙ процесс (не обязательно из

@@ -412,44 +412,51 @@ export class PropertyAssetsService {
       );
     }
 
-    const existingIndex = (asset.media || []).findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
-    let updatedMedia = [...(asset.media || [])];
+    // MKT-004-MEDIA-RACE-001: mutateMedia re-reads the current media[] on
+    // every attempt and retries the CAS on a lost race, so a confirm
+    // racing another confirm/delete/reorder on the same asset can no
+    // longer silently discard one of the two writes.
+    await this.propertyAssetRepository.mutateMedia(asset._id, (currentMedia) => {
+      const existingIndex = currentMedia.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+      let updatedMedia = [...currentMedia];
 
-    if (existingIndex >= 0) {
-      const item = updatedMedia[existingIndex]!;
-      const newRole = dto?.role ?? item.role;
-      if (newRole === 'cover') {
-        updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
+      if (existingIndex >= 0) {
+        const item = updatedMedia[existingIndex]!;
+        const newRole = dto?.role ?? item.role;
+        if (newRole === 'cover') {
+          updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
+        }
+        updatedMedia[existingIndex] = {
+          ...item,
+          role: newRole,
+          sortOrder: dto?.sortOrder !== undefined ? dto.sortOrder : item.sortOrder,
+          alt: dto?.alt !== undefined ? dto.alt : item.alt,
+          isPrivate: dto?.isPrivate !== undefined ? dto.isPrivate : item.isPrivate,
+        };
+      } else {
+        const hasCover = updatedMedia.some((m) => m.role === 'cover' && !m.isPrivate);
+        const isExplicitCover = dto?.role === 'cover';
+        const shouldBeCover = isExplicitCover || (!hasCover && !dto?.isPrivate);
+
+        if (shouldBeCover) {
+          updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
+        }
+
+        const sortOrder = dto?.sortOrder !== undefined ? dto.sortOrder : updatedMedia.length;
+        updatedMedia.push({
+          id: mediaAssetId.toString(),
+          mediaAssetId,
+          role: shouldBeCover ? 'cover' : 'gallery',
+          sortOrder,
+          alt: dto?.alt,
+          isPrivate: dto?.isPrivate ?? false,
+          createdAt: new Date(),
+        });
       }
-      updatedMedia[existingIndex] = {
-        ...item,
-        role: newRole,
-        sortOrder: dto?.sortOrder !== undefined ? dto.sortOrder : item.sortOrder,
-        alt: dto?.alt !== undefined ? dto.alt : item.alt,
-        isPrivate: dto?.isPrivate !== undefined ? dto.isPrivate : item.isPrivate,
-      };
-    } else {
-      const hasCover = updatedMedia.some((m) => m.role === 'cover' && !m.isPrivate);
-      const isExplicitCover = dto?.role === 'cover';
-      const shouldBeCover = isExplicitCover || (!hasCover && !dto?.isPrivate);
 
-      if (shouldBeCover) {
-        updatedMedia = updatedMedia.map((m) => ({ ...m, role: 'gallery' as const }));
-      }
+      return updatedMedia;
+    });
 
-      const sortOrder = dto?.sortOrder !== undefined ? dto.sortOrder : updatedMedia.length;
-      updatedMedia.push({
-        id: mediaAssetId.toString(),
-        mediaAssetId,
-        role: shouldBeCover ? 'cover' : 'gallery',
-        sortOrder,
-        alt: dto?.alt,
-        isPrivate: dto?.isPrivate ?? false,
-        createdAt: new Date(),
-      });
-    }
-
-    await this.propertyAssetRepository.updateMedia(asset._id, updatedMedia);
     return this.listMedia(assetId, organizationId);
   }
 
@@ -492,25 +499,33 @@ export class PropertyAssetsService {
 
   async deleteMedia(assetId: Types.ObjectId, mediaAssetId: Types.ObjectId, organizationId: Types.ObjectId) {
     const asset = await this.getAsset(assetId, organizationId);
-    const mediaItems = asset.media || [];
-    const index = mediaItems.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
-    if (index < 0) {
+    let notFound = false;
+
+    await this.propertyAssetRepository.mutateMedia(asset._id, (currentMedia) => {
+      const index = currentMedia.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+      if (index < 0) {
+        notFound = true;
+        return currentMedia;
+      }
+      notFound = false;
+      const removed = currentMedia[index]!;
+      const updatedMedia = currentMedia.filter((m) => !m.mediaAssetId.equals(mediaAssetId));
+
+      if (removed.role === 'cover' && updatedMedia.length > 0) {
+        const firstNonPrivate = updatedMedia.find((m) => !m.isPrivate);
+        if (firstNonPrivate) {
+          firstNonPrivate.role = 'cover';
+        } else if (updatedMedia[0]) {
+          updatedMedia[0].role = 'cover';
+        }
+      }
+
+      return updatedMedia;
+    });
+
+    if (notFound) {
       throw new NotFoundException('Media item not found on asset');
     }
-
-    const removed = mediaItems[index]!;
-    const updatedMedia = mediaItems.filter((m) => !m.mediaAssetId.equals(mediaAssetId));
-
-    if (removed.role === 'cover' && updatedMedia.length > 0) {
-      const firstNonPrivate = updatedMedia.find((m) => !m.isPrivate);
-      if (firstNonPrivate) {
-        firstNonPrivate.role = 'cover';
-      } else if (updatedMedia[0]) {
-        updatedMedia[0].role = 'cover';
-      }
-    }
-
-    await this.propertyAssetRepository.updateMedia(asset._id, updatedMedia);
     return { success: true };
   }
 
@@ -521,27 +536,37 @@ export class PropertyAssetsService {
     dto: UpdatePropertyAssetMediaDto,
   ) {
     const asset = await this.getAsset(assetId, organizationId);
-    const mediaItems = [...(asset.media || [])];
-    const index = mediaItems.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
-    if (index < 0) {
+    let notFound = false;
+
+    await this.propertyAssetRepository.mutateMedia(asset._id, (currentMedia) => {
+      const mediaItems = [...currentMedia];
+      const index = mediaItems.findIndex((m) => m.mediaAssetId.equals(mediaAssetId));
+      if (index < 0) {
+        notFound = true;
+        return currentMedia;
+      }
+      notFound = false;
+
+      const currentItem = mediaItems[index]!;
+      if (dto.role === 'cover') {
+        for (const m of mediaItems) {
+          m.role = 'gallery';
+        }
+        currentItem.role = 'cover';
+      } else if (dto.role === 'gallery') {
+        currentItem.role = 'gallery';
+      }
+
+      if (dto.sortOrder !== undefined) currentItem.sortOrder = dto.sortOrder;
+      if (dto.alt !== undefined) currentItem.alt = dto.alt;
+      if (dto.isPrivate !== undefined) currentItem.isPrivate = dto.isPrivate;
+
+      return mediaItems;
+    });
+
+    if (notFound) {
       throw new NotFoundException('Media item not found on asset');
     }
-
-    const currentItem = mediaItems[index]!;
-    if (dto.role === 'cover') {
-      for (const m of mediaItems) {
-        m.role = 'gallery';
-      }
-      currentItem.role = 'cover';
-    } else if (dto.role === 'gallery') {
-      currentItem.role = 'gallery';
-    }
-
-    if (dto.sortOrder !== undefined) currentItem.sortOrder = dto.sortOrder;
-    if (dto.alt !== undefined) currentItem.alt = dto.alt;
-    if (dto.isPrivate !== undefined) currentItem.isPrivate = dto.isPrivate;
-
-    await this.propertyAssetRepository.updateMedia(asset._id, mediaItems);
     return this.listMedia(assetId, organizationId);
   }
 
@@ -551,32 +576,36 @@ export class PropertyAssetsService {
     items: Array<{ mediaAssetId: string; sortOrder: number; role?: 'cover' | 'gallery' }>,
   ) {
     const asset = await this.getAsset(assetId, organizationId);
-    const mediaItems = [...(asset.media || [])];
-    const orderMap = new Map(items.map((it) => [it.mediaAssetId, it]));
 
-    let hasExplicitCover = false;
-    for (const m of mediaItems) {
-      const override = orderMap.get(m.mediaAssetId.toString());
-      if (override) {
-        m.sortOrder = override.sortOrder;
-        if (override.role) {
-          m.role = override.role;
-          if (override.role === 'cover') hasExplicitCover = true;
-        }
-      }
-    }
+    await this.propertyAssetRepository.mutateMedia(asset._id, (currentMedia) => {
+      const mediaItems = [...currentMedia];
+      const orderMap = new Map(items.map((it) => [it.mediaAssetId, it]));
 
-    if (hasExplicitCover) {
-      const designatedCovers = items.filter((it) => it.role === 'cover').map((it) => it.mediaAssetId);
+      let hasExplicitCover = false;
       for (const m of mediaItems) {
-        if (!designatedCovers.includes(m.mediaAssetId.toString())) {
-          m.role = 'gallery';
+        const override = orderMap.get(m.mediaAssetId.toString());
+        if (override) {
+          m.sortOrder = override.sortOrder;
+          if (override.role) {
+            m.role = override.role;
+            if (override.role === 'cover') hasExplicitCover = true;
+          }
         }
       }
-    }
 
-    mediaItems.sort((a, b) => a.sortOrder - b.sortOrder);
-    await this.propertyAssetRepository.updateMedia(asset._id, mediaItems);
+      if (hasExplicitCover) {
+        const designatedCovers = items.filter((it) => it.role === 'cover').map((it) => it.mediaAssetId);
+        for (const m of mediaItems) {
+          if (!designatedCovers.includes(m.mediaAssetId.toString())) {
+            m.role = 'gallery';
+          }
+        }
+      }
+
+      mediaItems.sort((a, b) => a.sortOrder - b.sortOrder);
+      return mediaItems;
+    });
+
     return this.listMedia(assetId, organizationId);
   }
 

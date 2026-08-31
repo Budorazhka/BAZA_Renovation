@@ -4,7 +4,10 @@ import type { SessionService } from '../../modules/identity/session.service';
 
 describe('MarketplaceAccountContextMiddleware', () => {
   it('строит контекст из marketplace-audience сессии (identityId, без organizationId/positionId)', async () => {
-    const sessionService = { getActiveSessionFromRequest: jest.fn().mockResolvedValue({ identityId: 'identity-1' }) } as unknown as SessionService;
+    const sessionService = {
+      getActiveSessionFromRequest: jest.fn().mockResolvedValue({ identityId: 'identity-1' }),
+      getRawTokenFromRequest: jest.fn().mockReturnValue('raw-token'),
+    } as unknown as SessionService;
     const middleware = new MarketplaceAccountContextMiddleware(sessionService);
     const req = {} as never;
     const next = jest.fn();
@@ -17,7 +20,10 @@ describe('MarketplaceAccountContextMiddleware', () => {
   });
 
   it('НЕ бросает и НЕ устанавливает контекст, если marketplace-сессии нет — downstream guard отклонит запрос', async () => {
-    const sessionService = { getActiveSessionFromRequest: jest.fn().mockResolvedValue(null) } as unknown as SessionService;
+    const sessionService = {
+      getActiveSessionFromRequest: jest.fn().mockResolvedValue(null),
+      getRawTokenFromRequest: jest.fn().mockReturnValue(undefined),
+    } as unknown as SessionService;
     const middleware = new MarketplaceAccountContextMiddleware(sessionService);
     const req = {} as never;
     const next = jest.fn();
@@ -26,6 +32,20 @@ describe('MarketplaceAccountContextMiddleware', () => {
 
     expect((req as { marketplaceAccountContext?: unknown }).marketplaceAccountContext).toBeUndefined();
     expect(next).toHaveBeenCalled();
+  });
+
+  it('устанавливает hadSessionCookieMarketplace независимо от того, резолвится ли сессия — MarketplaceAccountGuard использует это для 401 vs 403', async () => {
+    const sessionService = {
+      getActiveSessionFromRequest: jest.fn().mockResolvedValue(null),
+      getRawTokenFromRequest: jest.fn().mockReturnValue('garbage-token'),
+    } as unknown as SessionService;
+    const middleware = new MarketplaceAccountContextMiddleware(sessionService);
+    const req = {} as never;
+    const next = jest.fn();
+
+    await middleware.use(req, {} as never, next);
+
+    expect((req as { hadSessionCookieMarketplace?: boolean }).hadSessionCookieMarketplace).toBe(true);
   });
 
   // Реальный найденный класс бага (тот же, что подтверждён D-07 post-fix

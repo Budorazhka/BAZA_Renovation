@@ -88,6 +88,17 @@ describe('MediaStorageService', () => {
     expect(() => new MediaStorageService(incompleteConfig)).toThrow(/Missing config/);
   });
 
+  it('deleteObject отправляет Bucket/Key для приватного bucket', async () => {
+    const sendSpy = jest.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never);
+
+    const service = new MediaStorageService(makeConfigService());
+    await service.deleteObject({ bucket: 'private', key: 'assetId/original.png' });
+
+    const command = sendSpy.mock.calls[0]![0] as { input: { Bucket: string; Key: string } };
+    expect(command.input.Bucket).toBe('baza-private-test');
+    expect(command.input.Key).toBe('assetId/original.png');
+  });
+
   describe('getPublicUrl', () => {
     it('строит URL из MINIO_PUBLIC_BASE_URL + key, не привязываясь к MINIO_ENDPOINT', () => {
       const service = new MediaStorageService(

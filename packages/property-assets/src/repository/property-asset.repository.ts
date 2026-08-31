@@ -103,11 +103,65 @@ export class PropertyAssetRepository {
       .exec();
   }
 
-  async updateMedia(
+  /**
+   * MKT-004-MEDIA-RACE-001: CAS on the document's `version`. Every media[]
+   * write (confirm/delete/update/reorder, both ERP and marketplace-account
+   * paths — both call this one shared method) previously did a plain
+   * read-modify-write on the whole array with no version check, so two
+   * concurrent mutations on the SAME asset (e.g. confirming two different
+   * photos at once, or confirming one while deleting another) could
+   * silently lose one write — whichever `$set` committed last won outright,
+   * discarding the other caller's change with no error to either side.
+   */
+  private async updateMediaIfVersionMatches(
     id: Types.ObjectId,
     media: PropertyAssetDocument['media'],
+    expectedVersion: number,
     session?: ClientSession,
   ) {
-    return this.model.updateOne({ _id: id }, { $set: { media } }, { session }).exec();
+    return this.model
+      .updateOne(
+        { _id: id, version: expectedVersion },
+        { $set: { media }, $inc: { version: 1 } },
+        { session },
+      )
+      .exec();
+  }
+
+  /**
+   * Read-modify-write on `media[]` with automatic retry on a lost CAS race
+   * (see updateMediaIfVersionMatches above). `mutator` receives the CURRENT
+   * media array on each attempt (never a stale copy from a prior attempt)
+   * and returns the array to write; it must be a pure function of that
+   * array so a retry re-applies the same logic against the latest state
+   * rather than reapplying a decision made against data that's since
+   * changed. `id` is assumed already ownership-checked by the caller
+   * before this is invoked — retries re-fetch by `_id` alone (no repeated
+   * tenant/identity filter), since ownership cannot change mid-operation.
+   * Bounded at 5 attempts: a real, persistent conflict (not just one
+   * unlucky race) should surface as an honest error, not retry forever.
+   */
+  async mutateMedia(
+    id: Types.ObjectId,
+    mutator: (currentMedia: PropertyAssetDocument['media']) => PropertyAssetDocument['media'],
+    options: { maxAttempts?: number } = {},
+  ): Promise<PropertyAssetDocument> {
+    const maxAttempts = options.maxAttempts ?? 5;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const current = await this.model.findOne({ _id: id }).exec();
+      if (!current) {
+        throw new Error(`PropertyAsset ${id.toString()} not found during mutateMedia`);
+      }
+      const nextMedia = mutator(current.media || []);
+      const result = await this.updateMediaIfVersionMatches(id, nextMedia, current.version);
+      if (result.modifiedCount > 0) {
+        return (await this.model.findOne({ _id: id }).exec())!;
+      }
+      // Someone else's write committed between our read and our write —
+      // loop back and retry against the now-current state.
+    }
+    throw new Error(
+      `PropertyAsset ${id.toString()} media update lost the optimistic-concurrency race ${maxAttempts} times in a row`,
+    );
   }
 }

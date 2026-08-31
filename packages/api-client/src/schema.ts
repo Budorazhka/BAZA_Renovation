@@ -284,6 +284,282 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список лидов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только лиды, где ownerPositionId совпадает с его собственной Position — сужение применяется на backend до чтения, не постфильтрацией. ownerPositionId в query — дополнительное клиентское сужение поверх уже резолвленного scope, никогда не расширяет его (own-scope с чужим ownerPositionId в query — 400, не 403 и не расширение видимости). */
+        get: operations["listLeads"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Append-only история stage-переходов ОДНОГО лида, newest-first, cursor-paginated. Tenant и owner/own-scope проверяются ДО чтения lead_events (тот же findByIdForOrganization, что GET /leads/{leadId}) — чужой (другая организация, либо не «свой» лид при own-scope) и несуществующий leadId дают ОДИНАКОВЫЙ 404 (non-disclosure). */
+        get: operations["listLeadEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Агрегированный timeline активности лида (переходы стадий, создание/завершение/отмена задач, CRM audit events). Сортировка newest-first с детерминированным тай-брейкером и курсорной пагинацией. Tenant и owner scope проверяются до чтения — чужой лид возвращает 404 (non-disclosure). */
+        get: operations["getLeadTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список контактов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только контакты, связанные хотя бы с одним ЕГО лидом (Contact сам по себе не хранит ownerPositionId — own-scope резолвится транзитивно через Lead ДО чтения contacts, не постфильтрацией уже прочитанной страницы). `q` — единый поиск по name/phone (partial, регистронезависимый), не два отдельных query-параметра. */
+        get: operations["listContacts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Контакт по id. Tenant И own-scope (транзитивно через Lead) проверяются ДО чтения — чужой (другая организация, либо не связан ни с одним "своим" лидом при own-scope) и несуществующий contactId дают ОДИНАКОВЫЙ 404 (non-disclosure). Ответ не содержит session/ password/internal-полей — явная whitelist-проекция на backend. */
+        get: operations["getContact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/contacts/{contactId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Агрегированный timeline активности контакта и связанных с ним лидов и задач текущего tenant'а. Для own-scope проверяется транзитивная принадлежность контакта менеджеру через лиды. */
+        get: operations["getContactTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список задач текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator/developer) видит все задачи tenant'а; own-scope (manager) видит только задачи, назначенные на его собственную Position — сужение применяется на backend до чтения. */
+        get: operations["listTasks"];
+        put?: never;
+        /** Создание новой CRM-задачи с опциональной привязкой к лиду и контакту */
+        post: operations["createTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение задачи по ID. Tenant и own-scope проверяются до чтения — чужая задача возвращает 404 (non-disclosure). */
+        get: operations["getTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Частичное обновление задачи (заголовок, описание, срок, статус) — НИКОГДА исполнителя (assignedPositionId): смена исполнителя только через PATCH /tasks/{taskId}/reassign, отдельный grant task.reassign, тот же принцип, что lead.assign отделён от lead.changeStage. expectedVersion обязателен (conventions.md разд.5 optimistic concurrency, тот же паттерн, что PATCH /leads/{leadId}/stage). */
+        patch: operations["updateTask"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена исполнителя задачи (assignedPositionId) — отдельный grant task.reassign (owner-подтверждено 30.08.2026, не task.edit). own-scope (manager) может переназначить ТОЛЬКО задачу, уже назначенную на себя, и ТОЛЬКО на себя же (либо снять назначение через assignedPositionId:null) — не может передать задачу коллеге. expectedVersion обязателен (conventions.md разд.5). */
+        patch: operations["reassignTask"];
+        trace?: never;
+    };
+    "/tasks/{taskId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Завершение задачи (перевод в статус completed с фиксацией времени и исполнителя). Идемпотентно на уровне "уже completed" — повторный вызов ЛЮБЫМ expectedVersion после успешного завершения просто возвращает текущее состояние (200), не 409/404 — безопасно вызывать повторно. Сам переход open→completed версионирован (conventions.md разд.5): устаревший expectedVersion на ОТКРЫТОЙ задаче — 409, не молчаливый lost update. */
+        post: operations["completeTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список сделок текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/developer) видит все сделки tenant'а; own-scope (manager) видит только сделки, где ownerPositionId === собственная Position. */
+        get: operations["listDeals"];
+        put?: never;
+        /** Создание новой CRM-сделки */
+        post: operations["createDeal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение детальной информации о сделке. Tenant и own-scope проверяются до чтения — чужая сделка возвращает 404 (non-disclosure). */
+        get: operations["getDeal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия) */
+        patch: operations["updateDeal"];
+        trace?: never;
+    };
+    "/deals/{dealId}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена стадии сделки с проверкой матрицы допустимых переходов и optimistic concurrency (expectedVersion). */
+        patch: operations["changeDealStage"];
+        trace?: never;
+    };
+    "/deals/{dealId}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Добавление участника сделки с optimistic concurrency */
+        post: operations["addDealParticipant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}/participants/{contactId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удаление участника из сделки с optimistic concurrency */
+        delete: operations["removeDealParticipant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deals/{dealId}/checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Атомарное обновление чек-листа сделки с optimistic concurrency */
+        patch: operations["updateDealChecklist"];
+        trace?: never;
+    };
     "/admin/publications": {
         parameters: {
             query?: never;
@@ -942,6 +1218,66 @@ export interface components {
             source?: {
                 [key: string]: unknown;
             };
+            stalled?: boolean;
+        };
+        /** @description GET /leads item shape (CrmService.CrmLeadReadModel) — contact встроен как whitelist-проекция {id, name, phone, email?}, никогда весь Contact-документ; ownerPositionId — null, если лид ещё не назначен ни на одну Position. */
+        LeadListItem: {
+            id: string;
+            organizationId: string;
+            ownerPositionId: string | null;
+            /** @enum {string} */
+            stage: "new" | "contacted" | "qualified" | "converted" | "lost";
+            version: number;
+            source: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            createdAt: string;
+            stalled?: boolean;
+            contact: {
+                id?: string;
+                name?: string;
+                phone?: string;
+                email?: string | null;
+            } | null;
+            /** @description CRM-003 мягкое правило (read-only индикатор, НЕ блокирует запись): true, если stage∈{new,contacted,qualified} И у лида есть хотя бы одна открытая (status:open) CRM Task. Для converted/lost — всегда false, правило их не касается. */
+            hasOpenNextAction: boolean;
+        };
+        LeadListResponse: {
+            items: components["schemas"]["LeadListItem"][];
+            nextCursor: string | null;
+        };
+        /** @description Один immutable append-only переход стадии лида (LeadEventDocument). */
+        LeadEvent: {
+            id?: string;
+            leadId?: string;
+            /** @enum {string} */
+            stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+            changedBy?: {
+                /** @enum {string} */
+                type?: "position" | "system";
+                positionId?: string | null;
+            };
+            /** Format: date-time */
+            changedAt?: string;
+        };
+        LeadEventListResponse: {
+            items: components["schemas"]["LeadEvent"][];
+            nextCursor: string | null;
+        };
+        /** @description GET /contacts, GET /contacts/{contactId} item shape (CrmService.CrmContactReadModel) — явная whitelist-проекция (ContactDocument.roles, служебные поля НЕ включены), никогда session/password/internal-поля. */
+        ContactView: {
+            id?: string;
+            organizationId?: string;
+            name?: string;
+            phone?: string;
+            email?: string | null;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        ContactListResponse: {
+            items: components["schemas"]["ContactView"][];
+            nextCursor: string | null;
         };
         PublicListingList: {
             items: components["schemas"]["PublicListingCard"][];
@@ -1250,6 +1586,168 @@ export interface components {
             items: components["schemas"]["AdminAuditEventView"][];
             nextCursor: string | null;
         };
+        TaskView: {
+            id: string;
+            organizationId: string;
+            title: string;
+            description?: string | null;
+            /** @enum {string} */
+            status: "open" | "completed" | "cancelled";
+            /** Format: date-time */
+            dueAt?: string | null;
+            assignedPositionId?: string | null;
+            leadId?: string | null;
+            contactId?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedByPositionId?: string | null;
+            /** @description conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        TaskListResponse: {
+            items: components["schemas"]["TaskView"][];
+            nextCursor: string | null;
+        };
+        CreateTaskRequest: {
+            title: string;
+            description?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            assignedPositionId?: string;
+            leadId?: string;
+            contactId?: string;
+        };
+        /** @description НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign. */
+        UpdateTaskRequest: {
+            expectedVersion: number;
+            title?: string;
+            description?: string | null;
+            /** Format: date-time */
+            dueAt?: string | null;
+            /** @enum {string} */
+            status?: "open" | "cancelled";
+        };
+        ReassignTaskRequest: {
+            expectedVersion: number;
+            /** @description Отсутствие/null — снять назначение (задача становится unassigned). */
+            assignedPositionId?: string | null;
+        };
+        CompleteTaskRequest: {
+            expectedVersion: number;
+        };
+        TimelineEventItem: {
+            id: string;
+            /** @enum {string} */
+            type: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+            /** Format: date-time */
+            happenedAt: string;
+            title: string;
+            summary?: string | null;
+            actor: {
+                /** @enum {string} */
+                type: "position" | "identity" | "system" | "admin_account";
+                id?: string | null;
+            };
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        TimelineResponse: {
+            items: components["schemas"]["TimelineEventItem"][];
+            nextCursor: string | null;
+        };
+        /** @enum {string} */
+        DealStage: "showing" | "deposit" | "deal" | "golden" | "check_in" | "referral" | "closed_lost";
+        CrmContactEmbed: {
+            id: string;
+            name: string;
+            phone: string;
+            email?: string | null;
+        };
+        DealParticipant: {
+            role: string;
+            contactId: string;
+            contact?: components["schemas"]["CrmContactEmbed"];
+        };
+        DealChecklistItem: {
+            id: string;
+            label: string;
+            done: boolean;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedByPositionId?: string | null;
+        };
+        DealView: {
+            id: string;
+            organizationId: string;
+            leadId?: string | null;
+            contactId: string;
+            ownerPositionId: string;
+            title: string;
+            description?: string | null;
+            stage: components["schemas"]["DealStage"];
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+            participants: components["schemas"]["DealParticipant"][];
+            checklistItems: components["schemas"]["DealChecklistItem"][];
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            contact?: components["schemas"]["CrmContactEmbed"];
+        };
+        DealListResponse: {
+            items: components["schemas"]["DealView"][];
+            nextCursor: string | null;
+        };
+        CreateDealRequest: {
+            contactId: string;
+            ownerPositionId?: string;
+            leadId?: string;
+            title: string;
+            description?: string;
+            stage?: components["schemas"]["DealStage"];
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+            participants?: {
+                role: string;
+                contactId: string;
+            }[];
+            checklistItems?: {
+                id?: string;
+                label: string;
+                done?: boolean;
+            }[];
+        };
+        UpdateDealRequest: {
+            expectedVersion: number;
+            title?: string;
+            description?: string | null;
+            ownerPositionId?: string;
+            expectedCommission?: components["schemas"]["MoneyAmount"];
+        };
+        ChangeDealStageRequest: {
+            stage: components["schemas"]["DealStage"];
+            expectedVersion: number;
+            reason?: string;
+        };
+        AddDealParticipantRequest: {
+            expectedVersion: number;
+            contactId: string;
+            role: string;
+        };
+        DealChecklistItemInput: {
+            id?: string;
+            label: string;
+            done: boolean;
+        };
+        UpdateDealChecklistRequest: {
+            expectedVersion: number;
+            items: components["schemas"]["DealChecklistItemInput"][];
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -1272,6 +1770,8 @@ export interface components {
         ListingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
+        /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+        IdempotencyKeyHeaderOptional: string;
     };
     requestBodies: never;
     headers: never;
@@ -1636,7 +2136,10 @@ export interface operations {
     revealContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKeyHeaderOptional"];
+            };
             path: {
                 slug: string;
             };
@@ -1657,6 +2160,8 @@ export interface operations {
                     "application/json": components["schemas"]["RevealContactResponse"];
                 };
             };
+            /** @description IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса */
+            409: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
         };
@@ -1689,6 +2194,690 @@ export interface operations {
             };
             /** @description FORBIDDEN — нет lead.assign.organization */
             403: components["responses"]["Error"];
+        };
+    };
+    listLeads: {
+        parameters: {
+            query?: {
+                stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+                ownerPositionId?: string;
+                /** @description Фильтр по признаку stalled (активный лид без открытых задач) */
+                stalled?: boolean;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лиды текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный stage/ownerPositionId/cursor/limit, либо ownerPositionId вне permission scope вызывающего */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    listLeadEvents: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description История переходов лида, newest-first (может быть пустой) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadEventListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный leadId/cursor/limit */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
+        };
+    };
+    getLeadTimeline: {
+        parameters: {
+            query?: {
+                type?: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+                from?: string;
+                to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Timeline активности лида */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    listContacts: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контакты текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный q/cursor/limit */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    getContact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Контакт */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидный contactId */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев) */
+            404: components["responses"]["Error"];
+        };
+    };
+    getContactTimeline: {
+        parameters: {
+            query?: {
+                type?: "lead_stage_changed" | "lead_assigned" | "task_created" | "task_updated" | "task_completed" | "task_cancelled" | "audit_event";
+                from?: string;
+                to?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Timeline активности контакта */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimelineResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет contact.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — контакт не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    listTasks: {
+        parameters: {
+            query?: {
+                status?: "open" | "completed" | "cancelled";
+                assignedPositionId?: string;
+                leadId?: string;
+                contactId?: string;
+                dueBefore?: string;
+                dueAfter?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задачи текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидные фильтры или assignedPositionId вне scope */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.create */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — указанный leadId или contactId не найден */
+            404: components["responses"]["Error"];
+        };
+    };
+    getTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Задача */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED / Нельзя редактировать завершённую задачу */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
+            409: components["responses"]["Error"];
+        };
+    };
+    reassignTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача переназначена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — assignedPositionId вне permission scope вызывающего */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.reassign */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — задача или новый assignedPositionId (Position) не найдены/вне tenant */
+            404: components["responses"]["Error"];
+            /** @description Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition, тот же путь, что POST /leads/{leadId}/assign) ИЛИ VERSION_CONFLICT — expectedVersion устарел */
+            409: components["responses"]["Error"];
+        };
+    };
+    completeTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompleteTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача завершена (или уже была завершена — идемпотентный повтор) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.complete */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел на ЕЩЁ ОТКРЫТОЙ задаче, обновите и повторите */
+            409: components["responses"]["Error"];
+        };
+    };
+    listDeals: {
+        parameters: {
+            query?: {
+                stage?: components["schemas"]["DealStage"];
+                ownerPositionId?: string;
+                leadId?: string;
+                contactId?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сделки текущего tenant/scope, newest-first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидные фильтры или ownerPositionId вне scope */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION — нет session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.create */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — указанный contactId или leadId не найден в организации */
+            404: components["responses"]["Error"];
+        };
+    };
+    getDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Сделка найдена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка не найдена */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    changeDealStage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeDealStageRequest"];
+            };
+        };
+        responses: {
+            /** @description Стадия сделки изменена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED — недопустимый переход стадии */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.changeStage */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    addDealParticipant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDealParticipantRequest"];
+            };
+        };
+        responses: {
+            /** @description Участник добавлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка или контакт участника не найден */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT или DUPLICATE_DETECTED — сделка изменилась параллельно либо контакт уже является участником */
+            409: components["responses"]["Error"];
+        };
+    };
+    removeDealParticipant: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header?: never;
+            path: {
+                dealId: string;
+                contactId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Участник удалён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — участник или сделка не найдены */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    updateDealChecklist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDealChecklistRequest"];
+            };
+        };
+        responses: {
+            /** @description Чек-лист обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет deal.edit */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
         };
     };
     adminListPublications: {
@@ -2668,7 +3857,10 @@ export interface operations {
     revealListingContact: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKeyHeaderOptional"];
+            };
             path: {
                 slug: string;
             };
@@ -2693,6 +3885,8 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом */
             404: components["responses"]["Error"];
+            /** @description IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса */
+            409: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
         };

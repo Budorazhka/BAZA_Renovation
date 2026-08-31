@@ -14,7 +14,9 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository } from '@baza/development';
+import RedisMock from 'ioredis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { RedisService } from '../../src/shared/redis/redis.service';
 
 describe('Public listing lead reveal flow — Integration (real HTTP + real MongoDB transactions)', () => {
   let replSet: MongoMemoryReplSet;
@@ -24,6 +26,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
   let propertyAssetRepository: PropertyAssetRepository;
   let publicationRepository: MarketplacePublicationRepository;
   let publicationHandler: PublicationRequestedHandler;
+  let redisMockClient: InstanceType<typeof RedisMock>;
 
   beforeAll(async () => {
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
@@ -34,8 +37,19 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    // RedisRateLimitGuard (см. её докстринг) требует реальный atomic eval()
+    // против Redis — не MongoMemoryReplSet-style in-process сервер (не
+    // существует эквивалента для Redis), поэтому DI-override RedisService на
+    // ioredis-mock (полноценная эмуляция протокола, включая Lua eval) — тот
+    // же принцип подмены инфраструктуры под тестами, что MongoMemoryReplSet
+    // делает для MongoDB, адаптированный под то, что реально доступно для Redis.
+    redisMockClient = new RedisMock();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue({ client: redisMockClient, onModuleDestroy: async () => {} })
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();
@@ -89,9 +103,16 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
       'contacts',
       'leads',
       'lead_events',
+      'public_reveal_idempotency_records',
     ]) {
       await connection.collection(collection).deleteMany({});
     }
+    // Rate-limit счётчики (ratelimit:reveal-contact:ip:*/listing:*) должны
+    // сбрасываться между тестами так же, как Mongo-коллекции — иначе тест,
+    // исчерпавший лимит для своего IP/slug, "протекает" в следующий тест
+    // (ioredis-mock не имеет реального TTL-истечения синхронно с ходом
+    // тестов, счётчики живут до explicit flush).
+    await redisMockClient.flushall();
   });
 
   async function ownerCookie(prefix: string) {
@@ -397,5 +418,130 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
       payload: { requesterPhone: '+995555999999' },
     });
     expect(blockedRes.statusCode).toBe(429);
+    // Retry-After должен реально долетать до HTTP-ответа (не только
+    // до внутреннего RateLimitResult) — RedisRateLimitGuard.
+    expect(blockedRes.headers['retry-after']).toBeDefined();
+    expect(Number(blockedRes.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  describe('Idempotency-Key (guest reveal-contact retry/race)', () => {
+    it('тот же Idempotency-Key и тот же payload — второй запрос возвращает тот же ответ, не создаёт второй Lead', async () => {
+      const owner = await ownerCookie('idem-replay-owner');
+      const listingData = await seedPublishedListing(owner);
+      const ip = nextIp();
+      const payload = { requesterName: 'Иван Повтор', requesterPhone: '+995555700001' };
+
+      const first = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        headers: { 'idempotency-key': 'retry-key-1' },
+        payload,
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        headers: { 'idempotency-key': 'retry-key-1' },
+        payload,
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.json()).toEqual(first.json());
+
+      const leadCount = await connection.collection('leads').countDocuments({});
+      expect(leadCount).toBe(1);
+      const auditCount = await connection
+        .collection('audit_events')
+        .countDocuments({ action: 'lead.create_from_reveal' });
+      expect(auditCount).toBe(1);
+    });
+
+    it('тот же Idempotency-Key, другой payload — 409 конфликт, не создаёт второй Lead', async () => {
+      const owner = await ownerCookie('idem-conflict-owner');
+      const listingData = await seedPublishedListing(owner);
+      const ip = nextIp();
+
+      const first = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        headers: { 'idempotency-key': 'conflict-key-1' },
+        payload: { requesterPhone: '+995555700002' },
+      });
+      expect(first.statusCode).toBe(200);
+
+      const conflicting = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        headers: { 'idempotency-key': 'conflict-key-1' },
+        payload: { requesterPhone: '+995555700003' },
+      });
+      expect(conflicting.statusCode).toBe(409);
+
+      const leadCount = await connection.collection('leads').countDocuments({});
+      expect(leadCount).toBe(1);
+    });
+
+    it('параллельные запросы с одним Idempotency-Key и одним payload создают ровно один Lead', async () => {
+      const owner = await ownerCookie('idem-race-owner');
+      const listingData = await seedPublishedListing(owner);
+      const ip = nextIp();
+      const payload = { requesterPhone: '+995555700004' };
+
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          app.inject({
+            method: 'POST',
+            url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+            remoteAddress: ip,
+            headers: { 'idempotency-key': 'race-key-1' },
+            payload,
+          }),
+        ),
+      );
+
+      for (const res of responses) {
+        expect(res.statusCode).toBe(200);
+      }
+      const leadIds = new Set(responses.map((res) => res.json().leadId));
+      expect(leadIds.size).toBe(1);
+
+      const leadCount = await connection.collection('leads').countDocuments({});
+      expect(leadCount).toBe(1);
+      const auditCount = await connection
+        .collection('audit_events')
+        .countDocuments({ action: 'lead.create_from_reveal' });
+      expect(auditCount).toBe(1);
+    });
+
+    it('повтор без Idempotency-Key сохраняет прежнее поведение — каждый запрос создаёт новый Lead', async () => {
+      const owner = await ownerCookie('idem-compat-owner');
+      const listingData = await seedPublishedListing(owner);
+      const ip = nextIp();
+      const payload = { requesterPhone: '+995555700005' };
+
+      const first = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        payload,
+      });
+      expect(first.statusCode).toBe(200);
+
+      const second = await app.inject({
+        method: 'POST',
+        url: `/api/v1/public/listings/${listingData.slug}/reveal-contact`,
+        remoteAddress: ip,
+        payload,
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.json().leadId).not.toBe(first.json().leadId);
+
+      const leadCount = await connection.collection('leads').countDocuments({});
+      expect(leadCount).toBe(2);
+    });
   });
 });

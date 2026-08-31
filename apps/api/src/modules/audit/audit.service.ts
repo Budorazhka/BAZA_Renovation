@@ -93,6 +93,10 @@ export class AuditService {
     return this.auditEventRepository.listForAdmin(params);
   }
 
+  async findByResources(resourceIds: Types.ObjectId[]): Promise<AuditEventDocument[]> {
+    return this.auditEventRepository.findByResourceIds(resourceIds);
+  }
+
   private assertNoSecrets(payload: Record<string, unknown> | undefined, field: 'before' | 'after'): void {
     if (!payload) return;
     const found = findForbiddenKeys(payload);

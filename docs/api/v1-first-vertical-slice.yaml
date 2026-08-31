@@ -366,6 +366,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderOptional'
       requestBody:
         required: true
         content:
@@ -379,6 +380,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RevealContactResponse'
+        '409':
+          description: IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса
+          $ref: '#/components/responses/Error'
         '429':
           description: RATE_LIMITED
           $ref: '#/components/responses/Error'
@@ -411,6 +415,791 @@ paths:
                 $ref: '#/components/schemas/Lead'
         '403':
           description: FORBIDDEN — нет lead.assign.organization
+          $ref: '#/components/responses/Error'
+
+  /leads:
+    get:
+      operationId: listLeads
+      summary: >
+        Список лидов текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/administrator) видит весь
+        tenant; own-scope (manager) видит только лиды, где ownerPositionId
+        совпадает с его собственной Position — сужение применяется на
+        backend до чтения, не постфильтрацией. ownerPositionId в query —
+        дополнительное клиентское сужение поверх уже резолвленного scope,
+        никогда не расширяет его (own-scope с чужим ownerPositionId в query
+        — 400, не 403 и не расширение видимости).
+      tags: [erp-crm]
+      parameters:
+        - name: stage
+          in: query
+          schema: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        - name: ownerPositionId
+          in: query
+          schema: {type: string}
+        - name: stalled
+          in: query
+          schema: {type: boolean}
+          description: Фильтр по признаку stalled (активный лид без открытых задач)
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Лиды текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный stage/ownerPositionId/cursor/limit, либо ownerPositionId вне permission scope вызывающего
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/events:
+    get:
+      operationId: listLeadEvents
+      summary: >
+        Append-only история stage-переходов ОДНОГО лида, newest-first,
+        cursor-paginated. Tenant и owner/own-scope проверяются ДО чтения
+        lead_events (тот же findByIdForOrganization, что GET /leads/{leadId})
+        — чужой (другая организация, либо не «свой» лид при own-scope) и
+        несуществующий leadId дают ОДИНАКОВЫЙ 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: История переходов лида, newest-first (может быть пустой)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadEventListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный leadId/cursor/limit
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/timeline:
+    get:
+      operationId: getLeadTimeline
+      summary: >
+        Агрегированный timeline активности лида (переходы стадий, создание/завершение/отмена задач,
+        CRM audit events). Сортировка newest-first с детерминированным тай-брейкером и курсорной пагинацией.
+        Tenant и owner scope проверяются до чтения — чужой лид возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: type
+          in: query
+          schema: {type: string, enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Timeline активности лида
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+
+  /contacts:
+    get:
+      operationId: listContacts
+      summary: >
+        Список контактов текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/administrator) видит весь
+        tenant; own-scope (manager) видит только контакты, связанные хотя бы
+        с одним ЕГО лидом (Contact сам по себе не хранит ownerPositionId —
+        own-scope резолвится транзитивно через Lead ДО чтения contacts, не
+        постфильтрацией уже прочитанной страницы). `q` — единый поиск по
+        name/phone (partial, регистронезависимый), не два отдельных
+        query-параметра.
+      tags: [erp-crm]
+      parameters:
+        - name: q
+          in: query
+          schema: {type: string, maxLength: 200}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Контакты текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидный q/cursor/limit
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+
+  /contacts/{contactId}:
+    get:
+      operationId: getContact
+      summary: >
+        Контакт по id. Tenant И own-scope (транзитивно через Lead)
+        проверяются ДО чтения — чужой (другая организация, либо не связан
+        ни с одним "своим" лидом при own-scope) и несуществующий contactId
+        дают ОДИНАКОВЫЙ 404 (non-disclosure). Ответ не содержит session/
+        password/internal-полей — явная whitelist-проекция на backend.
+      tags: [erp-crm]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Контакт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactView'
+        '400':
+          description: VALIDATION_FAILED — невалидный contactId
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — контакт не существует или вне permission scope (non-disclosure, тот же код для обоих случаев)
+          $ref: '#/components/responses/Error'
+
+  /contacts/{contactId}/timeline:
+    get:
+      operationId: getContactTimeline
+      summary: >
+        Агрегированный timeline активности контакта и связанных с ним лидов и задач текущего tenant'а.
+        Для own-scope проверяется транзитивная принадлежность контакта менеджеру через лиды.
+      tags: [erp-crm]
+      parameters:
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: type
+          in: query
+          schema: {type: string, enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Timeline активности контакта
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет contact.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — контакт не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+
+  /tasks:
+    get:
+      operationId: listTasks
+      summary: >
+        Список задач текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/administrator/developer)
+        видит все задачи tenant'а; own-scope (manager) видит только задачи,
+        назначенные на его собственную Position — сужение применяется на
+        backend до чтения.
+      tags: [erp-crm]
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [open, completed, cancelled]}
+        - name: assignedPositionId
+          in: query
+          schema: {type: string}
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: contactId
+          in: query
+          schema: {type: string}
+        - name: dueBefore
+          in: query
+          schema: {type: string, format: date-time}
+        - name: dueAfter
+          in: query
+          schema: {type: string, format: date-time}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Задачи текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидные фильтры или assignedPositionId вне scope
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет baza_session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.read
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: createTask
+      summary: Создание новой CRM-задачи с опциональной привязкой к лиду и контакту
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Задача создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — указанный leadId или contactId не найден
+          $ref: '#/components/responses/Error'
+
+  /tasks/{taskId}:
+    get:
+      operationId: getTask
+      summary: >
+        Получение задачи по ID. Tenant и own-scope проверяются до чтения —
+        чужая задача возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Задача
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+    patch:
+      operationId: updateTask
+      summary: >
+        Частичное обновление задачи (заголовок, описание, срок, статус) —
+        НИКОГДА исполнителя (assignedPositionId): смена исполнителя только
+        через PATCH /tasks/{taskId}/reassign, отдельный grant task.reassign,
+        тот же принцип, что lead.assign отделён от lead.changeStage.
+        expectedVersion обязателен (conventions.md разд.5 optimistic
+        concurrency, тот же паттерн, что PATCH /leads/{leadId}/stage).
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTaskRequest'
+      responses:
+        '200':
+          description: Задача обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED / Нельзя редактировать завершённую задачу
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion устарел, обновите и повторите
+          $ref: '#/components/responses/Error'
+
+  /tasks/{taskId}/reassign:
+    patch:
+      operationId: reassignTask
+      summary: >
+        Смена исполнителя задачи (assignedPositionId) — отдельный grant
+        task.reassign (owner-подтверждено 30.08.2026, не task.edit).
+        own-scope (manager) может переназначить ТОЛЬКО задачу, уже
+        назначенную на себя, и ТОЛЬКО на себя же (либо снять назначение
+        через assignedPositionId:null) — не может передать задачу коллеге.
+        expectedVersion обязателен (conventions.md разд.5).
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignTaskRequest'
+      responses:
+        '200':
+          description: Задача переназначена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED — assignedPositionId вне permission scope вызывающего
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.reassign
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — задача или новый assignedPositionId (Position) не найдены/вне tenant
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >
+            Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition,
+            тот же путь, что POST /leads/{leadId}/assign) ИЛИ VERSION_CONFLICT — expectedVersion устарел
+          $ref: '#/components/responses/Error'
+
+  /tasks/{taskId}/complete:
+    post:
+      operationId: completeTask
+      summary: >
+        Завершение задачи (перевод в статус completed с фиксацией времени и
+        исполнителя). Идемпотентно на уровне "уже completed" — повторный
+        вызов ЛЮБЫМ expectedVersion после успешного завершения просто
+        возвращает текущее состояние (200), не 409/404 — безопасно вызывать
+        повторно. Сам переход open→completed версионирован
+        (conventions.md разд.5): устаревший expectedVersion на ОТКРЫТОЙ
+        задаче — 409, не молчаливый lost update.
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteTaskRequest'
+      responses:
+        '200':
+          description: Задача завершена (или уже была завершена — идемпотентный повтор)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.complete
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion устарел на ЕЩЁ ОТКРЫТОЙ задаче, обновите и повторите
+          $ref: '#/components/responses/Error'
+
+  /deals:
+    get:
+      operationId: listDeals
+      summary: >
+        Список сделок текущей организации, newest-first, cursor-paginated.
+        organization-scope (owner/director/rop/developer) видит все сделки tenant'а;
+        own-scope (manager) видит только сделки, где ownerPositionId === собственная Position.
+      tags: [erp-crm]
+      parameters:
+        - name: stage
+          in: query
+          schema:
+            $ref: '#/components/schemas/DealStage'
+        - name: ownerPositionId
+          in: query
+          schema: {type: string}
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: contactId
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Сделки текущего tenant/scope, newest-first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealListResponse'
+        '400':
+          description: VALIDATION_FAILED — невалидные фильтры или ownerPositionId вне scope
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION — нет session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.read
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: createDeal
+      summary: Создание новой CRM-сделки
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDealRequest'
+      responses:
+        '201':
+          description: Сделка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — указанный contactId или leadId не найден в организации
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}:
+    get:
+      operationId: getDeal
+      summary: >
+        Получение детальной информации о сделке.
+        Tenant и own-scope проверяются до чтения — чужая сделка возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Сделка найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка не найдена
+          $ref: '#/components/responses/Error'
+
+    patch:
+      operationId: updateDeal
+      summary: Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия)
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDealRequest'
+      responses:
+        '200':
+          description: Сделка обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/stage:
+    patch:
+      operationId: changeDealStage
+      summary: >
+        Смена стадии сделки с проверкой матрицы допустимых переходов и optimistic concurrency (expectedVersion).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeDealStageRequest'
+      responses:
+        '200':
+          description: Стадия сделки изменена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED — недопустимый переход стадии
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.changeStage
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/participants:
+    post:
+      operationId: addDealParticipant
+      summary: Добавление участника сделки с optimistic concurrency
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddDealParticipantRequest'
+      responses:
+        '200':
+          description: Участник добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка или контакт участника не найден
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT или DUPLICATE_DETECTED — сделка изменилась параллельно либо контакт уже является участником
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/participants/{contactId}:
+    delete:
+      operationId: removeDealParticipant
+      summary: Удаление участника из сделки с optimistic concurrency
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: contactId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: expectedVersion
+          in: query
+          required: true
+          schema: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: Участник удалён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — участник или сделка не найдены
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/checklist:
+    patch:
+      operationId: updateDealChecklist
+      summary: Атомарное обновление чек-листа сделки с optimistic concurrency
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDealChecklistRequest'
+      responses:
+        '200':
+          description: Чек-лист обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет deal.edit
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — сделка была изменена параллельным запросом
           $ref: '#/components/responses/Error'
 
   /admin/publications:
@@ -1396,6 +2185,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeaderOptional'
       requestBody:
         required: true
         content:
@@ -1414,6 +2204,9 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           description: PUBLICATION_NOT_FOUND — публикация не найдена, не опубликована или не является листингом
+          $ref: '#/components/responses/Error'
+        '409':
+          description: IDEMPOTENCY_KEY_CONFLICT — тот же Idempotency-Key уже использован с другим телом запроса
           $ref: '#/components/responses/Error'
         '429':
           description: RATE_LIMITED
@@ -1464,6 +2257,16 @@ components:
       required: true
       schema: {type: string, format: uuid}
       description: ADR-006 — обязателен для publish/book/cancel/manual-ledger
+    IdempotencyKeyHeaderOptional:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: {type: string, format: uuid}
+      description: >
+        Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) —
+        повтор без ключа сохраняет текущую совместимость (всегда новый Lead).
+        С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает
+        сохранённый ответ, не создаёт новый Lead.
 
   responses:
     Error:
@@ -1649,6 +2452,99 @@ components:
         ownerPositionId: {type: string, nullable: true}
         stage: {type: string}
         source: {type: object, additionalProperties: true}
+        stalled: {type: boolean}
+
+    LeadListItem:
+      type: object
+      required: [id, organizationId, ownerPositionId, stage, version, source, createdAt, contact, hasOpenNextAction]
+      description: >
+        GET /leads item shape (CrmService.CrmLeadReadModel) — contact
+        встроен как whitelist-проекция {id, name, phone, email?}, никогда
+        весь Contact-документ; ownerPositionId — null, если лид ещё не
+        назначен ни на одну Position.
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        ownerPositionId: {type: string, nullable: true}
+        stage: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        version: {type: integer}
+        source: {type: object, additionalProperties: true}
+        createdAt: {type: string, format: date-time}
+        stalled: {type: boolean}
+        contact:
+          type: object
+          nullable: true
+          properties:
+            id: {type: string}
+            name: {type: string}
+            phone: {type: string}
+            email: {type: string, nullable: true}
+        hasOpenNextAction:
+          type: boolean
+          description: >
+            CRM-003 мягкое правило (read-only индикатор, НЕ блокирует
+            запись): true, если stage∈{new,contacted,qualified} И у лида
+            есть хотя бы одна открытая (status:open) CRM Task. Для
+            converted/lost — всегда false, правило их не касается.
+
+    LeadListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeadListItem'
+        nextCursor: {type: string, nullable: true}
+
+    LeadEvent:
+      type: object
+      description: Один immutable append-only переход стадии лида (LeadEventDocument).
+      properties:
+        id: {type: string}
+        leadId: {type: string}
+        stage: {type: string, enum: [new, contacted, qualified, converted, lost]}
+        changedBy:
+          type: object
+          properties:
+            type: {type: string, enum: [position, system]}
+            positionId: {type: string, nullable: true}
+        changedAt: {type: string, format: date-time}
+
+    LeadEventListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeadEvent'
+        nextCursor: {type: string, nullable: true}
+
+    ContactView:
+      type: object
+      description: >
+        GET /contacts, GET /contacts/{contactId} item shape
+        (CrmService.CrmContactReadModel) — явная whitelist-проекция
+        (ContactDocument.roles, служебные поля НЕ включены), никогда
+        session/password/internal-поля.
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time}
+
+    ContactListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactView'
+        nextCursor: {type: string, nullable: true}
 
     PublicListingList:
       type: object
@@ -2077,3 +2973,251 @@ components:
           items:
             $ref: '#/components/schemas/AdminAuditEventView'
         nextCursor: {type: string, nullable: true}
+
+    TaskView:
+      type: object
+      required: [id, organizationId, title, status, version, createdAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        status:
+          type: string
+          enum: [open, completed, cancelled]
+        dueAt: {type: string, format: date-time, nullable: true}
+        assignedPositionId: {type: string, nullable: true}
+        leadId: {type: string, nullable: true}
+        contactId: {type: string, nullable: true}
+        completedAt: {type: string, format: date-time, nullable: true}
+        completedByPositionId: {type: string, nullable: true}
+        version: {type: integer, description: "conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete"}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time, nullable: true}
+
+    TaskListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskView'
+        nextCursor: {type: string, nullable: true}
+
+    CreateTaskRequest:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        dueAt: {type: string, format: date-time}
+        assignedPositionId: {type: string}
+        leadId: {type: string}
+        contactId: {type: string}
+
+    UpdateTaskRequest:
+      type: object
+      description: "НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign."
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000, nullable: true}
+        dueAt: {type: string, format: date-time, nullable: true}
+        status:
+          type: string
+          enum: [open, cancelled]
+
+    ReassignTaskRequest:
+      type: object
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        assignedPositionId: {type: string, nullable: true, description: "Отсутствие/null — снять назначение (задача становится unassigned)."}
+
+    CompleteTaskRequest:
+      type: object
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+
+    TimelineEventItem:
+      type: object
+      required: [id, type, happenedAt, title, actor]
+      properties:
+        id: {type: string}
+        type:
+          type: string
+          enum: [lead_stage_changed, lead_assigned, task_created, task_updated, task_completed, task_cancelled, audit_event]
+        happenedAt: {type: string, format: date-time}
+        title: {type: string}
+        summary: {type: string, nullable: true}
+        actor:
+          type: object
+          required: [type]
+          properties:
+            type: {type: string, enum: [position, identity, system, admin_account]}
+            id: {type: string, nullable: true}
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    TimelineResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEventItem'
+        nextCursor: {type: string, nullable: true}
+
+    DealStage:
+      type: string
+      enum: [showing, deposit, deal, golden, check_in, referral, closed_lost]
+
+    CrmContactEmbed:
+      type: object
+      required: [id, name, phone]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        phone: {type: string}
+        email: {type: string, nullable: true}
+
+    DealParticipant:
+      type: object
+      required: [role, contactId]
+      properties:
+        role: {type: string}
+        contactId: {type: string}
+        contact:
+          $ref: '#/components/schemas/CrmContactEmbed'
+
+    DealChecklistItem:
+      type: object
+      required: [id, label, done]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        done: {type: boolean}
+        completedAt: {type: string, format: date-time, nullable: true}
+        completedByPositionId: {type: string, nullable: true}
+
+    DealView:
+      type: object
+      required: [id, organizationId, contactId, ownerPositionId, title, stage, participants, checklistItems, version, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        leadId: {type: string, nullable: true}
+        contactId: {type: string}
+        ownerPositionId: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealParticipant'
+        checklistItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealChecklistItem'
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        contact:
+          $ref: '#/components/schemas/CrmContactEmbed'
+
+    DealListResponse:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealView'
+        nextCursor: {type: string, nullable: true}
+
+    CreateDealRequest:
+      type: object
+      required: [contactId, title]
+      properties:
+        contactId: {type: string}
+        ownerPositionId: {type: string}
+        leadId: {type: string}
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+        participants:
+          type: array
+          items:
+            type: object
+            required: [role, contactId]
+            properties:
+              role: {type: string, minLength: 1, maxLength: 50}
+              contactId: {type: string}
+        checklistItems:
+          type: array
+          items:
+            type: object
+            required: [label]
+            properties:
+              id: {type: string}
+              label: {type: string, minLength: 1, maxLength: 500}
+              done: {type: boolean}
+
+    UpdateDealRequest:
+      type: object
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000, nullable: true}
+        ownerPositionId: {type: string}
+        expectedCommission:
+          $ref: '#/components/schemas/MoneyAmount'
+
+    ChangeDealStageRequest:
+      type: object
+      required: [stage, expectedVersion]
+      properties:
+        stage:
+          $ref: '#/components/schemas/DealStage'
+        expectedVersion: {type: integer, minimum: 0}
+        reason: {type: string, maxLength: 2000}
+
+    AddDealParticipantRequest:
+      type: object
+      required: [contactId, role, expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        contactId: {type: string}
+        role: {type: string, minLength: 1, maxLength: 50}
+
+    DealChecklistItemInput:
+      type: object
+      required: [label, done]
+      properties:
+        id: {type: string}
+        label: {type: string, minLength: 1, maxLength: 500}
+        done: {type: boolean}
+
+    UpdateDealChecklistRequest:
+      type: object
+      required: [items, expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DealChecklistItemInput'
