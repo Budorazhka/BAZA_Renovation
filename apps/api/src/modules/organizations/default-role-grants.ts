@@ -73,6 +73,31 @@ export interface DefaultGrant {
  * инфраструктуры в кодовой базе, тот же прецедент, что остальные grants
  * этого файла) — существующие организации получат 403 на список команды,
  * пока их Position не пересоздадут/не получат grant отдельно.
+ *
+ * `media_asset.upload` (01.09.2026) — обратный случай ко всем остальным
+ * записям этого файла: право не «выдано и не используется», а НАОБОРОТ
+ * проверялось в коде (@RequirePermission('media_asset','upload') на
+ * POST /media/upload-intent и POST /media/:assetId/confirm), но не было
+ * выдано НИ ОДНОЙ роли. То есть оба эндпоинта отвечали 403 всем и всегда.
+ *
+ * Автор MediaController это предвидел и записал в его докстринге:
+ * "permission-matrix.md не специфицирует media-права явно... при следующем
+ * ревью этот раздел должен быть добавлен туда как источник истины, а не
+ * только жить в коде". Ревью не случилось, дыра осталась.
+ *
+ * Почему это не мёртвый код, который можно удалить: из пяти назначений
+ * загрузки (MEDIA_PURPOSE_BUCKET) только property_photo закрыт отдельным
+ * путём property-assets со своим правом property_asset.edit. Плана этажа
+ * (floor_plan), фото юнита (unit_photo), документа агентства
+ * (agency_document) и аватара (profile_avatar) загрузить было НЕЛЬЗЯ
+ * никак — другого пути для них нет.
+ *
+ * Выдано ровно тем ролям, у которых уже есть property_asset.edit
+ * (owner/director/rop/manager/developer): они и так грузят медиа через
+ * путь property-assets, поэтому грант не расширяет ничьих реальных
+ * возможностей — он разблокирует остальные назначения. administrator и
+ * marketer не получают: у них нет ни property_asset.edit, ни
+ * development.edit, с медиа объектов они не работают.
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -97,6 +122,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
     { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'media_asset', action: 'upload', scope: 'organization' },
     { resource: 'listing', action: 'read', scope: 'organization' },
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
@@ -138,6 +164,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
     { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'media_asset', action: 'upload', scope: 'organization' },
     { resource: 'listing', action: 'read', scope: 'organization' },
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
@@ -184,6 +211,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
     { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'media_asset', action: 'upload', scope: 'organization' },
     { resource: 'listing', action: 'read', scope: 'organization' },
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
@@ -218,6 +246,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
     { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'media_asset', action: 'upload', scope: 'organization' },
     { resource: 'listing', action: 'read', scope: 'organization' },
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
@@ -270,6 +299,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
     { resource: 'property_asset', action: 'edit', scope: 'organization' },
+    { resource: 'media_asset', action: 'upload', scope: 'organization' },
     { resource: 'listing', action: 'read', scope: 'organization' },
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
