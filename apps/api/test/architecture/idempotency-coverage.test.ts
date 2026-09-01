@@ -54,8 +54,11 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
  * Маршрут → почему ключ НЕ требуется. Проверяется, что он и правда не требуется.
  *
  * Причина, начинающаяся с `ПРОБЕЛ:`, означает осознанно принятый риск, а не
- * безопасность: повтор такого запроса создаёт вторую сущность. Число таких
- * записей закреплено отдельной проверкой — молча вырасти оно не может.
+ * безопасность: повтор такого запроса создаёт вторую сущность, КОТОРАЯ
+ * ОСТАЁТСЯ И ВВОДИТ В ЗАБЛУЖДЕНИЕ. Само по себе «создаёт вторую запись» ещё
+ * не пробел: если дубль недолговечен и убирается сам (см. три upload-intent
+ * ниже), риска он не несёт, а формальная идемпотентность там даже вредна.
+ * Число пробелов закреплено отдельной проверкой — молча вырасти не может.
  */
 const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   // --- Аутентификация ---
@@ -91,7 +94,8 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'PATCH /property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
   'PATCH /property-assets/:assetId/listings/:listingId/confirm-actuality':
     'проставляет отметку времени, повтор безвреден',
-  'POST /property-assets/:assetId/media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /property-assets/:assetId/media/upload-intent':
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id, идемпотентно',
   'PATCH /property-assets/:assetId/media/:mediaAssetId': 'обновление по id, идемпотентно',
   'DELETE /property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
@@ -106,7 +110,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'PATCH /marketplace/property-assets/:assetId/listings/:listingId/confirm-actuality':
     'проставляет отметку времени, повтор безвреден',
   'POST /marketplace/property-assets/:assetId/media/upload-intent':
-    'ПРОБЕЛ: дубль создаёт второй media asset',
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /marketplace/property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id',
   'PATCH /marketplace/property-assets/:assetId/media/:mediaAssetId': 'обновление по id',
   'DELETE /marketplace/property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
@@ -115,7 +119,8 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'условный update кандидата, пишется audit',
 
   // --- Медиа ---
-  'POST /media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /media/upload-intent':
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /media/:assetId/confirm': 'подтверждение по id, идемпотентно',
 
   // --- CRM ---
@@ -146,7 +151,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 5;
+const KNOWN_GAPS = 2;
 
 interface RouteInfo {
   key: string;
