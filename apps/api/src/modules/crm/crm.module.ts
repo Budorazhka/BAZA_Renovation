@@ -39,6 +39,7 @@ import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
 import { PublicRevealIdempotencyModule } from '../../shared/idempotency/public-reveal-idempotency.module';
+import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
 import { OutboxModule } from '../outbox/outbox.module';
 
@@ -60,6 +61,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     AuthorizationModule,
     OrganizationsModule,
     PublicRevealIdempotencyModule,
+    IdempotencyModule,
     RateLimitModule,
     OutboxModule,
   ],

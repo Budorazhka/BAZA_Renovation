@@ -435,6 +435,8 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
         actorPositionId,
         actorIdentityId: new Types.ObjectId(),
         correlationId: 'integration-test-correlation-id',
+      idempotencyKey: new Types.ObjectId().toString(),
+      idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
       });
 
       expect(result.stage).toBe('new');
@@ -464,6 +466,8 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
         actorPositionId,
         actorIdentityId: new Types.ObjectId(),
         correlationId: 'integration-test-correlation-id',
+      idempotencyKey: new Types.ObjectId().toString(),
+      idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
       });
 
       expect(result.contact).toMatchObject({ name: 'Новый Клиент', phone: '+995500000043' });
@@ -495,6 +499,8 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
           actorPositionId: new Types.ObjectId(),
           actorIdentityId: new Types.ObjectId(),
           correlationId: 'integration-test-correlation-id',
+      idempotencyKey: new Types.ObjectId().toString(),
+      idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -511,6 +517,8 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
           actorPositionId: new Types.ObjectId(),
           actorIdentityId: new Types.ObjectId(),
           correlationId: 'integration-test-correlation-id',
+      idempotencyKey: new Types.ObjectId().toString(),
+      idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
         }),
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
 

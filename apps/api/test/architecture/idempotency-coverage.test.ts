@@ -34,6 +34,7 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /property-assets/:assetId/listings/:listingId/publish': 'publish листинга',
   'POST /marketplace/property-assets/:assetId/listings/:listingId/publish':
     'publish листинга в marketplace-потоке',
+  'POST /leads': 'дубль лида искажает воронку и отчётность по менеджерам — данные, по которым принимают решения',
 };
 
 /**
@@ -115,7 +116,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /media/:assetId/confirm': 'подтверждение по id, идемпотентно',
 
   // --- CRM ---
-  'POST /leads': 'ПРОБЕЛ: дубль создаёт второй лид',
   'POST /leads/:leadId/assign': 'условный update владельца',
   'PATCH /leads/:leadId/stage': 'переход стадии условный, повтор не применяется дважды',
   'POST /deals': 'ПРОБЕЛ: дубль создаёт вторую сделку',
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 19;
+const KNOWN_GAPS = 18;
 
 interface RouteInfo {
   key: string;

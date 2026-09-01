@@ -10,6 +10,7 @@ import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
+import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { AuditService } from '../audit/audit.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -187,6 +188,7 @@ export class CrmService {
     private readonly auditService: AuditService,
     private readonly organizationsService: OrganizationsService,
     private readonly publicRevealIdempotencyService: PublicRevealIdempotencyService,
+    private readonly idempotencyService: IdempotencyService,
     private readonly taskRepository: TaskRepository,
     private readonly dealRepository: DealRepository,
     private readonly dealEventRepository: DealEventRepository,
@@ -1668,6 +1670,15 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: повтор не должен создавать второй лид — дубль искажает воронку. */
+    idempotencyKey: string;
+    /**
+     * Тело для хеша идемпотентности. Приходит ИЗ КОНТРОЛЛЕРА, а не собирается
+     * здесь заново: `checkReplay` до транзакции и `record` внутри неё обязаны
+     * хешировать одну и ту же форму, иначе повтор просто не найдётся и защита
+     * будет мнимой.
+     */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmLeadReadModel> {
     return runInTransaction(this.connection, async (session) => {
       const contact = params.contactId
@@ -1711,7 +1722,24 @@ export class CrmService {
         session,
       );
 
-      return toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+      const readModel = toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+
+      // ADR-006: запись идемпотентности идёт В ТОЙ ЖЕ транзакции, что и сам
+      // лид. Иначе возможен разрыв: лид создан, запись не сохранилась — и
+      // повтор создаёт второй лид, то есть ровно то, от чего защищаемся.
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createLead',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 

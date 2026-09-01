@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { TenantGuard } from '../../shared/tenant/tenant.guard';
@@ -14,6 +14,9 @@ import { ListLeadEventsDto } from './dto/list-lead-events.dto';
 import { ListTimelineDto } from './dto/list-timeline.dto';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
+import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+import { AppException } from '../../shared/errors/app-exception';
+import { ErrorCode } from '../../shared/errors/error-codes';
 
 /**
  * ERP tenant-scoped lead-management endpoints — физически отдельный
@@ -26,28 +29,66 @@ export class LeadController {
   constructor(
     private readonly crmService: CrmService,
     private readonly policyEvaluator: PolicyEvaluatorService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   /**
    * lead.create.organization — CrmService.createLead докстринг: ровно один
    * из contactId/requesterPhone, лид создаётся unassigned (не auto-
-   * assign на actor'а — assignLead отдельная explicit команда). Idempotency-
-   * Key НЕ требуется (тот же паттерн, что createDeal — не входит в ADR-006
-   * "publish/book/cancel/manual-ledger" список critical commands).
+   * assign на actor'а — assignLead отдельная explicit команда).
+   *
+   * Idempotency-Key ОБЯЗАТЕЛЕН. Раньше здесь стояло обратное со ссылкой на
+   * то, что ADR-006 перечисляет только publish/book/cancel/manual-ledger. Но
+   * перечень ADR-006 — это примеры критических команд, а не исчерпывающий
+   * список: повтор создания лида порождает второй лид, а дубль лида искажает
+   * воронку и отчётность по менеджерам, то есть данные, по которым принимают
+   * решения. Это дороже дубля справочной сущности.
+   *
+   * Требование безопасно ввести именно сейчас: на 01.09.2026 ни один клиент
+   * этот endpoint не вызывает (ERP ходит в legacy /crm/leads, leadsApiV2
+   * использует только чтение), поэтому обязательный header ничего не ломает.
+   * Через месяц это было бы breaking change.
    */
   @Post()
   @HttpCode(201)
   @RequirePermission('lead', 'create')
-  async createLead(@Req() req: FastifyRequest, @Body() dto: CreateLeadDto) {
+  async createLead(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreateLeadDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const idempotencyRequestBody = {
+      contactId: dto.contactId ?? null,
+      requesterName: dto.requesterName ?? null,
+      requesterPhone: dto.requesterPhone ?? null,
+    };
+
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'createLead',
+      key: idempotencyKey,
+      requestBody: idempotencyRequestBody,
+    });
+    if (replay) {
+      return replay.responseBody;
+    }
+
     return this.crmService.createLead({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       requesterName: dto.requesterName,
       requesterPhone: dto.requesterPhone,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId,
       correlationId: req.correlationId,
+      idempotencyKey,
+      idempotencyRequestBody,
     });
   }
 
