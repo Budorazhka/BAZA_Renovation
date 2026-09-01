@@ -14,6 +14,7 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplace-account/marketplace-account-context.middleware';
 import { MediaStorageService } from '@baza/media-storage';
 import { MediaMimeVerifierService } from '../../src/modules/media/media-mime-verifier.service';
+import type { PropertyAssetMediaViewItem } from '../../src/modules/property-assets/property-assets.service';
 import { RedisService } from '../../src/shared/redis/redis.service';
 import { createRedisMockService } from './support/redis-mock';
 
@@ -222,11 +223,15 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
       payload: { role: 'cover' },
     });
     expect(patchRes.statusCode).toBe(200);
-    const updatedList = patchRes.json();
-    const photo1 = updatedList.find((i: any) => i.mediaAssetId === mediaAssetId1);
-    const photo2 = updatedList.find((i: any) => i.mediaAssetId === mediaAssetId2);
-    expect(photo2.role).toBe('cover');
-    expect(photo1.role).toBe('gallery'); // Demoted to gallery
+    const updatedList: PropertyAssetMediaViewItem[] = patchRes.json();
+    const photo1 = updatedList.find((i) => i.mediaAssetId === mediaAssetId1);
+    const photo2 = updatedList.find((i) => i.mediaAssetId === mediaAssetId2);
+    // Явная проверка присутствия до обращения к полям: без неё пропажа
+    // фото из ответа давала бы TypeError вместо внятного отказа теста.
+    expect(photo1).toBeDefined();
+    expect(photo2).toBeDefined();
+    expect(photo2!.role).toBe('cover');
+    expect(photo1!.role).toBe('gallery'); // Demoted to gallery
 
     // 9. Reorder media via PUT
     const reorderRes = await app.inject({
@@ -320,14 +325,14 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
       url: `/api/v1/property-assets/${assetId}/media`,
       headers: { cookie },
     });
-    const finalItems = finalListRes.json();
+    const finalItems: PropertyAssetMediaViewItem[] = finalListRes.json();
     // Both photos must be present — a lost update would leave only 1.
     expect(finalItems).toHaveLength(2);
-    const ids = finalItems.map((i: any) => i.mediaAssetId).sort();
+    const ids = finalItems.map((i) => i.mediaAssetId).sort();
     expect(ids).toEqual([mediaAssetIdA, mediaAssetIdB].sort());
     // Exactly one cover (the invariant the mutator logic maintains) —
     // a lost update could also have left this at 0 or 2.
-    const coverCount = finalItems.filter((i: any) => i.role === 'cover').length;
+    const coverCount = finalItems.filter((i) => i.role === 'cover').length;
     expect(coverCount).toBe(1);
   });
 
@@ -392,11 +397,11 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
       url: `/api/v1/property-assets/${assetId}/media`,
       headers: { cookie },
     });
-    const finalItems = finalListRes.json();
+    const finalItems: PropertyAssetMediaViewItem[] = finalListRes.json();
     // The delete's effect (old photo gone) AND the confirm's effect (new
     // photo present) must both have applied — a lost update would leave
     // either the old photo still present, or the new one missing.
     expect(finalItems).toHaveLength(1);
-    expect(finalItems[0].mediaAssetId).toBe(newMediaAssetId);
+    expect(finalItems[0]!.mediaAssetId).toBe(newMediaAssetId);
   });
 });

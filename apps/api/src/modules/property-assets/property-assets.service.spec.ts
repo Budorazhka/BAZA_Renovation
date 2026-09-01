@@ -1,11 +1,12 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { PropertyAssetsService } from './property-assets.service';
-import type { PropertyAssetRepository, ListingRepository } from '@baza/property-assets';
+import type { PropertyAssetRepository, ListingRepository, PropertyAssetMediaItem } from '@baza/property-assets';
 import type { PublicationService } from '../publication/publication.service';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { DedupeService } from './dedupe.service';
+import type { MediaService } from '../media/media.service';
 
 const assetDto = {
   propertyType: 'apartment' as const,
@@ -37,7 +38,7 @@ function makeService(overrides: {
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   dedupeService?: Partial<DedupeService>;
-  mediaService?: Partial<any>;
+  mediaService?: Partial<MediaService>;
 } = {}) {
   return new PropertyAssetsService(
     (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
@@ -63,7 +64,7 @@ function makeService(overrides: {
     // publishListing-тесты (не про DEDUPE-001) не ломались новым gate'ом;
     // тесты именно на dedupe-блокировку переопределяют assertNoBlockingDuplicates.
     (overrides.dedupeService ?? { assertNoBlockingDuplicates: jest.fn().mockResolvedValue(undefined), scanForDuplicates: jest.fn().mockResolvedValue(undefined) }) as DedupeService,
-    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
+    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as unknown as MediaService,
     makeMockConnection() as never,
   );
 }
@@ -645,7 +646,7 @@ describe('PropertyAssetsService', () => {
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository });
 
       await expect(
         service.createMediaUploadIntent(assetId, orgId, {
@@ -661,7 +662,7 @@ describe('PropertyAssetsService', () => {
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId, media: [] }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository });
 
       await expect(
         service.createMediaUploadIntent(assetId, orgId, {
@@ -680,7 +681,7 @@ describe('PropertyAssetsService', () => {
       const mediaService = {
         createUploadIntent: jest.fn().mockResolvedValue({ assetId: 'media-123', uploadUrl: 'https://minio.test/upload' }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository, mediaService });
 
       const res = await service.createMediaUploadIntent(assetId, orgId, {
         declaredMimeType: 'image/jpeg',
@@ -712,7 +713,7 @@ describe('PropertyAssetsService', () => {
       const mediaService = {
         confirmUpload: jest.fn().mockResolvedValue({ status: 'rejected' }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository, mediaService });
 
       await expect(
         service.confirmMediaUpload(assetId, mediaAssetId, orgId, actorId, 'corr-1'),
@@ -724,7 +725,7 @@ describe('PropertyAssetsService', () => {
       const mediaAssetId = new Types.ObjectId();
       const orgId = new Types.ObjectId();
       const actorId = new Types.ObjectId();
-      const asset = { _id: assetId, media: [] as any[] };
+      const asset = { _id: assetId, media: [] as PropertyAssetMediaItem[] };
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
         mutateMedia: jest.fn().mockImplementation((id, mutator) => {
@@ -752,7 +753,7 @@ describe('PropertyAssetsService', () => {
         ),
         getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository, mediaService });
 
       const list = await service.confirmMediaUpload(assetId, mediaAssetId, orgId, actorId, 'corr-1', {
         alt: 'Фасад здания',
@@ -783,7 +784,7 @@ describe('PropertyAssetsService', () => {
           { id: galleryId.toString(), mediaAssetId: galleryId, role: 'gallery', sortOrder: 1, isPrivate: false },
         ],
       };
-      let capturedMedia: any[] | undefined;
+      let capturedMedia: PropertyAssetMediaItem[] | undefined;
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
         mutateMedia: jest.fn().mockImplementation((id, mutator) => {
@@ -791,7 +792,7 @@ describe('PropertyAssetsService', () => {
           return Promise.resolve({ ...asset, media: capturedMedia });
         }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository });
 
       const res = await service.deleteMedia(assetId, coverId, orgId);
 
@@ -816,7 +817,7 @@ describe('PropertyAssetsService', () => {
           { id: item2Id.toString(), mediaAssetId: item2Id, role: 'gallery', sortOrder: 1, isPrivate: false },
         ],
       };
-      let capturedMedia: any[] | undefined;
+      let capturedMedia: PropertyAssetMediaItem[] | undefined;
       const assetRepo = {
         findByIdForOrganization: jest.fn().mockResolvedValue(asset),
         mutateMedia: jest.fn().mockImplementation((id, mutator) => {
@@ -828,7 +829,7 @@ describe('PropertyAssetsService', () => {
         getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()),
         getPublicUrl: jest.fn(),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository, mediaService });
 
       await service.updateMediaItem(assetId, item2Id, orgId, { role: 'cover' });
 

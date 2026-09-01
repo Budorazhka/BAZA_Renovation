@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
+import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';

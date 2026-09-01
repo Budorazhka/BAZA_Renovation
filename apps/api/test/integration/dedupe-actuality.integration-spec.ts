@@ -307,7 +307,7 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       const phone = '+995500444888';
 
       const assetA = await createAsset(orgA, { phone, address: 'Org A List Candidates Address' });
-      const assetB = await createAsset(orgB, { phone, address: 'Org B List Candidates Address' });
+      await createAsset(orgB, { phone, address: 'Org B List Candidates Address' });
 
       const listResponseA = await app.inject({
         method: 'GET',

@@ -19,11 +19,10 @@ import { LeadEventRepository } from './repository/lead-event.repository';
 import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
-import { DEAL_STAGES, DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
+import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage } from './schemas/lead.schema';
 import type { TaskDocument, TaskStatus } from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
-import type { DealEventDocument } from './schemas/deal-event.schema';
 
 import type { TimelineEventType } from './dto/list-timeline.dto';
 

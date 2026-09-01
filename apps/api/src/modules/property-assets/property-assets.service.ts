@@ -475,7 +475,7 @@ export class PropertyAssetsService {
       const mediaAsset = assetsMap.get(m.mediaAssetId.toString());
       let url: string | undefined;
       if (mediaAsset && mediaAsset.variants && mediaAsset.variants.length > 0) {
-        const cardOrDetail = mediaAsset.variants.find((v: any) => v.type === 'card' || v.type === 'detail') ?? mediaAsset.variants[0];
+        const cardOrDetail = mediaAsset.variants.find((v) => v.type === 'card' || v.type === 'detail') ?? mediaAsset.variants[0];
         if (cardOrDetail) {
           url = this.mediaService.getPublicUrl(cardOrDetail.assetPath);
         }

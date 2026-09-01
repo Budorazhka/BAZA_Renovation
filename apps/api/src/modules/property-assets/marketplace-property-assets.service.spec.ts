@@ -6,6 +6,7 @@ import type { PublicationService } from '../publication/publication.service';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { DedupeService } from './dedupe.service';
+import type { MediaService } from '../media/media.service';
 
 const assetDto = {
   propertyType: 'apartment' as const,
@@ -37,7 +38,7 @@ function makeService(overrides: {
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   dedupeService?: Partial<DedupeService>;
-  mediaService?: Partial<any>;
+  mediaService?: Partial<MediaService>;
 } = {}) {
   return new MarketplacePropertyAssetsService(
     (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
@@ -53,7 +54,7 @@ function makeService(overrides: {
       ...overrides.idempotencyService,
     }) as IdempotencyService,
     (overrides.dedupeService ?? { assertNoBlockingDuplicates: jest.fn().mockResolvedValue(undefined), scanForDuplicates: jest.fn().mockResolvedValue(undefined) }) as DedupeService,
-    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
+    (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as unknown as MediaService,
     makeMockConnection() as never,
   );
 }
@@ -218,7 +219,7 @@ describe('MarketplacePropertyAssetsService', () => {
       const mediaService = {
         createUploadIntent: jest.fn().mockResolvedValue({ assetId: 'media-999', uploadUrl: 'https://minio.test/upload' }),
       };
-      const service = makeService({ propertyAssetRepository: assetRepo as any, mediaService });
+      const service = makeService({ propertyAssetRepository: assetRepo as unknown as PropertyAssetRepository, mediaService });
 
       const res = await service.createMediaUploadIntent(assetId, identityId, {
         declaredMimeType: 'image/png',

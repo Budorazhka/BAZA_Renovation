@@ -43,6 +43,14 @@ jobs:
       - name: Typecheck workspace
         run: pnpm typecheck
 
+      # Lint не входил НИ В ОДИН workflow — из-за этого он тихо зарос до
+      # 26 ошибок (21 no-explicit-any + 5 неиспользуемых импортов),
+      # и `pnpm lint` перестал быть полезным сигналом: он всегда был
+      # красным, поэтому его перестали запускать. Ошибки исправлены
+      # 01.09.2026, шаг добавлен, чтобы это не повторилось.
+      - name: Lint workspace
+        run: pnpm lint
+
       - name: Run unit tests
         run: pnpm test
 
