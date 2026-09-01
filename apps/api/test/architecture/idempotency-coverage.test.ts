@@ -39,6 +39,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
   'POST /marketplace/property-assets': 'дубль объекта в мастере публикации — клиент шлёт стабильный ключ на повтор шага',
   'POST /marketplace/property-assets/:assetId/listings': 'дубль листинга на том же объекте',
+  'POST /property-assets': 'дубль объекта в ERP — клиент шлёт стабильный ключ на повтор формы',
+  'POST /property-assets/:assetId/listings': 'дубль листинга на том же объекте (ERP)',
 };
 
 /**
@@ -83,8 +85,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'PATCH /units/:unitId/status': 'expectedVersion (CAS)',
 
   // --- Объекты и листинги (ERP-поток) ---
-  'POST /property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
-  'POST /property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
   'POST /property-assets/:assetId/listings/:listingId/unpublish':
     'условный update: modifiedCount === 0 → 409 (conventions.md §8)',
   'PATCH /property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 14;
+const KNOWN_GAPS = 12;
 
 interface RouteInfo {
   key: string;

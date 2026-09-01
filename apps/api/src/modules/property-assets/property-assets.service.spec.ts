@@ -69,16 +69,24 @@ function makeService(overrides: {
   );
 }
 
+/** Идемпотентность в этих тестах не проверяется — важен сам вызов репозитория. */
+function idem() {
+  return { identityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } };
+}
+
 describe('PropertyAssetsService', () => {
   it('creates organization-owned assets without trusting client scope', async () => {
     const assetRepository = { create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) };
     const service = makeService({ propertyAssetRepository: assetRepository as never });
     const organizationId = new Types.ObjectId();
 
-    await service.createAsset(organizationId, assetDto);
+    await service.createAsset(organizationId, assetDto, idem());
 
     expect(assetRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ publisherScope: { type: 'organization', organizationId }, representativePhone: assetDto.representativePhone }),
+      // второй аргумент — session: объект и отметка идемпотентности пишутся
+      // одной транзакцией (ADR-006)
+      expect.anything(),
     );
   });
 
@@ -92,7 +100,7 @@ describe('PropertyAssetsService', () => {
         dedupeService: { scanForDuplicates: scanForDuplicatesSpy, assertNoBlockingDuplicates: jest.fn() } as never,
       });
 
-      await service.createAsset(new Types.ObjectId(), assetDto);
+      await service.createAsset(new Types.ObjectId(), assetDto, idem());
 
       expect(scanForDuplicatesSpy).toHaveBeenCalledWith(assetId);
     });
@@ -105,7 +113,7 @@ describe('PropertyAssetsService', () => {
         dedupeService: { scanForDuplicates: jest.fn().mockRejectedValue(new Error('dedupe scan boom')), assertNoBlockingDuplicates: jest.fn() } as never,
       });
 
-      const result = await service.createAsset(new Types.ObjectId(), assetDto);
+      const result = await service.createAsset(new Types.ObjectId(), assetDto, idem());
 
       expect(result._id).toBe(assetId);
     });
@@ -118,8 +126,8 @@ describe('PropertyAssetsService', () => {
     const listingRepository = { create: jest.fn().mockImplementation(async (input) => ({ _id: new Types.ObjectId(), ...input })) };
     const service = makeService({ propertyAssetRepository: assetRepository as never, listingRepository: listingRepository as never });
 
-    await service.createListing(assetId, organizationId, { dealType: 'sale', price });
-    await service.createListing(assetId, organizationId, { dealType: 'rent_long', price });
+    await service.createListing(assetId, organizationId, { dealType: 'sale', price }, idem());
+    await service.createListing(assetId, organizationId, { dealType: 'rent_long', price }, idem());
 
     expect(listingRepository.create).toHaveBeenCalledTimes(2);
     expect(listingRepository.create.mock.calls.map(([input]) => input.dealType)).toEqual(['sale', 'rent_long']);
@@ -131,7 +139,7 @@ describe('PropertyAssetsService', () => {
     const service = makeService({ propertyAssetRepository: assetRepository as never, listingRepository: listingRepository as never });
 
     await expect(
-      service.createListing(new Types.ObjectId(), new Types.ObjectId(), { dealType: 'sale', price }),
+      service.createListing(new Types.ObjectId(), new Types.ObjectId(), { dealType: 'sale', price }, idem()),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(listingRepository.create).not.toHaveBeenCalled();
   });
