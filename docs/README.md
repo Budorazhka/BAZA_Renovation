@@ -111,6 +111,10 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [d07-runtime-e2e-gate.md](operations/d07-runtime-e2e-gate.md) — Playwright против живых HTTP-процессов.
 - [nest11-fastify5-migration.md](operations/nest11-fastify5-migration.md) — миграция Nest 10→11 и Fastify 4→5, уязвимости 19 → 0.
 
+### Асинхронный контур
+
+- [outbox-dead-letter-noise.md](operations/outbox-dead-letter-noise.md) — семь типов событий уходили в `dead_letter` без единой попытки; обработчик подтверждаемых событий и страж покрытия.
+
 ### Сверки состояния
 
 - [current-state-reconciliation-2026-08-31.md](operations/current-state-reconciliation-2026-08-31.md) — что реально реализовано в CRM на 31.08.
