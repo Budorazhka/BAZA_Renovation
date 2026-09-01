@@ -9,6 +9,9 @@ import { RequirePermission } from '../authorization/require-permission.decorator
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { DevelopmentsService } from './developments.service';
+import { ChessboardWorkbookService } from './chessboard-workbook.service';
+import { chessboardFileName } from './chessboard-export';
+import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { CreateDevelopmentDto } from './dto/create-development.dto';
 import { UpdateDevelopmentDto } from './dto/update-development.dto';
@@ -48,6 +51,7 @@ export class DevelopmentsController {
   constructor(
     private readonly developmentsService: DevelopmentsService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly chessboardWorkbookService: ChessboardWorkbookService,
   ) {}
 
   @Post('developments')
@@ -297,6 +301,47 @@ export class DevelopmentsController {
       new Types.ObjectId(tenantContext.organizationId),
       { kind: dto.kind, status: dto.status, limit: dto.limit },
     );
+  }
+
+  /**
+   * chessboard.export — грант из permission-matrix.md, выданный почти всем
+   * ролям (owner/director/rop/administrator/marketer/developer), но до
+   * этого коммита не проверявшийся нигде: выгрузки шахматки просто не
+   * существовало.
+   *
+   * ЕДИНСТВЕННЫЙ эндпоинт API, отдающий не JSON. `@Res` без passthrough —
+   * тело пишется напрямую в FastifyReply, минуя сериализацию Nest; helmet
+   * настроен в main.api.ts на JSON-only ответы, поэтому Content-Type
+   * ставится здесь явно. ADR-008 (файлы не ходят телом через API) здесь
+   * НЕ нарушается по смыслу: он про пользовательские медиа произвольного
+   * размера в S3, а тут — сгенерированный на лету отчёт в сотни
+   * килобайт, живущий ровно один запрос и нигде не хранимый.
+   */
+  @Get('developments/:developmentId/chessboard/export')
+  @RequirePermission('chessboard', 'export')
+  async exportChessboard(
+    @Req() req: FastifyRequest,
+    @Param('developmentId', ParseObjectIdPipe) developmentId: Types.ObjectId,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const tenantContext = requireTenantContext(req);
+
+    const { developmentName, currency, units } = await this.developmentsService.buildChessboardExport(
+      developmentId,
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+    const workbook = await this.chessboardWorkbookService.build({ currency, units });
+    const fileName = chessboardFileName(developmentName, new Date());
+
+    await reply
+      .type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      // filename* (RFC 5987) — имя файла кириллическое, в голом filename= оно
+      // не выживет; ASCII-фолбэк остаётся для старых клиентов.
+      .header(
+        'Content-Disposition',
+        `attachment; filename="chessboard.xlsx"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+      )
+      .send(workbook);
   }
 
   @Get('units/:unitId')

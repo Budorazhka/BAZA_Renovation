@@ -1,7 +1,7 @@
 import { Body, Controller, Headers, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { CrmService } from './crm.service';
-import { RevealContactDto } from './dto/reveal-contact.dto';
+import { RevealContactDto, toUtmRecord } from './dto/reveal-contact.dto';
 import { RedisRateLimitGuard } from '../../shared/rate-limit/redis-rate-limit.guard';
 
 /**
@@ -33,7 +33,7 @@ export class ListingCrmController {
       slug,
       requesterName: dto.requesterName,
       requesterPhone: dto.requesterPhone,
-      utm: dto.utm,
+      utm: toUtmRecord(dto.utm),
       referrer: req.headers.referer,
       correlationId: req.correlationId,
       idempotencyKey,

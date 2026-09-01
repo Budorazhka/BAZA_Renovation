@@ -139,11 +139,31 @@ export class DuplicateCandidateRepository {
    * override_not_duplicate или detected и решает, что это ДЕЙСТВИТЕЛЬНО
    * дубль) — тот же generic паттерн, что AdminPublicationService.unpublish
    * (permission-проверка — ответственность вызывающего сервиса, этот
-   * repository только исполняет уже принятое решение).
+   * repository только исполняет уже принятое решение). Фильтр `$ne:
+   * 'confirmed_duplicate'` (не CAS по expectedVersion — у этого документа
+   * нет version-поля) допускает confirm ИЗ ОБОИХ detected И
+   * override_not_duplicate — админ может отменить решение владельца
+   * "не дубль", это единственный actor, у кого есть такое право
+   * (DuplicateCandidateRepository.override комментарий).
    */
-  async markConfirmedDuplicate(id: Types.ObjectId, session?: ClientSession): Promise<{ modifiedCount: number }> {
+  async markConfirmedDuplicate(
+    id: Types.ObjectId,
+    params: { reason: string; confirmByAdminAccountId: Types.ObjectId },
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
     const result = await this.model
-      .updateOne({ _id: id, status: { $ne: 'confirmed_duplicate' } }, { $set: { status: 'confirmed_duplicate' } }, { session })
+      .updateOne(
+        { _id: id, status: { $ne: 'confirmed_duplicate' } },
+        {
+          $set: {
+            status: 'confirmed_duplicate',
+            confirmReason: params.reason,
+            confirmByAdminAccountId: params.confirmByAdminAccountId,
+            confirmedAt: new Date(),
+          },
+        },
+        { session },
+      )
       .exec();
     return { modifiedCount: result.modifiedCount };
   }

@@ -16,6 +16,8 @@ import { ListingRepository, PropertyAssetRepository } from '@baza/property-asset
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { AdminPublicationService } from '../../src/modules/admin/admin-publication.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 // D-03 паттерн (см. publish-to-published-projection.integration-spec.ts):
 // прямой кросс-app импорт реального worker handler'а внутри тестового
 // файла — доказывает полную цепочку publish → outbox → worker → published
@@ -23,6 +25,7 @@ import type { AdminContext } from '../../src/shared/admin/admin-context';
 // mongodb-memory-server инфраструктуру в двух местах. OutboxPollerService
 // сам не тестируется здесь (свой unit-тест в apps/worker).
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 describe('MKT-002: Listing publication + public secondary/rent data-layer (real HTTP + real MongoDB)', () => {
   let replSet: MongoMemoryReplSet;
@@ -45,7 +48,10 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();
@@ -74,6 +80,8 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
       moduleRef.get(DevelopmentRepository),
       listingRepository,
       propertyAssetRepository,
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

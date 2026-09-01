@@ -11,6 +11,8 @@ import { CorrelationIdMiddleware } from '../../src/shared/errors/correlation-id.
 import { TenantContextMiddleware } from '../../src/shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.middleware';
 import { MarketplacePublicationRepository, type PublicationSourceType } from '@baza/publication';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * D-04A: GET /api/v1/public/developments (list) — самостоятельная,
@@ -47,7 +49,10 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);

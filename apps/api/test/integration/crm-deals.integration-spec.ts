@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from '../../src/app.module';
@@ -12,6 +13,8 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplace-account/marketplace-account-context.middleware';
 import { AuthService } from '../../src/modules/identity/auth.service';
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * DEAL-001: Deal Core Backend Vertical Slice HTTP Integration Tests.
@@ -36,7 +39,10 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 
     await app.register(fastifyCookie);
@@ -46,21 +52,21 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
     const adminContextMiddleware = app.get(AdminContextMiddleware);
     const marketplaceAccountContextMiddleware = app.get(MarketplaceAccountContextMiddleware);
     const isHealthCheckPath = (url: string): boolean => url === '/health' || url === '/health/ready';
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await correlationIdMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await correlationIdMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await tenantContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await tenantContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await adminContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await adminContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await marketplaceAccountContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await marketplaceAccountContextMiddleware.use(req, reply, () => {});
     });
     app.useGlobalFilters(new AppExceptionFilter());
     const { ValidationPipe } = await import('@nestjs/common');
@@ -611,6 +617,173 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       expect([first.statusCode, second.statusCode].sort()).toEqual([200, 409]);
       const persisted = await connection.collection('deals').findOne({ _id: new Types.ObjectId(dealId) });
       expect(persisted?.version).toBe(1);
+    });
+  });
+
+  describe('PATCH /deals/:dealId/reassign — client.reassign (security review 31.08.2026)', () => {
+    it('owner reassigns a deal to another position, increments version and writes client.reassign audit', async () => {
+      const owner = await seedOwnerSession();
+      const managerA = await seedManagerSession(owner.organizationId);
+      const managerB = await seedManagerSession(owner.organizationId);
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: managerA.cookie },
+        payload: { title: 'Сделка на реассайн', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}/reassign`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: managerB.positionId.toString() },
+      });
+
+      expect(reassignRes.statusCode).toBe(200);
+      const body = JSON.parse(reassignRes.body);
+      expect(body.ownerPositionId).toBe(managerB.positionId.toString());
+      expect(body.version).toBe(1);
+
+      const audit = await connection.collection('audit_events').findOne({
+        action: 'client.reassign',
+        resourceId: new Types.ObjectId(dealId),
+      });
+      expect(audit?.before?.ownerPositionId).toBe(managerA.positionId.toString());
+      expect(audit?.after?.ownerPositionId).toBe(managerB.positionId.toString());
+    });
+
+    it('manager without client.reassign grant gets 403 even on their own deal', async () => {
+      const owner = await seedOwnerSession();
+      const managerA = await seedManagerSession(owner.organizationId);
+      const managerB = await seedManagerSession(owner.organizationId);
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: managerA.cookie },
+        payload: { title: 'Менеджер не может переназначить сам', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}/reassign`,
+        headers: { cookie: managerA.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: managerB.positionId.toString() },
+      });
+
+      expect(reassignRes.statusCode).toBe(403);
+    });
+
+    it('PATCH /deals/:dealId no longer accepts ownerPositionId — deal.edit alone cannot reassign', async () => {
+      const owner = await seedOwnerSession();
+      const managerB = await seedManagerSession(owner.organizationId);
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: owner.cookie },
+        payload: { title: 'Правка без реассайна', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      const editRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: managerB.positionId.toString() },
+      });
+
+      expect(editRes.statusCode).toBe(400);
+      expect(JSON.parse(editRes.body).error.code).toBe('VALIDATION_FAILED');
+    });
+
+    it('rejects reassignment to a position outside the organization with 404', async () => {
+      const owner = await seedOwnerSession();
+      const foreignOwner = await seedOwnerSession();
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: owner.cookie },
+        payload: { title: 'Чужая позиция', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}/reassign`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: foreignOwner.positionId.toString() },
+      });
+
+      expect(reassignRes.statusCode).toBe(404);
+    });
+
+    it('rejects stale expectedVersion with 409 VERSION_CONFLICT', async () => {
+      const owner = await seedOwnerSession();
+      const managerB = await seedManagerSession(owner.organizationId);
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: owner.cookie },
+        payload: { title: 'Устаревшая версия', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, title: 'Обновлённое название' },
+      });
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}/reassign`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: managerB.positionId.toString() },
+      });
+
+      expect(reassignRes.statusCode).toBe(409);
+    });
+
+    it('no-op reassignment to the same owner succeeds without a version bump or audit entry', async () => {
+      const owner = await seedOwnerSession();
+      const managerA = await seedManagerSession(owner.organizationId);
+      const contactId = await seedContact(owner.organizationId);
+
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/api/v1/deals',
+        headers: { cookie: managerA.cookie },
+        payload: { title: 'Тот же владелец', contactId: contactId.toString() },
+      });
+      const dealId = JSON.parse(createRes.body).id;
+
+      const reassignRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/deals/${dealId}/reassign`,
+        headers: { cookie: owner.cookie },
+        payload: { expectedVersion: 0, ownerPositionId: managerA.positionId.toString() },
+      });
+
+      expect(reassignRes.statusCode).toBe(200);
+      expect(JSON.parse(reassignRes.body).version).toBe(0);
+
+      const audit = await connection.collection('audit_events').findOne({
+        action: 'client.reassign',
+        resourceId: new Types.ObjectId(dealId),
+      });
+      expect(audit).toBeNull();
     });
   });
 

@@ -14,12 +14,15 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { DuplicateCandidateRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { ActualityService } from '../../src/modules/property-assets/actuality.service';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 // D-03/MKT-002 паттерн: прямой кросс-app импорт реального worker handler'а
 // внутри тестового файла — доказывает полную цепочку publish → outbox →
 // worker → published projection против одной и той же реальной MongoDB.
 import { DevelopmentRepository } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (real HTTP + real MongoDB)', () => {
   let replSet: MongoMemoryReplSet;
@@ -41,7 +44,10 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();
@@ -63,6 +69,8 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       moduleRef.get(DevelopmentRepository),
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 
@@ -254,7 +262,10 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       const assetA = await createAsset(orgA, { phone, address: 'Confirmed Address A' });
       const assetB = await createAsset(orgB, { phone, address: 'Confirmed Address B' });
       const candidate = await duplicateCandidateRepository.findByPair(new Types.ObjectId(assetA._id), new Types.ObjectId(assetB._id));
-      await duplicateCandidateRepository.markConfirmedDuplicate(candidate!._id);
+      await duplicateCandidateRepository.markConfirmedDuplicate(candidate!._id, {
+        reason: 'Подтверждено админом при разборе очереди дублей',
+        confirmByAdminAccountId: new Types.ObjectId(),
+      });
 
       const overrideResponse = await app.inject({
         method: 'POST',

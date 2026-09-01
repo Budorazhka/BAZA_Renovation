@@ -13,6 +13,54 @@ function makeRequest(organizationId: Types.ObjectId, positionId: Types.ObjectId)
   };
 }
 
+describe('LeadController.createLead', () => {
+  it('пробрасывает contactId/requesterName/requesterPhone + actor/organization из tenantContext', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+    const createLead = jest.fn().mockResolvedValue({ id: 'lead-1', ownerPositionId: null, stage: 'new' });
+    const controller = new LeadController(
+      { createLead } as unknown as CrmService,
+      { matchingScopes: jest.fn() } as unknown as PolicyEvaluatorService,
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    const result = await controller.createLead(req as never, {
+      contactId: contactId.toString(),
+      requesterName: 'Игнорируется, если есть contactId',
+    });
+
+    expect(createLead).toHaveBeenCalledWith({
+      organizationId,
+      contactId,
+      requesterName: 'Игнорируется, если есть contactId',
+      requesterPhone: undefined,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+    expect(result).toEqual({ id: 'lead-1', ownerPositionId: null, stage: 'new' });
+  });
+
+  it('без contactId передаёт undefined, requesterPhone доходит до сервиса как есть', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const createLead = jest.fn().mockResolvedValue({ id: 'lead-2' });
+    const controller = new LeadController(
+      { createLead } as unknown as CrmService,
+      { matchingScopes: jest.fn() } as unknown as PolicyEvaluatorService,
+    );
+
+    await controller.createLead(makeRequest(organizationId, positionId) as never, {
+      requesterPhone: '+995500000009',
+    });
+
+    expect(createLead).toHaveBeenCalledWith(
+      expect.objectContaining({ contactId: undefined, requesterPhone: '+995500000009' }),
+    );
+  });
+});
+
 describe('LeadController — read scope', () => {
   it('сужает GET /leads для own-grant до текущей Position прямо в CRM query', async () => {
     const organizationId = new Types.ObjectId();

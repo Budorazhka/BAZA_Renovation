@@ -134,4 +134,50 @@ describe('UnitRepository', () => {
       expect(limitSpy).toHaveBeenCalledWith(50);
     });
   });
+
+  describe('listForBuildings / countForBuildings (chessboard.export)', () => {
+    it('фильтрует по $in списку корпусов, organizationId и kind', async () => {
+      const buildingIds = [new Types.ObjectId(), new Types.ObjectId()];
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const findSpy = jest.fn().mockReturnValue({ exec: execSpy });
+
+      const repository = new UnitRepository({ find: findSpy } as never);
+      await repository.listForBuildings(buildingIds, organizationId, { kind: 'apartment' });
+
+      expect(findSpy).toHaveBeenCalledWith({
+        buildingId: { $in: buildingIds },
+        organizationId,
+        kind: 'apartment',
+      });
+    });
+
+    it('пустой список корпусов не идёт в БД вообще — $in:[] вернул бы пусто, но запрос всё равно лишний', async () => {
+      const findSpy = jest.fn();
+      const countSpy = jest.fn();
+      const repository = new UnitRepository({ find: findSpy, countDocuments: countSpy } as never);
+
+      await expect(repository.listForBuildings([], new Types.ObjectId())).resolves.toEqual([]);
+      await expect(repository.countForBuildings([], new Types.ObjectId())).resolves.toBe(0);
+      expect(findSpy).not.toHaveBeenCalled();
+      expect(countSpy).not.toHaveBeenCalled();
+    });
+
+    it('countForBuildings считает тем же фильтром, что и чтение — потолок выгрузки нельзя обойти', async () => {
+      const buildingIds = [new Types.ObjectId()];
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue(42);
+      const countSpy = jest.fn().mockReturnValue({ exec: execSpy });
+
+      const repository = new UnitRepository({ countDocuments: countSpy } as never);
+      const result = await repository.countForBuildings(buildingIds, organizationId, { kind: 'apartment' });
+
+      expect(countSpy).toHaveBeenCalledWith({
+        buildingId: { $in: buildingIds },
+        organizationId,
+        kind: 'apartment',
+      });
+      expect(result).toBe(42);
+    });
+  });
 });

@@ -53,6 +53,22 @@ export class DuplicateCandidateDocument extends Document {
   @Prop()
   overrideAt?: Date;
 
+  /**
+   * Admin-confirm (DEDUPE-001 admin review queue) — тот же уровень
+   * audit-контекста на самом документе, что override* поля выше, не
+   * только в отдельной audit_events записи: reason/actor/timestamp
+   * читаемы прямо на кандидате без join к audit log для отображения в
+   * admin-очереди.
+   */
+  @Prop()
+  confirmReason?: string;
+
+  @Prop({ type: Types.ObjectId })
+  confirmByAdminAccountId?: Types.ObjectId;
+
+  @Prop()
+  confirmedAt?: Date;
+
   declare detectedAt: Date;
 }
 

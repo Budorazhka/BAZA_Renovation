@@ -148,6 +148,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/developments/{developmentId}/chessboard/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Выгрузка шахматки ЖК в XLSX (chessboard.export). ЕДИНСТВЕННЫЙ эндпоинт API, отдающий не JSON, а бинарное тело файла. Формат воспроизводит выгрузку bz26-client-erp (владелец, 31.08.2026): лист «Шахматка», 15 колонок, русские подписи статусов, без стилей и итоговых строк. Пять колонок цен по кондициям и «Базовая цена за м²» всегда пустые — таких полей в доменной модели BAZA нет, колонки сохранены ради совместимости формы файла. Выгружаются ВСЕ корпуса ЖК одним файлом (корпус — первая колонка) и ТОЛЬКО kind=apartment. Строки отсортированы корпус → этаж → номер. */
+        get: operations["exportChessboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/developments/{developmentId}/buildings": {
         parameters: {
             query?: never;
@@ -236,6 +253,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bookings/{bookingId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отменить бронь (BOOK-001 follow-up) — booking.cancel.organization, не booking.create.own: отменить может руководитель, не только автор брони. Разрешено только из pending/booked; paid (уже оплачена) и уже терминальные (rejected/expired) отклоняются как BOOKING_INVALID_STATE_TRANSITION — оплаченная бронь требует отдельного финансового процесса, вне этого среза. */
+        post: operations["cancelBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подтвердить бронь (BOOK-001 follow-up) — booking.confirm.own, единственное действие из триптиха confirm/cancel/extend, доступное manager'у для СВОЕЙ брони (cancel/extend требуют organization grant). pending → booked. */
+        post: operations["confirmBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}/extend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Продлить бронь (BOOK-001 follow-up) — booking.extend.organization (не .own, как cancel). Только вперёд: newExpiresAt строго позже текущего expiresAt. Проверяется на пересечение с другими активными бронями того же unit (исключая саму себя). */
+        post: operations["extendBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/developments": {
         parameters: {
             query?: never;
@@ -314,7 +382,8 @@ export interface paths {
         /** Список лидов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только лиды, где ownerPositionId совпадает с его собственной Position — сужение применяется на backend до чтения, не постфильтрацией. ownerPositionId в query — дополнительное клиентское сужение поверх уже резолвленного scope, никогда не расширяет его (own-scope с чужим ownerPositionId в query — 400, не 403 и не расширение видимости). */
         get: operations["listLeads"];
         put?: never;
-        post?: never;
+        /** Ручное создание лида в CRM (lead.create.organization) — security review 31.08.2026: грант был выдан всем ролям, но до этого прохода не существовало ни одного HTTP-пути завести лид вручную (единственный источник — публичный reveal-contact). Ровно один способ указать контакт: contactId (уже существующий) либо requesterPhone (find-or-create по телефону в этой организации, тот же tenant-local dedupe, что reveal-contact). ownerPositionId НЕ проставляется автоматически на создателя — лид стартует unassigned, как и лиды с сайта; назначение — отдельный вызов POST /leads/{leadId}/assign (owner decision: "Автоматическая раздача... не является стартовым поведением"). */
+        post: operations["createLead"];
         delete?: never;
         options?: never;
         head?: never;
@@ -508,8 +577,25 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия) */
+        /** Частичное обновление сделки с optimistic concurrency (заголовок, описание, комиссия). НЕ меняет ownerPositionId — см. PATCH /deals/{dealId}/reassign (client.reassign, отдельный grant от deal.edit). */
         patch: operations["updateDeal"];
+        trace?: never;
+    };
+    "/deals/{dealId}/reassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена ответственного за сделку (ownerPositionId) — отдельный grant client.reassign (owner/director/rop, scope organization), не deal.edit. Тот же принцип, что PATCH /tasks/{taskId}/reassign отделён от task.edit. ownerPositionId у сделки обязательное поле — endpoint не поддерживает "снять ответственного", только замену на другую assignable позицию той же организации. expectedVersion обязателен (conventions.md разд.5). */
+        patch: operations["reassignDeal"];
         trace?: never;
     };
     "/deals/{dealId}/stage": {
@@ -578,6 +664,40 @@ export interface paths {
         head?: never;
         /** Атомарное обновление чек-листа сделки с optimistic concurrency */
         patch: operations["updateDealChecklist"];
+        trace?: never;
+    };
+    "/admin/duplicate-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin review queue для DEDUPE-001 (master plan разд.2.3: "Автор может заявить, что это не дубль; такое исключение логируется и попадает в административную проверку"). duplicate_candidate.read — global scope (пара может involve organizations из разных городов, city-scoping здесь структурно не подходит, в отличие от publications). Отсутствие гранта — ошибка (403), НЕ пустой список (в отличие от adminListPublications, где отсутствие read-scope даёт пустой результат) — здесь единственный grant либо есть, либо нет, нет частичного scope, который стоило бы молча сужать до пустоты. */
+        get: operations["adminListDuplicateCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/duplicate-candidates/{duplicateCandidateId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin critical action: подтверждает, что пара — реальный дубль. Единственный actor, кто может confirm ИЗ override_not_duplicate (отменяет решение владельца "не дубль"), не только ИЗ detected. reason обязателен (permission-matrix.md разд.4). */
+        post: operations["adminConfirmDuplicateCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/admin/publications": {
@@ -1220,6 +1340,47 @@ export interface components {
             slug?: string | null;
             unpublishReason?: string | null;
         };
+        /** @description null, если PropertyAsset больше не существует (удалён/несогласован) */
+        AdminDuplicateCandidateAsset: {
+            id?: string;
+            /** @enum {string} */
+            propertyType?: "apartment" | "house" | "land" | "commercial";
+            location?: {
+                city?: string;
+                address?: string;
+            };
+            characteristics?: {
+                area?: number;
+                rooms?: number | null;
+                floor?: number | null;
+            };
+            representativePhone?: string;
+            publisherScope?: {
+                /** @enum {string} */
+                type?: "organization" | "marketplace_account";
+                organizationId?: string | null;
+            };
+        } | null;
+        AdminDuplicateCandidate: {
+            id?: string;
+            /** @enum {string} */
+            status?: "detected" | "confirmed_duplicate" | "override_not_duplicate";
+            signals?: {
+                phoneMatch?: boolean;
+                addressMatch?: boolean;
+                roomsAreaFloorMatch?: boolean;
+            };
+            /** Format: date-time */
+            detectedAt?: string;
+            overrideReason?: string | null;
+            /** Format: date-time */
+            overrideAt?: string | null;
+            confirmReason?: string | null;
+            /** Format: date-time */
+            confirmedAt?: string | null;
+            assetA?: components["schemas"]["AdminDuplicateCandidateAsset"];
+            assetB?: components["schemas"]["AdminDuplicateCandidateAsset"];
+        };
         PublicDevelopmentList: {
             items: components["schemas"]["PublicDevelopmentCard"][];
             nextCursor: string | null;
@@ -1244,8 +1405,13 @@ export interface components {
         RevealContactRequest: {
             requesterName?: string;
             requesterPhone?: string;
+            /** @description Строго 5 стандартных UTM-ключей (security review: без whitelist публичный гость мог сохранить в Lead произвольный объект любого размера/формы) — неизвестные поля отклоняются как VALIDATION_FAILED, не отбрасываются молча. */
             utm?: {
-                [key: string]: unknown;
+                utm_source?: string;
+                utm_medium?: string;
+                utm_campaign?: string;
+                utm_term?: string;
+                utm_content?: string;
             } | null;
         };
         RevealContactResponse: {
@@ -1768,12 +1934,17 @@ export interface components {
                 done?: boolean;
             }[];
         };
+        /** @description НЕ содержит ownerPositionId — см. PATCH /deals/{dealId}/reassign. */
         UpdateDealRequest: {
             expectedVersion: number;
             title?: string;
             description?: string | null;
-            ownerPositionId?: string;
             expectedCommission?: components["schemas"]["MoneyAmount"];
+        };
+        ReassignDealRequest: {
+            expectedVersion: number;
+            /** @description Обязательное поле — у Deal, в отличие от Task, нет 'unassigned' состояния. */
+            ownerPositionId: string;
         };
         ChangeDealStageRequest: {
             stage: components["schemas"]["DealStage"];
@@ -1814,6 +1985,7 @@ export interface components {
         AssetId: string;
         MediaAssetId: string;
         ListingId: string;
+        BookingId: string;
         /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
         IdempotencyKeyHeader: string;
         /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
@@ -2017,6 +2189,36 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    exportChessboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XLSX-файл шахматки (Content-Disposition attachment, имя файла в filename* RFC 5987) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description VALIDATION_FAILED — в ЖК смешаны разные валюты (единый заголовок колонок соврал бы про часть строк) ИЛИ число квартир превышает потолок выгрузки */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет chessboard.export */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+        };
+    };
     createBuilding: {
         parameters: {
             query?: never;
@@ -2156,6 +2358,118 @@ export interface operations {
             /** @description Unit или lead не найдены в текущей организации */
             404: components["responses"]["Error"];
             /** @description Пересечение активной брони или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    cancelBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Бронь переведена в статус rejected, unit свободен для новых броней */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    confirmBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Бронь переведена в статус booked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация/не own (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Booking не в pending (уже booked/rejected/expired/paid) или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    extendBooking: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    newExpiresAt: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Бронь продлена, dateRange.expiresAt обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Booking"];
+                };
+            };
+            /** @description Отсутствует Idempotency-Key или newExpiresAt не позже текущего expiresAt */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking не существует/чужая организация (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key */
             409: components["responses"]["Error"];
         };
     };
@@ -2309,6 +2623,41 @@ export interface operations {
             401: components["responses"]["Error"];
             /** @description FORBIDDEN — нет lead.read */
             403: components["responses"]["Error"];
+        };
+    };
+    createLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    contactId?: string;
+                    requesterName?: string;
+                    requesterPhone?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Лид создан, stage=new, ownerPositionId=null */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListItem"];
+                };
+            };
+            /** @description VALIDATION_FAILED — ни contactId, ни requesterPhone не переданы */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.create */
+            403: components["responses"]["Error"];
+            /** @description contactId указывает на несуществующий/чужой контакт */
+            404: components["responses"]["Error"];
         };
     };
     listLeadEvents: {
@@ -2818,6 +3167,42 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    reassignDeal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dealId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReassignDealRequest"];
+            };
+        };
+        responses: {
+            /** @description Сделка переназначена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DealView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет client.reassign */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — сделка или новый ownerPositionId (Position) не найдены/вне tenant */
+            404: components["responses"]["Error"];
+            /** @description Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition) ИЛИ VERSION_CONFLICT — expectedVersion устарел */
+            409: components["responses"]["Error"];
+        };
+    };
     changeDealStage: {
         parameters: {
             query?: never;
@@ -2958,6 +3343,79 @@ export interface operations {
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    adminListDuplicateCandidates: {
+        parameters: {
+            query?: {
+                /** @description Без значения — очередь на проверку (detected + override_not_duplicate) */
+                status?: "detected" | "override_not_duplicate" | "confirmed_duplicate";
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список кандидатов с денормализованной парой PropertyAsset для визуального сравнения */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["AdminDuplicateCandidate"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminConfirmDuplicateCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                duplicateCandidateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Кандидат переведён в confirmed_duplicate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "confirmed_duplicate";
+                    };
+                };
+            };
+            /** @description ADMIN_REASON_REQUIRED — reason короче 10 символов */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.confirm */
+            403: components["responses"]["Error"];
+            /** @description Duplicate candidate не найден */
+            404: components["responses"]["Error"];
+            /** @description Уже confirmed_duplicate */
             409: components["responses"]["Error"];
         };
     };

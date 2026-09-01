@@ -197,6 +197,415 @@ export class BookingsService {
       expiresAt: params.expiresAt.toISOString(),
     };
   }
+
+  /**
+   * BOOK-001 follow-up (book-001-decision-memo Q1 рекомендация: cancel —
+   * единственное действие этого второго среза, confirm/extend/paid
+   * остаются отдельными). booking.cancel.organization — не .own: cancel
+   * может любая Position с organization-grant'ом (owner/director/rop/
+   * developer в DEFAULT_ROLE_GRANTS), не только автор брони (manager
+   * получает только create/confirm.own, cancel-гранта у него нет вообще —
+   * намеренная иерархия, не пропуск).
+   *
+   * Разрешён переход только из pending/booked. paid исключён намеренно:
+   * отмена уже оплаченной брони — не просто снятие hold'а, это финансовая
+   * операция (возврат), вне контракта этого среза (book-001-decision-memo
+   * не специфицирует billing-side-effect). Уже терминальные (rejected/
+   * expired) — второй cancel того же booking, не новая операция.
+   */
+  async cancelBooking(params: {
+    bookingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    reason?: string;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<BookingDocument | { replay: IdempotentReplay }> {
+    const booking = await this.bookingRepository.findByIdForOrganization(params.bookingId, params.organizationId);
+    if (!booking) {
+      // Non-disclosure: не существует и "существует, но чужая организация"
+      // — один и тот же 404, тот же принцип, что во всех остальных модулях.
+      throw new AppException(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
+    }
+
+    const requestBody = this.cancelRequestBody(params);
+    try {
+      return await runInTransaction(this.connection, async (session) => {
+        const replay = await this.idempotencyService.checkReplay({
+          identityId: params.actorIdentityId,
+          operation: 'cancelBooking',
+          key: params.idempotencyKey,
+          requestBody,
+        });
+        if (replay) {
+          return { replay };
+        }
+
+        const { modifiedCount } = await this.bookingRepository.cancelIfActive(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+            `Booking status is '${booking.status}', only 'pending'/'booked' bookings can be cancelled`,
+          );
+        }
+
+        const updated = await this.bookingRepository.findByIdForOrganization(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+        // Только что изменили эту же запись в этой же транзакции — findOne
+        // по её собственному _id не может вернуть null здесь.
+        const response = toBookingResponse(updated!) as unknown as Record<string, unknown>;
+
+        await this.outboxService.publish(
+          {
+            eventType: 'BookingCancelled',
+            aggregateId: booking._id,
+            aggregateType: 'booking',
+            deduplicationKey: `booking:${booking._id.toString()}:cancelled`,
+            payload: {
+              bookingId: booking._id,
+              unitId: booking.unitId,
+              organizationId: booking.organizationId,
+              reason: params.reason ?? null,
+            },
+          },
+          session,
+        );
+
+        await this.auditService.append(
+          {
+            actor: { type: 'identity', id: params.actorIdentityId },
+            action: 'booking.cancel',
+            resource: 'booking',
+            resourceId: booking._id,
+            correlationId: params.correlationId,
+            before: { status: booking.status },
+            after: { status: 'rejected', reason: params.reason ?? null },
+          },
+          session,
+        );
+
+        await this.idempotencyService.record(
+          {
+            identityId: params.actorIdentityId,
+            operation: 'cancelBooking',
+            key: params.idempotencyKey,
+            requestBody,
+            responseStatus: 200,
+            responseBody: response,
+          },
+          session,
+        );
+
+        return updated!;
+      });
+    } catch (error: unknown) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+      const replay = await this.idempotencyService.awaitReplay({
+        identityId: params.actorIdentityId,
+        operation: 'cancelBooking',
+        key: params.idempotencyKey,
+        requestBody,
+      });
+      if (replay) {
+        return { replay };
+      }
+      throw new AppException(
+        ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+        'Idempotency-Key was concurrently claimed but its response is unavailable',
+      );
+    }
+  }
+
+  private cancelRequestBody(params: { bookingId: Types.ObjectId; reason?: string }): Record<string, unknown> {
+    return {
+      bookingId: params.bookingId.toString(),
+      reason: params.reason ?? null,
+    };
+  }
+
+  /**
+   * BOOK-001 follow-up (booking.confirm.own — decision-memo не
+   * специфицировал confirm/extend/paid, но default-role-grants.ts уже
+   * содержит confirm/own для owner/director/rop/developer/manager: техническое
+   * прочтение — единственный небазовый статус между `pending` (hold) и
+   * `paid` в уже существующем enum (schema/lead.schema docstring "domain-
+   * model.md Module 7") — `booked`, поэтому confirm читается как
+   * pending→booked, не изобретённый отдельный статус). `.own`, не
+   * `.organization` — единственное действие этого booking-триптиха
+   * (confirm/cancel/extend), доступное manager'у: он подтверждает
+   * СВОЮ бронь, cancel/extend требуют organization grant.
+   *
+   * requiredManagerPositionId — тот же паттерн, что LeadController.
+   * ownerFilterForAction: undefined при organization/global scope (весь
+   * tenant), Position ID при own (не раскрываем manager'у существование
+   * чужой брони — non-disclosure на уровне repository-фильтра, не
+   * отдельная проверка после чтения).
+   */
+  async confirmBooking(params: {
+    bookingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    requiredManagerPositionId?: Types.ObjectId;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<BookingDocument | { replay: IdempotentReplay }> {
+    const booking = await this.bookingRepository.findByIdForOrganizationOwned(
+      params.bookingId,
+      params.organizationId,
+      params.requiredManagerPositionId,
+    );
+    if (!booking) {
+      throw new AppException(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
+    }
+
+    const requestBody = { bookingId: params.bookingId.toString() };
+    try {
+      return await runInTransaction(this.connection, async (session) => {
+        const replay = await this.idempotencyService.checkReplay({
+          identityId: params.actorIdentityId,
+          operation: 'confirmBooking',
+          key: params.idempotencyKey,
+          requestBody,
+        });
+        if (replay) {
+          return { replay };
+        }
+
+        const { modifiedCount } = await this.bookingRepository.confirmIfPending(
+          params.bookingId,
+          params.organizationId,
+          params.requiredManagerPositionId,
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+            `Booking status is '${booking.status}', only 'pending' bookings can be confirmed`,
+          );
+        }
+
+        const updated = await this.bookingRepository.findByIdForOrganization(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+        const response = toBookingResponse(updated!) as unknown as Record<string, unknown>;
+
+        await this.outboxService.publish(
+          {
+            eventType: 'BookingConfirmed',
+            aggregateId: booking._id,
+            aggregateType: 'booking',
+            deduplicationKey: `booking:${booking._id.toString()}:confirmed`,
+            payload: {
+              bookingId: booking._id,
+              unitId: booking.unitId,
+              organizationId: booking.organizationId,
+            },
+          },
+          session,
+        );
+
+        await this.auditService.append(
+          {
+            actor: { type: 'identity', id: params.actorIdentityId },
+            action: 'booking.confirm',
+            resource: 'booking',
+            resourceId: booking._id,
+            correlationId: params.correlationId,
+            before: { status: booking.status },
+            after: { status: 'booked' },
+          },
+          session,
+        );
+
+        await this.idempotencyService.record(
+          {
+            identityId: params.actorIdentityId,
+            operation: 'confirmBooking',
+            key: params.idempotencyKey,
+            requestBody,
+            responseStatus: 200,
+            responseBody: response,
+          },
+          session,
+        );
+
+        return updated!;
+      });
+    } catch (error: unknown) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+      const replay = await this.idempotencyService.awaitReplay({
+        identityId: params.actorIdentityId,
+        operation: 'confirmBooking',
+        key: params.idempotencyKey,
+        requestBody,
+      });
+      if (replay) {
+        return { replay };
+      }
+      throw new AppException(
+        ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+        'Idempotency-Key was concurrently claimed but its response is unavailable',
+      );
+    }
+  }
+
+  /**
+   * BOOK-001 follow-up (booking.extend.organization — как cancel, не
+   * доступно manager'у). Только продление вперёд (newExpiresAt строго
+   * позже текущего expiresAt) — сокращение окна брони это отдельное
+   * действие, не запрошенное нигде и не являющееся "extend" по смыслу
+   * слова. BookingLock.bumpForUnit — та же сериализация, что book():
+   * расширение занятого окна пересекается с той же гонкой "конкурентный
+   * book() на соседнее время", что и создание.
+   */
+  async extendBooking(params: {
+    bookingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    newExpiresAt: Date;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<BookingDocument | { replay: IdempotentReplay }> {
+    if (Number.isNaN(params.newExpiresAt.getTime())) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'newExpiresAt must be a valid date');
+    }
+
+    const booking = await this.bookingRepository.findByIdForOrganization(params.bookingId, params.organizationId);
+    if (!booking) {
+      throw new AppException(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
+    }
+    if (params.newExpiresAt <= booking.dateRange.expiresAt) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'newExpiresAt must be strictly after the current expiresAt — extend only moves the booking forward',
+      );
+    }
+
+    const requestBody = {
+      bookingId: params.bookingId.toString(),
+      newExpiresAt: params.newExpiresAt.toISOString(),
+    };
+    try {
+      return await runInTransaction(this.connection, async (session) => {
+        await this.bookingLockRepository.bumpForUnit(booking.unitId, session);
+
+        const replay = await this.idempotencyService.checkReplay({
+          identityId: params.actorIdentityId,
+          operation: 'extendBooking',
+          key: params.idempotencyKey,
+          requestBody,
+        });
+        if (replay) {
+          return { replay };
+        }
+
+        const overlap = await this.bookingRepository.findOverlappingActiveExcluding(
+          booking.unitId,
+          booking._id,
+          booking.dateRange.startsAt,
+          params.newExpiresAt,
+          session,
+        );
+        if (overlap) {
+          throw new AppException(ErrorCode.BOOKING_OVERLAP, 'Extended range overlaps another active booking');
+        }
+
+        const { modifiedCount } = await this.bookingRepository.extendIfActive(
+          params.bookingId,
+          params.organizationId,
+          params.newExpiresAt,
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+            `Booking status is '${booking.status}', only 'pending'/'booked' bookings can be extended`,
+          );
+        }
+
+        const updated = await this.bookingRepository.findByIdForOrganization(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+        const response = toBookingResponse(updated!) as unknown as Record<string, unknown>;
+
+        await this.outboxService.publish(
+          {
+            eventType: 'BookingExtended',
+            aggregateId: booking._id,
+            aggregateType: 'booking',
+            deduplicationKey: `booking:${booking._id.toString()}:extended:${params.newExpiresAt.toISOString()}`,
+            payload: {
+              bookingId: booking._id,
+              unitId: booking.unitId,
+              organizationId: booking.organizationId,
+              previousExpiresAt: booking.dateRange.expiresAt,
+              newExpiresAt: params.newExpiresAt,
+            },
+          },
+          session,
+        );
+
+        await this.auditService.append(
+          {
+            actor: { type: 'identity', id: params.actorIdentityId },
+            action: 'booking.extend',
+            resource: 'booking',
+            resourceId: booking._id,
+            correlationId: params.correlationId,
+            before: { expiresAt: booking.dateRange.expiresAt },
+            after: { expiresAt: params.newExpiresAt },
+          },
+          session,
+        );
+
+        await this.idempotencyService.record(
+          {
+            identityId: params.actorIdentityId,
+            operation: 'extendBooking',
+            key: params.idempotencyKey,
+            requestBody,
+            responseStatus: 200,
+            responseBody: response,
+          },
+          session,
+        );
+
+        return updated!;
+      });
+    } catch (error: unknown) {
+      if (!isDuplicateKeyError(error)) {
+        throw error;
+      }
+      const replay = await this.idempotencyService.awaitReplay({
+        identityId: params.actorIdentityId,
+        operation: 'extendBooking',
+        key: params.idempotencyKey,
+        requestBody,
+      });
+      if (replay) {
+        return { replay };
+      }
+      throw new AppException(
+        ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
+        'Idempotency-Key was concurrently claimed but its response is unavailable',
+      );
+    }
+  }
 }
 
 function isDuplicateKeyError(error: unknown): boolean {

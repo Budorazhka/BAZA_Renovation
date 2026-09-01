@@ -206,6 +206,46 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /developments/{developmentId}/chessboard/export:
+    get:
+      operationId: exportChessboard
+      summary: >
+        Выгрузка шахматки ЖК в XLSX (chessboard.export). ЕДИНСТВЕННЫЙ
+        эндпоинт API, отдающий не JSON, а бинарное тело файла.
+        Формат воспроизводит выгрузку bz26-client-erp (владелец, 31.08.2026):
+        лист «Шахматка», 15 колонок, русские подписи статусов, без стилей и
+        итоговых строк. Пять колонок цен по кондициям и «Базовая цена за м²»
+        всегда пустые — таких полей в доменной модели BAZA нет, колонки
+        сохранены ради совместимости формы файла.
+        Выгружаются ВСЕ корпуса ЖК одним файлом (корпус — первая колонка) и
+        ТОЛЬКО kind=apartment. Строки отсортированы корпус → этаж → номер.
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      responses:
+        '200':
+          description: XLSX-файл шахматки (Content-Disposition attachment, имя файла в filename* RFC 5987)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: >
+            VALIDATION_FAILED — в ЖК смешаны разные валюты (единый заголовок
+            колонок соврал бы про часть строк) ИЛИ число квартир превышает
+            потолок выгрузки
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет chessboard.export
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+
   /developments/{developmentId}/buildings:
     post:
       operationId: createBuilding
@@ -338,6 +378,123 @@ paths:
           description: Пересечение активной брони или конфликт Idempotency-Key
           $ref: '#/components/responses/Error'
 
+  /bookings/{bookingId}/cancel:
+    post:
+      operationId: cancelBooking
+      summary: >
+        Отменить бронь (BOOK-001 follow-up) — booking.cancel.organization,
+        не booking.create.own: отменить может руководитель, не только автор
+        брони. Разрешено только из pending/booked; paid (уже оплачена) и
+        уже терминальные (rejected/expired) отклоняются как
+        BOOKING_INVALID_STATE_TRANSITION — оплаченная бронь требует
+        отдельного финансового процесса, вне этого среза.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: {type: string, nullable: true}
+      responses:
+        '200':
+          description: Бронь переведена в статус rejected, unit свободен для новых броней
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Booking не в pending/booked (уже rejected/expired/paid) или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
+  /bookings/{bookingId}/confirm:
+    post:
+      operationId: confirmBooking
+      summary: >
+        Подтвердить бронь (BOOK-001 follow-up) — booking.confirm.own, единственное
+        действие из триптиха confirm/cancel/extend, доступное manager'у для
+        СВОЕЙ брони (cancel/extend требуют organization grant). pending → booked.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '200':
+          description: Бронь переведена в статус booked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация/не own (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Booking не в pending (уже booked/rejected/expired/paid) или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
+  /bookings/{bookingId}/extend:
+    post:
+      operationId: extendBooking
+      summary: >
+        Продлить бронь (BOOK-001 follow-up) — booking.extend.organization
+        (не .own, как cancel). Только вперёд: newExpiresAt строго позже
+        текущего expiresAt. Проверяется на пересечение с другими активными
+        бронями того же unit (исключая саму себя).
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newExpiresAt]
+              properties:
+                newExpiresAt: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Бронь продлена, dateRange.expiresAt обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          description: Отсутствует Idempotency-Key или newExpiresAt не позже текущего expiresAt
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking не существует/чужая организация (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
   /public/developments:
     get:
       operationId: searchPublicDevelopments
@@ -457,6 +614,49 @@ paths:
           $ref: '#/components/responses/Error'
 
   /leads:
+    post:
+      operationId: createLead
+      summary: >
+        Ручное создание лида в CRM (lead.create.organization) — security review
+        31.08.2026: грант был выдан всем ролям, но до этого прохода не
+        существовало ни одного HTTP-пути завести лид вручную (единственный
+        источник — публичный reveal-contact). Ровно один способ указать
+        контакт: contactId (уже существующий) либо requesterPhone
+        (find-or-create по телефону в этой организации, тот же tenant-local
+        dedupe, что reveal-contact). ownerPositionId НЕ проставляется
+        автоматически на создателя — лид стартует unassigned, как и лиды с
+        сайта; назначение — отдельный вызов POST /leads/{leadId}/assign
+        (owner decision: "Автоматическая раздача... не является стартовым
+        поведением").
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                contactId: {type: string}
+                requesterName: {type: string}
+                requesterPhone: {type: string}
+      responses:
+        '201':
+          description: Лид создан, stage=new, ownerPositionId=null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListItem'
+        '400':
+          description: VALIDATION_FAILED — ни contactId, ни requesterPhone не переданы
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: contactId указывает на несуществующий/чужой контакт
+          $ref: '#/components/responses/Error'
     get:
       operationId: listLeads
       summary: >
@@ -1046,7 +1246,11 @@ paths:
 
     patch:
       operationId: updateDeal
-      summary: Частичное обновление сделки с optimistic concurrency (заголовок, описание, ответственный, комиссия)
+      summary: >
+        Частичное обновление сделки с optimistic concurrency (заголовок,
+        описание, комиссия). НЕ меняет ownerPositionId — см.
+        PATCH /deals/{dealId}/reassign (client.reassign, отдельный grant
+        от deal.edit).
       tags: [erp-crm]
       parameters:
         - name: dealId
@@ -1080,6 +1284,54 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /deals/{dealId}/reassign:
+    patch:
+      operationId: reassignDeal
+      summary: >
+        Смена ответственного за сделку (ownerPositionId) — отдельный grant
+        client.reassign (owner/director/rop, scope organization),
+        не deal.edit. Тот же принцип, что PATCH /tasks/{taskId}/reassign
+        отделён от task.edit. ownerPositionId у сделки обязательное поле —
+        endpoint не поддерживает "снять ответственного", только замену на
+        другую assignable позицию той же организации. expectedVersion
+        обязателен (conventions.md разд.5).
+      tags: [erp-crm]
+      parameters:
+        - name: dealId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignDealRequest'
+      responses:
+        '200':
+          description: Сделка переназначена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DealView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет client.reassign
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — сделка или новый ownerPositionId (Position) не найдены/вне tenant
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >
+            Position closed (ConflictException — переиспользует OrganizationsService.findAssignablePosition)
+            ИЛИ VERSION_CONFLICT — expectedVersion устарел
           $ref: '#/components/responses/Error'
 
   /deals/{dealId}/stage:
@@ -1239,6 +1491,93 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           description: VERSION_CONFLICT — сделка была изменена параллельным запросом
+          $ref: '#/components/responses/Error'
+
+  /admin/duplicate-candidates:
+    get:
+      operationId: adminListDuplicateCandidates
+      summary: >
+        Admin review queue для DEDUPE-001 (master plan разд.2.3: "Автор может
+        заявить, что это не дубль; такое исключение логируется и попадает в
+        административную проверку"). duplicate_candidate.read — global scope
+        (пара может involve organizations из разных городов, city-scoping
+        здесь структурно не подходит, в отличие от publications).
+        Отсутствие гранта — ошибка (403), НЕ пустой список (в отличие от
+        adminListPublications, где отсутствие read-scope даёт пустой
+        результат) — здесь единственный grant либо есть, либо нет, нет
+        частичного scope, который стоило бы молча сужать до пустоты.
+      tags: [admin]
+      parameters:
+        - name: status
+          in: query
+          description: "Без значения — очередь на проверку (detected + override_not_duplicate)"
+          schema: {type: string, enum: [detected, override_not_duplicate, confirmed_duplicate]}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список кандидатов с денормализованной парой PropertyAsset для визуального сравнения
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminDuplicateCandidate'
+                  nextCursor: {type: string, nullable: true}
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.read
+          $ref: '#/components/responses/Error'
+
+  /admin/duplicate-candidates/{duplicateCandidateId}/confirm:
+    post:
+      operationId: adminConfirmDuplicateCandidate
+      summary: >
+        Admin critical action: подтверждает, что пара — реальный дубль.
+        Единственный actor, кто может confirm ИЗ override_not_duplicate
+        (отменяет решение владельца "не дубль"), не только ИЗ detected.
+        reason обязателен (permission-matrix.md разд.4).
+      tags: [admin]
+      parameters:
+        - name: duplicateCandidateId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '200':
+          description: Кандидат переведён в confirmed_duplicate
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [confirmed_duplicate]}
+        '400':
+          description: ADMIN_REASON_REQUIRED — reason короче 10 символов
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — нет duplicate_candidate.confirm
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Duplicate candidate не найден
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Уже confirmed_duplicate
           $ref: '#/components/responses/Error'
 
   /admin/publications:
@@ -2290,6 +2629,11 @@ components:
       in: path
       required: true
       schema: {type: string}
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: {type: string}
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
@@ -2470,6 +2814,52 @@ components:
         slug: {type: string, nullable: true}
         unpublishReason: {type: string, nullable: true}
 
+    AdminDuplicateCandidateAsset:
+      type: object
+      nullable: true
+      description: null, если PropertyAsset больше не существует (удалён/несогласован)
+      properties:
+        id: {type: string}
+        propertyType: {type: string, enum: [apartment, house, land, commercial]}
+        location:
+          type: object
+          properties:
+            city: {type: string}
+            address: {type: string}
+        characteristics:
+          type: object
+          properties:
+            area: {type: number}
+            rooms: {type: number, nullable: true}
+            floor: {type: number, nullable: true}
+        representativePhone: {type: string}
+        publisherScope:
+          type: object
+          properties:
+            type: {type: string, enum: [organization, marketplace_account]}
+            organizationId: {type: string, nullable: true}
+
+    AdminDuplicateCandidate:
+      type: object
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [detected, confirmed_duplicate, override_not_duplicate]}
+        signals:
+          type: object
+          properties:
+            phoneMatch: {type: boolean}
+            addressMatch: {type: boolean}
+            roomsAreaFloorMatch: {type: boolean}
+        detectedAt: {type: string, format: date-time}
+        overrideReason: {type: string, nullable: true}
+        overrideAt: {type: string, nullable: true, format: date-time}
+        confirmReason: {type: string, nullable: true}
+        confirmedAt: {type: string, nullable: true, format: date-time}
+        assetA:
+          $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
+        assetB:
+          $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
+
     PublicDevelopmentList:
       type: object
       required: [items, nextCursor, total]
@@ -2499,7 +2889,21 @@ components:
       properties:
         requesterName: {type: string}
         requesterPhone: {type: string}
-        utm: {type: object, additionalProperties: true, nullable: true}
+        utm:
+          type: object
+          nullable: true
+          description: >
+            Строго 5 стандартных UTM-ключей (security review: без whitelist
+            публичный гость мог сохранить в Lead произвольный объект любого
+            размера/формы) — неизвестные поля отклоняются как VALIDATION_FAILED,
+            не отбрасываются молча.
+          additionalProperties: false
+          properties:
+            utm_source: {type: string, maxLength: 200}
+            utm_medium: {type: string, maxLength: 200}
+            utm_campaign: {type: string, maxLength: 200}
+            utm_term: {type: string, maxLength: 200}
+            utm_content: {type: string, maxLength: 200}
 
     RevealContactResponse:
       type: object
@@ -3244,14 +3648,21 @@ components:
 
     UpdateDealRequest:
       type: object
+      description: "НЕ содержит ownerPositionId — см. PATCH /deals/{dealId}/reassign."
       required: [expectedVersion]
       properties:
         expectedVersion: {type: integer, minimum: 0}
         title: {type: string, minLength: 1, maxLength: 255}
         description: {type: string, maxLength: 2000, nullable: true}
-        ownerPositionId: {type: string}
         expectedCommission:
           $ref: '#/components/schemas/MoneyAmount'
+
+    ReassignDealRequest:
+      type: object
+      required: [expectedVersion, ownerPositionId]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        ownerPositionId: {type: string, description: "Обязательное поле — у Deal, в отличие от Task, нет 'unassigned' состояния."}
 
     ChangeDealStageRequest:
       type: object

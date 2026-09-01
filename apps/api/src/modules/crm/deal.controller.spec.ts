@@ -163,4 +163,59 @@ describe('DealController', () => {
       );
     });
   });
+
+  describe('reassignDeal', () => {
+    it('resolves scope against resource "client" (not "deal") and delegates ownerPositionId', async () => {
+      const dealId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const targetPositionId = new Types.ObjectId();
+      const reassignDeal = jest.fn().mockResolvedValue({ id: dealId.toString(), ownerPositionId: targetPositionId.toString() });
+      const matchingScopes = jest.fn().mockResolvedValue(['organization']);
+      const controller = new DealController(
+        { reassignDeal } as unknown as CrmService,
+        { matchingScopes } as unknown as PolicyEvaluatorService,
+      );
+
+      await controller.reassignDeal(makeRequest(organizationId, positionId) as never, dealId, {
+        expectedVersion: 0,
+        ownerPositionId: targetPositionId.toString(),
+      });
+
+      expect(matchingScopes).toHaveBeenCalledWith(
+        expect.objectContaining({ resource: 'client', action: 'reassign' }),
+      );
+      expect(reassignDeal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dealId,
+          organizationId,
+          requiredScopePositionId: undefined,
+          expectedVersion: 0,
+          ownerPositionId: targetPositionId,
+        }),
+      );
+    });
+
+    it('own-scope grant narrows requiredScopePositionId to the caller position', async () => {
+      const dealId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const targetPositionId = new Types.ObjectId();
+      const reassignDeal = jest.fn().mockResolvedValue({ id: dealId.toString() });
+      const matchingScopes = jest.fn().mockResolvedValue(['own']);
+      const controller = new DealController(
+        { reassignDeal } as unknown as CrmService,
+        { matchingScopes } as unknown as PolicyEvaluatorService,
+      );
+
+      await controller.reassignDeal(makeRequest(organizationId, positionId) as never, dealId, {
+        expectedVersion: 0,
+        ownerPositionId: targetPositionId.toString(),
+      });
+
+      expect(reassignDeal).toHaveBeenCalledWith(
+        expect.objectContaining({ requiredScopePositionId: positionId }),
+      );
+    });
+  });
 });

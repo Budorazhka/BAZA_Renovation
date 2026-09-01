@@ -27,14 +27,19 @@ interface ApiResponse<T> {
  * клиентского кода (не архитектурное предпочтение этого прохода) — проще
  * выполнить здесь, чем менять уже переписанный teamApi.ts.
  *
- * READ-операции (list/ensure-self/ensure-team) БЕЗ PermissionGuard на
- * уровне класса — только TenantGuard. vacate/move/setStatus/assign/create/
- * update/avatar ниже добавляют PermissionGuard точечно на своих методах
- * (не на класс — иначе сломало бы read-методы без @RequirePermission,
- * PermissionGuard требует его явно). Все write-операции teamApi.ts теперь
- * реализованы на backend (26.08.2026) — HR-профильные поля идут через
- * отдельную коллекцию position_profiles (см. TeamService комментарий),
- * не расширяют специфицированную domain-модель.
+ * PermissionGuard навешан точечно на методах (не на класс — TenantGuard на
+ * классе достаточен для ensure-self, тот метод не раскрывает чужие данные).
+ * `list`/`ensure-team` возвращают полный TeamUserView всех позиций
+ * организации, включая HR-PII (loginEmail/phone/birthDate/telegram/...) —
+ * security review 31.08.2026: раньше эти два метода были БЕЗ
+ * PermissionGuard вообще (только TenantGuard), то есть отдавали эти поля
+ * любой authenticated сессии организации без explicit grant'а — deny-by-
+ * default нарушался именно здесь. Требуют `position.read` (см.
+ * default-role-grants.ts — добавлен всем ролям тем же коммитом, что и этот
+ * guard, иначе никто не смог бы увидеть список команды вообще). Все
+ * write-операции teamApi.ts реализованы на backend (26.08.2026) — HR-
+ * профильные поля идут через отдельную коллекцию position_profiles (см.
+ * TeamService комментарий), не расширяют специфицированную domain-модель.
  */
 @Controller('team-users')
 @UseGuards(TenantGuard)
@@ -45,6 +50,8 @@ export class TeamController {
   ) {}
 
   @Get()
+  @UseGuards(PermissionGuard)
+  @RequirePermission('position', 'read')
   async list(@Req() req: FastifyRequest): Promise<ApiResponse<TeamUserView[]>> {
     const tenantContext = requireTenantContext(req);
     const data = await this.teamService.listForOrganization(new Types.ObjectId(tenantContext.organizationId));
@@ -145,6 +152,8 @@ export class TeamController {
    * не дойдёт сюда).
    */
   @Post('ensure-team')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('position', 'read')
   async ensureTeam(
     @Req() req: FastifyRequest,
   ): Promise<ApiResponse<{ teamId: string; positions: TeamUserView[] } | null>> {

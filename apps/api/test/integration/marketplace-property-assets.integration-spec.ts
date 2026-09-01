@@ -17,7 +17,10 @@ import { DuplicateCandidateRepository, ListingRepository, PropertyAssetRepositor
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { AdminPublicationService } from '../../src/modules/admin/admin-publication.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 import { PublicationRequestedHandler } from '../../../worker/src/handlers/publication-requested.handler';
+import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 const MARKETPLACE_ORIGIN = 'https://marketplace.test.local';
 
@@ -55,7 +58,10 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     // как AppModule/AuthController её прочитают.
     process.env.CORS_ALLOWED_ORIGIN_MARKETPLACE = MARKETPLACE_ORIGIN;
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);
     const fastify = app.getHttpAdapter().getInstance();
@@ -78,6 +84,8 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       moduleRef.get(DevelopmentRepository),
       moduleRef.get(ListingRepository),
       moduleRef.get(PropertyAssetRepository),
+      moduleRef.get(MediaAssetRepository),
+      moduleRef.get(MediaStorageService),
     );
   }, 120_000);
 

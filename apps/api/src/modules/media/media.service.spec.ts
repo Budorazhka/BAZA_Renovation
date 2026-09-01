@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { MediaService } from './media.service';
-import type { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
+import { MediaObjectTooLargeError, type MediaAssetRepository, type MediaStorageService } from '@baza/media-storage';
 import type { OwnerScope } from '@baza/tenant-scope';
 import type { MediaMimeVerifierService } from './media-mime-verifier.service';
 import type { AuditService } from '../audit/audit.service';
@@ -150,6 +150,89 @@ describe('MediaService.confirmUpload', () => {
     expect(markVerifiedSpy).not.toHaveBeenCalled();
     expect(outboxPublishSpy).not.toHaveBeenCalled();
     expect(auditAppendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Security review: presigned upload раньше не имел серверной проверки
+   * фактического размера объекта — MediaStorageService.readObject теперь
+   * бросает MediaObjectTooLargeError (HEAD-проверка до чтения тела в
+   * память), confirmUpload должен трактовать это как обычный reject, не
+   * как 500 и не буферизовать объект.
+   */
+  it('помечает asset rejected, если объект в storage превышает лимит размера (MediaObjectTooLargeError)', async () => {
+    const assetId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const asset = {
+      _id: assetId,
+      ownerScope: makeOwnerScope(organizationId),
+      bucket: 'public' as const,
+      originalPath: `${assetId.toString()}/original.jpg`,
+      declaredMimeType: 'image/jpeg',
+    };
+
+    const findByIdSpy = jest.fn().mockResolvedValue(asset);
+    const markRejectedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const markVerifiedSpy = jest.fn();
+    const readObjectSpy = jest.fn().mockRejectedValue(new MediaObjectTooLargeError(50_000_000, 20_000_000));
+    const verifySpy = jest.fn();
+    const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
+    const outboxPublishSpy = jest.fn();
+
+    const service = new MediaService(
+      makeMockConnection() as never,
+      { findById: findByIdSpy, markRejected: markRejectedSpy, markVerified: markVerifiedSpy } as unknown as MediaAssetRepository,
+      { readObject: readObjectSpy } as unknown as MediaStorageService,
+      { verify: verifySpy } as unknown as MediaMimeVerifierService,
+      { append: auditAppendSpy } as unknown as AuditService,
+      { publish: outboxPublishSpy } as unknown as OutboxService,
+    );
+
+    const result = await service.confirmUpload({
+      assetId,
+      actorIdentityId: new Types.ObjectId(),
+      expectedOwnerScope: makeOwnerScope(organizationId),
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result).toEqual({ status: 'rejected' });
+    expect(markRejectedSpy).toHaveBeenCalledWith(assetId, 'File exceeds size limit', expect.anything());
+    expect(verifySpy).not.toHaveBeenCalled();
+    expect(outboxPublishSpy).not.toHaveBeenCalled();
+  });
+
+  it('пробрасывает ошибку как есть, если readObject упал НЕ из-за размера (инфраструктурный сбой)', async () => {
+    const assetId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const asset = {
+      _id: assetId,
+      ownerScope: makeOwnerScope(organizationId),
+      bucket: 'public' as const,
+      originalPath: `${assetId.toString()}/original.jpg`,
+      declaredMimeType: 'image/jpeg',
+    };
+
+    const findByIdSpy = jest.fn().mockResolvedValue(asset);
+    const markRejectedSpy = jest.fn();
+    const readObjectSpy = jest.fn().mockRejectedValue(new Error('S3 connection refused'));
+
+    const service = new MediaService(
+      makeMockConnection() as never,
+      { findById: findByIdSpy, markRejected: markRejectedSpy } as unknown as MediaAssetRepository,
+      { readObject: readObjectSpy } as unknown as MediaStorageService,
+      {} as unknown as MediaMimeVerifierService,
+      {} as unknown as AuditService,
+      {} as unknown as OutboxService,
+    );
+
+    await expect(
+      service.confirmUpload({
+        assetId,
+        actorIdentityId: new Types.ObjectId(),
+        expectedOwnerScope: makeOwnerScope(organizationId),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toThrow('S3 connection refused');
+    expect(markRejectedSpy).not.toHaveBeenCalled();
   });
 
   it('помечает asset verified и публикует MediaVerified outbox-событие при успешном verify', async () => {

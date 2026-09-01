@@ -58,6 +58,39 @@ export class UnitRepository {
   }
 
   /**
+   * chessboard.export: выгрузка шахматки читает юниты ВСЕХ корпусов ЖК за
+   * один запрос — listForBuilding здесь не подходит принципиально, он
+   * требует обязательный limit (сознательно, чтобы read-эндпоинт не мог
+   * отдать неограниченную страницу) и один buildingId. Здесь ограничение
+   * идёт сверху: DevelopmentsService.buildChessboardExport проверяет
+   * общее число юнитов ЖК до чтения и отказывает, если оно превышает
+   * потолок выгрузки — иначе весь ЖК не поместился бы в один файл всё
+   * равно. organizationId остаётся частью фильтра, не post-fetch
+   * проверкой, как и во всех остальных методах репозитория.
+   */
+  async listForBuildings(
+    buildingIds: Types.ObjectId[],
+    organizationId: Types.ObjectId,
+    filter: { kind?: UnitKind } = {},
+  ): Promise<UnitDocument[]> {
+    if (buildingIds.length === 0) {
+      return [];
+    }
+    return this.model.find({ buildingId: { $in: buildingIds }, organizationId, ...filter }).exec();
+  }
+
+  async countForBuildings(
+    buildingIds: Types.ObjectId[],
+    organizationId: Types.ObjectId,
+    filter: { kind?: UnitKind } = {},
+  ): Promise<number> {
+    if (buildingIds.length === 0) {
+      return 0;
+    }
+    return this.model.countDocuments({ buildingId: { $in: buildingIds }, organizationId, ...filter }).exec();
+  }
+
+  /**
    * updateUnitPrice (domain-model.md Модуль 4): пишет новую цену И
    * append'ит priceHistory-запись атомарно в одном updateOne — не два
    * отдельных запроса (иначе окно между "цена уже новая" и "history ещё

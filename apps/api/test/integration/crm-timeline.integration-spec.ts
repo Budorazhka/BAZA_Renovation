@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import fastifyCookie from '@fastify/cookie';
 import { AppModule } from '../../src/app.module';
@@ -12,6 +13,8 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplace-account/marketplace-account-context.middleware';
 import { AuthService } from '../../src/modules/identity/auth.service';
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * CRM-004: Pipeline & Activity Timeline + Stalled Leads.
@@ -35,7 +38,10 @@ describe('CRM Pipeline & Activity Timeline + Stalled Leads — HTTP Integration'
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 
     await app.register(fastifyCookie);
@@ -45,21 +51,21 @@ describe('CRM Pipeline & Activity Timeline + Stalled Leads — HTTP Integration'
     const adminContextMiddleware = app.get(AdminContextMiddleware);
     const marketplaceAccountContextMiddleware = app.get(MarketplaceAccountContextMiddleware);
     const isHealthCheckPath = (url: string): boolean => url === '/health' || url === '/health/ready';
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await correlationIdMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await correlationIdMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await tenantContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await tenantContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await adminContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await adminContextMiddleware.use(req, reply, () => {});
     });
-    fastifyInstance.addHook('onRequest', async (req: never, reply: never) => {
-      if (isHealthCheckPath((req as { url: string }).url)) return;
-      await marketplaceAccountContextMiddleware.use(req as never, reply as never, () => {});
+    fastifyInstance.addHook('onRequest', async (req: FastifyRequest, reply: FastifyReply) => {
+      if (isHealthCheckPath(req.url)) return;
+      await marketplaceAccountContextMiddleware.use(req, reply, () => {});
     });
     app.useGlobalFilters(new AppExceptionFilter());
     const { ValidationPipe } = await import('@nestjs/common');

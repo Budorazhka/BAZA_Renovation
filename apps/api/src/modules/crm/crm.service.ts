@@ -1639,6 +1639,83 @@ export class CrmService {
     return lead._id;
   }
 
+  /**
+   * lead.create.organization — security review 31.08.2026: грант выдан
+   * ВСЕМ ролям (owner/director/rop/manager/administrator/developer) в
+   * DEFAULT_ROLE_GRANTS, но до этого прохода не существовало НИ ОДНОГО
+   * HTTP-пути вручную завести лид в CRM — единственный способ появления
+   * Lead был createLeadForReveal (только из анонимного публичного
+   * reveal-contact потока). Честный gap, найденный чтением кода, не
+   * документа.
+   *
+   * НЕ назначает ownerPositionId автоматически на actor'а — LeadDocument.
+   * ownerPositionId докстринг прямо фиксирует owner decision: "Изначально
+   * null... назначается explicit командой assignLead, НЕ auto-assignment
+   * по умолчанию" (master plan: "Новый лид назначается РОПом, Директором
+   * или Собственником"). Вручную заведённый лид — тот же 'new'/unassigned
+   * старт, что и лид с сайта; owner/director/rop назначают его отдельным
+   * вызовом assignLead, та же дисциплина для обоих источников.
+   *
+   * contactId ИЛИ requesterPhone — ровно один способ указать контакт
+   * (CreateLeadDto докстринг). resolveContact переиспользует тот же
+   * find-by-phone-or-create tenant-local dedupe, что уже применяется в
+   * reveal-контуре — не отдельная логика для ERP-стороны.
+   */
+  async createLead(params: {
+    organizationId: Types.ObjectId;
+    contactId?: Types.ObjectId;
+    requesterName?: string;
+    requesterPhone?: string;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadReadModel> {
+    return runInTransaction(this.connection, async (session) => {
+      const contact = params.contactId
+        ? await (async () => {
+            const found = await this.contactRepository.findByIdForOrganization(params.contactId!, params.organizationId);
+            if (!found) {
+              throw new NotFoundException('Contact not found');
+            }
+            return found;
+          })()
+        : await this.resolveContact(params.organizationId, params, session);
+
+      const lead = await this.leadRepository.create(
+        {
+          organizationId: params.organizationId,
+          contactId: contact._id,
+          source: { route: 'manual' },
+        },
+        session,
+      );
+
+      await this.leadEventRepository.append(
+        {
+          leadId: lead._id,
+          organizationId: params.organizationId,
+          stage: 'new' as LeadStage,
+          changedBy: { type: 'position', positionId: params.actorPositionId },
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.create',
+          resource: 'lead',
+          resourceId: lead._id,
+          after: { contactId: contact._id.toString(), source: 'manual' },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+    });
+  }
+
   private async resolveContact(
     organizationId: Types.ObjectId,
     params: { requesterName?: string; requesterPhone?: string },
@@ -1878,7 +1955,6 @@ export class CrmService {
     requiredOwnerPositionId?: Types.ObjectId;
     title?: string;
     description?: string | null;
-    ownerPositionId?: Types.ObjectId;
     expectedCommission?: MoneyAmount | null;
     expectedVersion: number;
     actorPositionId: Types.ObjectId;
@@ -1898,14 +1974,6 @@ export class CrmService {
     }
 
     return runInTransaction(this.connection, async (session) => {
-      if (params.ownerPositionId) {
-        await this.organizationsService.findAssignablePosition(
-          params.ownerPositionId,
-          params.organizationId,
-          session,
-        );
-      }
-
       const updated = await this.dealRepository.updateDeal(
         params.dealId,
         params.organizationId,
@@ -1913,7 +1981,6 @@ export class CrmService {
         {
           title: params.title,
           description: params.description,
-          ownerPositionId: params.ownerPositionId,
           expectedCommission: params.expectedCommission,
         },
         session,
@@ -1974,6 +2041,120 @@ export class CrmService {
       const contactsById = new Map(contacts.map((c) => [c._id.toString(), c]));
 
       return toDealReadModel(updated, contactsById.get(updated.contactId.toString()), contactsById);
+    });
+  }
+
+  /**
+   * PATCH /deals/:dealId/reassign. client.reassign — отдельный action от
+   * deal.edit, тот же принцип, что уже применён к Task (task.reassign
+   * отделён от task.edit, см. reassignTask докстринг). До этого коммита
+   * client.reassign был "мёртвым" grant'ом в DEFAULT_ROLE_GRANTS
+   * (owner/director/rop, scope 'organization') — ownerPositionId менялся
+   * ТОЛЬКО через deal.edit (UpdateDealDto.ownerPositionId), без проверки
+   * client.reassign вообще. Для шести встроенных ролей это не давало
+   * реальной дыры (deal.edit organization-scope уже есть у тех же
+   * owner/director/rop, а own-scope у manager был явно заблокирован
+   * сверкой ownerPositionId с собственной позицией в DealController), но
+   * платформа поддерживает explicit per-Position custom grant-наборы
+   * (⚙-toggle, см. DEFAULT_ROLE_GRANTS докстринг) — Position с deal.edit,
+   * но БЕЗ client.reassign, могла бы переназначить владельца сделки в
+   * обход зафиксированного в grants намерения. Честный gap, найденный
+   * сверкой grants-таблицы с реальными @RequirePermission-проверками, не
+   * документа.
+   *
+   * ownerPositionId у Deal — ОБЯЗАТЕЛЬНОЕ поле (в отличие от
+   * Task.assignedPositionId) — reassignDeal не поддерживает "снять
+   * владельца", только замену на другую existing assignable позицию той
+   * же организации.
+   *
+   * No-op (ownerPositionId совпадает с текущим) — короткий выход ДО
+   * транзакции без проверки версии, тот же принцип, что
+   * CrmService.reassignTask: "переназначение" фактически не произошло,
+   * нечего фиксировать как факт изменения.
+   */
+  async reassignDeal(params: {
+    dealId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    requiredScopePositionId?: Types.ObjectId;
+    expectedVersion: number;
+    ownerPositionId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmDealReadModel> {
+    const existing = await this.dealRepository.findByIdForOrganization(
+      params.dealId,
+      params.organizationId,
+      params.requiredScopePositionId,
+    );
+    if (!existing) {
+      throw new NotFoundException('Deal not found');
+    }
+
+    if (existing.ownerPositionId.equals(params.ownerPositionId)) {
+      const contacts = await this.contactRepository.findByIdsForOrganization(params.organizationId, [
+        existing.contactId,
+        ...existing.participants.map((p) => p.contactId),
+      ]);
+      const contactsById = new Map(contacts.map((c) => [c._id.toString(), c]));
+      return toDealReadModel(existing, contactsById.get(existing.contactId.toString()), contactsById);
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      await this.organizationsService.findAssignablePosition(
+        params.ownerPositionId,
+        params.organizationId,
+        session,
+      );
+
+      const { modifiedCount } = await this.dealRepository.reassignOwner(
+        params.dealId,
+        params.organizationId,
+        params.expectedVersion,
+        params.ownerPositionId,
+        session,
+      );
+      if (modifiedCount === 0) {
+        const current = await this.dealRepository.findByIdForOrganization(
+          params.dealId,
+          params.organizationId,
+          params.requiredScopePositionId,
+        );
+        if (!current) {
+          throw new NotFoundException('Deal not found');
+        }
+        throw new ConflictException('Deal was modified by another request — refresh and retry');
+      }
+
+      const updated = await this.dealRepository.findByIdForOrganization(
+        params.dealId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'client.reassign',
+          resource: 'deal',
+          resourceId: params.dealId,
+          before: { ownerPositionId: existing.ownerPositionId.toString() },
+          after: { ownerPositionId: params.ownerPositionId.toString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      const contactIdSet = new Set<string>([updated!.contactId.toString()]);
+      for (const p of updated!.participants ?? []) {
+        contactIdSet.add(p.contactId.toString());
+      }
+      const contactObjectIds = [...contactIdSet].map((id) => new Types.ObjectId(id));
+      const contacts = await this.contactRepository.findByIdsForOrganization(params.organizationId, contactObjectIds);
+      const contactsById = new Map(contacts.map((c) => [c._id.toString(), c]));
+
+      return toDealReadModel(updated!, contactsById.get(updated!.contactId.toString()), contactsById);
     });
   }
 

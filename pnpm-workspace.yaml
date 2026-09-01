@@ -7,3 +7,23 @@ allowBuilds:
   core-js: true
   esbuild: true
   mongodb-memory-server: true
+
+# Транзитивные зависимости с известными адвизори, которые не подтягиваются
+# обновлением прямых зависимостей (обе живут внутри @nestjs/*):
+#   lodash <4.18.1  — prototype pollution (_.unset / array-path) + code
+#     injection в _.template; приходит из @nestjs/config, где используется
+#     для чтения конфига из env. В нашем коде lodash напрямую не используется.
+#   file-type <21.3.2 — бесконечный цикл в ASF-парсере и ZIP-бомба; приходит
+#     из @nestjs/common (его FileTypeValidator), который в этом проекте не
+#     используется ни разу — свой magic-byte sniffing в media идёт через
+#     собственный file-type ^22. Оверрайд схлопывает обе копии в одну.
+#   fastify — @nestjs/platform-fastify пиннит ТОЧНУЮ версию (5.11.3), из-за
+#     чего в дереве оказывались две копии fastify вместе с нашей прямой
+#     зависимостью. Разные копии = разные типы FastifyRequest/FastifyInstance,
+#     и tsc отклонял передачу request из хука в наш же middleware. Обе версии
+#     закрывают адвизори, проблема только в дубле — схлопываем в одну.
+overrides:
+  lodash@<4.18.1: ^4.18.1
+  file-type@<21.3.2: ^22.0.2
+  fastify: ^5.12.1
+  uuid@<11.1.1: ^11.1.1

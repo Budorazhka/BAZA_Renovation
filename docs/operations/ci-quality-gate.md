@@ -82,7 +82,7 @@ The quality gate executes the following sequence of commands in order:
 | Step | Command | Purpose |
 |------|---------|---------|
 | 1. Install | `pnpm install --frozen-lockfile` | Restores workspace dependencies strictly matching `pnpm-lock.yaml`. Fails if lockfile is out of date. |
-| 2. Typecheck | `pnpm typecheck` | Runs Turbo typecheck across all 17 workspace packages and apps (`tsc --noEmit` / `tsc -b`). |
+| 2. Typecheck | `pnpm typecheck` | Runs Turbo typecheck across all 17 workspace packages and apps (`tsc --noEmit` / `tsc -b`). Для `apps/api` это ДВА прогона: `tsconfig.json` (только `src`, то же, что собирает `nest build`) и `tsconfig.test.json` (`src` + `test`). Второй добавлен 01.09.2026: каталог `test` был исключён из проверки типов, из-за чего изменения сигнатур не проверялись компилятором в интеграционных тестах — так прошли две реальные регрессии (см. `nest11-fastify5-migration.md`). Unit-тесты (`*.spec.ts`) лежат в `src` и проверялись всегда. |
 | 3. Unit Tests | `pnpm test` | Runs Jest unit tests across backend services and frontend packages. |
 | 4. Build | `pnpm build` | Compiles backend NestJS modules, shared packages, and builds Vite frontend bundles (`admin-web`, `marketplace-web`). |
 | 5. OpenAPI Sync Check | `node packages/api-client/scripts/check-stale.mjs` | Regenerates TypeScript client types from `docs/api/v1-first-vertical-slice.yaml` and asserts zero drift with `packages/api-client/src/schema.ts`. |

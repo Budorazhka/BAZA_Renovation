@@ -48,6 +48,14 @@ describe('DevelopmentsService — read hierarchy integration (real MongoDB)', ()
     process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
     process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    // REDIS_URL — тот же паттерн, что MINIO_* выше: OrganizationsModule
+    // транзитивно тянет RedisModule, чей RedisService делает
+    // config.getOrThrow('REDIS_URL') в конструкторе. Без этой строки файл
+    // падал ВСЕМИ тестами (не подключением к Redis, а самим DI: ключа нет в
+    // конфиге) — тот же класс поломки, что уже чинился для admin-unpublish/
+    // admin-accounts спек. Реальный Redis тестам не нужен: ioredis
+    // ретраится в фоне, не роняя процесс.
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
 
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(uri), DevelopmentsModule],

@@ -29,7 +29,6 @@ export interface CreateDealParams {
 export interface UpdateDealParams {
   title?: string;
   description?: string | null;
-  ownerPositionId?: Types.ObjectId;
   expectedCommission?: MoneyAmount | null;
 }
 
@@ -122,7 +121,6 @@ export class DealRepository {
     const $unset: Record<string, number> = {};
 
     if (params.title !== undefined) $set.title = params.title;
-    if (params.ownerPositionId !== undefined) $set.ownerPositionId = params.ownerPositionId;
 
     if (params.description === null) {
       $unset.description = 1;
@@ -165,6 +163,27 @@ export class DealRepository {
         },
         {
           $set: { stage: newStage, updatedAt: new Date() },
+          $inc: { version: 1 },
+        },
+        { session },
+      )
+      .exec();
+
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  async reassignOwner(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    expectedVersion: number,
+    ownerPositionId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        { _id: id, organizationId, version: expectedVersion },
+        {
+          $set: { ownerPositionId, updatedAt: new Date() },
           $inc: { version: 1 },
         },
         { session },

@@ -9,6 +9,7 @@ import { ProductAccessRepository } from './repository/product-access.repository'
 import { SessionService } from './session.service';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { AuthController } from './auth.controller';
       { name: SessionDocument.name, schema: SessionSchema },
       { name: ProductAccessDocument.name, schema: ProductAccessSchema },
     ]),
+    RateLimitModule,
   ],
   controllers: [AuthController],
   providers: [SessionRepository, IdentityRepository, ProductAccessRepository, SessionService, AuthService],

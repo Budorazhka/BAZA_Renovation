@@ -1298,3 +1298,149 @@ describe('DevelopmentsService.getPublicationStatus', () => {
     expect(result.buildError).toBeUndefined();
   });
 });
+
+describe('DevelopmentsService.buildChessboardExport', () => {
+  const organizationId = new Types.ObjectId();
+  const developmentId = new Types.ObjectId();
+  const buildingId = new Types.ObjectId();
+  const floorId = new Types.ObjectId();
+
+  function makeExportService(overrides: {
+    development?: unknown;
+    buildings?: unknown[];
+    floors?: unknown[];
+    units?: unknown[];
+    unitCount?: number;
+  } = {}) {
+    const units = overrides.units ?? [];
+    return makeService({
+      developmentRepository: {
+        findByIdForOrganization: jest
+          .fn()
+          .mockResolvedValue(overrides.development === undefined ? { _id: developmentId, name: 'Sea Towers' } : overrides.development),
+      },
+      buildingRepository: {
+        listForDevelopment: jest
+          .fn()
+          .mockResolvedValue(overrides.buildings ?? [{ _id: buildingId, name: 'Корпус 1' }]),
+      },
+      floorRepository: {
+        listForBuildings: jest
+          .fn()
+          .mockResolvedValue(overrides.floors ?? [{ _id: floorId, floorNumber: 3 }]),
+      },
+      unitRepository: {
+        countForBuildings: jest.fn().mockResolvedValue(overrides.unitCount ?? units.length),
+        listForBuildings: jest.fn().mockResolvedValue(units),
+      },
+    });
+  }
+
+  function makeUnitDoc(overrides: Record<string, unknown> = {}) {
+    return {
+      buildingId,
+      floorId,
+      number: 'A-0301',
+      rooms: 2,
+      area: 58,
+      price: { amountMinorUnits: 12_180_000, currency: 'USD' },
+      status: 'available',
+      ...overrides,
+    };
+  }
+
+  it('резолвит имя корпуса и номер этажа по id и отдаёт имя ЖК с валютой', async () => {
+    const service = makeExportService({ units: [makeUnitDoc()] });
+
+    const result = await service.buildChessboardExport(developmentId, organizationId);
+
+    expect(result.developmentName).toBe('Sea Towers');
+    expect(result.currency).toBe('USD');
+    expect(result.units).toEqual([
+      {
+        buildingName: 'Корпус 1',
+        floorNumber: 3,
+        number: 'A-0301',
+        rooms: 2,
+        area: 58,
+        priceMinorUnits: 12_180_000,
+        status: 'available',
+        promotion: undefined,
+      },
+    ]);
+  });
+
+  it('читает только квартиры — паркинги и кладовки в шахматочную выгрузку не идут', async () => {
+    const service = makeExportService({ units: [makeUnitDoc()] });
+
+    await service.buildChessboardExport(developmentId, organizationId);
+
+    const unitRepository = (service as unknown as { unitRepository: { listForBuildings: jest.Mock; countForBuildings: jest.Mock } })
+      .unitRepository;
+    expect(unitRepository.listForBuildings).toHaveBeenCalledWith([buildingId], organizationId, { kind: 'apartment' });
+    expect(unitRepository.countForBuildings).toHaveBeenCalledWith([buildingId], organizationId, { kind: 'apartment' });
+  });
+
+  it('чужой или несуществующий ЖК — 404, до любого чтения юнитов', async () => {
+    const service = makeExportService({ development: null });
+
+    await expect(service.buildChessboardExport(developmentId, organizationId)).rejects.toThrow(NotFoundException);
+    const unitRepository = (service as unknown as { unitRepository: { listForBuildings: jest.Mock } }).unitRepository;
+    expect(unitRepository.listForBuildings).not.toHaveBeenCalled();
+  });
+
+  it('смешанные валюты в одном ЖК — явная ошибка, а не файл с неверной подписью колонок', async () => {
+    const service = makeExportService({
+      units: [
+        makeUnitDoc({ price: { amountMinorUnits: 100, currency: 'USD' } }),
+        makeUnitDoc({ number: 'A-0302', price: { amountMinorUnits: 100, currency: 'GEL' } }),
+      ],
+    });
+
+    await expect(service.buildChessboardExport(developmentId, organizationId)).rejects.toThrow(
+      'Chessboard export requires a single currency across the development',
+    );
+  });
+
+  it('превышение потолка выгрузки отклоняется ДО чтения юнитов в память', async () => {
+    const service = makeExportService({ unitCount: 20_001 });
+
+    await expect(service.buildChessboardExport(developmentId, organizationId)).rejects.toThrow(
+      'Chessboard export is limited to 20000 units',
+    );
+    const unitRepository = (service as unknown as { unitRepository: { listForBuildings: jest.Mock } }).unitRepository;
+    expect(unitRepository.listForBuildings).not.toHaveBeenCalled();
+  });
+
+  it('ЖК без корпусов отдаёт пустую выгрузку, а не падает', async () => {
+    const service = makeExportService({ buildings: [], floors: [], units: [] });
+
+    const result = await service.buildChessboardExport(developmentId, organizationId);
+
+    expect(result.units).toEqual([]);
+    expect(result.currency).toBe('USD');
+  });
+
+  it('строки отсортированы корпус → этаж → номер', async () => {
+    const otherBuildingId = new Types.ObjectId();
+    const otherFloorId = new Types.ObjectId();
+    const service = makeExportService({
+      buildings: [
+        { _id: buildingId, name: 'Корпус 2' },
+        { _id: otherBuildingId, name: 'Корпус 1' },
+      ],
+      floors: [
+        { _id: floorId, floorNumber: 2 },
+        { _id: otherFloorId, floorNumber: 10 },
+      ],
+      units: [
+        makeUnitDoc({ number: 'B-0201' }),
+        makeUnitDoc({ buildingId: otherBuildingId, floorId: otherFloorId, number: 'A-1001' }),
+      ],
+    });
+
+    const result = await service.buildChessboardExport(developmentId, organizationId);
+
+    expect(result.units.map((u) => u.number)).toEqual(['A-1001', 'B-0201']);
+  });
+});

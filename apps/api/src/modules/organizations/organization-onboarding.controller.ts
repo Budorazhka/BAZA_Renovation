@@ -1,8 +1,10 @@
-import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { SessionService } from '../identity/session.service';
 import { OrganizationsService } from './organizations.service';
 import { RegisterOrganizationDto } from './dto/register-organization.dto';
+import { IpRateLimitGuard } from '../../shared/rate-limit/ip-rate-limit.guard';
+import { RateLimit } from '../../shared/rate-limit/rate-limit.decorator';
 
 /**
  * Публичный (без TenantGuard) onboarding-путь — намеренно отдельный
@@ -26,8 +28,16 @@ export class OrganizationOnboardingController {
     private readonly organizationsService: OrganizationsService,
   ) {}
 
+  /**
+   * Rate limit по IP (security review) — этот путь тоже принимает
+   * login+password (verifyCredentialsForOnboarding, см. докстринг класса) и
+   * без лимита был бы ещё одним неограниченным auth-подобным вектором,
+   * помимо /auth/login.
+   */
   @Post('register')
   @HttpCode(201)
+  @UseGuards(IpRateLimitGuard)
+  @RateLimit({ keyPrefix: 'org-register', limit: 5, windowSeconds: 60 })
   async register(
     @Req() req: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,

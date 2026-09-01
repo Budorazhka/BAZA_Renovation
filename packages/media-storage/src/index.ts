@@ -1,4 +1,4 @@
-export { MediaStorageService } from './media-storage.service';
+export { MediaStorageService, MediaObjectTooLargeError } from './media-storage.service';
 export {
   MediaAssetDocument,
   MediaAssetSchema,

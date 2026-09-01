@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { ConfigModule } from '@nestjs/config';
 import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
@@ -8,6 +9,7 @@ import { AdminPublicationService } from '../../src/modules/admin/admin-publicati
 import { AdminAccountService } from '../../src/modules/admin/admin-account.service';
 import { AuthService } from '../../src/modules/identity/auth.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
+import { withSession } from './support/with-session';
 
 /**
  * Integration-тест против РЕАЛЬНОГО MongoDB single-node replica set
@@ -36,8 +38,20 @@ describe('AdminPublicationService.unpublish — integration (real MongoDB transa
     await replSet.waitUntilRunning();
     const uri = replSet.getUri();
 
+    // ConfigModule (ДОБАВЛЕНО): AdminModule теперь импортирует
+    // PropertyAssetsModule (admin duplicate-candidates review queue), которое
+    // транзитивно тянет MediaModule → MediaStorageService, а тот требует
+    // ConfigService в конструкторе (реальный S3Client) — тот же паттерн
+    // фикса, что уже применён в developments-transactions.integration-spec.ts.
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
     const moduleRef = await Test.createTestingModule({
-      imports: [MongooseModule.forRoot(uri), AdminModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(uri), AdminModule],
     }).compile();
 
     connection = moduleRef.get<Connection>(getConnectionToken());
@@ -90,11 +104,11 @@ describe('AdminPublicationService.unpublish — integration (real MongoDB transa
   });
 
   async function seedPublishedPublication(sourceId: Types.ObjectId, organizationId: Types.ObjectId) {
-    await publicationRepository.upsertPending({
+    await withSession(connection, (session) => publicationRepository.upsertPending({
       sourceType: 'development',
       sourceId,
       publisherScope: { type: 'organization', organizationId },
-    });
+    }, session));
     await connection
       .collection('marketplace_publications')
       .updateOne({ sourceType: 'development', sourceId }, { $set: { status: 'published', slug: 'test-slug' } });
@@ -231,8 +245,20 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
     await replSet.waitUntilRunning();
     const uri = replSet.getUri();
 
+    // ConfigModule (ДОБАВЛЕНО): AdminModule теперь импортирует
+    // PropertyAssetsModule (admin duplicate-candidates review queue), которое
+    // транзитивно тянет MediaModule → MediaStorageService, а тот требует
+    // ConfigService в конструкторе (реальный S3Client) — тот же паттерн
+    // фикса, что уже применён в developments-transactions.integration-spec.ts.
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
     const moduleRef = await Test.createTestingModule({
-      imports: [MongooseModule.forRoot(uri), AdminModule],
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(uri), AdminModule],
     }).compile();
 
     connection = moduleRef.get<Connection>(getConnectionToken());
@@ -286,7 +312,7 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
   async function seedPublication(params: { sourceType: 'development' | 'unit' | 'listing'; city: string; status: 'published' | 'unpublished' | 'build_failed' | 'publication_pending' }) {
     const sourceId = new Types.ObjectId();
     const organizationId = new Types.ObjectId();
-    await publicationRepository.upsertPending({ sourceType: params.sourceType, sourceId, publisherScope: { type: 'organization', organizationId } });
+    await withSession(connection, (session) => publicationRepository.upsertPending({ sourceType: params.sourceType, sourceId, publisherScope: { type: 'organization', organizationId } }, session));
     await connection.collection('marketplace_publications').updateOne(
       { sourceType: params.sourceType, sourceId },
       { $set: { status: params.status, slug: `slug-${sourceId.toString()}`, searchProjection: { city: params.city } } },

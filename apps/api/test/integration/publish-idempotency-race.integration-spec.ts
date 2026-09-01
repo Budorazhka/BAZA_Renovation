@@ -9,6 +9,8 @@ import { AppExceptionFilter } from '../../src/shared/errors/app-exception.filter
 import { CorrelationIdMiddleware } from '../../src/shared/errors/correlation-id.middleware';
 import { TenantContextMiddleware } from '../../src/shared/tenant/tenant-context.middleware';
 import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.middleware';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 import { DevelopmentRepository } from '@baza/development';
 
 /**
@@ -53,7 +55,10 @@ describe('POST /developments/:id/publish — гонка параллельных
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
 
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
     await app.register(fastifyCookie);

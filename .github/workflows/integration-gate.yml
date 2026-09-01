@@ -19,6 +19,12 @@ jobs:
   integration:
     name: HTTP and module integration gate
     runs-on: ubuntu-latest
+    # Реальная длительность сьюта на раннере — 3.5 минуты (замер
+    # 01.09.2026). До этого гейт не завершался НИ РАЗУ и убивался по
+    # таймауту, но причина была не в нехватке времени: jest проходил все
+    # тесты и не выходил, вися на хендлах ioredis (см.
+    # jest.integration.config.js, forceExit). 20 минут — запас почти в
+    # шесть раз, его достаточно.
     timeout-minutes: 20
 
     steps:
@@ -40,8 +46,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Report runner capacity
+        run: |
+          echo "CPU: $(nproc)"
+          free -h || true
+          ls -la ~/.cache/mongodb-binaries 2>/dev/null || echo "mongod binary not downloaded yet"
+
+      # --log-order=stream: по умолчанию turbo группирует вывод задачи и
+      # печатает его только после завершения. Именно поэтому оба прошлых
+      # падения выглядели как «19 минут тишины, затем отмена» — понять,
+      # висит сборка или тесты, было невозможно. Со стримом виден прогресс
+      # jest по файлам. (--output-logs принимает full/none/hash-only/
+      # new-only/errors-only, значения stream у него нет.)
       - name: Run HTTP and module integration tests
-        run: pnpm test:integration
+        run: pnpm exec turbo run test:integration --output-logs=full --log-order=stream
 
       - name: Check git formatting and whitespace
         run: git diff --check

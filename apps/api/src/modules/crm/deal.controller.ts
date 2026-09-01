@@ -24,6 +24,7 @@ import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe'
 import { CrmService } from './crm.service';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
+import { ReassignDealDto } from './dto/reassign-deal.dto';
 import { ChangeDealStageDto } from './dto/change-deal-stage.dto';
 import { AddDealParticipantDto } from './dto/add-deal-participant.dto';
 import { UpdateDealChecklistDto } from './dto/update-deal-checklist.dto';
@@ -132,22 +133,42 @@ export class DealController {
     const actorPositionId = new Types.ObjectId(tenantContext.positionId);
     const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
 
-    const ownerScopePositionId = await this.ownerFilterForAction(tenantContext.positionId, 'edit');
-    if (dto.ownerPositionId && ownerScopePositionId && !ownerScopePositionId.equals(new Types.ObjectId(dto.ownerPositionId))) {
-      throw new BadRequestException('ownerPositionId is outside caller permission scope');
-    }
-
     return this.crmService.updateDeal({
       dealId,
       organizationId,
-      requiredOwnerPositionId: ownerScopePositionId,
+      requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'edit'),
       title: dto.title,
       description: dto.description,
-      ownerPositionId: dto.ownerPositionId ? new Types.ObjectId(dto.ownerPositionId) : undefined,
       expectedCommission: dto.expectedCommission,
       expectedVersion: dto.expectedVersion,
       actorPositionId,
       actorIdentityId,
+      correlationId: req.correlationId,
+    });
+  }
+
+  /**
+   * client.reassign — отдельный grant от deal.edit (см. CrmService.reassignDeal
+   * докстринг). PATCH, тот же HTTP-выбор, что PATCH /tasks/:taskId/reassign
+   * (task.reassign — идемпотентная замена значения поля ownerPositionId).
+   */
+  @Patch(':dealId/reassign')
+  @HttpCode(200)
+  @RequirePermission('client', 'reassign')
+  async reassignDeal(
+    @Req() req: FastifyRequest,
+    @Param('dealId', ParseObjectIdPipe) dealId: Types.ObjectId,
+    @Body() dto: ReassignDealDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.reassignDeal({
+      dealId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      requiredScopePositionId: await this.ownerFilterForClientReassign(tenantContext.positionId),
+      expectedVersion: dto.expectedVersion,
+      ownerPositionId: new Types.ObjectId(dto.ownerPositionId),
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,
     });
   }
@@ -263,6 +284,25 @@ export class DealController {
       subjectId: positionObjectId,
       resource: 'deal',
       action,
+    });
+    return scopes.some((scope) => scope === 'organization' || scope === 'global')
+      ? undefined
+      : positionObjectId;
+  }
+
+  /**
+   * client.reassign — грант выдаётся на resource 'client' (DEFAULT_ROLE_GRANTS),
+   * не 'deal' — PermissionGuard уже проверил это декоратором, здесь нужен
+   * ТОЛЬКО scope того же гранта для сужения own/team, поэтому отдельный
+   * helper вместо переиспользования ownerFilterForAction(resource:'deal').
+   */
+  private async ownerFilterForClientReassign(positionId: string): Promise<Types.ObjectId | undefined> {
+    const positionObjectId = new Types.ObjectId(positionId);
+    const scopes = await this.policyEvaluator.matchingScopes({
+      subjectType: 'position',
+      subjectId: positionObjectId,
+      resource: 'client',
+      action: 'reassign',
     });
     return scopes.some((scope) => scope === 'organization' || scope === 'global')
       ? undefined
