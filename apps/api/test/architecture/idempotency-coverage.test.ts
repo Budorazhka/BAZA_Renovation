@@ -65,10 +65,20 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /auth/login': 'выдаёт сессию; повтор даёт новую сессию, а не дубль ресурса',
   'POST /auth/logout': 'идемпотентен по природе: повтор на закрытой сессии ничего не меняет',
   'POST /auth/register': 'повтор отклоняется уникальностью email на уровне БД',
-  'POST /organizations/register': 'ПРОБЕЛ: дубль создаёт вторую организацию',
+  'POST /organizations/register':
+    'НЕ пробел, проверено 02.09.2026: повтор отклоняется уникальным частичным индексом ' +
+    '{identityId} where endedAt not exists на position_assignments — второй активный assignment ' +
+    'для той же identity невозможен на уровне БД. Вся регистрация идёт одной транзакцией ' +
+    '(createOrganizationWithOwner), поэтому отклонённый дубль не оставляет висячей организации. ' +
+    'Ключ здесь был бы к тому же сломан: повтор вернул бы тело, но не поставил session-cookie.',
 
   // --- Команда и позиции ---
-  'POST /team-users': 'ПРОБЕЛ: дубль создаёт вторую позицию',
+  'POST /team-users':
+    'НЕ пробел, проверено 02.09.2026: первый же шаг createOccupiedPosition — registerIdentity — ' +
+    'падает на уникальном индексе normalizedLogin (11000 -> ConflictException), поэтому повтор ' +
+    'с тем же телом вторую позицию создать не может. ОТДЕЛЬНО: сама операция НЕ атомарна ' +
+    '(четыре шага без общей транзакции) — это настоящий дефект, но другого рода, и ключом ' +
+    'он не лечится. См. docs/api/conventions.md §8.',
   'POST /team-users/ensure-self': 'upsert по identity: повтор возвращает ту же позицию',
   'POST /team-users/ensure-team': 'upsert по организации: повтор возвращает ту же команду',
   'POST /team-users/invite/:token/activate': 'токен одноразовый, повтор отклоняется',
@@ -151,7 +161,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 2;
+const KNOWN_GAPS = 0;
 
 interface RouteInfo {
   key: string;
