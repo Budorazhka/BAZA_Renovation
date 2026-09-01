@@ -1,4 +1,45 @@
-import { IsDateString, IsMongoId, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsDateString,
+  IsHexColor,
+  IsIn,
+  IsInt,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  TASK_CATEGORIES,
+  TASK_ENTITY_TYPES,
+  TASK_PRIORITIES,
+  type TaskCategory,
+  type TaskEntityType,
+  type TaskPriority,
+} from '../schemas/task.schema';
+
+/** Подзадача. `id` генерирует клиент — он же переставляет их локально до сохранения. */
+export class CreateTaskSubtaskDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  title!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  done?: boolean;
+}
 
 export class CreateTaskDto {
   @IsString()
@@ -26,4 +67,59 @@ export class CreateTaskDto {
   @IsOptional()
   @IsMongoId()
   contactId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  startAt?: string;
+
+  @IsOptional()
+  @IsIn(TASK_PRIORITIES)
+  priority?: TaskPriority;
+
+  @IsOptional()
+  @IsIn(TASK_CATEGORIES)
+  taskCategory?: TaskCategory;
+
+  /** `null` — снять метку. Отсутствие поля и null — разные намерения. */
+  @IsOptional()
+  @IsHexColor()
+  colorHex?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  reminderOffsetsMinutes?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskSubtaskDto)
+  subtasks?: CreateTaskSubtaskDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(255, { each: true })
+  attachmentFileNames?: string[];
+
+  @IsOptional()
+  @IsIn(TASK_ENTITY_TYPES)
+  entityType?: TaskEntityType;
+
+  @IsOptional()
+  @IsMongoId()
+  entityId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isAutomatic?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  triggerType?: string;
 }

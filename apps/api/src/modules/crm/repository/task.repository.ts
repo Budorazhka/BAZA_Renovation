@@ -1,7 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
-import { TaskDocument, type TaskStatus } from '../schemas/task.schema';
+import {
+  TaskDocument,
+  type TaskStatus,
+  type TaskPriority,
+  type TaskCategory,
+  type TaskEntityType,
+} from '../schemas/task.schema';
 
 export interface ListTasksFilter {
   assignedPositionId?: Types.ObjectId;
@@ -23,6 +29,17 @@ export interface CreateTaskParams {
   assignedPositionId?: Types.ObjectId;
   leadId?: Types.ObjectId;
   contactId?: Types.ObjectId;
+  startAt?: Date;
+  priority?: TaskPriority;
+  taskCategory?: TaskCategory;
+  colorHex?: string | null;
+  reminderOffsetsMinutes?: number[];
+  subtasks?: Array<{ id: string; title: string; done: boolean }>;
+  attachmentFileNames?: string[];
+  entityType?: TaskEntityType;
+  entityId?: Types.ObjectId;
+  isAutomatic?: boolean;
+  triggerType?: string;
 }
 
 export interface UpdateTaskParams {
@@ -52,6 +69,20 @@ export class TaskRepository {
     if (params.assignedPositionId !== undefined) docData.assignedPositionId = params.assignedPositionId;
     if (params.leadId !== undefined) docData.leadId = params.leadId;
     if (params.contactId !== undefined) docData.contactId = params.contactId;
+    // Ниже — поля, которыми пользуется экран задач. Каждое проставляется
+    // только если пришло: у остальных работают defaults схемы, и запись «как
+    // есть» не должна затирать их undefined'ом.
+    if (params.startAt !== undefined) docData.startAt = params.startAt;
+    if (params.priority !== undefined) docData.priority = params.priority;
+    if (params.taskCategory !== undefined) docData.taskCategory = params.taskCategory;
+    if (params.colorHex !== undefined) docData.colorHex = params.colorHex;
+    if (params.reminderOffsetsMinutes !== undefined) docData.reminderOffsetsMinutes = params.reminderOffsetsMinutes;
+    if (params.subtasks !== undefined) docData.subtasks = params.subtasks;
+    if (params.attachmentFileNames !== undefined) docData.attachmentFileNames = params.attachmentFileNames;
+    if (params.entityType !== undefined) docData.entityType = params.entityType;
+    if (params.entityId !== undefined) docData.entityId = params.entityId;
+    if (params.isAutomatic !== undefined) docData.isAutomatic = params.isAutomatic;
+    if (params.triggerType !== undefined) docData.triggerType = params.triggerType;
 
     const [created] = await this.model.create([docData], { session });
     return created!;

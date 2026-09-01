@@ -22,7 +22,13 @@ import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage } from './schemas/lead.schema';
-import type { TaskDocument, TaskStatus } from './schemas/task.schema';
+import type {
+  TaskDocument,
+  TaskStatus,
+  TaskPriority,
+  TaskCategory,
+  TaskEntityType,
+} from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
 
 import type { TimelineEventType } from './dto/list-timeline.dto';
@@ -127,6 +133,25 @@ export interface CrmTaskReadModel {
   version: number;
   createdAt: string;
   updatedAt: string | null;
+
+  // Поля, которыми экран задач ERP уже пользуется (требование: интерфейс не
+  // меняется, модель подстраивается под него).
+  startAt: string | null;
+  priority: TaskPriority;
+  taskCategory: TaskCategory;
+  colorHex: string | null;
+  reminderOffsetsMinutes: number[];
+  subtasks: Array<{ id: string; title: string; done: boolean }>;
+  attachmentFileNames: string[];
+  entityType: TaskEntityType;
+  entityId: string | null;
+  isAutomatic: boolean;
+  triggerType: string | null;
+  /**
+   * Просрочена ли задача. НЕ хранится: производное от dueAt и статуса,
+   * вычисляется на чтении — иначе поле устаревало бы само каждую полночь.
+   */
+  isOverdue: boolean;
 }
 
 /**
@@ -747,6 +772,17 @@ export class CrmService {
     assignedPositionId?: Types.ObjectId;
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
+    startAt?: Date;
+    priority?: TaskPriority;
+    taskCategory?: TaskCategory;
+    colorHex?: string | null;
+    reminderOffsetsMinutes?: number[];
+    subtasks?: Array<{ id: string; title: string; done: boolean }>;
+    attachmentFileNames?: string[];
+    entityType?: TaskEntityType;
+    entityId?: Types.ObjectId;
+    isAutomatic?: boolean;
+    triggerType?: string;
     correlationId: string;
     /** ADR-006: дубль задачи засоряет список «следующих действий» менеджера. */
     idempotencyKey: string;
@@ -808,6 +844,17 @@ export class CrmService {
           leadId: params.leadId,
           contactId: resolvedContactId,
           status: 'open',
+          startAt: params.startAt,
+          priority: params.priority,
+          taskCategory: params.taskCategory,
+          colorHex: params.colorHex,
+          reminderOffsetsMinutes: params.reminderOffsetsMinutes,
+          subtasks: params.subtasks,
+          attachmentFileNames: params.attachmentFileNames,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          isAutomatic: params.isAutomatic,
+          triggerType: params.triggerType,
         },
         session,
       );
@@ -2698,7 +2745,7 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
+export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
   return {
     id: task._id.toString(),
     organizationId: task.organizationId.toString(),
@@ -2714,6 +2761,28 @@ function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     version: task.version ?? 0,
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
+
+    startAt: task.startAt ? task.startAt.toISOString() : null,
+    priority: task.priority ?? 'medium',
+    taskCategory: task.taskCategory ?? 'work',
+    colorHex: task.colorHex ?? null,
+    reminderOffsetsMinutes: task.reminderOffsetsMinutes ?? [],
+    subtasks: (task.subtasks ?? []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      done: Boolean(item.done),
+    })),
+    attachmentFileNames: task.attachmentFileNames ?? [],
+    entityType: task.entityType ?? 'none',
+    entityId: task.entityId ? task.entityId.toString() : null,
+    isAutomatic: Boolean(task.isAutomatic),
+    triggerType: task.triggerType ?? null,
+    // Открытая или взятая в работу задача со сроком в прошлом — просрочена.
+    // Завершённая и отменённая просроченными не считаются никогда.
+    isOverdue:
+      (task.status === 'open' || task.status === 'in_progress') &&
+      Boolean(task.dueAt) &&
+      task.dueAt!.getTime() < Date.now(),
   };
 }
 

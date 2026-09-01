@@ -96,6 +96,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Канонический контекст текущего пользователя ERP (Identity, Organization, Position, Permissions)
+         * @description Audience и TenantContext определяются сервером исключительно по baza_session cookie. Возвращает агрегированный профиль identity, organization, position и список эффективных прав (grants).
+         */
+        get: operations["getErpMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/exports/{entity}": {
         parameters: {
             query?: never;
@@ -1825,7 +1845,7 @@ export interface components {
             title: string;
             description?: string | null;
             /** @enum {string} */
-            status: "open" | "completed" | "cancelled";
+            status: "open" | "in_progress" | "completed" | "cancelled";
             /** Format: date-time */
             dueAt?: string | null;
             assignedPositionId?: string | null;
@@ -1840,6 +1860,28 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt?: string | null;
+            /** Format: date-time */
+            startAt?: string | null;
+            /** @enum {string} */
+            priority?: "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            taskCategory?: "work" | "personal";
+            /** @description Цветовая метка #rrggbb; null — метки нет */
+            colorHex?: string | null;
+            reminderOffsetsMinutes?: number[];
+            subtasks?: {
+                id: string;
+                title: string;
+                done: boolean;
+            }[];
+            attachmentFileNames?: string[];
+            /** @enum {string} */
+            entityType?: "lead" | "client" | "deal" | "property" | "booking" | "none";
+            entityId?: string | null;
+            isAutomatic?: boolean;
+            triggerType?: string | null;
+            /** @description ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь. */
+            isOverdue?: boolean;
         };
         TaskListResponse: {
             items: components["schemas"]["TaskView"][];
@@ -1853,6 +1895,25 @@ export interface components {
             assignedPositionId?: string;
             leadId?: string;
             contactId?: string;
+            /** Format: date-time */
+            startAt?: string;
+            /** @enum {string} */
+            priority?: "low" | "medium" | "high" | "critical";
+            /** @enum {string} */
+            taskCategory?: "work" | "personal";
+            colorHex?: string | null;
+            reminderOffsetsMinutes?: number[];
+            subtasks?: {
+                id: string;
+                title: string;
+                done?: boolean;
+            }[];
+            attachmentFileNames?: string[];
+            /** @enum {string} */
+            entityType?: "lead" | "client" | "deal" | "property" | "booking" | "none";
+            entityId?: string;
+            isAutomatic?: boolean;
+            triggerType?: string;
         };
         /** @description НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign. */
         UpdateTaskRequest: {
@@ -1986,6 +2047,36 @@ export interface components {
             expectedVersion: number;
             items: components["schemas"]["DealChecklistItemInput"][];
         };
+        ErpMePermission: {
+            resource: string;
+            action: string;
+            /** @enum {string} */
+            scope: "own" | "position" | "team" | "organization" | "global" | "city" | "domain" | "project" | "assigned";
+            scopeValue?: string;
+        };
+        ErpMeResponse: {
+            identity: {
+                id: string;
+                login: string;
+                status: string;
+            };
+            organization: {
+                id: string;
+                name: string;
+                /** @enum {string} */
+                type: "agency" | "developer" | "realtor";
+                status: string;
+            };
+            position: {
+                id: string;
+                /** @enum {string} */
+                role: "owner" | "director" | "rop" | "manager" | "administrator" | "marketer" | "developer";
+                displayName: string;
+                parentPositionId?: string | null;
+                avatarUrl?: string;
+            };
+            permissions: components["schemas"]["ErpMePermission"][];
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -2105,6 +2196,30 @@ export interface operations {
             };
             /** @description Origin отсутствует или не относится к известному продукту. */
             401: components["responses"]["Error"];
+        };
+    };
+    getErpMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущий контекст пользователя ERP */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErpMeResponse"];
+                };
+            };
+            /** @description AUTH_NO_SESSION — нет session cookie */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет активного tenant context (сессия не erp или нет активной позиции) */
+            403: components["responses"]["Error"];
         };
     };
     runExport: {
