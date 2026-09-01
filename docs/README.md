@@ -74,6 +74,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [marketplace-operational-hardening-runbook.md](operations/marketplace-operational-hardening-runbook.md) — runbook эксплуатации.
 - [public-listing-leads.md](operations/public-listing-leads.md) — раскрытие контакта и создание лида.
 - [property-asset-media.md](operations/property-asset-media.md) — загрузка медиа и публичная галерея.
+- [media-upload-grant.md](operations/media-upload-grant.md) — грант `media_asset.upload` проверялся, но не был выдан никому; плюс страж `permission-grants`.
 
 ### Брони
 
