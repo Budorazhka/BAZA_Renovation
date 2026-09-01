@@ -92,8 +92,7 @@ describe('AdminPublicationService.unpublish — integration (real MongoDB transa
     await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
 
     const access = await connection.collection('product_accesses').findOne({ identityId, product: 'admin' });
     expect(access?.revokedAt).toBeUndefined();
@@ -296,8 +295,7 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     await adminAccountService.grantPermission(makeSuperAdminContext(), {
       adminAccountId: account._id,
       resource: grant.resource,
@@ -384,8 +382,7 @@ describe('AdminPublicationService.list — integration (real MongoDB, scope-фи
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
 
     const result = await adminPublicationService.list(
       { identityId: identityId.toString(), adminAccountId: account._id.toString(), isSuperAdmin: false },

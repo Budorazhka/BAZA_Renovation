@@ -91,8 +91,7 @@ describe('AdminDuplicateCandidateService — integration (real MongoDB)', () => 
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     await adminAccountService.grantPermission(makeSuperAdminContext(), {
       adminAccountId: account._id,
       resource: grant.resource,
@@ -137,8 +136,7 @@ describe('AdminDuplicateCandidateService — integration (real MongoDB)', () => 
       const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
         identityId,
         isSuperAdmin: false,
-        correlationId: 'integration-test-correlation-id',
-      });
+        correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
 
       await expect(
         service.list(
@@ -219,8 +217,7 @@ describe('AdminDuplicateCandidateService — integration (real MongoDB)', () => 
       const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
         identityId,
         isSuperAdmin: false,
-        correlationId: 'integration-test-correlation-id',
-      });
+        correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
 
       await expect(
         service.confirm(

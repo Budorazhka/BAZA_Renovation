@@ -74,8 +74,7 @@ describe('AdminAccountService.listAdminAccounts / listGrants — integration (re
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     return { identityId, account };
   }
 
@@ -253,8 +252,7 @@ describe('AdminAccountService.deactivateAdminAccount / reactivateAdminAccount �
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     const session = await authService.login({ login, password: PASSWORD, audience: 'admin' });
     return { identityId, account, sessionToken: session.sessionToken };
   }
@@ -471,8 +469,7 @@ describe('AdminAccountService.revokeGrant — integration (real MongoDB, CAS)', 
     const account = await adminAccountService.createAdminAccount(superAdminContext, {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'integration-test-correlation-id',
-    });
+      correlationId: 'integration-test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     await adminAccountService.grantPermission(superAdminContext, {
       adminAccountId: account._id,
       resource: 'development',

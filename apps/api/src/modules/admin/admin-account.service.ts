@@ -7,6 +7,7 @@ import type { AdminContext } from '../../shared/admin/admin-context';
 import { AdminAccountRepository } from './repository/admin-account.repository';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { AuditService } from '../audit/audit.service';
+import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import type { PermissionScope } from '../authorization/schemas/permission-grant.schema';
 import type { AdminAccountDocument } from './schemas/admin-account.schema';
 import { AuthService } from '../identity/auth.service';
@@ -32,6 +33,7 @@ export class AdminAccountService {
     private readonly auditService: AuditService,
     private readonly authService: AuthService,
     private readonly sessionService: SessionService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   /**
@@ -42,7 +44,13 @@ export class AdminAccountService {
    */
   async createAdminAccount(
     requestedBy: AdminContext,
-    params: { identityId: Types.ObjectId; isSuperAdmin: boolean; correlationId: string },
+    params: {
+      identityId: Types.ObjectId;
+      isSuperAdmin: boolean;
+      correlationId: string;
+      /** ADR-006: повтор не должен создавать второй админ-аккаунт. */
+      idempotency: { actorIdentityId: Types.ObjectId; key: string; requestBody: Record<string, unknown> };
+    },
   ): Promise<AdminAccountDocument> {
     this.requireSuperAdmin(requestedBy);
     return runInTransaction(this.connection, async (session) => {
@@ -62,8 +70,35 @@ export class AdminAccountService {
         },
         session,
       );
+      // ADR-006: отметка идемпотентности пишется в ТОЙ ЖЕ транзакции, что и
+      // аккаунт с его грантом доступа и audit-записью.
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.actorIdentityId,
+          operation: 'createAdminAccount',
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: {
+            id: account._id.toString(),
+            identityId: account.identityId.toString(),
+            isSuperAdmin: account.isSuperAdmin,
+          },
+        },
+        session,
+      );
+
       return account;
     });
+  }
+
+  /** Проверка повтора до транзакции — как в property-assets и developments. */
+  checkCreateReplay(
+    identityId: Types.ObjectId,
+    key: string,
+    requestBody: Record<string, unknown>,
+  ): Promise<IdempotentReplay | null> {
+    return this.idempotencyService.checkReplay({ identityId, operation: 'createAdminAccount', key, requestBody });
   }
 
   /**

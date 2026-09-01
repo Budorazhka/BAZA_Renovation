@@ -47,6 +47,7 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /buildings/:buildingId/floors': 'дубль этажа',
   'POST /buildings/:buildingId/floor-plans': 'дубль планировки',
   'POST /floors/:floorId/units': 'дубль юнита — шахматка показала бы несуществующий лот',
+  'POST /admin/accounts': 'дубль админ-аккаунта: второй аккаунт с админ-доступом на ту же identity',
 };
 
 /**
@@ -136,7 +137,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /public/listings/:slug/reveal-contact': 'своя запись идемпотентности',
 
   // --- Админ ---
-  'POST /admin/accounts': 'ПРОБЕЛ: дубль создаёт второй админ-аккаунт',
   'POST /admin/accounts/:adminAccountId/deactivate': 'условный update по статусу',
   'POST /admin/accounts/:adminAccountId/reactivate': 'условный update по статусу',
   'POST /admin/accounts/:adminAccountId/grants': 'грант идемпотентен по (account, resource+action)',
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 6;
+const KNOWN_GAPS = 5;
 
 interface RouteInfo {
   key: string;

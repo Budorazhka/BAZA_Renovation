@@ -133,8 +133,7 @@ describe('Admin HTTP routes — integration (полный AppModule, реаль�
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin,
-      correlationId: 'http-integration-test',
-    });
+      correlationId: 'http-integration-test', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     const session = await authService.login({ login, password: PASSWORD, audience: 'admin' });
     return { cookie: `baza_session=${session.sessionToken}`, adminAccountId: account._id.toString(), identityId, login };
   }

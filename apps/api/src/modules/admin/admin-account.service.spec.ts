@@ -48,6 +48,7 @@ function makeService(
     auditService,
     authService as AuthService,
     sessionService as SessionService,
+    { checkReplay: jest.fn().mockResolvedValue(null), record: jest.fn().mockResolvedValue(undefined) } as never,
   );
 }
 
@@ -65,22 +66,20 @@ describe('AdminAccountService — self-escalation prevention', () => {
       service.createAdminAccount(makeAdminContext({ isSuperAdmin: false }), {
         identityId: new Types.ObjectId(),
         isSuperAdmin: false,
-        correlationId: 'test-correlation-id',
-      }),
+        correlationId: 'test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } } }),
     ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.SELF_ESCALATION_BLOCKED }));
 
     expect(createSpy).not.toHaveBeenCalled();
   });
 
   it('createAdminAccount проходит для super_admin', async () => {
-    const createSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId() });
+    const createSpy = jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), identityId: new Types.ObjectId(), isSuperAdmin: false });
     const service = makeService({ create: createSpy });
 
     await service.createAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
       identityId: new Types.ObjectId(),
       isSuperAdmin: false,
-      correlationId: 'test-correlation-id',
-    });
+      correlationId: 'test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } } });
 
     expect(createSpy).toHaveBeenCalledTimes(1);
   });
@@ -160,7 +159,7 @@ describe('AdminAccountService — audit', () => {
     const adminContext = makeAdminContext({ isSuperAdmin: true });
 
     const service = makeService(
-      { create: jest.fn().mockResolvedValue({ _id: accountId }) },
+      { create: jest.fn().mockResolvedValue({ _id: accountId, identityId: new Types.ObjectId(), isSuperAdmin: false }) },
       {},
       makeAuditService({ append: appendSpy }),
     );
@@ -168,8 +167,7 @@ describe('AdminAccountService — audit', () => {
     await service.createAdminAccount(adminContext, {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'test-correlation-id',
-    });
+      correlationId: 'test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } } });
 
     expect(appendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -329,7 +327,7 @@ describe('AdminAccountService — product access', () => {
     const identityId = new Types.ObjectId();
     const grantAdminAccess = jest.fn().mockResolvedValue(undefined);
     const service = makeService(
-      { create: jest.fn().mockResolvedValue({ _id: accountId }) },
+      { create: jest.fn().mockResolvedValue({ _id: accountId, identityId: new Types.ObjectId(), isSuperAdmin: false }) },
       {},
       makeAuditService(),
       { grantAdminAccess },
@@ -338,8 +336,7 @@ describe('AdminAccountService — product access', () => {
     await service.createAdminAccount(makeAdminContext({ isSuperAdmin: true }), {
       identityId,
       isSuperAdmin: false,
-      correlationId: 'test-correlation-id',
-    });
+      correlationId: 'test-correlation-id', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } } });
 
     expect(grantAdminAccess).toHaveBeenCalledWith(identityId, expect.anything());
   });
