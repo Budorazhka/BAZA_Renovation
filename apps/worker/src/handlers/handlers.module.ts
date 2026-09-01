@@ -24,7 +24,26 @@ import { BookingCreatedHandler } from './booking-created.handler';
 import { BookingCancelledHandler } from './booking-cancelled.handler';
 import { BookingConfirmedHandler } from './booking-confirmed.handler';
 import { BookingExtendedHandler } from './booking-extended.handler';
+import { AcknowledgedEventHandler } from './acknowledged-event.handler';
 import { ImageVariantService } from './image-variant.service';
+
+/**
+ * Типы событий, которые публикуются, но пока не имеют побочного эффекта.
+ * Подтверждаются общим AcknowledgedEventHandler — см. его докстринг о том,
+ * почему отсутствие handler'а хуже, чем no-op handler.
+ *
+ * Экспортируется, чтобы страж (handlers-coverage.spec.ts) мог сверить этот
+ * список с тем, что реально публикуется в коде.
+ */
+export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
+  'PositionVacated',
+  'TaskCreated',
+  'TaskCompleted',
+  'TaskReassigned',
+  'UnitPriceChanged',
+  'UnitStatusChanged',
+  'UnpublicationRequested',
+] as const;
 
 /**
  * Регистрация handler'ов в EventHandlerRegistry при старте приложения —
@@ -57,6 +76,7 @@ import { ImageVariantService } from './image-variant.service';
     BookingCancelledHandler,
     BookingConfirmedHandler,
     BookingExtendedHandler,
+    AcknowledgedEventHandler,
   ],
 })
 export class HandlersModule implements OnModuleInit {
@@ -69,6 +89,7 @@ export class HandlersModule implements OnModuleInit {
     private readonly bookingCancelledHandler: BookingCancelledHandler,
     private readonly bookingConfirmedHandler: BookingConfirmedHandler,
     private readonly bookingExtendedHandler: BookingExtendedHandler,
+    private readonly acknowledgedEventHandler: AcknowledgedEventHandler,
   ) {}
 
   onModuleInit(): void {
@@ -79,5 +100,19 @@ export class HandlersModule implements OnModuleInit {
     this.registry.register('BookingCancelled', this.bookingCancelledHandler);
     this.registry.register('BookingConfirmed', this.bookingConfirmedHandler);
     this.registry.register('BookingExtended', this.bookingExtendedHandler);
+
+    // События без специфицированного побочного эффекта. До 01.09.2026 у них
+    // не было handler'а вообще, и каждое такое событие уходило прямо в
+    // dead_letter (OutboxPollerService при отсутствии handler'а сразу
+    // выставляет attempts = MAX_ATTEMPTS). Среди них рутинные TaskCreated/
+    // TaskCompleted/UnitPriceChanged — то есть очередь «поломок» полнилась
+    // при обычной работе и переставала быть сигналом о настоящем сбое.
+    //
+    // Появится реальный side-effect — тип переезжает в собственный handler
+    // и убирается отсюда. Соответствие этого списка тому, что реально
+    // публикуется, стережёт handlers-coverage.spec.ts.
+    for (const eventType of ACKNOWLEDGED_ONLY_EVENT_TYPES) {
+      this.registry.register(eventType, this.acknowledgedEventHandler);
+    }
   }
 }
