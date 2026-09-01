@@ -138,10 +138,24 @@ pnpm runtime:down
 
 CI намеренно задаёт `MINIO_ENDPOINT=http://host.docker.internal:9000` для
 presigned upload из контейнеров и `MINIO_PUBLIC_BASE_URL=http://localhost:9000/baza-public`
-для браузера. `compose.runtime.yml` добавляет Linux-compatible
-`host-gateway` mapping, поэтому схема одинакова на GitHub runner и Docker
-Desktop. Credentials в workflow — только локальные тестовые значения и не
+для браузера. Credentials в workflow — только локальные тестовые значения и не
 являются production secrets.
+
+Чтобы это имя резолвилось, нужны ДВЕ вещи, а не одна:
+
+1. `extra_hosts: host.docker.internal:host-gateway` в `compose.runtime.yml` —
+   резолв **внутри контейнеров** (api, worker).
+2. Запись `127.0.0.1 host.docker.internal` в `/etc/hosts` **самого раннера** —
+   резолв у **браузера**, который на Linux работает на хосте, а не в контейнере.
+   Это отдельный шаг workflow.
+
+Второй пункт был описан в плане (`docs/codex/plans/2026-08-30-runtime-ci-gate.md`,
+задача №3), но не реализован, а этот документ утверждал, что одного
+host-gateway mapping достаточно. Из-за расхождения тест
+`03-publishing-wizard` падал на КАЖДОМ прогоне гейта с 30.08.2026: API
+подписывал ссылку на `host.docker.internal`, браузер её не резолвил, PUT в
+MinIO не уходил, `confirm` не наступал, тест умирал по таймауту. Исправлено
+01.09.2026.
 
 ## Оркестрация: почему именно так
 

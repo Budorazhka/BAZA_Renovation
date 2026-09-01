@@ -87,6 +87,28 @@ jobs:
       - name: Install Chromium and system dependencies
         run: pnpm --filter @baza/e2e-runtime exec playwright install --with-deps chromium
 
+      # Задача №3 из docs/codex/plans/2026-08-30-runtime-ci-gate.md
+      # («Make host.docker.internal resolve on Linux runners»), которая так и
+      # не была выполнена — из-за этого тест публикации падал на КАЖДОМ
+      # прогоне гейта, начиная с самого первого (30.08.2026).
+      #
+      # API подписывает presigned-ссылку на загрузку адресом из
+      # MINIO_ENDPOINT, то есть http://host.docker.internal:9000. Внутри
+      # контейнеров это имя резолвится через extra_hosts в
+      # compose.runtime.yml, но PUT по этой ссылке делает БРАУЗЕР, который
+      # работает на самом раннере, — а там такого имени нет, и запрос
+      # умирает на DNS. Дальше мастер публикации не доходит до confirm, и
+      # тест валится по таймауту ожидания ответа.
+      #
+      # 127.0.0.1 корректен для обеих сторон: браузер попадает на
+      # опубликованный порт MinIO, контейнеры — через host-gateway. Подпись
+      # остаётся валидной, потому что Host-заголовок в обоих случаях один и
+      # тот же.
+      - name: Make host.docker.internal resolvable on the runner
+        run: |
+          echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+          getent hosts host.docker.internal
+
       - name: Validate runtime Compose configuration
         run: pnpm runtime:config
 
