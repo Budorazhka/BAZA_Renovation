@@ -748,6 +748,10 @@ export class CrmService {
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: дубль задачи засоряет список «следующих действий» менеджера. */
+    idempotencyKey: string;
+    /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmTaskReadModel> {
     let resolvedContactId = params.contactId;
 
@@ -845,7 +849,21 @@ export class CrmService {
         session,
       );
 
-      return toTaskReadModel(task);
+      const readModel = toTaskReadModel(task);
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createTask',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 
@@ -1856,6 +1874,10 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: дубль сделки удваивает ожидаемую комиссию в отчётах. */
+    idempotencyKey: string;
+    /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmDealReadModel> {
     // 1. Verify primary contact exists in the tenant
     const primaryContact = await this.contactRepository.findByIdForOrganization(
@@ -1972,7 +1994,21 @@ export class CrmService {
         session,
       );
 
-      return toDealReadModel(created, primaryContact, participantContactsById);
+      const readModel = toDealReadModel(created, primaryContact, participantContactsById);
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createDeal',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 

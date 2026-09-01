@@ -3,6 +3,10 @@ import { Types } from 'mongoose';
 import { TaskController } from './task.controller';
 import type { CrmService } from './crm.service';
 import type { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
+import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+
+/** Повторов в этих тестах нет: checkReplay всегда отдаёт null. */
+const noReplay = () => ({ checkReplay: jest.fn().mockResolvedValue(null) }) as unknown as IdempotencyService;
 
 function makeRequest(organizationId: Types.ObjectId, positionId: Types.ObjectId) {
   return {
@@ -25,6 +29,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { listTasks } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.listTasks(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -50,6 +55,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { listTasks } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.listTasks(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -74,6 +80,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { listTasks: jest.fn() } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await expect(
@@ -94,6 +101,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { getTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.getTask(makeRequest(organizationId, positionId) as never, taskId);
@@ -114,11 +122,12 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { createTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.createTask(makeRequest(organizationId, positionId) as never, {
         title: 'Follow up',
-      });
+      }, 'test-key');
 
       expect(createTask).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -141,6 +150,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { updateTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.updateTask(makeRequest(organizationId, positionId) as never, taskId, {
@@ -170,6 +180,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { reassignTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.reassignTask(makeRequest(organizationId, positionId) as never, taskId, {
@@ -197,6 +208,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { reassignTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.reassignTask(makeRequest(organizationId, positionId) as never, taskId, {
@@ -218,6 +230,7 @@ describe('TaskController', () => {
       const controller = new TaskController(
         { completeTask } as unknown as CrmService,
         { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.completeTask(makeRequest(organizationId, positionId) as never, taskId, {

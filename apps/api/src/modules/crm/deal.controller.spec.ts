@@ -3,6 +3,10 @@ import { Types } from 'mongoose';
 import { DealController } from './deal.controller';
 import type { CrmService } from './crm.service';
 import type { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
+import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+
+/** Повторов в этих тестах нет: checkReplay всегда отдаёт null. */
+const noReplay = () => ({ checkReplay: jest.fn().mockResolvedValue(null) }) as unknown as IdempotencyService;
 
 function makeRequest(organizationId: Types.ObjectId, positionId: Types.ObjectId) {
   return {
@@ -25,6 +29,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { listDeals } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.listDeals(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -48,6 +53,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { listDeals } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.listDeals(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -72,6 +78,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { listDeals } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await expect(
@@ -93,6 +100,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { getDeal } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       const result = await controller.getDeal(makeRequest(organizationId, positionId) as never, dealId);
@@ -116,12 +124,13 @@ describe('DealController', () => {
       const controller = new DealController(
         { createDeal } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.createDeal(makeRequest(organizationId, positionId) as never, {
         contactId: contactId.toString(),
         title: 'New Deal',
-      });
+      }, 'test-key');
 
       expect(createDeal).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -144,6 +153,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { changeDealStage } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.changeDealStage(makeRequest(organizationId, positionId) as never, dealId, {
@@ -175,6 +185,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { reassignDeal } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.reassignDeal(makeRequest(organizationId, positionId) as never, dealId, {
@@ -206,6 +217,7 @@ describe('DealController', () => {
       const controller = new DealController(
         { reassignDeal } as unknown as CrmService,
         { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
       );
 
       await controller.reassignDeal(makeRequest(organizationId, positionId) as never, dealId, {

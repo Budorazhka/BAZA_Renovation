@@ -35,6 +35,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /marketplace/property-assets/:assetId/listings/:listingId/publish':
     'publish листинга в marketplace-потоке',
   'POST /leads': 'дубль лида искажает воронку и отчётность по менеджерам — данные, по которым принимают решения',
+  'POST /deals': 'дубль сделки удваивает ожидаемую комиссию в отчётах',
+  'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
 };
 
 /**
@@ -118,14 +120,12 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   // --- CRM ---
   'POST /leads/:leadId/assign': 'условный update владельца',
   'PATCH /leads/:leadId/stage': 'переход стадии условный, повтор не применяется дважды',
-  'POST /deals': 'ПРОБЕЛ: дубль создаёт вторую сделку',
   'PATCH /deals/:dealId': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/reassign': 'expectedVersion (CAS) — см. conventions.md §8',
   'POST /deals/:dealId/participants': 'участник уникален по contactId в рамках сделки',
   'DELETE /deals/:dealId/participants/:contactId': 'удаление по id идемпотентно',
-  'POST /tasks': 'ПРОБЕЛ: дубль создаёт вторую задачу',
   'PATCH /tasks/:taskId': 'expectedVersion (CAS)',
   'PATCH /tasks/:taskId/reassign': 'expectedVersion (CAS)',
   'POST /tasks/:taskId/complete': 'повторное завершение намеренно идемпотентно',
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 18;
+const KNOWN_GAPS = 16;
 
 interface RouteInfo {
   key: string;

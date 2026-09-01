@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  Headers,
   Controller,
   Get,
   HttpCode,
@@ -20,6 +21,9 @@ import { RequirePermission } from '../authorization/require-permission.decorator
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { CrmService } from './crm.service';
+import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+import { AppException } from '../../shared/errors/app-exception';
+import { ErrorCode } from '../../shared/errors/error-codes';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { ReassignTaskDto } from './dto/reassign-task.dto';
@@ -36,6 +40,7 @@ export class TaskController {
   constructor(
     private readonly crmService: CrmService,
     private readonly policyEvaluator: PolicyEvaluatorService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   @Get()
@@ -78,12 +83,42 @@ export class TaskController {
   @Post()
   @HttpCode(201)
   @RequirePermission('task', 'create')
-  async createTask(@Req() req: FastifyRequest, @Body() dto: CreateTaskDto) {
+  async createTask(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreateTaskDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const idempotencyRequestBody = {
+      title: dto.title,
+      description: dto.description ?? null,
+      dueAt: dto.dueAt ?? null,
+      assignedPositionId: dto.assignedPositionId ?? null,
+      leadId: dto.leadId ?? null,
+      contactId: dto.contactId ?? null,
+    };
+
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'createTask',
+      key: idempotencyKey,
+      requestBody: idempotencyRequestBody,
+    });
+    if (replay) {
+      return replay.responseBody;
+    }
+
     return this.crmService.createTask({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId,
+      idempotencyKey,
+      idempotencyRequestBody,
       requiredScopePositionId: await this.ownerFilterForAction(tenantContext.positionId, 'create'),
       title: dto.title,
       description: dto.description,
