@@ -1,0 +1,116 @@
+/* Токены CRM — тёмно-зелёная тема ALPHABASE.sale */
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Тёмно-зелёная тема — как основной проект */
+  --background: #031712; /* app-bg — очень тёмный зелёный */
+  --foreground: #ffffff; /* белый текст */
+  --card: #112d1c; /* green-card — тёмно-зелёные карточки */
+  --card-foreground: #ffffff;
+  --popover: #112d1c;
+  --popover-foreground: #ffffff;
+  --primary: #c9a84c; /* gold — золотой акцент */
+  --primary-foreground: #031712;
+  --secondary: #163824; /* green-card-hover */
+  --secondary-foreground: #ffffff;
+  --muted: #0d2818; /* green-bg */
+  --muted-foreground: rgba(255, 255, 255, 0.55); /* nav-item-text */
+  --accent: #e6c364; /* theme-accent-heading — светлое золото */
+  --accent-foreground: #031712;
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: #ffffff;
+  --border: #1e4a2a; /* green-border */
+  --input: #0d2818;
+  --ring: #c9a84c;
+  --chart-1: #c9a84c;
+  --chart-2: #e6c364;
+  --chart-3: #2e7d32;
+  --chart-4: #4caf50;
+  --chart-5: #81c784;
+  --radius: 0.625rem;
+  --sidebar: #00110d; /* rail-bg */
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #c9a84c;
+  --sidebar-primary-foreground: #031712;
+  --sidebar-accent: #163824;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1e4a2a;
+  --sidebar-ring: #c9a84c;
+}
+
+.dark {
+  /* Тёмная тема — те же тона, чуть глубже */
+  --background: #020f0c;
+  --foreground: #ffffff;
+  --card: #0e2418;
+  --card-foreground: #ffffff;
+  --popover: #0e2418;
+  --popover-foreground: #ffffff;
+  --primary: #c9a84c;
+  --primary-foreground: #020f0c;
+  --secondary: #143020;
+  --secondary-foreground: #ffffff;
+  --muted: #0a1f12; /* green-deep */
+  --muted-foreground: rgba(255, 255, 255, 0.48); /* app-text-subtle */
+  --accent: #e6c364;
+  --accent-foreground: #020f0c;
+  --destructive: oklch(0.45 0.2 27);
+  --destructive-foreground: #ffffff;
+  --border: #1a3d24;
+  --input: #0a1f12;
+  --ring: #c9a84c;
+  --chart-1: #c9a84c;
+  --chart-2: #e6c364;
+  --chart-3: #2e7d32;
+  --chart-4: #4caf50;
+  --chart-5: #81c784;
+  --radius: 0.625rem;
+  --sidebar: #000d09;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #c9a84c;
+  --sidebar-primary-foreground: #020f0c;
+  --sidebar-accent: #143020;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1a3d24;
+  --sidebar-ring: #c9a84c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}

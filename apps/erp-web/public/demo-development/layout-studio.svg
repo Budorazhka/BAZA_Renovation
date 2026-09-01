@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="680" viewBox="0 0 900 680">
+  <rect width="900" height="680" fill="#f3efe5"/><path d="M100 80h700v520H100z" fill="#fffdf8" stroke="#173b30" stroke-width="14"/>
+  <path d="M100 390h260M360 80v310M620 390v210" stroke="#6f6758" stroke-width="9"/>
+  <rect x="135" y="120" width="170" height="220" fill="#d0e8df"/><rect x="415" y="125" width="320" height="210" fill="#e8dfca"/>
+  <rect x="140" y="440" width="170" height="110" fill="#d8c89c"/><rect x="670" y="455" width="80" height="100" fill="#d0e8df"/>
+  <text x="450" y="645" text-anchor="middle" fill="#173b30" font-family="Montserrat,Arial" font-size="25" letter-spacing="5">СТУДИЯ · 31,8 М²</text>
+</svg>

@@ -1,0 +1,685 @@
+import { useEffect, useState } from 'react'
+import {
+  X, Plus, Trash2, BookOpen, MessageSquare,
+  Presentation, Video, FileText, Check, ArrowUp, ArrowDown,
+} from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { cn } from '@/lib/utils'
+import { lmsApi } from '@/services/lmsApi'
+import type { LMSItem, ContentType, TargetRole } from '@/data/lms-mock'
+import { useI18n } from "@/i18n";
+
+/** Грузит файл на сервер, возвращает постоянный url или null, если бэкенд недоступен. */
+async function uploadToServer(file: File): Promise<string | null> {
+  try {
+    const uploaded = await lmsApi.uploadFile(file)
+    return uploaded?.url ?? null
+  } catch {
+    return null
+  }
+}
+
+// ─── Параметры компонента ─────────────────────────────────────────────────────
+
+interface LMSAdminDialogProps {
+  open: boolean
+  mode: 'create' | 'edit'
+  item?: LMSItem | null
+  onClose: () => void
+  onSave: (item: LMSItem) => void
+}
+
+// ─── Состояние формы ──────────────────────────────────────────────────────────
+
+type AdminContentType = Exclude<ContentType, 'quiz'>
+
+interface FormState {
+  type: AdminContentType
+  title: string
+  description: string
+  targetRole: TargetRole
+  tags: string
+  readTime: string
+  coverUrl: string
+  // статья
+  articleBody: string
+  // видео
+  videoUrl: string
+  videoDescription: string
+  // скрипт
+  scriptLines: Array<{ speaker: 'manager' | 'client'; text: string }>
+  // презентация
+  slides: Array<{ title: string; body: string }>
+  // PDF-файл
+  pdfUrl: string
+  pdfDescription: string
+}
+
+function emptyForm(): FormState {
+  return {
+    type: 'article',
+    title: '',
+    description: '',
+    targetRole: 'all',
+    tags: '',
+    readTime: '',
+    coverUrl: '',
+    articleBody: '',
+    videoUrl: '',
+    videoDescription: '',
+    scriptLines: [{ speaker: 'manager', text: '' }],
+    slides: [{ title: '', body: '' }],
+    pdfUrl: '',
+    pdfDescription: '',
+  }
+}
+
+function itemToForm(item: LMSItem): FormState {
+  const base: FormState = {
+    ...emptyForm(),
+    type: item.type === 'quiz' ? 'article' : item.type,
+    title: item.title,
+    description: item.description,
+    targetRole: item.targetRole,
+    tags: item.tags?.join(', ') ?? '',
+    readTime: item.readTime ?? '',
+    coverUrl: '',
+  }
+  if (item.content.type === 'article') base.articleBody = item.content.body
+  if (item.content.type === 'video') {
+    base.videoUrl = item.content.url
+    base.videoDescription = item.content.description ?? ''
+  }
+  if (item.content.type === 'script') base.scriptLines = item.content.lines.map(l => ({ ...l }))
+  if (item.content.type === 'presentation') base.slides = item.content.slides.map(s => ({ ...s }))
+  if (item.content.type === 'pdf') {
+    base.pdfUrl = item.content.url
+    base.pdfDescription = item.content.description ?? ''
+  }
+  return base
+}
+
+function formToItem(form: FormState, existingId?: string): LMSItem {
+  const id = existingId ?? `lms-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  const tags = form.tags.split(',').map(t => t.trim()).filter(Boolean)
+
+  let content: LMSItem['content']
+  switch (form.type) {
+    case 'article':
+      content = { type: 'article', body: form.articleBody }
+      break
+    case 'video':
+      content = { type: 'video', url: form.videoUrl, description: form.videoDescription || undefined }
+      break
+    case 'script':
+      content = { type: 'script', lines: form.scriptLines.filter(l => l.text.trim()) }
+      break
+    case 'presentation':
+      content = { type: 'presentation', slides: form.slides.filter(s => s.title.trim()) }
+      break
+    case 'pdf':
+      content = { type: 'pdf', url: form.pdfUrl, description: form.pdfDescription || undefined }
+      break
+    default:
+      content = { type: 'article', body: '' }
+  }
+
+  return {
+    id,
+    type: form.type,
+    title: form.title,
+    description: form.description,
+    targetRole: form.targetRole,
+    readTime: form.readTime || undefined,
+    tags: tags.length ? tags : undefined,
+    content,
+  }
+}
+
+// ─── Проверка полей ───────────────────────────────────────────────────────────
+
+function validate(form: FormState): string | null {
+  if (!form.title.trim()) return 'Укажите название материала'
+  if (form.type === 'video' && !form.videoUrl.trim()) return 'Укажите ссылку на видео'
+  if (form.type === 'pdf' && !form.pdfUrl.trim()) return 'Укажите ссылку на PDF файл'
+  if (form.type === 'script' && form.scriptLines.filter(l => l.text.trim()).length === 0)
+    return 'Добавьте хотя бы одну реплику'
+  if (form.type === 'presentation' && form.slides.filter(s => s.title.trim()).length === 0)
+    return 'Добавьте хотя бы один слайд'
+  return null
+}
+
+// ─── Общие классы полей ───────────────────────────────────────────────────────
+
+const FIELD =
+  'w-full rounded-2xl border border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_92%,transparent)] px-3 py-2.5 text-[13px] text-[color:var(--app-text)] placeholder:text-[color:var(--shell-search-ph)] outline-none focus:border-[rgba(52,211,153,0.55)] transition-colors'
+
+// ─── Мелкие вложенные компоненты ───────────────────────────────────────────────
+
+function FieldShell({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] font-normal uppercase tracking-wider text-[color:var(--hub-stat-label)]">{label}</p>
+      {children}
+    </div>
+  )
+}
+
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 pt-1">
+      <div className="h-px flex-1 bg-[var(--hub-tile-icon-bg)]" />
+      <span className="text-[11px] font-normal uppercase tracking-wider text-[color:var(--theme-accent-icon-dim)]">{label}</span>
+      <div className="h-px flex-1 bg-[var(--hub-tile-icon-bg)]" />
+    </div>
+  )
+}
+
+// ─── Список типов контента ────────────────────────────────────────────────────
+
+const CONTENT_TYPES: Array<{ id: AdminContentType; label: string; icon: React.ReactNode }> = [
+  { id: 'article',      label: 'Статья',        icon: <BookOpen className="size-4" /> },
+  { id: 'script',       label: 'Скрипт',         icon: <MessageSquare className="size-4" /> },
+  { id: 'presentation', label: 'Презентация',    icon: <Presentation className="size-4" /> },
+  { id: 'video',        label: 'Видео',           icon: <Video className="size-4" /> },
+  { id: 'pdf',          label: 'PDF',             icon: <FileText className="size-4" /> },
+]
+
+// ─── Редактор реплик скрипта ──────────────────────────────────────────────────
+
+function ScriptEditor({
+  lines,
+  onChange,
+}: {
+  lines: Array<{ speaker: 'manager' | 'client'; text: string }>
+  onChange: (lines: Array<{ speaker: 'manager' | 'client'; text: string }>) => void
+}) {
+    const { t } = useI18n();
+  const addLine = () => {
+    const lastSpeaker = lines[lines.length - 1]?.speaker ?? 'manager'
+    onChange([...lines, { speaker: lastSpeaker === 'manager' ? 'client' : 'manager', text: '' }])
+  }
+
+  const updateLine = (i: number, patch: Partial<typeof lines[0]>) => {
+    onChange(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  }
+
+  const removeLine = (i: number) => onChange(lines.filter((_, idx) => idx !== i))
+
+  const moveLine = (i: number, dir: -1 | 1) => {
+    const next = [...lines]
+    const target = i + dir
+    if (target < 0 || target >= next.length) return
+    ;[next[i], next[target]] = [next[target], next[i]]
+    onChange(next)
+  }
+
+  return (
+    <div className="space-y-2">
+      {lines.map((line, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <button
+            type="button"
+            onClick={() => updateLine(i, { speaker: line.speaker === 'manager' ? 'client' : 'manager' })}
+            className={cn(
+              'mt-1 flex size-8 shrink-0 items-center justify-center rounded-full border text-[11px] font-normal transition-colors',
+              line.speaker === 'manager'
+                ? 'border-blue-500/40 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                : 'border-[color:var(--hub-card-border)] bg-[var(--hub-action-hover)] text-[color:var(--theme-accent-link-dim)] hover:bg-[var(--nav-item-bg-active)]',
+            )}
+            title={line.speaker === 'manager' ? 'Менеджер (нажмите для смены)' : 'Клиент (нажмите для смены)'}
+          >
+            {line.speaker === 'manager' ? 'М' : 'К'}
+          </button>
+          <input
+            value={line.text}
+            onChange={e => updateLine(i, { text: e.target.value })}
+            placeholder={line.speaker === 'manager' ? 'Реплика менеджера...' : 'Реплика клиента...'}
+            className={cn(FIELD, 'flex-1')}
+          />
+          <div className="mt-1 flex flex-col gap-0.5">
+            <button type="button" onClick={() => moveLine(i, -1)} disabled={i === 0}
+              className="rounded p-1 text-[color:var(--theme-accent-icon-dim)] hover:text-[color:var(--theme-accent-link-dim)] disabled:opacity-20">
+              <ArrowUp className="size-3" />
+            </button>
+            <button type="button" onClick={() => moveLine(i, 1)} disabled={i === lines.length - 1}
+              className="rounded p-1 text-[color:var(--theme-accent-icon-dim)] hover:text-[color:var(--theme-accent-link-dim)] disabled:opacity-20">
+              <ArrowDown className="size-3" />
+            </button>
+          </div>
+          <button type="button" onClick={() => removeLine(i)} disabled={lines.length === 1}
+            className="mt-1 rounded-full p-1.5 text-[color:var(--theme-accent-icon-dim)] hover:text-red-400 hover:bg-red-900/20 disabled:opacity-20 transition-colors">
+            <Trash2 className="size-3.5" />
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addLine}
+        className="flex items-center gap-1.5 rounded-full border border-dashed border-[color:var(--hub-card-border)] px-3 py-1.5 text-xs text-[color:var(--hub-desc)] hover:border-[color:var(--hub-card-border-hover)] hover:text-[color:var(--app-text-muted)] transition-colors"
+      >
+        <Plus className="size-3" /> {t('lms.lMSAdminDialog.добавить_реплику')}</button>
+    </div>
+  )
+}
+
+// ─── Редактор слайдов ─────────────────────────────────────────────────────────
+
+function SlidesEditor({
+  slides,
+  onChange,
+}: {
+  slides: Array<{ title: string; body: string }>
+  onChange: (slides: Array<{ title: string; body: string }>) => void
+}) {
+    const { t } = useI18n();
+  const addSlide = () => onChange([...slides, { title: '', body: '' }])
+  const updateSlide = (i: number, patch: Partial<typeof slides[0]>) =>
+    onChange(slides.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
+  const removeSlide = (i: number) => onChange(slides.filter((_, idx) => idx !== i))
+  const moveSlide = (i: number, dir: -1 | 1) => {
+    const next = [...slides]
+    const target = i + dir
+    if (target < 0 || target >= next.length) return
+    ;[next[i], next[target]] = [next[target], next[i]]
+    onChange(next)
+  }
+
+  return (
+    <div className="space-y-3">
+      {slides.map((slide, i) => (
+        <div key={i} className="rounded-2xl border border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_78%,transparent)] p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-[var(--hub-tile-icon-bg)] text-[11px] font-normal text-[color:var(--hub-badge-soon-fg)]">{i + 1}</span>
+            <input
+              value={slide.title}
+              onChange={e => updateSlide(i, { title: e.target.value })}
+              placeholder={t('lms.lMSAdminDialog.заголовок_слайда')}
+              className={cn(FIELD, 'flex-1')}
+            />
+            <button type="button" onClick={() => moveSlide(i, -1)} disabled={i === 0}
+              className="rounded p-1 text-[color:var(--theme-accent-icon-dim)] hover:text-[color:var(--theme-accent-link-dim)] disabled:opacity-20">
+              <ArrowUp className="size-3.5" />
+            </button>
+            <button type="button" onClick={() => moveSlide(i, 1)} disabled={i === slides.length - 1}
+              className="rounded p-1 text-[color:var(--theme-accent-icon-dim)] hover:text-[color:var(--theme-accent-link-dim)] disabled:opacity-20">
+              <ArrowDown className="size-3.5" />
+            </button>
+            <button type="button" onClick={() => removeSlide(i)} disabled={slides.length === 1}
+              className="rounded-full p-1.5 text-[color:var(--theme-accent-icon-dim)] hover:text-red-400 hover:bg-red-900/20 disabled:opacity-20 transition-colors">
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+          <textarea
+            value={slide.body}
+            onChange={e => updateSlide(i, { body: e.target.value })}
+            placeholder={t('lms.lMSAdminDialog.содержимое_слайда')}
+            rows={3}
+            className={cn(FIELD, 'resize-none')}
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addSlide}
+        className="flex items-center gap-1.5 rounded-full border border-dashed border-[color:var(--hub-card-border)] px-3 py-1.5 text-xs text-[color:var(--hub-desc)] hover:border-[color:var(--hub-card-border-hover)] hover:text-[color:var(--app-text-muted)] transition-colors"
+      >
+        <Plus className="size-3" /> {t('lms.lMSAdminDialog.добавить_слайд')}</button>
+    </div>
+  )
+}
+
+// ─── Основное диалоговое окно ─────────────────────────────────────────────────
+
+export function LMSAdminDialog({ open, mode, item, onClose, onSave }: LMSAdminDialogProps) {
+    const { t } = useI18n();
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setForm(item ? itemToForm(item) : emptyForm())
+      setError(null)
+    }
+  }, [open, item])
+
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm(prev => ({ ...prev, [key]: value }))
+
+  const handleSave = () => {
+    const err = validate(form)
+    if (err) { setError(err); return }
+    onSave(formToItem(form, item?.id))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="top-[50%] h-[calc(100vh-24px)] w-[calc(100vw-16px)] max-w-2xl translate-y-[-50%] overflow-hidden rounded-[24px] border-0 bg-transparent p-0 shadow-none"
+      >
+        {/* Dark background wrapper */}
+        <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[color:var(--hub-card-border)] bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.09),transparent_40%),linear-gradient(180deg,rgba(9,36,28,0.99),rgba(6,20,16,0.98))]">
+
+          {/* Sticky header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--hub-tile-icon-border)] px-5 py-4">
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-normal uppercase tracking-widest text-[color:var(--hub-stat-label)]">
+                {t('lms.lMSAdminDialog.база_знаний')}</p>
+              <h2 className="text-lg font-normal text-[color:var(--app-text)]">
+                {mode === 'create' ? 'Новый материал' : 'Редактировать материал'}
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex size-8 items-center justify-center rounded-full border border-[color:var(--hub-tile-icon-border)] text-[color:var(--hub-desc)] hover:border-[color:var(--hub-card-border-hover)] hover:text-[color:var(--app-text)] transition-colors"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+
+            {/* Content type selector */}
+            <div className="space-y-2">
+              <p className="text-[11px] font-normal uppercase tracking-wider text-[color:var(--hub-stat-label)]">{t('lms.lMSAdminDialog.тип_материала')}</p>
+              <div className="flex flex-wrap gap-2">
+                {CONTENT_TYPES.map(ct => {
+                  const active = form.type === ct.id
+                  return (
+                    <button
+                      key={ct.id}
+                      type="button"
+                      onClick={() => set('type', ct.id)}
+                      className={cn(
+                        'flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-[13px] font-medium transition-all',
+                        active
+                          ? 'border-emerald-400/60 bg-emerald-400/12 text-emerald-300'
+                          : 'border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_82%,transparent)] text-[color:var(--hub-badge-soon-fg)] hover:border-[color:var(--hub-card-border-hover)] hover:text-[color:var(--theme-accent-heading)]',
+                      )}
+                    >
+                      {ct.icon}
+                      {ct.label}
+                      {active && <Check className="size-3 ml-0.5" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <SectionDivider label={t('lms.lMSAdminDialog.основное')} />
+
+            {/* Title */}
+            <FieldShell label={t('lms.lMSAdminDialog.название')}>
+              <input
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+                placeholder={t('lms.lMSAdminDialog.название_материала')}
+                className={cn(FIELD, !form.title.trim() && error ? 'border-red-500/60' : '')}
+              />
+            </FieldShell>
+
+            {/* Description */}
+            <FieldShell label={t('lms.lMSAdminDialog.описание')}>
+              <textarea
+                value={form.description}
+                onChange={e => set('description', e.target.value)}
+                placeholder={t('lms.lMSAdminDialog.краткое_описание_ото')}
+                rows={2}
+                className={cn(FIELD, 'resize-none')}
+              />
+            </FieldShell>
+
+            {/* Role + ReadTime row */}
+            <div className="grid grid-cols-2 gap-3">
+              <FieldShell label={t('lms.lMSAdminDialog.для_кого')}>
+                <Select value={form.targetRole} onValueChange={v => set('targetRole', v as TargetRole)}>
+                  <SelectTrigger className="h-10 rounded-2xl border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_92%,transparent)] text-[13px] text-[color:var(--app-text)] shadow-none focus:ring-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('lms.lMSAdminDialog.все_роли')}</SelectItem>
+                    <SelectItem value="manager">{t('lms.lMSAdminDialog.менеджер')}</SelectItem>
+                    <SelectItem value="rop">{t('lms.lMSAdminDialog.роп')}</SelectItem>
+                    <SelectItem value="director">{t('lms.lMSAdminDialog.директор')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FieldShell>
+              <FieldShell label={t('lms.lMSAdminDialog.время_чтения')}>
+                <input
+                  value={form.readTime}
+                  onChange={e => set('readTime', e.target.value)}
+                  placeholder={t('lms.lMSAdminDialog.5_мин')}
+                  className={FIELD}
+                />
+              </FieldShell>
+            </div>
+
+            {/* Tags */}
+            <FieldShell label={t('lms.lMSAdminDialog.теги_через_запятую')}>
+              <input
+                value={form.tags}
+                onChange={e => set('tags', e.target.value)}
+                placeholder={t('lms.lMSAdminDialog.crm_скрипты_возражен')}
+                className={FIELD}
+              />
+            </FieldShell>
+
+            {/* Cover image upload */}
+            <FieldShell label={t('lms.lMSAdminDialog.обложка')}>
+              <label className="group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_82%,transparent)] px-4 py-5 transition-colors hover:border-[color:var(--hub-card-border-hover)] hover:bg-[var(--hub-action-hover)]">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="absolute inset-0 cursor-pointer opacity-0"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    // Мгновенный локальный превью, затем замена на серверный url
+                    const reader = new FileReader()
+                    reader.onload = ev => set('coverUrl', ev.target?.result as string)
+                    reader.readAsDataURL(file)
+                    uploadToServer(file).then(url => { if (url) set('coverUrl', url) })
+                  }}
+                />
+                {form.coverUrl ? (
+                  <div className="h-32 w-full overflow-hidden rounded-xl">
+                    <img src={form.coverUrl} alt="preview" className="h-full w-full object-cover" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex size-10 items-center justify-center rounded-full bg-[var(--nav-item-bg-active)]">
+                      <svg className="size-5 text-[color:var(--hub-stat-label)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                    </div>
+                    <p className="text-[12px] text-[color:var(--hub-stat-label)]">{t('lms.lMSAdminDialog.нажмите_чтобы_загруз')}</p>
+                    <p className="text-[11px] text-[color:var(--theme-accent-icon-dim)]">PNG, JPG, WEBP</p>
+                  </>
+                )}
+              </label>
+              {form.coverUrl && (
+                <button
+                  type="button"
+                  onClick={() => set('coverUrl', '')}
+                  className="mt-1.5 text-[11px] text-[color:var(--theme-accent-icon-dim)] hover:text-red-400 transition-colors"
+                >
+                  {t('lms.lMSAdminDialog.удалить_обложку')}</button>
+              )}
+            </FieldShell>
+
+            {/* ── Content section ── */}
+            <SectionDivider label={t('lms.lMSAdminDialog.контент')} />
+
+            {/* Article */}
+            {form.type === 'article' && (
+              <FieldShell label={t('lms.lMSAdminDialog.текст_статьи_поддерж')}>
+                <textarea
+                  value={form.articleBody}
+                  onChange={e => set('articleBody', e.target.value)}
+                  placeholder={t('lms.lMSAdminDialog.заголовок_10_10_тек')}
+                  rows={14}
+                  className={cn(FIELD, 'resize-y font-mono text-[12px] leading-relaxed')}
+                />
+              </FieldShell>
+            )}
+
+            {/* Video */}
+            {form.type === 'video' && (
+              <div className="space-y-4">
+                <FieldShell label={t('lms.lMSAdminDialog.ссылка_на_видео_yout')}>
+                  <input
+                    value={form.videoUrl}
+                    onChange={e => set('videoUrl', e.target.value)}
+                    placeholder="https://www.youtube.com/embed/..."
+                    className={cn(FIELD, !form.videoUrl.trim() && error ? 'border-red-500/60' : '')}
+                  />
+                </FieldShell>
+                {form.videoUrl && (
+                  <div className="relative aspect-video overflow-hidden rounded-xl border border-[color:var(--hub-tile-icon-border)] bg-black">
+                    <iframe src={form.videoUrl} title="preview" className="absolute inset-0 h-full w-full" allowFullScreen />
+                  </div>
+                )}
+                <FieldShell label={t('lms.lMSAdminDialog.описание_необязатель')}>
+                  <textarea
+                    value={form.videoDescription}
+                    onChange={e => set('videoDescription', e.target.value)}
+                    placeholder={t('lms.lMSAdminDialog.о_ч_м_это_видео')}
+                    rows={3}
+                    className={cn(FIELD, 'resize-none')}
+                  />
+                </FieldShell>
+              </div>
+            )}
+
+            {/* PDF */}
+            {form.type === 'pdf' && (
+              <div className="space-y-4">
+                <FieldShell label={t('lms.lMSAdminDialog.pdf_файл')}>
+                  <label className={cn(
+                    'group relative flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed px-4 py-5 transition-colors',
+                    !form.pdfUrl && error
+                      ? 'border-red-500/50 bg-red-900/10'
+                      : 'border-[color:var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_82%,transparent)] hover:border-[color:var(--hub-card-border-hover)] hover:bg-[var(--hub-action-hover)]',
+                  )}>
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      onChange={e => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        // Мгновенный локальный превью, затем замена на серверный url
+                        set('pdfUrl', URL.createObjectURL(file))
+                        set('pdfDescription', form.pdfDescription || file.name.replace(/\.pdf$/i, ''))
+                        uploadToServer(file).then(url => { if (url) set('pdfUrl', url) })
+                      }}
+                    />
+                    {form.pdfUrl ? (
+                      <div className="flex w-full items-center gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-500/15">
+                          <FileText className="size-5 text-red-300" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-[color:var(--app-text)]">{form.pdfDescription || 'PDF загружен'}</p>
+                          <p className="text-[11px] text-[color:var(--workspace-text-muted)]">{t('lms.lMSAdminDialog.нажмите_чтобы_замени')}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex size-10 items-center justify-center rounded-full bg-[var(--nav-item-bg-active)]">
+                          <FileText className="size-5 text-[color:var(--hub-stat-label)]" />
+                        </div>
+                        <p className="text-[12px] text-[color:var(--hub-stat-label)]">{t('lms.lMSAdminDialog.нажмите_чтобы_загруз')}</p>
+                        <p className="text-[11px] text-[color:var(--theme-accent-icon-dim)]">{t('lms.lMSAdminDialog.pdf_до_50_мб')}</p>
+                      </>
+                    )}
+                  </label>
+                  {form.pdfUrl && (
+                    <button
+                      type="button"
+                      onClick={() => set('pdfUrl', '')}
+                      className="mt-1 text-[11px] text-[color:var(--theme-accent-icon-dim)] hover:text-red-400 transition-colors"
+                    >
+                      {t('lms.lMSAdminDialog.удалить_файл')}</button>
+                  )}
+                </FieldShell>
+                {form.pdfUrl && (
+                  <div className="overflow-hidden rounded-xl border border-[color:var(--hub-tile-icon-border)]" style={{ height: 300 }}>
+                    <iframe src={form.pdfUrl} title="PDF preview" className="h-full w-full bg-white" />
+                  </div>
+                )}
+                <FieldShell label={t('lms.lMSAdminDialog.описание_необязатель')}>
+                  <textarea
+                    value={form.pdfDescription}
+                    onChange={e => set('pdfDescription', e.target.value)}
+                    placeholder={t('lms.lMSAdminDialog.о_ч_м_этот_документ')}
+                    rows={3}
+                    className={cn(FIELD, 'resize-none')}
+                  />
+                </FieldShell>
+              </div>
+            )}
+
+            {/* Script */}
+            {form.type === 'script' && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 text-[11px] text-[color:var(--workspace-text-muted)]">
+                  <span className="flex items-center gap-1.5"><span className="inline-flex size-5 items-center justify-center rounded-full bg-blue-500/15 text-[10px] font-normal text-blue-300">{t('lms.lMSAdminDialog.м')}</span>{t('lms.lMSAdminDialog.менеджер')}</span>
+                  <span className="flex items-center gap-1.5"><span className="inline-flex size-5 items-center justify-center rounded-full bg-[var(--nav-item-bg-active)] text-[10px] font-normal text-[color:var(--hub-badge-soon-fg)]">{t('lms.lMSAdminDialog.к')}</span>{t('lms.lMSAdminDialog.клиент')}</span>
+                  <span className="ml-auto">{t('lms.lMSAdminDialog.нажмите_м_к_для_смен')}</span>
+                </div>
+                <ScriptEditor lines={form.scriptLines} onChange={v => set('scriptLines', v)} />
+              </div>
+            )}
+
+            {/* Presentation */}
+            {form.type === 'presentation' && (
+              <div className="space-y-2">
+                <p className="text-[11px] text-[color:var(--workspace-text-muted)]">
+                  {form.slides.length} {form.slides.length === 1 ? 'слайд' : form.slides.length < 5 ? 'слайда' : 'слайдов'}
+                </p>
+                <SlidesEditor slides={form.slides} onChange={v => set('slides', v)} />
+              </div>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div className="rounded-xl border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+
+            {/* Bottom padding */}
+            <div className="h-2" />
+          </div>
+
+          {/* Sticky footer */}
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[color:var(--hub-tile-icon-border)] px-5 py-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full border border-[color:var(--hub-card-border)] px-5 py-2 text-[13px] font-medium text-[color:var(--hub-body)] hover:border-[color:var(--hub-card-border-hover)] hover:text-[color:var(--app-text)] transition-colors"
+            >
+              {t('lms.lMSAdminDialog.отмена')}</button>
+            <button type="button" onClick={handleSave} className="alphabase-section-primary !normal-case px-5 py-2 text-[13px]">
+              {mode === 'create' ? 'Добавить' : 'Сохранить'}
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

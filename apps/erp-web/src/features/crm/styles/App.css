@@ -1,0 +1,1500 @@
+/* CRM-специфичные стили — тёмно-зелёная тема ALPHABASE.sale */
+@import "./design-tokens.css";
+@import "tailwindcss";
+
+/* CRM-цвета — тёмная тема */
+@theme {
+  --color-berega-primary: var(--primary);
+  --color-berega-secondary: var(--secondary);
+  --color-dream-primary: var(--primary);
+  --color-dream-secondary: var(--secondary);
+}
+
+:root:not([data-theme='light']):not([data-theme='light-green']) {
+  color-scheme: dark !important;
+  --background: #031712;
+  --foreground: #ffffff;
+  --card: #112d1c;
+  --secondary: #163824;
+  --muted: #0d2818;
+  --muted-foreground: rgba(255, 255, 255, 0.55);
+  --border: #1e4a2a;
+  --input: #0d2818;
+  --primary: #c9a84c;
+}
+:root[data-theme='light'], :root[data-theme='light-green'] {
+  color-scheme: light !important;
+}
+
+/* CRM-шрифт — Montserrat (см. index.css --font-sans) */
+.crm-app {
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: dark;
+  color: var(--foreground);
+  background-color: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Анимации */
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.modal-fade-in {
+  animation: modal-fade-in 0.5s ease forwards;
+}
+
+@keyframes filters-slide-in {
+  from { opacity: 0; transform: translateX(-30px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.filters-slide-in {
+  animation: filters-slide-in 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.success-modal-backdrop {
+  animation: fadeIn 0.3s ease-in-out forwards;
+}
+.success-modal-content {
+  animation: fadeInScale 0.3s ease-in-out forwards;
+}
+
+/* Map popup стили */
+.apartment-counter-popup .maplibregl-popup-content {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+.apartment-counter-popup .maplibregl-popup-tip {
+  display: none;
+}
+.apartment-counter-popup-content {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 2px 2px;
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+.counter-circle {
+  width: 18px;
+  height: 18px;
+  background: #640064;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+}
+.counter-circle.highlighted {
+  background: #000099;
+}
+.price-text {
+  font-size: 16px;
+  font-weight: bold;
+  color: #000099;
+}
+
+/* Badge marker */
+.badge-marker {
+  padding: 0px;
+  position: relative;
+}
+.badge-marker::after {
+  content: "";
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 10px solid transparent;
+  border-top-color: rgba(255, 255, 255, 0.4);
+}
+
+/* CRM responsive layout */
+@media (min-width: 768px) {
+  .crm-main-container {
+    flex-direction: row !important;
+  }
+  .crm-left-col {
+    width: 19.5rem !important;
+    flex-shrink: 0 !important;
+  }
+  .crm-right-col {
+    flex: 1 1 0% !important;
+  }
+  .crm-inner-row {
+    flex-direction: row !important;
+  }
+  .crm-menu-row {
+    flex-direction: row !important;
+  }
+}
+
+/* Scroll UX: основной скролл внутри CRM, панели “держатся” */
+@media (min-width: 768px) {
+  .crm-left-col {
+    position: sticky;
+    top: 20px;
+    align-self: flex-start;
+    max-height: calc(100dvh - 40px);
+    overflow: auto;
+    scrollbar-width: none;
+  }
+
+  .crm-left-col::-webkit-scrollbar {
+    display: none;
+  }
+
+  .crm-inner-row {
+    position: sticky;
+    top: 20px;
+    z-index: 20;
+    background-color: var(--background);
+    padding-top: 4px;
+    padding-bottom: 8px;
+  }
+}
+
+/* Классическая CRM: плотный одноэкранный рабочий стол без вертикального скролла страницы */
+@media (min-width: 768px) {
+  .crm-classic-compact {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .crm-classic-compact .crm-classic-viewport {
+    padding: 10px 18px 12px;
+    overflow: hidden;
+  }
+
+  .crm-classic-compact .crm-main-container {
+    gap: 14px;
+  }
+
+  .crm-classic-compact .crm-left-col {
+    position: static;
+    width: 17.6rem !important;
+    max-height: none;
+    height: 100%;
+    overflow: hidden;
+    gap: 0;
+  }
+
+  .crm-classic-compact .crm-sidebar-logout {
+    display: none;
+  }
+
+  .crm-classic-compact .crm-sidebar-report > div {
+    margin-top: 0 !important;
+    padding: 12px 12px 16px !important;
+    border-radius: 20px !important;
+    gap: 6px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-report [style*="min-height"] {
+    width: 140px !important;
+    height: 216px !important;
+    min-height: 216px !important;
+    max-height: 216px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-report [style*="min-height"] svg {
+    width: 140px;
+    height: 140px;
+  }
+
+  .crm-classic-compact .crm-sidebar-report .text-lg {
+    font-size: 15px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-report .text-sm {
+    font-size: 12px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-report button.mt-2 {
+    margin-top: 8px !important;
+    font-size: 13px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-library,
+  .crm-classic-compact .crm-sidebar-calendar,
+  .crm-classic-compact .crm-sidebar-notes,
+  .crm-classic-compact .crm-sidebar-ask {
+    margin-top: 12px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-library > div {
+    min-height: 56px;
+    padding: 12px 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-library svg {
+    width: 19px;
+    height: 19px;
+  }
+
+  .crm-classic-compact .crm-sidebar-library span[style*="font-size: 18px"] {
+    font-size: 15px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar > div {
+    border-radius: 18px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .p-4 {
+    padding: 15px 16px !important;
+    padding-bottom: 18px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .grid {
+    gap: 5px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .mb-2 {
+    margin-bottom: 10px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .py-1\.5 {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .text-sm {
+    font-size: 14px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-calendar .text-xs {
+    font-size: 12px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-notes > div {
+    padding: 16px 14px 14px !important;
+    gap: 14px !important;
+    border-radius: 18px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-notes .py-3 {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-ask button {
+    min-height: 56px;
+    padding: 14px 16px !important;
+    border-radius: 18px !important;
+  }
+
+  .crm-classic-compact .crm-sidebar-ask svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .crm-classic-compact .crm-right-col {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .crm-classic-compact .crm-inner-row {
+    position: static;
+    flex-wrap: nowrap !important;
+    gap: 14px !important;
+    padding: 0;
+    background: transparent;
+  }
+
+  .crm-classic-compact .crm-inner-row > div {
+    height: 320px !important;
+    min-height: 320px;
+    padding: 16px !important;
+    padding-bottom: 16px !important;
+    border-radius: 20px !important;
+    gap: 12px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row > div:first-child {
+    min-width: 0 !important;
+  }
+
+  .crm-classic-compact .crm-inner-row > div:last-child {
+    max-width: 404px !important;
+    min-width: 320px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row .h-11 {
+    height: 30px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row > div:last-child > .hidden.md\:flex {
+    height: 30px !important;
+    margin-top: 0 !important;
+    align-items: center !important;
+  }
+
+  .crm-classic-compact .crm-inner-row > div:last-child > .hidden.md\:flex > div {
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row > div:last-child > .hidden.md\:flex svg {
+    flex-shrink: 0;
+    display: block;
+  }
+
+  .crm-classic-compact .crm-inner-row .mt-5 {
+    margin-top: 6px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row .h-59 {
+    height: 246px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row .min-h-17\.5 {
+    min-height: 56px !important;
+  }
+
+  .crm-classic-compact .crm-inner-row .px-5 {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block > div {
+    margin-top: 12px !important;
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+    gap: 14px !important;
+    border-radius: 20px !important;
+    max-height: calc(100% - 334px);
+    overflow: hidden;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block > div > div:last-child {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block .px-5 {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block .gap-5 {
+    gap: 10px !important;
+  }
+
+  .crm-classic-compact .crm-right-col > .hidden.md\:block .gap-8 {
+    gap: 12px !important;
+  }
+}
+
+/* Scrollbar стили — тёмная тема */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0d2818;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e4a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2e6a3e;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.modal-backdrop {
+  backdrop-filter: blur(4px);
+}
+
+.fade-in {
+  animation: fadeIn 0.2s ease-in;
+}
+
+.animate-fade-in {
+  animation: fadeInSmooth 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeInSmooth {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Переопределение стандартных Tailwind цветов на тёмно-зелёную CRM тему */
+#crm-root {
+  --background: #031712;
+  --foreground: #ffffff;
+  --card: #112d1c;
+  --secondary: #163824;
+  --muted: #0d2818;
+  --muted-foreground: rgba(255, 255, 255, 0.55);
+  --border: #1e4a2a;
+  --input: #0d2818;
+  --primary: #c9a84c;
+  --tw-white: var(--background);
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100%;
+}
+
+#crm-root,
+#crm-root .crm-app,
+#crm-root .crm-main-container,
+#crm-root .crm-left-col,
+#crm-root .crm-right-col {
+  background-color: var(--background);
+}
+
+#crm-root .bg-white {
+  background-color: var(--card) !important;
+}
+
+#crm-root .text-gray-900,
+#crm-root .text-gray-800,
+#crm-root .text-gray-700 {
+  color: var(--foreground) !important;
+}
+
+#crm-root .text-gray-600 {
+  color: color-mix(in srgb, var(--foreground) 82%, transparent) !important;
+}
+
+#crm-root .text-gray-500,
+#crm-root .text-gray-400 {
+  color: var(--muted-foreground) !important;
+}
+
+#crm-root .text-black {
+  color: var(--foreground) !important;
+}
+
+#crm-root .bg-gray-100,
+#crm-root .bg-gray-200 {
+  background-color: var(--muted) !important;
+}
+
+#crm-root .bg-gray-50 {
+  background-color: var(--secondary) !important;
+}
+
+#crm-root .bg-gray-300 {
+  background-color: var(--muted) !important;
+}
+
+/* Убираем случайные светлые utility-фоны внутри CRM */
+#crm-root [class*="bg-[#F"],
+#crm-root [class*="bg-[#f"],
+#crm-root [class*="bg-slate-50"],
+#crm-root [class*="bg-slate-100"],
+#crm-root [class*="bg-zinc-50"],
+#crm-root [class*="bg-zinc-100"],
+#crm-root [class*="bg-neutral-50"],
+#crm-root [class*="bg-neutral-100"] {
+  background-color: var(--secondary) !important;
+}
+
+#crm-root .border-gray-200,
+#crm-root .border-gray-300 {
+  border-color: var(--border) !important;
+}
+
+#crm-root .border-gray-100 {
+  border-color: var(--border) !important;
+}
+
+#crm-root .text-blue-600 {
+  color: var(--accent) !important;
+}
+
+/* Модалки — тёмный фон */
+#crm-root .modal-fade-in > div > div,
+#crm-root .fixed > div[class*="rounded"] {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+}
+
+/* Инпуты — тёмная тема */
+#crm-root input,
+#crm-root textarea,
+#crm-root select {
+  background-color: var(--input) !important;
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+#crm-root input::placeholder,
+#crm-root textarea::placeholder {
+  color: var(--muted-foreground) !important;
+}
+
+/* Дополнительные переопределения для читаемости */
+#crm-root .bg-dream-secondary {
+  background-color: var(--card) !important;
+}
+
+#crm-root .text-dream-primary {
+  color: var(--primary) !important;
+}
+
+#crm-root .border-dream-primary {
+  border-color: var(--primary) !important;
+}
+
+.crm-library-modal {
+  background: #0b2118 !important;
+  border: 1px solid #2a5d39 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45) !important;
+  color: #f3f7ef !important;
+  overflow: hidden;
+}
+
+.crm-library-modal__header {
+  padding: 22px 24px 18px;
+  background: #12331f !important;
+  border-bottom: 1px solid #2a5d39 !important;
+}
+
+.crm-library-modal__title {
+  color: #f3f7ef !important;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  margin: 0;
+}
+
+.crm-library-modal__subtitle {
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px;
+  margin-top: 7px;
+}
+
+.crm-library-product-tabs {
+  color: #f3f7ef !important;
+}
+
+.crm-library-product-tab {
+  display: inline-flex;
+  min-height: 36px;
+  cursor: pointer;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid #3b7148;
+  background: #0d2818 !important;
+  padding: 8px 13px;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px;
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.crm-library-product-tab:hover {
+  border-color: #c9a84c;
+  background: #173f28 !important;
+}
+
+.crm-library-product-tab.is-active {
+  border-color: #c9a84c;
+  background: #c9a84c !important;
+  color: #112014 !important;
+}
+
+.crm-library-modal__close {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.72) !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.crm-library-modal__close:hover {
+  background: #1b442c !important;
+  color: #f3f7ef !important;
+}
+
+.crm-library-category-tabs {
+  gap: 4px;
+  padding: 0 24px;
+  background: #0f2a1c !important;
+  border-bottom: 1px solid #2a5d39 !important;
+}
+
+.crm-library-category-tab {
+  position: relative;
+  cursor: pointer;
+  padding: 15px 16px 14px;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.crm-library-category-tab:hover,
+.crm-library-category-tab.is-active {
+  color: #ffffff !important;
+}
+
+.crm-library-category-tab.is-active::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: #c9a84c;
+  content: "";
+}
+
+.crm-library-modal__body {
+  padding: 22px 24px 26px;
+  background: #071b14 !important;
+}
+
+.crm-library-info {
+  margin-bottom: 18px;
+  border: 1px solid #315f3d;
+  border-radius: 8px;
+  background: #102f20 !important;
+  padding: 13px 15px;
+}
+
+.crm-library-info p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.crm-library-empty {
+  display: flex;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #3b7148;
+  border-radius: 8px;
+  background: #0d2818 !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px;
+}
+
+/* Карточки и контейнеры */
+#crm-root .rounded-2xl,
+#crm-root .rounded-xl,
+#crm-root .rounded-lg {
+  border-color: var(--border) !important;
+}
+
+/* Таблицы */
+#crm-root table {
+  color: var(--foreground) !important;
+}
+
+#crm-root th {
+  color: var(--foreground) !important;
+  background-color: var(--muted) !important;
+}
+
+#crm-root td {
+  color: var(--foreground) !important;
+  border-color: var(--border) !important;
+}
+
+/* Кнопки */
+#crm-root button:not([class*="bg-"]) {
+  color: var(--foreground) !important;
+}
+
+/* Ссылки */
+#crm-root a {
+  color: var(--primary) !important;
+}
+
+/* Базовая типографика в CRM, без агрессивных глобальных перетираний */
+#crm-root {
+  color: var(--foreground);
+}
+
+#crm-root h1,
+#crm-root h2,
+#crm-root h3,
+#crm-root h4,
+#crm-root h5,
+#crm-root h6 {
+  color: var(--foreground);
+}
+
+#crm-root small,
+#crm-root .text-muted,
+#crm-root .text-secondary {
+  color: var(--muted-foreground) !important;
+}
+
+#crm-root [class*="bg-white"] {
+  background-color: var(--card) !important;
+}
+
+#crm-root .text-white {
+  color: #fff !important;
+}
+
+/* CRM: точечные dark-фиксы для Leads / Library / Notes / NewTask */
+#crm-root .bg-white\/90,
+#crm-root .bg-white\/80,
+#crm-root .bg-white\/70,
+#crm-root .bg-white\/60 {
+  background-color: color-mix(in srgb, var(--card) 92%, transparent) !important;
+}
+
+#crm-root .bg-blue-50,
+#crm-root .bg-blue-100,
+#crm-root .bg-indigo-50,
+#crm-root .bg-green-50,
+#crm-root .bg-yellow-50,
+#crm-root .bg-purple-50,
+#crm-root .bg-red-50 {
+  background-color: var(--secondary) !important;
+}
+
+#crm-root [class*="bg-[#EBF2FF]"],
+#crm-root [class*="bg-[#D5E5FF]"],
+#crm-root [class*="bg-[#E8F9F0]"],
+#crm-root [class*="bg-[#D1F3E1]"],
+#crm-root [class*="bg-[#F3E8FF]"],
+#crm-root [class*="bg-[#E5D1FF]"] {
+  background-color: var(--secondary) !important;
+}
+
+#crm-root .shadow-2xl,
+#crm-root .shadow-xl,
+#crm-root .shadow-lg {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35) !important;
+}
+
+#crm-root .text-gray-500,
+#crm-root .text-gray-600 {
+  color: var(--muted-foreground) !important;
+}
+
+#crm-root .text-gray-700,
+#crm-root .text-gray-800,
+#crm-root .text-gray-900,
+#crm-root [class*="text-black"] {
+  color: var(--foreground) !important;
+}
+
+#crm-root [style*="color: #151515"],
+#crm-root [style*="color:#151515"],
+#crm-root [style*="color: #000000"],
+#crm-root [style*="color:#000000"] {
+  color: var(--foreground) !important;
+}
+
+/* Переопределения для жестко прописанных белых цветов в Tailwind классах под светлыми темами */
+:root[data-theme='light'] #crm-root .text-\[rgba\(255\,255\,255\,0\.72\)\],
+:root[data-theme='light'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.72\)\],
+:root[data-theme='light'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.72\)\] {
+  color: var(--muted-foreground) !important;
+}
+:root[data-theme='light'] #crm-root .text-\[rgba\(255\,255\,255\,0\.92\)\],
+:root[data-theme='light'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.92\)\],
+:root[data-theme='light'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.92\)\] {
+  color: var(--foreground) !important;
+}
+:root[data-theme='light'] #crm-root .text-\[rgba\(255\,255\,255\,0\.88\)\],
+:root[data-theme='light'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.88\)\],
+:root[data-theme='light'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.88\)\] {
+  color: var(--foreground) !important;
+}
+:root[data-theme='light'] #crm-root .text-\[rgba\(255\,255\,255\,0\.45\)\],
+:root[data-theme='light'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.45\)\],
+:root[data-theme='light'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.45\)\] {
+  color: var(--muted-foreground) !important;
+  opacity: 0.6 !important;
+}
+:root[data-theme='light'] #crm-root .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder,
+:root[data-theme='light'] .modal-fade-in .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder,
+:root[data-theme='light'] .filters-slide-in .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder {
+  color: var(--muted-foreground) !important;
+  opacity: 0.72 !important;
+}
+
+:root[data-theme='light-green'] #crm-root .text-\[rgba\(255\,255\,255\,0\.72\)\],
+:root[data-theme='light-green'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.72\)\],
+:root[data-theme='light-green'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.72\)\] {
+  color: var(--muted-foreground) !important;
+}
+:root[data-theme='light-green'] #crm-root .text-\[rgba\(255\,255\,255\,0\.92\)\],
+:root[data-theme='light-green'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.92\)\],
+:root[data-theme='light-green'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.92\)\] {
+  color: var(--foreground) !important;
+}
+:root[data-theme='light-green'] #crm-root .text-\[rgba\(255\,255\,255\,0\.88\)\],
+:root[data-theme='light-green'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.88\)\],
+:root[data-theme='light-green'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.88\)\] {
+  color: var(--foreground) !important;
+}
+:root[data-theme='light-green'] #crm-root .text-\[rgba\(255\,255\,255\,0\.45\)\],
+:root[data-theme='light-green'] .modal-fade-in .text-\[rgba\(255\,255\,255\,0\.45\)\],
+:root[data-theme='light-green'] .filters-slide-in .text-\[rgba\(255\,255\,255\,0\.45\)\] {
+  color: var(--muted-foreground) !important;
+  opacity: 0.6 !important;
+}
+:root[data-theme='light-green'] #crm-root .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder,
+:root[data-theme='light-green'] .modal-fade-in .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder,
+:root[data-theme='light-green'] .filters-slide-in .placeholder\:text-\[rgba\(255\,255\,255\,0\.72\)\]::placeholder {
+  color: var(--muted-foreground) !important;
+  opacity: 0.72 !important;
+}
+
+/* Смягчение «кислотных» хардкод-цветов внутри CRM */
+#crm-root svg [fill="#169600"],
+#crm-root svg[fill="#169600"] {
+  fill: #6ea36b !important;
+}
+#crm-root svg [stroke="#169600"],
+#crm-root svg[stroke="#169600"] {
+  stroke: #6ea36b !important;
+}
+
+/*
+ * CRM-модалки рендерятся через React Portal в document.body — они вне #crm-root,
+ * поэтому общие переопределения выше до них не доходят. Перекрашиваем модалки
+ * в гамму CRM (тёмно-зелёный card + светлый текст + золотые акценты).
+ *
+ * Хук — класс `.modal-fade-in` на корне модалки. Он CRM-специфичный (определён
+ * в этом же файле), поэтому правила не задевают Radix-диалоги главного приложения.
+ */
+.modal-fade-in {
+  color: #f3f4f6;
+}
+
+/* Контейнеры модалок: белый → тёмно-зелёный card */
+.modal-fade-in .bg-white {
+  background-color: var(--card) !important;
+  color: #f3f4f6 !important;
+}
+
+/* Светло-голубые/серые подложки: → secondary тёмно-зелёный */
+.modal-fade-in .bg-blue-50,
+.modal-fade-in .bg-gray-50,
+.modal-fade-in .bg-gray-100,
+.modal-fade-in .bg-slate-50,
+.modal-fade-in .bg-slate-100,
+.modal-fade-in .bg-neutral-50,
+.modal-fade-in .bg-neutral-100 {
+  background-color: var(--secondary) !important;
+}
+
+/* Тёмный текст на белом → светлый текст на тёмном */
+.modal-fade-in .text-black,
+.modal-fade-in .text-gray-900,
+.modal-fade-in .text-gray-800,
+.modal-fade-in .text-gray-700 {
+  color: #f3f4f6 !important;
+}
+.modal-fade-in .text-gray-600,
+.modal-fade-in .text-gray-500,
+.modal-fade-in .text-gray-400 {
+  color: rgba(243, 244, 246, 0.7) !important;
+}
+
+/* Бордеры/разделители из светлой темы → CRM-границы */
+.modal-fade-in .border-gray-200,
+.modal-fade-in .border-gray-300,
+.modal-fade-in .border-gray-100 {
+  border-color: var(--border) !important;
+}
+
+/* Инпуты, селекты и текстарии — везде в модалках единый тёмный стиль */
+.modal-fade-in input,
+.modal-fade-in textarea,
+.modal-fade-in select {
+  background-color: var(--input) !important;
+  color: #f3f4f6 !important;
+  border-color: var(--border) !important;
+}
+.modal-fade-in input::placeholder,
+.modal-fade-in textarea::placeholder {
+  color: rgba(243, 244, 246, 0.55) !important;
+  opacity: 1;
+}
+
+/* Порталы CRM: dream-* за пределами #crm-root */
+.modal-fade-in .bg-dream-primary {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+
+.modal-fade-in .text-dream-primary {
+  color: var(--accent) !important;
+}
+
+.modal-fade-in .border-dream-primary {
+  border-color: var(--ring) !important;
+}
+
+.modal-fade-in .bg-dream-secondary {
+  background-color: var(--secondary) !important;
+}
+
+.modal-fade-in .hover\:bg-dream-secondary\/80:hover {
+  background-color: color-mix(in srgb, var(--secondary) 88%, var(--primary)) !important;
+}
+
+.modal-fade-in .rounded-\[25px\],
+.modal-fade-in .rounded-t-\[25px\],
+.modal-fade-in .md\:rounded-\[25px\] {
+  border-radius: 8px !important;
+}
+
+.modal-fade-in .rounded-\[20px\] {
+  border-radius: 8px !important;
+}
+
+.modal-fade-in .rounded-\[15px\] {
+  border-radius: 8px !important;
+}
+
+/* Кнопки/инпуты в модалках: без pill (≤8px) */
+.modal-fade-in .rounded-full:not(.animate-spin):not(.crm-keep-pill) {
+  border-radius: 6px !important;
+}
+
+/* Лейблы, span, p, h1-h4 — наследуют светлый цвет */
+.modal-fade-in label,
+.modal-fade-in span:not([class*="text-"]),
+.modal-fade-in p:not([class*="text-"]),
+.modal-fade-in h1,
+.modal-fade-in h2,
+.modal-fade-in h3,
+.modal-fade-in h4 {
+  color: inherit;
+}
+
+.modal-fade-in .crm-library-modal {
+  background: #0b2118 !important;
+  color: #f3f7ef !important;
+}
+
+.modal-fade-in .crm-library-modal__header {
+  background: #12331f !important;
+  color: #f3f7ef !important;
+}
+
+.modal-fade-in .crm-library-modal__title,
+.modal-fade-in .crm-library-category-tab.is-active {
+  color: #ffffff !important;
+}
+
+.modal-fade-in .crm-library-modal__subtitle,
+.modal-fade-in .crm-library-category-tab,
+.modal-fade-in .crm-library-empty {
+  color: rgba(243, 247, 239, 0.68) !important;
+}
+
+.modal-fade-in .crm-library-product-tab {
+  background: #0d2818 !important;
+  color: rgba(243, 247, 239, 0.76) !important;
+}
+
+.modal-fade-in .crm-library-product-tab.is-active {
+  background: #c9a84c !important;
+  color: #112014 !important;
+}
+
+.modal-fade-in .crm-library-category-tabs {
+  background: #0f2a1c !important;
+}
+
+.modal-fade-in .crm-library-modal__body {
+  background: #071b14 !important;
+}
+
+.modal-fade-in .crm-library-info {
+  background: #102f20 !important;
+}
+
+.modal-fade-in .crm-library-info p {
+  color: rgba(243, 247, 239, 0.78) !important;
+}
+
+.modal-fade-in .crm-library-modal__close {
+  color: rgba(243, 247, 239, 0.72) !important;
+}
+
+.modal-fade-in .crm-library-modal .bg-gray-50,
+.modal-fade-in .crm-library-modal .bg-gray-100,
+.modal-fade-in .crm-library-modal .bg-white,
+.modal-fade-in .crm-library-modal .bg-yellow-50 {
+  background: #102f20 !important;
+}
+
+.modal-fade-in .crm-library-modal .hover\:bg-gray-50:hover,
+.modal-fade-in .crm-library-modal .hover\:bg-gray-100:hover,
+.modal-fade-in .crm-library-modal .hover\:bg-yellow-100:hover {
+  background: #173f28 !important;
+}
+
+.modal-fade-in .crm-library-modal .border-gray-200,
+.modal-fade-in .crm-library-modal .border-gray-300,
+.modal-fade-in .crm-library-modal .border-gray-400,
+.modal-fade-in .crm-library-modal .border-yellow-300 {
+  border-color: #3b7148 !important;
+}
+
+.modal-fade-in .crm-library-modal .text-gray-700,
+.modal-fade-in .crm-library-modal .text-gray-600,
+.modal-fade-in .crm-library-modal .text-gray-500,
+.modal-fade-in .crm-library-modal .text-gray-400 {
+  color: rgba(243, 247, 239, 0.76) !important;
+}
+
+.modal-fade-in .crm-library-modal input {
+  background: #0d2818 !important;
+  color: #f3f7ef !important;
+  border-color: #3b7148 !important;
+}
+
+/* === Light & Mint Themes CRM Overrides === */
+
+:root[data-theme='light'],
+:root[data-theme='light'] #crm-root {
+  --background: #e2e8f0;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --secondary: #f1f5f9;
+  --muted: #cbd5e1;
+  --muted-foreground: #475569;
+  --border: #cbd5e1;
+  --input: #ffffff;
+  --primary: #0f172a;
+  --primary-foreground: #ffffff;
+  --accent: #0f172a;
+  --accent-foreground: #ffffff;
+}
+
+:root[data-theme='light-green'],
+:root[data-theme='light-green'] #crm-root {
+  --background: #eef4f1;
+  --foreground: #0b1f15;
+  --card: #fafdfc;
+  --secondary: #e4f0ea;
+  --muted: #cde0d8;
+  --muted-foreground: #2d5244;
+  --border: #c4ddd1;
+  --input: #fafdfc;
+  --primary: #0b1f15;
+  --primary-foreground: #ffffff;
+  --accent: #166534;
+  --accent-foreground: #ffffff;
+}
+
+/* Modal text overrides for Light Themes */
+:root[data-theme='light'] .modal-fade-in {
+  color: #0f172a;
+}
+:root[data-theme='light'] .modal-fade-in .bg-white {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .modal-fade-in .text-black,
+:root[data-theme='light'] .modal-fade-in .text-gray-900,
+:root[data-theme='light'] .modal-fade-in .text-gray-800,
+:root[data-theme='light'] .modal-fade-in .text-gray-700 {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .modal-fade-in .text-gray-600,
+:root[data-theme='light'] .modal-fade-in .text-gray-500,
+:root[data-theme='light'] .modal-fade-in .text-gray-400 {
+  color: #475569 !important;
+}
+:root[data-theme='light'] .modal-fade-in input,
+:root[data-theme='light'] .modal-fade-in textarea,
+:root[data-theme='light'] .modal-fade-in select {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .modal-fade-in input::placeholder,
+:root[data-theme='light'] .modal-fade-in textarea::placeholder {
+  color: #475569 !important;
+}
+
+:root[data-theme='light-green'] .modal-fade-in {
+  color: #0b1f15;
+}
+:root[data-theme='light-green'] .modal-fade-in .bg-white {
+  color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .modal-fade-in .text-black,
+:root[data-theme='light-green'] .modal-fade-in .text-gray-900,
+:root[data-theme='light-green'] .modal-fade-in .text-gray-800,
+:root[data-theme='light-green'] .modal-fade-in .text-gray-700 {
+  color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .modal-fade-in .text-gray-600,
+:root[data-theme='light-green'] .modal-fade-in .text-gray-500,
+:root[data-theme='light-green'] .modal-fade-in .text-gray-400 {
+  color: #2d5244 !important;
+}
+:root[data-theme='light-green'] .modal-fade-in input,
+:root[data-theme='light-green'] .modal-fade-in textarea,
+:root[data-theme='light-green'] .modal-fade-in select {
+  color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .modal-fade-in input::placeholder,
+:root[data-theme='light-green'] .modal-fade-in textarea::placeholder {
+  color: #3f564b !important;
+}
+
+/* CRM Library Modal overrides for Light Theme */
+:root[data-theme='light'] .crm-library-modal,
+:root[data-theme='light'] .modal-fade-in .crm-library-modal {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+:root[data-theme='light'] .crm-library-modal__header,
+:root[data-theme='light'] .modal-fade-in .crm-library-modal__header {
+  background: #f1f5f9 !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+:root[data-theme='light'] .crm-library-modal__title,
+:root[data-theme='light'] .modal-fade-in .crm-library-modal__title {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .crm-library-category-tabs,
+:root[data-theme='light'] .modal-fade-in .crm-library-category-tabs {
+  background: #f8fafc !important;
+  border-bottom-color: #cbd5e1 !important;
+}
+:root[data-theme='light'] .crm-library-category-tab,
+:root[data-theme='light'] .modal-fade-in .crm-library-category-tab {
+  color: #475569 !important;
+}
+:root[data-theme='light'] .crm-library-category-tab:hover,
+:root[data-theme='light'] .crm-library-category-tab.is-active,
+:root[data-theme='light'] .modal-fade-in .crm-library-category-tab:hover,
+:root[data-theme='light'] .modal-fade-in .crm-library-category-tab.is-active {
+  color: #0f172a !important;
+}
+:root[data-theme='light'] .crm-library-modal__body,
+:root[data-theme='light'] .modal-fade-in .crm-library-modal__body {
+  background: #ffffff !important;
+}
+:root[data-theme='light'] .crm-library-product-tab,
+:root[data-theme='light'] .modal-fade-in .crm-library-product-tab {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border-color: #cbd5e1 !important;
+}
+:root[data-theme='light'] .crm-library-product-tab:hover,
+:root[data-theme='light'] .modal-fade-in .crm-library-product-tab:hover {
+  background: #e2e8f0 !important;
+  border-color: #94a3b8 !important;
+}
+:root[data-theme='light'] .crm-library-product-tab.is-active,
+:root[data-theme='light'] .modal-fade-in .crm-library-product-tab.is-active {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  border-color: #0f172a !important;
+}
+:root[data-theme='light'] .crm-library-info,
+:root[data-theme='light'] .modal-fade-in .crm-library-info,
+:root[data-theme='light'] .crm-library-empty,
+:root[data-theme='light'] .modal-fade-in .crm-library-empty {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+:root[data-theme='light'] .crm-library-info p,
+:root[data-theme='light'] .modal-fade-in .crm-library-info p,
+:root[data-theme='light'] .crm-library-empty,
+:root[data-theme='light'] .modal-fade-in .crm-library-empty {
+  color: #475569 !important;
+}
+:root[data-theme='light'] .crm-library-modal input,
+:root[data-theme='light'] .modal-fade-in .crm-library-modal input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* CRM Library Modal overrides for Mint Theme */
+:root[data-theme='light-green'] .crm-library-modal,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-modal {
+  background: #fafdfc !important;
+  color: #0b1f15 !important;
+  border-color: #c4ddd1 !important;
+}
+:root[data-theme='light-green'] .crm-library-modal__header,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-modal__header {
+  background: #eef4f1 !important;
+  border-bottom-color: #c4ddd1 !important;
+}
+:root[data-theme='light-green'] .crm-library-modal__title,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-modal__title {
+  color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .crm-library-category-tabs,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-category-tabs {
+  background: #e4f0ea !important;
+  border-bottom-color: #c4ddd1 !important;
+}
+:root[data-theme='light-green'] .crm-library-category-tab,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-category-tab {
+  color: #2a4d3c !important;
+}
+:root[data-theme='light-green'] .crm-library-category-tab:hover,
+:root[data-theme='light-green'] .crm-library-category-tab.is-active,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-category-tab:hover,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-category-tab.is-active {
+  color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .crm-library-modal__body,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-modal__body {
+  background: #fafdfc !important;
+}
+:root[data-theme='light-green'] .crm-library-product-tab,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-product-tab {
+  background: #eef4f1 !important;
+  color: #1b3828 !important;
+  border-color: #c4ddd1 !important;
+}
+:root[data-theme='light-green'] .crm-library-product-tab:hover,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-product-tab:hover {
+  background: #e4f0ea !important;
+  border-color: #aac8b8 !important;
+}
+:root[data-theme='light-green'] .crm-library-product-tab.is-active,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-product-tab.is-active {
+  background: #0b1f15 !important;
+  color: #ffffff !important;
+  border-color: #0b1f15 !important;
+}
+:root[data-theme='light-green'] .crm-library-info,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-info,
+:root[data-theme='light-green'] .crm-library-empty,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-empty {
+  background: #eef7f3 !important;
+  border-color: #c4ddd1 !important;
+}
+:root[data-theme='light-green'] .crm-library-info p,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-info p,
+:root[data-theme='light-green'] .crm-library-empty,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-empty {
+  color: #2d5244 !important;
+}
+:root[data-theme='light-green'] .crm-library-modal input,
+:root[data-theme='light-green'] .modal-fade-in .crm-library-modal input {
+  background: #fafdfc !important;
+  color: #0b1f15 !important;
+  border-color: #c4ddd1 !important;
+}
+
+/* CRM Notes — раскрывающиеся секции */
+crm-notes details,
+.crm-lead-notes details,
+[data-testid="lead-notes"] details {
+  margin: 6px 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+crm-notes details summary,
+.crm-lead-notes details summary,
+[data-testid="lead-notes"] details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95em;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  user-select: none;
+  list-style: none;
+}
+
+crm-notes details summary::-webkit-details-marker,
+.crm-lead-notes details summary::-webkit-details-marker,
+[data-testid="lead-notes"] details summary::-webkit-details-marker {
+  display: none;
+}
+
+crm-notes details summary::before,
+.crm-lead-notes details summary::before,
+[data-testid="lead-notes"] details summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  transition: transform 0.2s;
+}
+
+crm-notes details[open] summary::before,
+.crm-lead-notes details[open] summary::before,
+[data-testid="lead-notes"] details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+crm-notes details summary:hover,
+.crm-lead-notes details summary:hover,
+[data-testid="lead-notes"] details summary:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+crm-notes details[open],
+.crm-lead-notes details[open],
+[data-testid="lead-notes"] details[open] {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+crm-notes details > *:not(summary),
+.crm-lead-notes details > *:not(summary),
+[data-testid="lead-notes"] details > *:not(summary) {
+  padding: 0 12px 10px;
+}
+
+/* Светлая тема */
+:root[data-theme='light'] crm-notes details,
+:root[data-theme='light'] .crm-lead-notes details,
+:root[data-theme='light'] [data-testid="lead-notes"] details {
+  border-color: #e5e7eb;
+  background: #fff;
+}
+
+:root[data-theme='light'] crm-notes details summary,
+:root[data-theme='light'] .crm-lead-notes details summary,
+:root[data-theme='light'] [data-testid="lead-notes"] details summary {
+  background: #f9fafb;
+}
+
+:root[data-theme='light'] crm-notes details summary:hover,
+:root[data-theme='light'] .crm-lead-notes details summary:hover,
+:root[data-theme='light'] [data-testid="lead-notes"] details summary:hover {
+  background: #f3f4f6;
+}
+
+:root[data-theme='light'] crm-notes details[open],
+:root[data-theme='light'] .crm-lead-notes details[open],
+:root[data-theme='light'] [data-testid="lead-notes"] details[open] {
+  background: #fafafa;
+}
+
+/* CRM Notes Editor */
+.notes-editor-container {
+  width: 100%;
+}
+
+.notes-editor-container textarea {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+.notes-editor-container textarea::placeholder {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+/* Light theme overrides */
+:root[data-theme='light'] .notes-editor-container .bg-\[\#0d2818\] {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+:root[data-theme='light'] .notes-editor-container .bg-\[\#163824\] {
+  background: #f1f5f9;
+}
+
+:root[data-theme='light'] .notes-editor-container .border-\[\#1e4a2a\] {
+  border-color: #cbd5e1;
+}
+
+:root[data-theme='light'] .notes-editor-container textarea {
+  color: #0f172a;
+  background: transparent;
+}
+
+:root[data-theme='light'] .notes-editor-container .bg-transparent {
+  background: transparent;
+}
+
+:root[data-theme='light'] .notes-editor-container .crm-lead-notes {
+  color: #0f172a;
+}
+
+:root[data-theme='light'] .notes-editor-container .text-white\/70 {
+  color: #475569 !important;
+}
+
+:root[data-theme='light'] .notes-editor-container .text-white\/30 {
+  color: #94a3b8 !important;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .bg-\[\#0d2818\] {
+  background: #eef7f3;
+  border-color: #c4ddd1;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .bg-\[\#163824\] {
+  background: #e4f0ea;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .border-\[\#1e4a2a\] {
+  border-color: #c4ddd1;
+}
+
+:root[data-theme='light-green'] .notes-editor-container textarea {
+  color: #0b1f15;
+  background: transparent;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .bg-transparent {
+  background: transparent;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .crm-lead-notes {
+  color: #0b1f15;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .text-white\/70 {
+  color: #2d5244 !important;
+}
+
+:root[data-theme='light-green'] .notes-editor-container .text-white\/30 {
+  color: #7c9a8c !important;
+}

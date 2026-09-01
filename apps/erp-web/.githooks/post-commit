@@ -1,0 +1,59 @@
+#!/bin/bash
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()  { echo -e "${CYAN}▸${NC} $1"; }
+ok()    { echo -e "${GREEN}✓${NC} $1"; }
+fail()  { echo -e "${RED}✖${NC} $1"; }
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "HEAD")
+COMMIT_SHA=$(git rev-parse --short HEAD)
+COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+
+echo ""
+ok "Committed: ${CYAN}${COMMIT_SHA}${NC} ${COMMIT_MSG} on ${BOLD}${BRANCH}${NC}"
+
+if [ "$BRANCH" = "egor" ]; then
+    echo ""
+
+    info "Pushing ${BOLD}egor${NC} to origin..."
+    if git push origin egor 2>&1; then
+        ok "Pushed egor"
+    else
+        fail "Failed to push egor"
+        exit 1
+    fi
+
+    info "Merging ${BOLD}egor${NC} into ${BOLD}main${NC}..."
+    git checkout main 2>/dev/null
+    git pull origin main 2>/dev/null || true
+
+    MERGE_RESULT=$(git merge egor --no-edit 2>&1) || true
+    if echo "$MERGE_RESULT" | grep -q "CONFLICT"; then
+        fail "Merge conflicts. Resolve manually."
+        git checkout egor 2>/dev/null
+        exit 1
+    fi
+
+    ok "Merged egor → main"
+
+    info "Pushing ${BOLD}main${NC} to origin..."
+    if git push origin main 2>&1; then
+        ok "Pushed main"
+    else
+        fail "Failed to push main"
+        git checkout egor 2>/dev/null
+        exit 1
+    fi
+
+    git checkout egor 2>/dev/null
+    echo ""
+    ok "Done! egor → origin → main → origin"
+    echo ""
+fi

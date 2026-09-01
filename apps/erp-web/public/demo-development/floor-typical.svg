@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#f2eee4"/>
+  <rect x="30" y="36" width="440" height="320" fill="#faf8f2" stroke="#173b30" stroke-width="8"/>
+  <rect x="30" y="404" width="440" height="320" fill="#faf8f2" stroke="#173b30" stroke-width="8"/>
+  <rect x="730" y="36" width="440" height="320" fill="#faf8f2" stroke="#173b30" stroke-width="8"/>
+  <rect x="730" y="404" width="440" height="320" fill="#faf8f2" stroke="#173b30" stroke-width="8"/>
+  <rect x="500" y="38" width="200" height="684" fill="#ded8ca" stroke="#766d5b" stroke-width="5"/>
+  <rect x="520" y="270" width="160" height="220" fill="#c4bcaa" stroke="#173b30" stroke-width="6"/>
+  <rect x="540" y="305" width="54" height="72" fill="#173b30"/><rect x="606" y="305" width="54" height="72" fill="#173b30"/>
+  <path d="M540 410h120M540 435h120" stroke="#766d5b" stroke-width="8"/>
+  <g stroke="#a99f8c" stroke-width="5" fill="none">
+    <path d="M170 36v180h300M30 216h140v140M275 216v140M170 404v180h300M30 584h140v140M275 584v140"/>
+    <path d="M1030 36v180H730M1170 216h-140v140M925 216v140M1030 404v180H730M1170 584h-140v140M925 584v140"/>
+  </g>
+  <g fill="#d0e8df" stroke="#173b30" stroke-width="3">
+    <rect x="70" y="70" width="70" height="90"/><rect x="330" y="245" width="95" height="70"/>
+    <rect x="70" y="438" width="70" height="90"/><rect x="330" y="613" width="95" height="70"/>
+    <rect x="1060" y="70" width="70" height="90"/><rect x="775" y="245" width="95" height="70"/>
+    <rect x="1060" y="438" width="70" height="90"/><rect x="775" y="613" width="95" height="70"/>
+  </g>
+  <g fill="#173b30" font-family="Montserrat,Arial" font-size="18" letter-spacing="2">
+    <text x="55" y="340">A · 01</text><text x="55" y="708">A · 02</text>
+    <text x="1065" y="340" text-anchor="end">B · 03</text><text x="1065" y="708" text-anchor="end">B · 04</text>
+  </g>
+  <text x="600" y="520" text-anchor="middle" fill="#766d5b" font-family="Montserrat,Arial" font-size="14" letter-spacing="3">ЛИФТОВОЙ ХОЛЛ</text>
+</svg>

@@ -1,0 +1,107 @@
+import { useState } from 'react'
+import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { SupremeOwnerDashboardPage } from '@/components/owner/SupremeOwnerDashboardPage'
+import { useNavigate } from 'react-router-dom'
+import '@/components/leads/leads-secret-table.css'
+import { useI18n } from "@/i18n";
+
+type ProductSection = 'network' | null
+
+export function ProductPage() {
+    const { t } = useI18n();
+  const [section, setSection] = useState<ProductSection>(null)
+  const navigate = useNavigate()
+
+  if (section === 'network') {
+    return (
+      <div className="leads-page-root min-h-screen">
+        <div className="leads-page-bg" aria-hidden />
+        <div className="leads-page-ornament" aria-hidden />
+        <div className="leads-page relative z-10 p-6 lg:p-8 space-y-4">
+          {/* Breadcrumb back */}
+          <div className="flex items-center gap-2 text-sm">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSection(null)}
+              className="gap-2 text-[color:var(--theme-accent-link-dim)] hover:text-[color:var(--app-text)] hover:bg-transparent px-0"
+            >
+              <ArrowLeft className="size-4" />
+              {t('product.productPage.продукт')}</Button>
+            <span className="text-[color:var(--theme-accent-icon-dim)]">/</span>
+            <span className="text-[color:var(--app-text-muted)] font-medium">{t('product.productPage.млм_аналитика')}</span>
+          </div>
+          {/* Analytics in white container so its CSS vars render correctly */}
+          <div className="leads-page-light-panel rounded-2xl bg-[#eaf4ee] shadow-xl overflow-hidden">
+            <SupremeOwnerDashboardPage />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="leads-page-root min-h-screen">
+      <div className="leads-page-bg" aria-hidden />
+      <div className="leads-page-ornament" aria-hidden />
+      <div className="leads-page relative z-10 flex min-h-[calc(100vh-8rem)] flex-col items-center justify-center p-6 lg:p-8">
+        <div className="w-full max-w-2xl space-y-10 text-center">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-[color:var(--hub-stat-label)] mb-1">{t('product.productPage.панель_управления')}</p>
+            <h1 className="text-3xl font-normal text-[color:var(--app-text)]">{t('product.productPage.продукт')}</h1>
+            <p className="mt-3 text-sm text-[color:var(--hub-stat-label)]">
+              {t('product.productPage.оба_модуля_доступны')}</p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-2">
+
+          {/* МЛМ-аналитика */}
+          <button
+            onClick={() => setSection('network')}
+            className="group relative overflow-hidden rounded-[28px] border border-[color:var(--hub-card-border-hover)] bg-[var(--hub-card-bg)] p-6 text-left shadow-[0_12px_34px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-1 hover:border-[color:var(--hub-card-border-hover)] hover:bg-[var(--hub-card-bg-hover)] hover:shadow-[0_18px_42px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)]"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--gold)_14%,transparent),transparent)]" />
+            <div className="pointer-events-none absolute right-[-36px] top-6 h-24 w-24 rounded-full bg-[var(--nav-item-bg-active)] blur-2xl" />
+            <div className="mb-5 flex min-h-[210px] w-full items-center justify-center overflow-hidden rounded-[22px] border border-[color:var(--hub-card-border)] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--gold)_8%,transparent),rgba(8,28,21,0.16)_58%,rgba(8,28,21,0.02)_100%)] px-4">
+              <img src={`${import.meta.env.BASE_URL}mlm-analytics-hero.png`} alt="" className="max-h-[200px] w-auto max-w-full object-contain object-center transition-transform duration-200 group-hover:scale-[1.04]" />
+            </div>
+            <p className="text-[10px] font-normal uppercase tracking-[0.28em] text-[color:var(--workspace-text-muted)]">
+              {t('product.productPage.активный_модуль')}</p>
+            <h3 className="mt-2 text-lg font-normal text-[color:var(--app-text)]">{t('product.productPage.млм_аналитика')}</h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--hub-body)]">
+              {t('product.productPage.kpi_партн_ры_воронка')}</p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[color:var(--hub-card-border)] bg-[var(--nav-item-bg-active)] px-4 py-2 text-xs font-normal text-[color:var(--app-text-muted)] transition-all group-hover:border-[color:var(--hub-card-border-hover)] group-hover:bg-[var(--nav-item-bg-active)]">
+              {t('product.productPage.открыть')}<ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </div>
+          </button>
+
+          {/* Объекты */}
+          <button
+            onClick={() => navigate('/dashboard/my-properties')}
+            className="group relative overflow-hidden rounded-[28px] border border-[color:var(--hub-card-border-hover)] bg-[var(--hub-card-bg)] p-6 text-left shadow-[0_12px_34px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.04)] transition-all duration-200 hover:-translate-y-1 hover:border-[color:var(--hub-card-border-hover)] hover:bg-[var(--hub-card-bg-hover)] hover:shadow-[0_18px_42px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.06)]"
+          >
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--gold)_14%,transparent),transparent)]" />
+            <div className="pointer-events-none absolute right-[-36px] top-6 h-24 w-24 rounded-full bg-[var(--nav-item-bg-active)] blur-2xl" />
+            <div className="mb-5 flex min-h-[210px] w-full items-center justify-center overflow-hidden rounded-[22px] border border-[color:var(--hub-card-border)] bg-[radial-gradient(circle_at_top,color-mix(in_srgb,var(--gold)_8%,transparent),rgba(8,28,21,0.16)_58%,rgba(8,28,21,0.02)_100%)] px-4">
+              <img
+                src={`${import.meta.env.BASE_URL}b4240bbd-e9b3-48f1-b848-78561518c053-removebg-preview.png`}
+                alt=""
+                className="max-h-[210px] w-auto max-w-full scale-[1.06] object-contain object-center transition-transform duration-200 group-hover:scale-[1.1]"
+              />
+            </div>
+            <p className="text-[10px] font-normal uppercase tracking-[0.28em] text-[color:var(--workspace-text-muted)]">
+              {t('product.productPage.активный_модуль')}</p>
+            <h3 className="mt-2 text-lg font-normal text-[color:var(--app-text)]">{t('product.productPage.объекты')}</h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--hub-body)]">
+              {t('product.productPage.управление_объектами')}</p>
+            <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-[color:var(--hub-card-border)] bg-[var(--nav-item-bg-active)] px-4 py-2 text-xs font-normal text-[color:var(--app-text-muted)] transition-all group-hover:border-[color:var(--hub-card-border-hover)] group-hover:bg-[var(--nav-item-bg-active)]">
+              {t('product.productPage.открыть')}<ArrowRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+            </div>
+          </button>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

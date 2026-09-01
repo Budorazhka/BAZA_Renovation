@@ -1,0 +1,73 @@
+#!/bin/bash
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+info()  { echo -e "${CYAN}▸${NC} $1"; }
+ok()    { echo -e "${GREEN}✓${NC} $1"; }
+fail()  { echo -e "${RED}✖${NC} $1"; }
+
+ERRORS=0
+
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || echo "detached")
+if [ "$BRANCH" = "main" ]; then
+    fail "Direct commits to ${BOLD}main${NC} are blocked."
+    exit 1
+fi
+
+SECRETS_PATTERNS=(
+    'password\s*='
+    'api[_-]?key\s*='
+    'secret\s*='
+    'token\s*='
+)
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -n "$STAGED_FILES" ]; then
+    for file in $STAGED_FILES; do
+        [[ "$file" == *.lock ]] && continue
+        [[ "$file" == package-lock.json ]] && continue
+        [[ "$file" == *.png ]] && continue
+        [[ "$file" == *.jpg ]] && continue
+        [[ "$file" == *.svg ]] && continue
+        [[ "$file" == .githooks/* ]] && continue
+
+        CONTENT=$(git show ":$file" 2>/dev/null || true)
+        if [ -n "$CONTENT" ]; then
+            for pattern in "${SECRETS_PATTERNS[@]}"; do
+                MATCHES=$(echo "$CONTENT" | grep -inE "$pattern" 2>/dev/null || true)
+                if [ -n "$MATCHES" ]; then
+                    fail "Possible secret in ${BOLD}$file${NC}:"
+                    echo "$MATCHES" | head -3
+                    ERRORS=$((ERRORS + 1))
+                fi
+            done
+        fi
+
+        if [[ "$file" == .env* ]] || [[ "$file" == *.env ]]; then
+            fail "Environment file ${BOLD}$file${NC} should not be committed."
+            ERRORS=$((ERRORS + 1))
+        fi
+    done
+fi
+
+info "Running build..."
+if ! npm run build 2>&1 | tail -3; then
+    fail "Build failed. Fix before committing."
+    ERRORS=$((ERRORS + 1))
+else
+    ok "Build passed"
+fi
+
+if [ $ERRORS -gt 0 ]; then
+    fail "${BOLD}${ERRORS} error(s) found. Commit blocked.${NC}"
+    exit 1
+fi
+
+ok "All checks passed. Committing..."

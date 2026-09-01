@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="960" viewBox="0 0 1600 960">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ddd6c8"/><stop offset="1" stop-color="#a79e8e"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#56766c"/><stop offset="1" stop-color="#173b30"/></linearGradient>
+    <linearGradient id="yard" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#536f5e"/><stop offset="1" stop-color="#183528"/></linearGradient>
+  </defs>
+  <rect width="1600" height="960" fill="#d6ddd8"/>
+  <path d="M0 60h520v640H0zM1080 60h520v640h-520z" fill="url(#wall)"/>
+  <rect x="70" y="130" width="390" height="500" fill="url(#glass)"/>
+  <rect x="1140" y="130" width="390" height="500" fill="url(#glass)"/>
+  <g stroke="#d4c7aa" stroke-width="18">
+    <path d="M70 225h390M70 320h390M70 415h390M70 510h390"/>
+    <path d="M1140 225h390M1140 320h390M1140 415h390M1140 510h390"/>
+  </g>
+  <path d="M520 260l280-170 280 170v440H520z" fill="#b9af9d"/>
+  <path d="M585 300h430v400H585z" fill="url(#glass)"/>
+  <path d="M0 700h1600v260H0z" fill="url(#yard)"/>
+  <path d="M200 960L690 700h220l490 260z" fill="#c7bfad"/>
+  <ellipse cx="800" cy="760" rx="210" ry="70" fill="#4b6855"/>
+  <ellipse cx="800" cy="760" rx="132" ry="42" fill="#cfbf91"/>
+  <g fill="#173d2c">
+    <circle cx="270" cy="680" r="72"/><rect x="260" y="680" width="20" height="160"/>
+    <circle cx="1320" cy="675" r="76"/><rect x="1310" y="675" width="20" height="165"/>
+    <circle cx="485" cy="755" r="44"/><circle cx="1115" cy="755" r="44"/>
+  </g>
+  <text x="800" y="648" text-anchor="middle" fill="#ead9a9" font-family="Montserrat,Arial" font-size="22" letter-spacing="6">PRIVATE COURTYARD</text>
+</svg>

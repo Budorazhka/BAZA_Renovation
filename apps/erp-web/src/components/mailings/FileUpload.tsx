@@ -1,0 +1,81 @@
+import { useRef } from 'react'
+import { FilePlus, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { cn } from '@/lib/utils'
+import { useI18n } from "@/i18n";
+
+const MAX_SIZE_MB = 10
+
+export interface FileUploadValue {
+  url: string
+  fileName: string
+}
+
+interface FileUploadProps {
+  value: FileUploadValue | undefined
+  onChange: (value: FileUploadValue | undefined) => void
+  className?: string
+}
+
+export function FileUpload({ value, onChange, className }: FileUploadProps) {
+    const { t } = useI18n();
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      onChange({ url: reader.result as string, fileName: file.name })
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const clear = () => onChange(undefined)
+
+  return (
+    <div className={cn('space-y-2', className)}>
+      <Label className="text-base text-[color:var(--app-text-muted)]">{t('mailings.fileUpload.файл')}</Label>
+      {value ? (
+        <div className="flex items-center gap-2 rounded-md border border-[var(--green-border)] bg-[var(--green-deep)] px-3 py-2">
+          <span className="min-w-0 flex-1 truncate text-base text-[color:var(--app-text)]" title={value.fileName}>
+            {value.fileName}
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={clear}
+          >
+            <X className="mr-1 size-4" />
+            {t('mailings.fileUpload.удалить')}</Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFile}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => inputRef.current?.click()}
+            className="border-[var(--green-border)] bg-transparent text-[color:var(--app-text)] hover:bg-[var(--dropdown-hover)]"
+          >
+            <FilePlus className="mr-2 size-4" />
+            {t('mailings.fileUpload.прикрепить_файл')}</Button>
+          <span className="text-sm text-muted-foreground">{t('mailings.fileUpload.до')}{MAX_SIZE_MB} {t('mailings.fileUpload.мб')}</span>
+        </div>
+      )}
+    </div>
+  )
+}

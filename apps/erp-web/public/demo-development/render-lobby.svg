@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="960" viewBox="0 0 1600 960">
+  <defs>
+    <linearGradient id="back" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#173a2f"/><stop offset="1" stop-color="#071c15"/></linearGradient>
+    <linearGradient id="floor" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b9aa91"/><stop offset="1" stop-color="#706654"/></linearGradient>
+    <radialGradient id="lamp"><stop stop-color="#f5dda0"/><stop offset="1" stop-color="#cda94f"/></radialGradient>
+  </defs>
+  <rect width="1600" height="960" fill="url(#back)"/>
+  <path d="M0 700L800 510l800 190v260H0z" fill="url(#floor)"/>
+  <rect x="120" y="80" width="500" height="620" fill="#d9d1c2"/>
+  <rect x="165" y="125" width="410" height="530" fill="#385d51"/>
+  <path d="M370 125v530M165 390h410" stroke="#cfbea0" stroke-width="16"/>
+  <rect x="980" y="170" width="420" height="500" fill="#c8bda9"/>
+  <rect x="1030" y="220" width="320" height="410" fill="#14392d"/>
+  <text x="1190" y="390" text-anchor="middle" fill="#e6c364" font-family="Montserrat,Arial" font-size="32" letter-spacing="9">BAZA</text>
+  <text x="1190" y="435" text-anchor="middle" fill="#d6ccb8" font-family="Montserrat,Arial" font-size="16" letter-spacing="5">RESIDENCE</text>
+  <path d="M670 710h300l70 125H600z" fill="#6a5f4f"/>
+  <rect x="700" y="675" width="240" height="55" rx="4" fill="#d5c9b3"/>
+  <circle cx="800" cy="145" r="54" fill="url(#lamp)"/><path d="M800 0v92" stroke="#dac786" stroke-width="7"/>
+  <circle cx="690" cy="120" r="30" fill="url(#lamp)"/><path d="M690 0v90" stroke="#dac786" stroke-width="5"/>
+  <circle cx="910" cy="120" r="30" fill="url(#lamp)"/><path d="M910 0v90" stroke="#dac786" stroke-width="5"/>
+</svg>
