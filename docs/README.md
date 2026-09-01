@@ -23,16 +23,28 @@
 репозитория, и там этот каталог не отслеживается git. То есть они не под
 контролем версий нигде.
 
-Первый шаг сделан: `BAZA_MASTER_PLAN.md` перенесён сюда 01.09.2026 и больше в
-этом списке не значится. Документы ниже по-прежнему снаружи.
+**Переносим модульно**, по мере завершения работ по теме документа (решение
+владельца от 01.09.2026, порядок очереди — в
+[roadmap-2026-09.md](roadmap-2026-09.md)). Документ, переезжающий вместе с
+закрытой работой, приезжает уже выверенным.
 
-| Документ | Где лежит | Кто на него ссылается отсюда |
-| --- | --- | --- |
-| ADR-001…010 | `BAZA_Renovation/docs/architecture/adr/` | `api/conventions.md`, докстринги стражей `tenant-scope` (ADR-002) и `idempotency-coverage` (ADR-006) |
-| `domain-model.md` | `BAZA_Renovation/docs/architecture/` | `api/conventions.md` |
-| `mongodb-schema.md` | `BAZA_Renovation/docs/architecture/` | `api/conventions.md` |
-| `permission-matrix.md` | `BAZA_Renovation/docs/security/` | `api/conventions.md`, страж `permission-grants` |
-| `threat-model.md` | `BAZA_Renovation/docs/security/` | проходы по безопасности |
+Уже здесь:
+
+| Документ | Приехал вместе с |
+| --- | --- |
+| [BAZA_MASTER_PLAN.md](BAZA_MASTER_PLAN.md) | отчётом о ходе работ и подсчётом готовности |
+| [architecture/adr/002-mongodb-tenancy.md](architecture/adr/002-mongodb-tenancy.md) | стражем `tenant-scope`: 18 запросов без `organizationId` разобраны, утечек нет |
+| [architecture/adr/006-transactions-outbox-workers.md](architecture/adr/006-transactions-outbox-workers.md) | стражем `idempotency-coverage`: противоречие §4/§8 conventions.md разрешено |
+| [security/permission-matrix.md](security/permission-matrix.md) | стражем `permission-grants`: все три мёртвых гранта включены |
+
+Ещё снаружи, в `BAZA_Renovation/docs/`:
+
+| Документ | Ждёт |
+| --- | --- |
+| ADR-005, ADR-008 | чистки тихих подмен данных в ERP |
+| `domain-model.md`, `mongodb-schema.md` | закрытия мок-долга CRM |
+| `threat-model.md`, ADR-004, ADR-009 | следующего прохода по безопасности |
+| ADR-001, 003, 007, 010 | по мере затрагивания своих областей |
 
 Практическое следствие: строка 4 файла `api/conventions.md` заявляет
 «Опирается на: все 10 ADR, domain-model.md, mongodb-schema.md,
