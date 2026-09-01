@@ -3,6 +3,7 @@ import { PublicationRequestedHandler } from './publication-requested.handler';
 import type { DevelopmentRepository } from '@baza/development';
 import type { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import type { MarketplacePublicationRepository } from '@baza/publication';
+import type { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 
 function makeEvent(payload: Record<string, unknown>) {
   return { aggregateId: new Types.ObjectId(), payload } as never;
@@ -40,16 +41,16 @@ function makeHandler(overrides: {
   developmentRepository?: Partial<DevelopmentRepository>;
   listingRepository?: Partial<ListingRepository>;
   propertyAssetRepository?: Partial<PropertyAssetRepository>;
-  mediaAssetRepository?: Partial<any>;
-  storage?: Partial<any>;
+  mediaAssetRepository?: Partial<MediaAssetRepository>;
+  storage?: Partial<MediaStorageService>;
 } = {}) {
   return new PublicationRequestedHandler(
     (overrides.publicationRepository ?? {}) as MarketplacePublicationRepository,
     (overrides.developmentRepository ?? { findById: jest.fn() }) as DevelopmentRepository,
     (overrides.listingRepository ?? { findById: jest.fn() }) as ListingRepository,
     (overrides.propertyAssetRepository ?? { findById: jest.fn() }) as PropertyAssetRepository,
-    (overrides.mediaAssetRepository ?? { findByIds: jest.fn().mockResolvedValue([]) }) as any,
-    (overrides.storage ?? { getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as any,
+    (overrides.mediaAssetRepository ?? { findByIds: jest.fn().mockResolvedValue([]) }) as MediaAssetRepository,
+    (overrides.storage ?? { getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as unknown as MediaStorageService,
   );
 }
 

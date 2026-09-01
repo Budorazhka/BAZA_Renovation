@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, FilterQuery, Model, Types, UpdateQuery } from 'mongoose';
+import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import type { MoneyAmount } from '@baza/contracts';
 import { DealChecklistItem, DealDocument, DealParticipant, type DealStage } from '../schemas/deal.schema';
 
