@@ -1,0 +1,144 @@
+# Permission matrix — BAZA.sale
+
+**Статус**: Proposed (первый цельный проход, 25.08.2026)
+**Опирается на**: ADR-002 (TenantContext), ADR-003 (Position/Assignment), ADR-009 (Admin grants model), domain-model.md Модуль 3 (PermissionGrant).
+**Формат**: `resource.action.scope` — единая тройка для ERP-organization grants и Admin grants (ADR-009), реализуется через `PermissionGrant`-коллекцию (mongodb-schema.md).
+
+Deny-by-default: отсутствие явного grant означает отказ. Скрытая кнопка на frontend не считается защитой (master plan разд.5.4) — каждая строка ниже проверяется сервером на каждый вызов, не только определяет видимость UI.
+
+---
+
+## 1. Базовые роли организации (ERP) — default grant sets
+
+Шесть фиксированных ролей (ADR-003, ADR-008 Accepted в исходном журнале решений master plan; `marketer` добавлена 25.08.2026 — `[technical decision]`, не owner decision, см. примечание ниже раздела 1.2): **owner, director, rop, manager, administrator, marketer**. Роль на `Position` задаёт **стартовый** набор grants при создании позиции — далее super_admin организации (owner) может донастроить конкретные grants индивидуально через `accessProfile` (Position, Module 2 domain-model.md) или `personalAccess` (override поверх позиции для конкретного человека — уже частично специфицировано в ERP-коде как паттерн, `teamApi.ts`).
+
+### 1.1. CRM / Leads / Contacts / Deals
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `lead.read.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `lead.read.team` | ✓ | ✓ | ✓ | — | — | — |
+| `lead.read.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `lead.create.organization` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
+| `lead.assign.organization` | ✓ | ✓ | ✓ | — | — | — |
+| `lead.reassign.team` | — | ✓ | ✓ (только среди своих) | — | — | — |
+| `contact.read.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `contact.read.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `client.reassign.organization` | ✓ | ✓ | ✓ | — | — | — |
+| `crm.stages.configure.organization` | — | — | — | — | — | — |
+
+**`crm.stages.configure.organization` — ни у кого нет по умолчанию** (`[owner decision — xlsx #108]`: «НЕТ», организации не настраивают этапы CRM самостоятельно — воронка фиксированная на уровне платформы, не per-tenant кастомизация).
+
+**`lead.reassign.team` для rop**: «Напиши систему чтобы роп мог между своими передавать. Диретор все и собственник все» (`[owner decision — xlsx #115]`) — rop передаёт лид/клиента только среди менеджеров своей команды (`scope: 'team'`), director/owner — вся организация (`scope: 'organization'`).
+
+### 1.2. Development / Chessboard / Units
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `development.read.organization` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `development.edit.organization` | ✓ | ✓ | — | — | — | — |
+| `unit.price.update.project` | ✓ | ✓ | ✓ | ⚙ toggle | ✓ | — |
+| `unit.status.update.project` | ✓ | ✓ | ✓ | ⚙ toggle | ✓ | — |
+| `chessboard.export.organization` | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+
+**`unit.price.update.project` / `unit.status.update.project` для manager**: `⚙ toggle` означает — **не default grant**, но explicit per-position включаемое право (`[owner decision — xlsx #53]`, дословно: «Из пользователей ЕРП собственник, директор, РОП, Администратор + менеджер ПРИ УСЛОВИИ ЧТО У НЕГО ЕСТЬ ТАКОЕ ПРАВО включенное в разделе команда. Там тумблер есть»). Технически: у manager-позиции по умолчанию `unit.price.update.project` **отсутствует** в `accessProfile`, но owner/director может добавить этот конкретный grant точечно через UI "тумблер" в разделе Команда — это явное подтверждение уже спроектированного паттерна ("тумблер" уже упоминается владельцем как существующий UX-концепт), не новая идея этого документа.
+
+**`marketer` роль**: `[technical decision — 25.08.2026]`, НЕ owner decision. `TeamUserRole` во фронтенд-коде (`apps/erp-web/src/types/team.ts`) уже включает `'marketer'` как шестую позицию оргструктуры (mock-сид данные, `src/services/teamApi.ts`, содержит демо-запись "Маркетолог") — фронтенд уже спроектирован с этой ролью, backend `FixedRole` (ADR-003, изначально пять значений) расширен до шести, чтобы соответствовать. Grants для marketer в этой матрице — минимальный, консервативный набор first-pass предположений (read-доступ к каталогу и export для маркетинговых материалов, НЕ price/status/finance/position-management), не подтверждённое владельцем решение о полном объёме прав этой роли — требует явного подтверждения при первом реальном использовании раздела "Команда" с marketer-позицией.
+
+### 1.3. Bookings
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `booking.create.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `booking.confirm.own` | ✓ | ✓ | ✓ | ✓ (только свой лид) | — | — |
+| `booking.cancel.organization` | ✓ | ✓ | ✓ | — | — | — |
+| `booking.extend.organization` | ✓ | ✓ | ✓ | — | — | — |
+
+**`booking.confirm.own` для manager**: «менеджер и все кто выше. Ну тот чей лид» (`[owner decision — xlsx #118]`) — manager подтверждает/отменяет бронь **только по своему лиду** (`scope: 'own'`), эскалация выше (rop+) не ограничена конкретным лидом.
+
+### 1.4. Team / Positions
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `position.create.organization` | ✓ | ✓ | — | — | ✓ (⚙, `[owner decision — xlsx #24]`) | — |
+| `position.assign_occupant.organization` | ✓ | ✓ | — | — | ✓ (⚙) | — |
+| `position.vacate.organization` | ✓ | ✓ | — | — | ✓ (⚙) | — |
+| `personal_access.grant.position` | ✓ | ✓ | — | — | — | — |
+
+**`administrator`-роль в Team-разделе**: `[owner decision — xlsx #24]` явно запросил роль «Администратор который правами доступа и прочей хуйней занимается» — это отражено как ⚙ (не default, но естественная область ответственности этой роли, включаемая owner/director при создании позиции с `fixedRole: 'administrator'`).
+
+### 1.5. Finance / Export
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `finance.read.organization` | ✓ | ✓ | — | — | — | — |
+| `manual_ledger.read.organization` | ✓ | — | — | — | — | — |
+| `export.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+
+**`manual_ledger.read.organization` только owner**: биллинговая история — самая чувствительная финансовая информация организации, не расширяется на director по умолчанию (может быть добавлено индивидуальным grant, если владелец организации явно решит).
+
+---
+
+## 2. Системные admin actors
+
+*(ADR-009)*
+
+### 2.1. super_admin
+
+Полный доступ ко всей системе без ограничений scope — не перечисляется построчно (единственный actor с implicit `*.* .global`), enforced на уровне отдельной проверки `adminAccount.role == 'super_admin'` в authorization-слое, не через `PermissionGrant`-записи (иначе потребовалось бы явно перечислять сотни строк, что не масштабируется и не нужно — super_admin по определению).
+
+### 2.2. admin с индивидуальными grants
+
+Формируется исключительно через `PermissionGrant` с `subjectType: 'admin_account'` — не hardcoded роль. Примеры типовых композиций (не enum-значения, просто иллюстрация, как выглядит реальный набор grants на практике):
+
+| Пример композиции | Grants |
+|---|---|
+| «Модератор вторички Батуми» (замещает legacy `mls_admin`-подобную демо-роль без hardcode) | `listing.moderate.city(batumi)`, `duplicate_candidate.resolve.city(batumi)`, `complaint.resolve.city(batumi)` |
+| «Админ новостроек» (замещает legacy `developers_admin`) | `development.moderate.domain(newbuilds)`, `unit.price.override.domain(newbuilds)` (только для критичных корректировок, не рутинного редактирования — то остаётся у ERP-ролей организации) |
+| «Модератор отзывов» | `review.moderate.global`, `review.rating_adjust.global` |
+
+**`[owner decision — xlsx #134]`**: «да суперадмином» (индивидуальная настройка) — только super_admin создаёт/меняет grants (ADR-009 self-escalation prevention, уже enforced на уровне архитектуры, не только этой матрицы).
+
+---
+
+## 3. Обязательные scopes и их конкретный смысл в этой системе
+
+| Scope | Используется где | Смысл |
+|---|---|---|
+| `own` | lead, contact, booking (manager-уровень) | только записи, где текущая Position — явный владелец/ответственный |
+| `position` | personal_access grants | относится к конкретной Position, не ко всей команде |
+| `team` | lead.reassign (rop) | подчинённые Position текущей Position (через `parentPositionId`) |
+| `organization` | большинство ERP grants | вся текущая организация (TenantContext.organizationId) |
+| `project` | unit.price/status.update | конкретный Development (не вся организация — застройщик с несколькими ЖК может ограничить право конкретным проектом, деталь для будущей гранулярности, не обязательна на MVP) |
+| `city` | admin grants (модерация) | конкретный город (`scopeValue: 'batumi' | 'tbilisi'`) |
+| `global` | super_admin-подобные admin grants, owner-only finance | вся платформа/вся организация без сужения |
+| `assigned` | *(зарезервирован, явного use case в MVP-объёме не найдено — не используется ни одной строкой этой матрицы; scope существует в перечне master plan разд.5.4, оставлен как валидный тип на будущее, не удалён из enum)* | — |
+| `domain` | admin grants (newbuilds/secondary/mls) | предметная область, не географическая (замещает legacy hardcoded domain-роли, ADR-009) |
+
+---
+
+## 4. Critical actions — обязательный reason + audit
+
+*(master plan разд.5.4/7.2, traceability matrix QA-002)*
+
+| Critical action | Кто может (permission) | Обязательные условия |
+|---|---|---|
+| **Price update** (единичное) | `unit.price.update.project` | audit before/after, без обязательного reason (рутинная операция) |
+| **Bulk price update** | `unit.price.update.project` + explicit bulk-подтверждение | audit с полным списком затронутых unit'ов, count-подтверждение перед применением (preview, master plan разд.5.4 «массовые операции с предварительным просмотром») |
+| **Booking cancel/extend** | `booking.cancel.organization` / `booking.extend.organization` | audit before/after |
+| **Lead reassignment** | `lead.assign.organization` / `lead.reassign.team` | audit (actor, from-position, to-position) |
+| **Listing unpublish** (владелец/риэлтор) | владелец listing или иерархия (owner/director/rop) | audit, reason опционален (не Admin-действие) |
+| **Listing unpublish** (Admin) | Admin grant `listing.unpublish.city/domain/global` | **обязательный reason**, audit (ADR-005 unpublish, master plan D-06) |
+| **Rating adjustment** (Admin) | `review.rating_adjust.*` | **обязательный reason** (`[owner decision — xlsx #142]`: «Для админов» — только Admin, не сама организация может корректировать чужой рейтинг) |
+| **Manual ledger change** | Admin grant `manual_ledger.write.*` | **обязательный reason**, append-only (никогда update, только новая компенсирующая запись, domain-model.md) |
+| **Impersonation** | super_admin или explicit Admin grant `impersonation.start.*` | обязательная причина, короткий TTL, заметная UI-плашка, запрет ряда критических действий во время impersonation-сессии, полный audit (master plan разд.5.4) |
+| **Export** (bulk data) | `export.organization` (ERP) / соответствующий Admin grant | audit с указанием объёма/типа экспортируемых данных |
+
+**Общий принцип для audit-требований** (`[owner decision — xlsx #139]`): «Важные типо блокировок и редактур. Каждый клик не надо» — audit-событие пишется на перечисленные выше critical actions и на изменения статуса/прав/блокировок, **не** на каждое чтение или тривиальное UI-действие (навигация, открытие карточки для просмотра).
+
+---
+
+## 5. Не рассмотрено в этом первом проходе (явно, не молча)
+
+- Гранулярная детализация Admin-grants для полного покрытия всех 25 разделов Admin (admin-functional-map.md) — этот документ покрывает разделы, прямо упомянутые в xlsx-ответах и critical actions traceability matrix; полная построчная admin permission matrix по каждому из 25 разделов — отдельная более мелкая задача, не блокирующая переход к API conventions (B-05), может быть дополнена по мере проектирования конкретных Admin-экранов в Этапе 8.
+- `project`-scope (ограничение права конкретным Development застройщика, не всей организацией) — введён в перечне scopes как валидный тип, но ни одна строка ERP-матрицы выше явно им не пользуется на MVP-уровне (все project-relevant права даны на уровне `organization`) — оставлено для будущей гранулярности, если застройщик с несколькими ЖК запросит разделение прав по конкретным проектам.

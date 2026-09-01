@@ -55,6 +55,14 @@
 
 Критические команды (`publish`, `book`, `cancel`, manual ledger operations) **обязаны** принимать header `Idempotency-Key: {client-generated UUID}`. Отсутствие header на этих конкретных endpoint'ах — `400 Bad Request` с кодом `IDEMPOTENCY_KEY_REQUIRED` (не молчаливое выполнение без защиты).
 
+> **Про manual ledger: правило записано авансом.** Финансового модуля не
+> существует (мастер-план, этап 9 — 0 %), поэтому ни одного endpoint'а manual
+> ledger сегодня нет, и требование к ним ничего не защищает. Гранты
+> `finance.read` и `manual_ledger.read` помечены в
+> `apps/api/test/architecture/permission-grants.test.ts` как
+> `INTENTIONALLY_UNIMPLEMENTED`. Правило вступает в силу вместе с модулем;
+> актуальный список endpoint'ов с ключом — в разделе 8.
+
 Поведение при повторном запросе с тем же ключом — см. ADR-006 раздел Idempotency (сравнение `requestHash`, возврат сохранённого `response` либо `409` при несовпадении тела запроса).
 
 ## 5. Optimistic concurrency
@@ -83,15 +91,55 @@ Endpoint'ы Admin-домена — отдельный namespace `/api/v1/admin/*
 ## 8. Критические команды — единообразный контракт
 
 Publish/unpublish/book/cancel/reassign/manual-ledger-change — все следуют одному паттерну:
-1. Требуют `Idempotency-Key`.
+1. Требуют `Idempotency-Key` — **но не все шесть, см. оговорку ниже**.
 2. Проверяют permission через `resource.action.scope` (permission-matrix.md) до выполнения.
 3. Для admin-инициированных — требуют `reason` в теле запроса (`400` без него на действиях, помеченных как требующие reason в permission-matrix.md раздел 4).
 4. Пишут audit event (Module 3) в той же транзакции, что бизнес-изменение.
 5. Возвращают немедленный синхронный результат для быстрых операций (unpublish, ADR-005) или промежуточный статус для операций, завершаемых worker'ом (publish → `publication_pending`, ADR-005).
 
+### Оговорка про пункт 1: `Idempotency-Key` требуют не все шесть
+
+Этот раздел и раздел 4 расходились: раздел 4 (со ссылкой на ADR-006) перечисляет `publish`,
+`book`, `cancel` и manual ledger — четыре; здесь перечислено шесть, добавляя `unpublish` и
+`reassign`. Код следует разделу 4. Зафиксировано 01.09.2026 в пользу раздела 4 — расхождение
+разрешено, а не оставлено на усмотрение читателя.
+
+**Требуют ключ (7 endpoint'ов):** `POST /bookings`, `POST /bookings/{id}/cancel`,
+`POST /bookings/{id}/confirm`, `POST /bookings/{id}/extend` (три follow-up команды брони — по
+book-001), `POST /developments/{id}/publish`, `POST /property-assets/{id}/listings/{id}/publish`
+и его marketplace-двойник.
+
+**Не требуют — `unpublish` и `reassign`.** Причина не в недосмотре: обе операции уже защищены от
+повторного применения на уровне записи. `unpublish` — условным update'ом (`modifiedCount === 0`
+→ `409`, публикация не в статусе `published`), `reassign` задачи и сделки — проверкой
+`expectedVersion` (CAS). Повторный запрос не может применить операцию дважды; в отличие от
+`publish`/`book`, новой сущности он тоже не создаёт.
+
+**Цена этого решения, чтобы она была видна:** при потерянном ответе клиент, повторив запрос,
+получит `409`, а не сохранённый результат первой попытки, — то есть не сможет отличить «моя
+операция не прошла» от «прошла, но ответ не доехал». Для админского `unpublish` и `reassign` это
+сочли приемлемым. Если решение поменяется, менять придётся не только сервер: `admin-web`
+сейчас заголовок не отправляет (`apps/admin-web/src/api/admin-api.ts`), и включение проверки без
+правки клиента немедленно сломает админку.
+
+Список endpoint'ов, требующих ключ, закреплён тестом
+`apps/api/test/architecture/idempotency-coverage.test.ts` — добавление новой критической команды
+без ключа (или снятие ключа с существующей) роняет его.
+
 ## 9. Локализация
 
-`Accept-Language: ru | en | ka` header определяет язык `message` в ошибках и, где применимо, локализованный контент (`LocalizedContent`, Module 11). Fallback — `ru` (domain-model.md Модуль 11).
+**Статус: не реализовано.** Раздел описывает целевое поведение, а не текущее.
+
+Целевое: `Accept-Language: ru | en | ka` header определяет язык `message` в ошибках и, где применимо, локализованный контент (`LocalizedContent`, Module 11). Fallback — `ru` (domain-model.md Модуль 11).
+
+Фактически на 01.09.2026 в `apps/api` и `packages` нет ни одного упоминания
+`Accept-Language`, `LocalizedContent` или языка `ka`: сервер отвечает на одном
+языке и заголовок не читает. Локализация входит в этап 4 мастер-плана
+(«RU/EN/KA, USD/GEL»), который закрыт примерно на 20 %.
+
+Пометка стоит здесь потому, что раздел выглядел как описание работающего
+контракта, и клиент, отправив `Accept-Language: ka`, молча получил бы русский
+ответ, не поняв почему.
 
 ## 10. Генерация клиента
 
