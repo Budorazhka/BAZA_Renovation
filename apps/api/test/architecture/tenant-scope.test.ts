@@ -1,0 +1,188 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * ADR-002: в tenant-коллекциях `organizationId` — ЧАСТЬ Mongo-фильтра, а не
+ * проверка после выборки. Нарушение этого правила означает чтение или
+ * запись через границу организаций, то есть худший класс бага в этом
+ * проекте.
+ *
+ * Тест находит запросы репозиториев, в фильтре которых organizationId нет,
+ * и сверяет их с явным списком исключений ниже. Каждое исключение проверено
+ * вручную 01.09.2026 и снабжено причиной; НОВЫЙ запрос без organizationId
+ * роняет тест, и автор обязан либо добавить фильтр, либо осознанно внести
+ * запись сюда.
+ *
+ * Смысл не в том, чтобы запретить такие запросы — часть из них законна и
+ * необходима, — а в том, чтобы каждый был решением, а не случайностью.
+ *
+ * Четвёртый страж такого рода после module-boundaries, permission-grants и
+ * idempotency-coverage.
+ */
+
+const REPO_ROOT = join(__dirname, '../../../..');
+const SCAN_ROOTS = [join(REPO_ROOT, 'apps/api/src'), join(REPO_ROOT, 'packages')];
+
+/**
+ * Коллекции, не привязанные к организации по своей природе: аккаунты
+ * платформы, идентити, сессии, аудит (у него своё скоупирование),
+ * гранты (по subjectId), outbox, записи идемпотентности, публикации
+ * маркетплейса (публичный каталог, скоуп — publisherScope) и booking-lock
+ * (ключ — unitId).
+ */
+const NON_TENANT_REPOSITORIES = [
+  'admin-account',
+  'audit-event',
+  'permission-grant',
+  'identity',
+  'session',
+  'product-access',
+  'idempotency-record',
+  'public-reveal-idempotency-record',
+  'outbox-event',
+  'marketplace-publication',
+  'booking-lock',
+];
+
+/** `<файл>#<метод>` → почему запрос без organizationId здесь корректен. */
+const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
+  'invitation.repository.ts#findByTokenHash':
+    'Поиск по самому токену: он и есть предъявляемый секрет, глобально уникален. ' +
+    'Организация приглашения читается ИЗ найденной записи, а не задаётся вызывающим.',
+  'position-assignment.repository.ts#findActiveByIdentity':
+    'Поиск СВОЕГО назначения по identity — из него и строится TenantContext. ' +
+    'Фильтровать по организации здесь нечем: она ещё не известна.',
+  'position-profile.repository.ts#findByPositionId':
+    'Профиль позиции; владение позицией проверено вызывающим (TeamService) до вызова.',
+  'position-profile.repository.ts#findByPositionIds':
+    'Batched-вариант того же: positionIds приходят из уже отфильтрованного по организации списка позиций ' +
+    '(TeamService строит команду через listForOrganization), а не из запроса пользователя.',
+  'position-assignment.repository.ts#findActiveByPosition':
+    'Оба вызывающих (OrganizationsService.vacate, TeamService) непосредственно перед этим получают позицию ' +
+    'через findByIdForOrganization/findAssignablePosition и падают 404, если она чужая.',
+  'listing.repository.ts#findActiveListingsConfirmedBefore':
+    'Фоновая задача протухания актуальности (ActualityService.expireOverdueListings, cron-точка входа): ' +
+    'намеренно проходит по всем организациям, tenant-контекста у неё нет по определению.',
+  'position.repository.ts#setAvatarAsset':
+    'Запись по positionId, владение проверено вызывающим до вызова.',
+  'media-asset.repository.ts#findByIds':
+    'Медиа скоупится не организацией, а ownerScope. Вызывающий MediaService.' +
+    'getAssetsForOwnerScope отбрасывает чужие через ownerScopesEqual; воркер работает ' +
+    'вне tenant-контекста по id из события.',
+  'media-asset.repository.ts#appendVariant': 'Воркер дописывает вариант по id обрабатываемого события, вне tenant-контекста.',
+  'media-asset.repository.ts#deletePermanently': 'Фоновая очистка media-cleanup по id, вне tenant-контекста.',
+  'duplicate-candidate.repository.ts#upsertDetected':
+    'Кандидат дубля по своей природе связывает активы ДВУХ организаций — одной organizationId у записи нет.',
+  'duplicate-candidate.repository.ts#findByPair': 'То же: пара активов из разных организаций.',
+  'duplicate-candidate.repository.ts#findById': 'Скоуп проверяется в DedupeService по владению обоими активами пары.',
+  'duplicate-candidate.repository.ts#listForReview': 'Админская очередь модерации — намеренно поверх всех организаций.',
+  'listing.repository.ts#findById':
+    'Вызывается по id, взятому из уже разрешённой сущности (публикация, актив), либо воркером вне tenant-контекста.',
+  'property-asset.repository.ts#findById':
+    'То же: id приходит из уже проверенной сущности (listing.propertyAssetId, свой только что созданный актив) ' +
+    'либо из воркера.',
+  'property-asset.repository.ts#mutateMedia':
+    'Докстринг метода фиксирует контракт: id уже проверен на владение вызывающим, ретраи перечитывают по _id, ' +
+    'потому что владение не может смениться посреди операции. Проверено: все 10 мест вызова получают asset ' +
+    'через getAsset(assetId, organizationId) либо getAsset(assetId, identityId).',
+};
+
+const QUERY = /this\.model\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|countDocuments|aggregate|distinct)\b/;
+const METHOD_START = /^\s{2}(?:async\s+)?([a-zA-Z][a-zA-Z0-9_]*)\s*\(/;
+
+function listRepositories(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry !== 'node_modules' && entry !== 'dist') files.push(...listRepositories(full));
+      continue;
+    }
+    if (entry.endsWith('.repository.ts') && !entry.endsWith('.spec.ts')) files.push(full);
+  }
+  return files;
+}
+
+/** `<файл>#<метод>` для каждого запроса, в теле метода которого нет organizationId. */
+function collectUnscopedQueries(): Set<string> {
+  const found = new Set<string>();
+
+  for (const root of SCAN_ROOTS) {
+    for (const file of listRepositories(root)) {
+      const fileName = file.split(/[\\/]/).pop()!;
+      if (NON_TENANT_REPOSITORIES.includes(fileName.replace('.repository.ts', ''))) continue;
+
+      const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+      lines.forEach((line, index) => {
+        if (!QUERY.test(line)) return;
+
+        let start = index;
+        let method = '<unknown>';
+        while (start > 0) {
+          const m = lines[start]!.match(METHOD_START);
+          if (m) {
+            method = m[1]!;
+            break;
+          }
+          start -= 1;
+        }
+
+        // Сигнатуру пропускаем НАМЕРЕННО: `organizationId` в списке
+        // параметров ничего не доказывает. Самая вероятная форма этого бага
+        // — параметр принимается, но в фильтр не попадает; поиск по всему
+        // методу такую правку пропускал (проверено: удаление organizationId
+        // из фильтра findByIdForOrganization тест не ловил).
+        let bodyStart = start;
+        while (bodyStart < index && !/\)\s*(?::[^{]*)?\{\s*$/.test(lines[bodyStart]!)) {
+          bodyStart += 1;
+        }
+
+        // Вперёд смотрим лишь на несколько строк — ровно чтобы захватить
+        // многострочный inline-фильтр вида `.findOne({\n _id,\n
+        // organizationId,\n })` — и обрываемся на начале следующего метода.
+        // Без этой границы окно залезало в соседний метод и находило там
+        // чужой organizationId (проверено: так тест не ловил удаление
+        // фильтра из findByIdForOrganization).
+        let bodyEnd = index + 1;
+        const maxLookahead = Math.min(index + 5, lines.length);
+        while (bodyEnd < maxLookahead && !METHOD_START.test(lines[bodyEnd]!)) {
+          bodyEnd += 1;
+        }
+
+        const body = lines.slice(bodyStart + 1, bodyEnd).join(' ');
+        if (!/organizationId/.test(body)) {
+          found.add(`${fileName}#${method}`);
+        }
+      });
+    }
+  }
+
+  return found;
+}
+
+describe('ADR-002: organizationId в фильтре tenant-запросов', () => {
+  const unscoped = collectUnscopedQueries();
+  const allowed = new Set(Object.keys(ALLOWED_WITHOUT_ORGANIZATION_ID));
+
+  it('нет НОВЫХ запросов без organizationId вне явного списка исключений', () => {
+    const unexpected = [...unscoped].filter((key) => !allowed.has(key)).sort();
+
+    expect(unexpected).toEqual([]);
+  });
+
+  it('список исключений не протух — каждая запись всё ещё соответствует коду', () => {
+    const stale = [...allowed].filter((key) => !unscoped.has(key)).sort();
+
+    expect(stale).toEqual([]);
+  });
+
+  it('у каждого исключения записана причина', () => {
+    for (const reason of Object.values(ALLOWED_WITHOUT_ORGANIZATION_ID)) {
+      expect(reason.length).toBeGreaterThan(30);
+    }
+  });
+
+  it('сверка что-то нашла — защита от молчаливо сломанного разбора', () => {
+    expect(unscoped.size).toBeGreaterThan(0);
+  });
+});
