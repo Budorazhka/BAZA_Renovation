@@ -123,6 +123,9 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
           location: expect.objectContaining({ address: 'Rustaveli 25' }),
           characteristics: expect.objectContaining({ area: 75, rooms: 2, representativePhone: '+995555123456' }),
         }),
+        // второй аргумент — Idempotency-Key: повтор шага не должен создавать
+        // второй объект (ADR-006)
+        expect.any(String),
       )
       expect(screen.getByTestId('wizard-step-deal')).toBeDefined()
     })
@@ -136,7 +139,7 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
 
     // Verify Listing creation and activation API calls
     await waitFor(() => {
-      expect(publishingApi.createListing).toHaveBeenCalledWith('asset-101', expect.objectContaining({ priceAmount: 95000 }))
+      expect(publishingApi.createListing).toHaveBeenCalledWith('asset-101', expect.objectContaining({ priceAmount: 95000 }), expect.any(String))
       expect(publishingApi.activateListing).toHaveBeenCalledWith('asset-101', 'listing-202')
       expect(screen.getByTestId('wizard-step-media')).toBeDefined()
     })

@@ -37,6 +37,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /leads': 'дубль лида искажает воронку и отчётность по менеджерам — данные, по которым принимают решения',
   'POST /deals': 'дубль сделки удваивает ожидаемую комиссию в отчётах',
   'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
+  'POST /marketplace/property-assets': 'дубль объекта в мастере публикации — клиент шлёт стабильный ключ на повтор шага',
+  'POST /marketplace/property-assets/:assetId/listings': 'дубль листинга на том же объекте',
 };
 
 /**
@@ -97,8 +99,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'условный update кандидата, пишется audit',
 
   // --- Объекты и листинги (marketplace-поток, те же правила) ---
-  'POST /marketplace/property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
-  'POST /marketplace/property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
   'POST /marketplace/property-assets/:assetId/listings/:listingId/unpublish':
     'условный update: modifiedCount === 0 → 409',
   'PATCH /marketplace/property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 16;
+const KNOWN_GAPS = 14;
 
 interface RouteInfo {
   key: string;
