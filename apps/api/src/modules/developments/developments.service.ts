@@ -1,10 +1,24 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import type { Currency, MoneyAmount } from '@baza/contracts';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
+
+/** Параметры идемпотентности создающей команды. */
+interface IdempotencyParams {
+  identityId: Types.ObjectId;
+  operation: string;
+  key: string;
+  requestBody: Record<string, unknown>;
+}
+
+/** Mongoose-документ -> обычный объект для записи идемпотентности. */
+function toPlainRecord(doc: unknown): Record<string, unknown> {
+  const candidate = doc as { toObject?: () => Record<string, unknown> };
+  return typeof candidate?.toObject === 'function' ? candidate.toObject() : (doc as Record<string, unknown>);
+}
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PublicationService } from '../publication/publication.service';
@@ -126,6 +140,46 @@ export class DevelopmentsService {
     }
   }
 
+
+  /**
+   * Общая обвязка идемпотентности для создающих команд девелопмента.
+   *
+   * ADR-006: отметка идемпотентности пишется В ТОЙ ЖЕ транзакции, что и сама
+   * сущность. Иначе возможен разрыв — корпус создан, отметка потеряна, и
+   * повтор создаёт второй. Вынесено в один метод, чтобы шесть команд не
+   * повторяли эту обвязку каждая по-своему.
+   */
+  private async createIdempotently<T>(
+    idempotency: IdempotencyParams,
+    create: (session: ClientSession) => Promise<T>,
+  ): Promise<T> {
+    return runInTransaction(this.connection, async (session) => {
+      const created = await create(session);
+      await this.idempotencyService.record(
+        {
+          identityId: idempotency.identityId,
+          operation: idempotency.operation,
+          key: idempotency.key,
+          requestBody: idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: toPlainRecord(created),
+        },
+        session,
+      );
+      return created;
+    });
+  }
+
+  /** Проверка повтора до транзакции — как в property-assets. */
+  checkCreateReplay(
+    identityId: Types.ObjectId,
+    operation: string,
+    key: string,
+    requestBody: Record<string, unknown>,
+  ): Promise<IdempotentReplay | null> {
+    return this.idempotencyService.checkReplay({ identityId, operation, key, requestBody });
+  }
+
   async createDevelopment(params: {
     organizationId: Types.ObjectId;
     name: string;
@@ -135,9 +189,12 @@ export class DevelopmentsService {
     startDate?: Date;
     completionDate?: Date;
     description?: string;
+    idempotency: IdempotencyParams;
   }): Promise<DevelopmentDocument> {
     await this.requireDeveloperOrganization(params.organizationId);
-    return this.developmentRepository.create(params);
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.developmentRepository.create(params, session),
+    );
   }
 
   async getDevelopmentForOrganization(
@@ -378,6 +435,7 @@ export class DevelopmentsService {
     startDate?: Date;
     completionDate?: Date;
     polygon?: GeoPolygon;
+    idempotency: IdempotencyParams;
   }): Promise<BuildingDocument> {
     const development = await this.developmentRepository.findByIdForOrganization(
       params.developmentId,
@@ -387,15 +445,20 @@ export class DevelopmentsService {
       throw new NotFoundException('Development not found');
     }
 
-    return this.buildingRepository.create({
-      developmentId: params.developmentId,
-      organizationId: params.organizationId,
-      name: params.name,
-      floorsCount: params.floorsCount,
-      startDate: params.startDate,
-      completionDate: params.completionDate,
-      polygon: params.polygon,
-    });
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.buildingRepository.create(
+        {
+          developmentId: params.developmentId,
+          organizationId: params.organizationId,
+          name: params.name,
+          floorsCount: params.floorsCount,
+          startDate: params.startDate,
+          completionDate: params.completionDate,
+          polygon: params.polygon,
+        },
+        session,
+      ),
+    );
   }
 
   /**
@@ -410,6 +473,7 @@ export class DevelopmentsService {
     buildingId: Types.ObjectId;
     organizationId: Types.ObjectId;
     name: string;
+    idempotency: IdempotencyParams;
   }) {
     const building = await this.buildingRepository.findByIdForOrganization(
       params.buildingId,
@@ -419,11 +483,12 @@ export class DevelopmentsService {
       throw new NotFoundException('Building not found');
     }
 
-    return this.sectionRepository.create({
-      buildingId: params.buildingId,
-      organizationId: params.organizationId,
-      name: params.name,
-    });
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.sectionRepository.create(
+        { buildingId: params.buildingId, organizationId: params.organizationId, name: params.name },
+        session,
+      ),
+    );
   }
 
   async createFloor(params: {
@@ -432,6 +497,7 @@ export class DevelopmentsService {
     organizationId: Types.ObjectId;
     floorNumber: number;
     floorType?: string;
+    idempotency: IdempotencyParams;
   }): Promise<FloorDocument> {
     const building = await this.buildingRepository.findByIdForOrganization(
       params.buildingId,
@@ -454,13 +520,18 @@ export class DevelopmentsService {
       }
     }
 
-    return this.floorRepository.create({
-      buildingId: params.buildingId,
-      sectionId: params.sectionId,
-      organizationId: params.organizationId,
-      floorNumber: params.floorNumber,
-      floorType: params.floorType,
-    });
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.floorRepository.create(
+        {
+          buildingId: params.buildingId,
+          sectionId: params.sectionId,
+          organizationId: params.organizationId,
+          floorNumber: params.floorNumber,
+          floorType: params.floorType,
+        },
+        session,
+      ),
+    );
   }
 
   /**
@@ -479,6 +550,7 @@ export class DevelopmentsService {
     imageAssetId?: Types.ObjectId;
     tags?: string[];
     polygon?: GeoPolygon2D;
+    idempotency: IdempotencyParams;
   }): Promise<FloorPlanDocument> {
     const building = await this.buildingRepository.findByIdForOrganization(
       params.buildingId,
@@ -488,7 +560,9 @@ export class DevelopmentsService {
       throw new NotFoundException('Building not found');
     }
 
-    return this.floorPlanRepository.create(params);
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.floorPlanRepository.create(params, session),
+    );
   }
 
   async getUnitForOrganization(id: Types.ObjectId, organizationId: Types.ObjectId): Promise<UnitDocument> {
@@ -511,6 +585,7 @@ export class DevelopmentsService {
     areaBalcony?: number;
     price: MoneyAmount;
     floorPlanId?: Types.ObjectId;
+    idempotency: IdempotencyParams;
   }): Promise<UnitDocument> {
     const floor = await this.floorRepository.findByIdForOrganization(params.floorId, params.organizationId);
     // floor.buildingId должен совпадать с переданным buildingId — тот же
@@ -530,22 +605,27 @@ export class DevelopmentsService {
       }
     }
 
-    return this.unitRepository.create({
-      buildingId: params.buildingId,
-      floorId: params.floorId,
-      // sectionId серверный, из уже проверенного floor — клиент его не
-      // передаёт и не может подделать (CreateUnitDto не содержит sectionId).
-      sectionId: floor.sectionId,
-      organizationId: params.organizationId,
-      number: params.number,
-      kind: params.kind,
-      rooms: params.rooms,
-      area: params.area,
-      areaLiving: params.areaLiving,
-      areaBalcony: params.areaBalcony,
-      price: params.price,
-      floorPlanId: params.floorPlanId,
-    });
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.unitRepository.create(
+        {
+          buildingId: params.buildingId,
+          floorId: params.floorId,
+          // sectionId серверный, из уже проверенного floor — клиент его не
+          // передаёт и не может подделать (CreateUnitDto не содержит sectionId).
+          sectionId: floor.sectionId,
+          organizationId: params.organizationId,
+          number: params.number,
+          kind: params.kind,
+          rooms: params.rooms,
+          area: params.area,
+          areaLiving: params.areaLiving,
+          areaBalcony: params.areaBalcony,
+          price: params.price,
+          floorPlanId: params.floorPlanId,
+        },
+        session,
+      ),
+    );
   }
 
   /**

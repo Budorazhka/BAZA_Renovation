@@ -41,6 +41,12 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /marketplace/property-assets/:assetId/listings': 'дубль листинга на том же объекте',
   'POST /property-assets': 'дубль объекта в ERP — клиент шлёт стабильный ключ на повтор формы',
   'POST /property-assets/:assetId/listings': 'дубль листинга на том же объекте (ERP)',
+  'POST /developments': 'дубль ЖК — клиент шлёт стабильный ключ на повтор формы мастера',
+  'POST /developments/:developmentId/buildings': 'дубль корпуса',
+  'POST /buildings/:buildingId/sections': 'дубль секции',
+  'POST /buildings/:buildingId/floors': 'дубль этажа',
+  'POST /buildings/:buildingId/floor-plans': 'дубль планировки',
+  'POST /floors/:floorId/units': 'дубль юнита — шахматка показала бы несуществующий лот',
 };
 
 /**
@@ -74,13 +80,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'грант идемпотентен по паре (subject, resource+action)',
 
   // --- Девелопмент ---
-  'POST /developments': 'ПРОБЕЛ: дубль создаёт второй ЖК',
   'PATCH /developments/:developmentId': 'expectedVersion (CAS) не даст применить дважды',
-  'POST /developments/:developmentId/buildings': 'ПРОБЕЛ: дубль создаёт второй корпус',
-  'POST /buildings/:buildingId/sections': 'ПРОБЕЛ: дубль создаёт вторую секцию',
-  'POST /buildings/:buildingId/floors': 'ПРОБЕЛ: дубль создаёт второй этаж',
-  'POST /buildings/:buildingId/floor-plans': 'ПРОБЕЛ: дубль создаёт второй план этажа',
-  'POST /floors/:floorId/units': 'ПРОБЕЛ: дубль создаёт второй юнит',
   'PATCH /units/:unitId/price': 'expectedVersion (CAS)',
   'PATCH /units/:unitId/status': 'expectedVersion (CAS)',
 
@@ -146,7 +146,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 12;
+const KNOWN_GAPS = 6;
 
 interface RouteInfo {
   key: string;

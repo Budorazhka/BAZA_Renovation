@@ -59,6 +59,11 @@ function makeService(overrides: {
   );
 }
 
+/** Идемпотентность в этих тестах не проверяется — важен сам вызов репозитория. */
+function idem(operation = 'test') {
+  return { identityId: new Types.ObjectId(), operation, key: new Types.ObjectId().toString(), requestBody: { probe: 1 } };
+}
+
 describe('DevelopmentsService — только organization.type:developer создаёт/публикует ЖК', () => {
   /**
    * permission-matrix.md: default grants дают development.edit owner/
@@ -83,6 +88,7 @@ describe('DevelopmentsService — только organization.type:developer со�
         name: 'ЖК Нелегальный',
         location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
         contact: { phone: '+995500000000' },
+        idempotency: idem(),
       }),
     ).rejects.toMatchObject({ code: 'DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION' });
 
@@ -100,6 +106,7 @@ describe('DevelopmentsService — только organization.type:developer со�
         name: 'ЖК Нелегальный',
         location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
         contact: { phone: '+995500000000' },
+        idempotency: idem(),
       }),
     ).rejects.toMatchObject({ code: 'DEVELOPMENT_REQUIRES_DEVELOPER_ORGANIZATION' });
   });
@@ -116,7 +123,8 @@ describe('DevelopmentsService — только organization.type:developer со�
       name: 'ЖК Легальный',
       location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
       contact: { phone: '+995500000000' },
-    });
+        idempotency: idem(),
+      });
 
     expect(createSpy).toHaveBeenCalledTimes(1);
   });
@@ -187,6 +195,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
         organizationId: new Types.ObjectId(),
         name: 'Building A',
         floorsCount: 10,
+      idempotency: idem(),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -207,6 +216,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
         buildingId: new Types.ObjectId(),
         organizationId: new Types.ObjectId(),
         floorNumber: 5,
+      idempotency: idem(),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -238,6 +248,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
         sectionId: new Types.ObjectId(),
         organizationId,
         floorNumber: 3,
+      idempotency: idem(),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -270,6 +281,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
         kind: 'apartment',
         area: 45,
         price: { amountMinorUnits: 10_000_000, currency: 'USD' },
+      idempotency: idem(),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -301,6 +313,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
         area: 45,
         price: { amountMinorUnits: 10_000_000, currency: 'USD' },
         floorPlanId: new Types.ObjectId(),
+      idempotency: idem(),
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -327,6 +340,7 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
       area: 45,
       price: { amountMinorUnits: 10_000_000, currency: 'USD' },
       floorPlanId,
+      idempotency: idem(),
     });
 
     expect(createUnitSpy).toHaveBeenCalledTimes(1);
@@ -359,9 +373,10 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
       kind: 'apartment',
       area: 45,
       price: { amountMinorUnits: 10_000_000, currency: 'USD' },
+      idempotency: idem(),
     });
 
-    expect(createUnitSpy).toHaveBeenCalledWith(expect.objectContaining({ sectionId }));
+    expect(createUnitSpy).toHaveBeenCalledWith(expect.objectContaining({ sectionId }), expect.anything());
   });
 
   it('createUnit оставляет sectionId undefined, если этаж не принадлежит секции', async () => {
@@ -383,9 +398,10 @@ describe('DevelopmentsService — tenant isolation on child entity creation', ()
       kind: 'apartment',
       area: 45,
       price: { amountMinorUnits: 10_000_000, currency: 'USD' },
+      idempotency: idem(),
     });
 
-    expect(createUnitSpy).toHaveBeenCalledWith(expect.objectContaining({ sectionId: undefined }));
+    expect(createUnitSpy).toHaveBeenCalledWith(expect.objectContaining({ sectionId: undefined }), expect.anything());
   });
 });
 
@@ -400,9 +416,9 @@ describe('DevelopmentsService.createSection', () => {
       sectionRepository: { create: createSectionSpy },
     });
 
-    await service.createSection({ buildingId, organizationId, name: 'Секция А' });
+    await service.createSection({ buildingId, organizationId, name: 'Секция А', idempotency: idem() });
 
-    expect(createSectionSpy).toHaveBeenCalledWith({ buildingId, organizationId, name: 'Секция А' });
+    expect(createSectionSpy).toHaveBeenCalledWith({ buildingId, organizationId, name: 'Секция А' }, expect.anything());
   });
 
   it('отклоняет, если building не найден в организации', async () => {
@@ -413,7 +429,7 @@ describe('DevelopmentsService.createSection', () => {
     });
 
     await expect(
-      service.createSection({ buildingId: new Types.ObjectId(), organizationId: new Types.ObjectId(), name: 'Секция А' }),
+      service.createSection({ buildingId: new Types.ObjectId(), organizationId: new Types.ObjectId(), name: 'Секция А', idempotency: idem() }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(createSectionSpy).not.toHaveBeenCalled();
@@ -431,10 +447,11 @@ describe('DevelopmentsService.createFloorPlan', () => {
       floorPlanRepository: { create: createFloorPlanSpy },
     });
 
-    await service.createFloorPlan({ buildingId, organizationId, name: 'Планировка 1', rooms: 2, area: 55 });
+    await service.createFloorPlan({ buildingId, organizationId, name: 'Планировка 1', rooms: 2, area: 55, idempotency: idem() });
 
     expect(createFloorPlanSpy).toHaveBeenCalledWith(
       expect.objectContaining({ buildingId, organizationId, name: 'Планировка 1', rooms: 2, area: 55 }),
+      expect.anything(),
     );
   });
 
@@ -446,7 +463,7 @@ describe('DevelopmentsService.createFloorPlan', () => {
     });
 
     await expect(
-      service.createFloorPlan({ buildingId: new Types.ObjectId(), organizationId: new Types.ObjectId(), name: 'X', rooms: 1, area: 30 }),
+      service.createFloorPlan({ buildingId: new Types.ObjectId(), organizationId: new Types.ObjectId(), name: 'X', rooms: 1, area: 30, idempotency: idem() }),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(createFloorPlanSpy).not.toHaveBeenCalled();

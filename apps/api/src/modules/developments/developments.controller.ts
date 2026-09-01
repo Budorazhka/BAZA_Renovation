@@ -57,8 +57,18 @@ export class DevelopmentsController {
   @Post('developments')
   @HttpCode(201)
   @RequirePermission('development', 'edit')
-  async createDevelopment(@Req() req: FastifyRequest, @Body() dto: CreateDevelopmentDto) {
+  async createDevelopment(@Req() req: FastifyRequest, @Body() dto: CreateDevelopmentDto, @Headers('idempotency-key') idempotencyKey?: string,) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { name: dto.name, city: dto.location?.city ?? null, address: dto.location?.address ?? null };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateDevelopment', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     return this.developmentsService.createDevelopment({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
@@ -78,6 +88,7 @@ export class DevelopmentsController {
       startDate: dto.startDate ? new Date(dto.startDate) : undefined,
       completionDate: dto.completionDate ? new Date(dto.completionDate) : undefined,
       description: dto.description,
+      idempotency: { identityId, operation: 'devCreateDevelopment', key: idempotencyKey, requestBody },
     });
   }
 
@@ -217,8 +228,19 @@ export class DevelopmentsController {
     @Req() req: FastifyRequest,
     @Param('developmentId') developmentId: string,
     @Body() dto: CreateBuildingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { developmentId, name: dto.name, floorsCount: dto.floorsCount };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateBuilding', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     return this.developmentsService.createBuilding({
       developmentId: new Types.ObjectId(developmentId),
@@ -227,6 +249,7 @@ export class DevelopmentsController {
       floorsCount: dto.floorsCount,
       startDate: dto.startDate ? new Date(dto.startDate) : undefined,
       completionDate: dto.completionDate ? new Date(dto.completionDate) : undefined,
+      idempotency: { identityId, operation: 'devCreateBuilding', key: idempotencyKey, requestBody },
     });
   }
 
@@ -386,13 +409,25 @@ export class DevelopmentsController {
     @Req() req: FastifyRequest,
     @Param('buildingId') buildingId: string,
     @Body() dto: CreateSectionDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { buildingId, name: dto.name };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateSection', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     return this.developmentsService.createSection({
       buildingId: new Types.ObjectId(buildingId),
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       name: dto.name,
+      idempotency: { identityId, operation: 'devCreateSection', key: idempotencyKey, requestBody },
     });
   }
 
@@ -406,8 +441,19 @@ export class DevelopmentsController {
     @Req() req: FastifyRequest,
     @Param('buildingId') buildingId: string,
     @Body() dto: CreateFloorPlanDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { buildingId, name: dto.name, rooms: dto.rooms, area: dto.area };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateFloorPlan', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     return this.developmentsService.createFloorPlan({
       buildingId: new Types.ObjectId(buildingId),
@@ -418,6 +464,7 @@ export class DevelopmentsController {
       isEuro: dto.isEuro,
       imageAssetId: dto.imageAssetId ? new Types.ObjectId(dto.imageAssetId) : undefined,
       tags: dto.tags,
+      idempotency: { identityId, operation: 'devCreateFloorPlan', key: idempotencyKey, requestBody },
     });
   }
 
@@ -428,8 +475,19 @@ export class DevelopmentsController {
     @Req() req: FastifyRequest,
     @Param('buildingId') buildingId: string,
     @Body() dto: CreateFloorDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { buildingId, floorNumber: dto.floorNumber };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateFloor', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     return this.developmentsService.createFloor({
       buildingId: new Types.ObjectId(buildingId),
@@ -437,6 +495,7 @@ export class DevelopmentsController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       floorNumber: dto.floorNumber,
       floorType: dto.floorType,
+      idempotency: { identityId, operation: 'devCreateFloor', key: idempotencyKey, requestBody },
     });
   }
 
@@ -448,8 +507,19 @@ export class DevelopmentsController {
     @Param('floorId') floorId: string,
     @Query('buildingId') buildingIdParam: string,
     @Body() dto: CreateUnitDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { floorId, number: dto.number, kind: dto.kind, area: dto.area };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateUnit', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
 
     // buildingId не часть URL-пути (OpenAPI-спека: POST /floors/{floorId}/units,
     // без buildingId в path) — передаётся query-параметром явно клиентом,
@@ -471,6 +541,7 @@ export class DevelopmentsController {
       areaBalcony: dto.areaBalcony,
       price: dto.price,
       floorPlanId: dto.floorPlanId ? new Types.ObjectId(dto.floorPlanId) : undefined,
+      idempotency: { identityId, operation: 'devCreateUnit', key: idempotencyKey, requestBody },
     });
   }
 
