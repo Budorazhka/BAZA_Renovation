@@ -2,30 +2,29 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Закрепляет список endpoint'ов, требующих `Idempotency-Key`.
+ * Требует ли каждая изменяющая состояние команда `Idempotency-Key`.
  *
- * Зачем нужен именно тест, а не только документ: docs/api/conventions.md
- * ПРОТИВОРЕЧИЛ САМ СЕБЕ. Раздел 4 (со ссылкой на ADR-006) перечислял
- * publish/book/cancel/manual-ledger — четыре команды; раздел 8 —
- * publish/unpublish/book/cancel/reassign/manual-ledger, шесть. Код следовал
- * разделу 4, и понять, баг это или решение, по документу было нельзя.
+ * ПОЧЕМУ ТЕСТ УСТРОЕН ИМЕННО ТАК. Первая редакция сравнивала «маршруты, которые
+ * бросают IDEMPOTENCY_KEY_REQUIRED» со списком-константой. Такая сверка ловила
+ * снятие ключа с известного маршрута, но НЕ ловила ровно ту регрессию, ради
+ * которой заводилась: новая критическая команда, добавленная без проверки
+ * ключа, не попадала ни в найденное, ни в ожидаемое — и тест проходил. Дыра
+ * подтверждена диверсией: добавленный `POST /bookings/sabotage-transfer` без
+ * идемпотентности прошёл стража насквозь.
  *
- * Расхождение разрешено 01.09.2026 в пользу раздела 4 (см. оговорку в §8
- * conventions.md): unpublish и reassign уже защищены от повторного
- * применения на уровне записи — условным update'ом и проверкой
- * expectedVersion соответственно, — и новой сущности не создают.
+ * Поэтому источник перечня маршрутов теперь НЕЗАВИСИМ от их поведения: список
+ * берётся из самих контроллеров (все не-GET маршруты), а решение по каждому
+ * обязано быть записано в одной из двух таблиц ниже. Новый изменяющий маршрут
+ * не попадает никуда и роняет тест — автор обязан принять решение, а не
+ * промолчать.
  *
- * Тест фиксирует РЕЗУЛЬТАТ этого решения: список ниже — исполняемая версия
- * документа. Добавление новой критической команды без ключа или снятие
- * ключа с существующей роняет тест, и автор обязан либо вернуть ключ, либо
- * осознанно обновить список вместе с §8 conventions.md.
- *
- * Тот же grep-подход, что у module-boundaries и permission-grants.
+ * Третий страж такого рода после module-boundaries и permission-grants;
+ * ADR-006 и conventions.md §4/§8 — источник правил.
  */
 
 const SRC_ROOT = join(__dirname, '../../src');
 
-/** endpoint → почему ключ обязателен. */
+/** Маршрут → почему ключ обязателен. Проверяется, что он ДЕЙСТВИТЕЛЬНО требуется. */
 const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /bookings': 'book — создаёт новую бронь, дубль занял бы юнит дважды',
   'POST /bookings/:bookingId/cancel': 'cancel — ADR-006 прямо перечисляет',
@@ -37,64 +36,221 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
     'publish листинга в marketplace-потоке',
 };
 
+/**
+ * Маршрут → почему ключ НЕ требуется. Проверяется, что он и правда не требуется.
+ *
+ * Причина, начинающаяся с `ПРОБЕЛ:`, означает осознанно принятый риск, а не
+ * безопасность: повтор такого запроса создаёт вторую сущность. Число таких
+ * записей закреплено отдельной проверкой — молча вырасти оно не может.
+ */
+const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
+  // --- Аутентификация ---
+  'POST /auth/login': 'выдаёт сессию; повтор даёт новую сессию, а не дубль ресурса',
+  'POST /auth/logout': 'идемпотентен по природе: повтор на закрытой сессии ничего не меняет',
+  'POST /auth/register': 'повтор отклоняется уникальностью email на уровне БД',
+  'POST /organizations/register': 'ПРОБЕЛ: дубль создаёт вторую организацию',
+
+  // --- Команда и позиции ---
+  'POST /team-users': 'ПРОБЕЛ: дубль создаёт вторую позицию',
+  'POST /team-users/ensure-self': 'upsert по identity: повтор возвращает ту же позицию',
+  'POST /team-users/ensure-team': 'upsert по организации: повтор возвращает ту же команду',
+  'POST /team-users/invite/:token/activate': 'токен одноразовый, повтор отклоняется',
+  'POST /team-users/positions/:positionId/assign': 'условный update позиции',
+  'POST /team-users/positions/:positionId/vacate': 'условный update: повтор на свободной позиции — 409',
+  'PATCH /team-users/positions/:positionId': 'обновление по id, повтор идемпотентен',
+  'PATCH /team-users/positions/:positionId/avatar': 'перезапись ссылки на аватар',
+  'PATCH /team-users/positions/:positionId/move': 'перемещение по id, повтор идемпотентен',
+  'PATCH /team-users/positions/:positionId/status': 'установка статуса, повтор идемпотентен',
+  'DELETE /team-users/positions/:positionId': 'удаление по id идемпотентно',
+  'POST /organizations/:organizationId/positions/:positionId/assign': 'условный update позиции',
+  'POST /organizations/:organizationId/positions/:positionId/grants':
+    'грант идемпотентен по паре (subject, resource+action)',
+
+  // --- Девелопмент ---
+  'POST /developments': 'ПРОБЕЛ: дубль создаёт второй ЖК',
+  'PATCH /developments/:developmentId': 'expectedVersion (CAS) не даст применить дважды',
+  'POST /developments/:developmentId/buildings': 'ПРОБЕЛ: дубль создаёт второй корпус',
+  'POST /buildings/:buildingId/sections': 'ПРОБЕЛ: дубль создаёт вторую секцию',
+  'POST /buildings/:buildingId/floors': 'ПРОБЕЛ: дубль создаёт второй этаж',
+  'POST /buildings/:buildingId/floor-plans': 'ПРОБЕЛ: дубль создаёт второй план этажа',
+  'POST /floors/:floorId/units': 'ПРОБЕЛ: дубль создаёт второй юнит',
+  'PATCH /units/:unitId/price': 'expectedVersion (CAS)',
+  'PATCH /units/:unitId/status': 'expectedVersion (CAS)',
+
+  // --- Объекты и листинги (ERP-поток) ---
+  'POST /property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
+  'POST /property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
+  'POST /property-assets/:assetId/listings/:listingId/unpublish':
+    'условный update: modifiedCount === 0 → 409 (conventions.md §8)',
+  'PATCH /property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
+  'PATCH /property-assets/:assetId/listings/:listingId/confirm-actuality':
+    'проставляет отметку времени, повтор безвреден',
+  'POST /property-assets/:assetId/media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id, идемпотентно',
+  'PATCH /property-assets/:assetId/media/:mediaAssetId': 'обновление по id, идемпотентно',
+  'DELETE /property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
+  'PUT /property-assets/:assetId/media/order': 'полная замена порядка, идемпотентна',
+  'POST /property-assets/duplicate-candidates/:duplicateCandidateId/override':
+    'условный update кандидата, пишется audit',
+
+  // --- Объекты и листинги (marketplace-поток, те же правила) ---
+  'POST /marketplace/property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
+  'POST /marketplace/property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
+  'POST /marketplace/property-assets/:assetId/listings/:listingId/unpublish':
+    'условный update: modifiedCount === 0 → 409',
+  'PATCH /marketplace/property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
+  'PATCH /marketplace/property-assets/:assetId/listings/:listingId/confirm-actuality':
+    'проставляет отметку времени, повтор безвреден',
+  'POST /marketplace/property-assets/:assetId/media/upload-intent':
+    'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /marketplace/property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id',
+  'PATCH /marketplace/property-assets/:assetId/media/:mediaAssetId': 'обновление по id',
+  'DELETE /marketplace/property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
+  'PUT /marketplace/property-assets/:assetId/media/order': 'полная замена порядка',
+  'POST /marketplace/property-assets/duplicate-candidates/:duplicateCandidateId/override':
+    'условный update кандидата, пишется audit',
+
+  // --- Медиа ---
+  'POST /media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /media/:assetId/confirm': 'подтверждение по id, идемпотентно',
+
+  // --- CRM ---
+  'POST /leads': 'ПРОБЕЛ: дубль создаёт второй лид',
+  'POST /leads/:leadId/assign': 'условный update владельца',
+  'PATCH /leads/:leadId/stage': 'переход стадии условный, повтор не применяется дважды',
+  'POST /deals': 'ПРОБЕЛ: дубль создаёт вторую сделку',
+  'PATCH /deals/:dealId': 'expectedVersion (CAS)',
+  'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
+  'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',
+  'PATCH /deals/:dealId/reassign': 'expectedVersion (CAS) — см. conventions.md §8',
+  'POST /deals/:dealId/participants': 'участник уникален по contactId в рамках сделки',
+  'DELETE /deals/:dealId/participants/:contactId': 'удаление по id идемпотентно',
+  'POST /tasks': 'ПРОБЕЛ: дубль создаёт вторую задачу',
+  'PATCH /tasks/:taskId': 'expectedVersion (CAS)',
+  'PATCH /tasks/:taskId/reassign': 'expectedVersion (CAS)',
+  'POST /tasks/:taskId/complete': 'повторное завершение намеренно идемпотентно',
+
+  // --- Публичный контур ---
+  'POST /public/developments/:slug/reveal-contact':
+    'своя запись идемпотентности (public-reveal-idempotency-record)',
+  'POST /public/listings/:slug/reveal-contact': 'своя запись идемпотентности',
+
+  // --- Админ ---
+  'POST /admin/accounts': 'ПРОБЕЛ: дубль создаёт второй админ-аккаунт',
+  'POST /admin/accounts/:adminAccountId/deactivate': 'условный update по статусу',
+  'POST /admin/accounts/:adminAccountId/reactivate': 'условный update по статусу',
+  'POST /admin/accounts/:adminAccountId/grants': 'грант идемпотентен по (account, resource+action)',
+  'POST /admin/accounts/:adminAccountId/grants/:grantId/revoke': 'условный update гранта',
+  'POST /admin/duplicate-candidates/:duplicateCandidateId/confirm': 'условный update кандидата',
+  'POST /admin/publications/:publicationId/unpublish': 'условный update (conventions.md §8)',
+};
+
+/** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
+const KNOWN_GAPS = 19;
+
+interface RouteInfo {
+  key: string;
+  enforcesKey: boolean;
+}
+
 function listControllers(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
     const fullPath = join(dir, entry);
-    if (statSync(fullPath).isDirectory()) {
-      files.push(...listControllers(fullPath));
-    } else if (entry.endsWith('.controller.ts')) {
-      files.push(fullPath);
-    }
+    if (statSync(fullPath).isDirectory()) files.push(...listControllers(fullPath));
+    else if (entry.endsWith('.controller.ts')) files.push(fullPath);
   }
   return files;
 }
 
 /**
- * Находит endpoint'ы, чей обработчик бросает IDEMPOTENCY_KEY_REQUIRED.
- * Метод и путь берутся из ближайшего ВЫШЕ по файлу декоратора маршрута —
- * так же, как их читает человек.
+ * Все изменяющие состояние маршруты (не-GET) и признак того, требует ли
+ * обработчик `Idempotency-Key`. Перечень маршрутов НЕ зависит от наличия
+ * проверки — в этом весь смысл: иначе незащищённый маршрут был бы невидим.
  */
-function collectEndpointsRequiringKey(): string[] {
-  const found: string[] = [];
+function collectMutatingRoutes(): RouteInfo[] {
+  const routes = new Map<string, boolean>();
 
   for (const file of listControllers(SRC_ROOT)) {
     const source = readFileSync(file, 'utf8');
     const controllerBase = source.match(/@Controller\(\s*'([^']*)'\s*\)/)?.[1] ?? '';
     const lines = source.split(/\r?\n/);
 
-    let currentRoute: { method: string; path: string } | null = null;
+    let current: string | null = null;
     for (const line of lines) {
       const route = line.match(/@(Get|Post|Patch|Put|Delete)\(\s*(?:'([^']*)')?\s*\)/);
       if (route) {
-        currentRoute = { method: route[1]!.toUpperCase(), path: route[2] ?? '' };
+        const method = route[1]!.toUpperCase();
+        if (method === 'GET') {
+          current = null;
+          continue;
+        }
+        const path = '/' + [controllerBase, route[2] ?? ''].filter(Boolean).join('/');
+        current = `${method} ${path}`;
+        if (!routes.has(current)) routes.set(current, false);
         continue;
       }
-      if (line.includes('IDEMPOTENCY_KEY_REQUIRED') && currentRoute) {
-        const full = '/' + [controllerBase, currentRoute.path].filter(Boolean).join('/');
-        found.push(`${currentRoute.method} ${full}`);
-        currentRoute = null;
+      if (current && line.includes('IDEMPOTENCY_KEY_REQUIRED')) {
+        routes.set(current, true);
+        current = null;
       }
     }
   }
 
-  return found.sort();
+  return [...routes].map(([key, enforcesKey]) => ({ key, enforcesKey })).sort((a, b) => a.key.localeCompare(b.key));
 }
 
-describe('Покрытие критических команд Idempotency-Key', () => {
-  const actual = collectEndpointsRequiringKey();
-  const expected = Object.keys(REQUIRE_IDEMPOTENCY_KEY).sort();
+describe('Покрытие изменяющих команд Idempotency-Key', () => {
+  const routes = collectMutatingRoutes();
+  const required = new Set(Object.keys(REQUIRE_IDEMPOTENCY_KEY));
+  const exempt = new Set(Object.keys(NO_IDEMPOTENCY_KEY_NEEDED));
 
-  it('ключ требуют ровно те маршруты, что перечислены в conventions.md §8', () => {
-    expect(actual).toEqual(expected);
+  it('разбор контроллеров что-то нашёл — защита от молчаливо сломанного парсера', () => {
+    expect(routes.length).toBeGreaterThan(50);
   });
 
-  it('сверка что-то нашла — защита от молчаливо сломанного разбора', () => {
-    expect(actual.length).toBeGreaterThan(0);
+  it('каждый изменяющий маршрут классифицирован: требует ключ либо явно освобождён', () => {
+    const unclassified = routes
+      .map((r) => r.key)
+      .filter((key) => !required.has(key) && !exempt.has(key));
+
+    expect(unclassified).toEqual([]);
   });
 
-  it('у каждой записи списка есть причина и корректный формат маршрута', () => {
-    for (const [endpoint, reason] of Object.entries(REQUIRE_IDEMPOTENCY_KEY)) {
+  it('маршруты из списка обязательных действительно требуют ключ', () => {
+    const declaredButNotEnforced = routes
+      .filter((r) => required.has(r.key) && !r.enforcesKey)
+      .map((r) => r.key);
+
+    expect(declaredButNotEnforced).toEqual([]);
+  });
+
+  it('освобождённые маршруты ключ не требуют — иначе список разошёлся с кодом', () => {
+    const exemptButEnforcing = routes
+      .filter((r) => exempt.has(r.key) && r.enforcesKey)
+      .map((r) => r.key);
+
+    expect(exemptButEnforcing).toEqual([]);
+  });
+
+  it('в списках нет маршрутов, которых больше нет в коде', () => {
+    const live = new Set(routes.map((r) => r.key));
+    const stale = [...required, ...exempt].filter((key) => !live.has(key)).sort();
+
+    expect(stale).toEqual([]);
+  });
+
+  it('число осознанно принятых пробелов не выросло молча', () => {
+    const gaps = Object.values(NO_IDEMPOTENCY_KEY_NEEDED).filter((r) => r.startsWith('ПРОБЕЛ:'));
+
+    expect(gaps.length).toBe(KNOWN_GAPS);
+  });
+
+  it('у каждой записи есть причина и корректный формат маршрута', () => {
+    for (const [endpoint, reason] of Object.entries({
+      ...REQUIRE_IDEMPOTENCY_KEY,
+      ...NO_IDEMPOTENCY_KEY_NEEDED,
+    })) {
       expect(reason.length).toBeGreaterThan(10);
       expect(endpoint).toMatch(/^(POST|PATCH|PUT|DELETE) \//);
     }
