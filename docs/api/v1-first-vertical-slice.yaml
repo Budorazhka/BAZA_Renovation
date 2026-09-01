@@ -123,6 +123,49 @@ paths:
           description: Origin отсутствует или не относится к известному продукту.
           $ref: '#/components/responses/Error'
 
+  /exports/{entity}:
+    get:
+      operationId: runExport
+      summary: >
+        Выгрузка CRM-списка в XLSX (export.run). Сущность — одна из
+        leads/deals/contacts/tasks.
+
+        ВАЖНО: сам грант export.run НЕ даёт доступа к данным. Дополнительно
+        требуется право на чтение конкретной сущности (lead.read, deal.read,
+        contact.read, task.read) и применяется то же сужение по scope, что и
+        у соответствующего list-эндпоинта: own-grant выгружает только своё.
+        Иначе выгрузка стала бы обходом прав на чтение — сразу файлом и
+        целиком. Например, `administrator` имеет export.run, но не имеет
+        deal.read, и получает 403 на /exports/deals.
+
+        Выгрузка ограничена 10 000 строками: превышение отклоняется целиком,
+        файл не обрезается молча.
+      tags: [erp-crm]
+      parameters:
+        - name: entity
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [leads, deals, contacts, tasks]
+      responses:
+        '200':
+          description: XLSX-файл выгрузки (Content-Disposition attachment, имя файла в filename* RFC 5987)
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: VALIDATION_FAILED — неизвестная сущность ИЛИ превышен потолок в 10 000 строк
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет export.run ЛИБО нет права на чтение этой сущности
+          $ref: '#/components/responses/Error'
+
   /organizations/register:
     post:
       operationId: registerOrganization

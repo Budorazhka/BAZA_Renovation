@@ -96,6 +96,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/exports/{entity}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Выгрузка CRM-списка в XLSX (export.run). Сущность — одна из leads/deals/contacts/tasks.
+         *     ВАЖНО: сам грант export.run НЕ даёт доступа к данным. Дополнительно требуется право на чтение конкретной сущности (lead.read, deal.read, contact.read, task.read) и применяется то же сужение по scope, что и у соответствующего list-эндпоинта: own-grant выгружает только своё. Иначе выгрузка стала бы обходом прав на чтение — сразу файлом и целиком. Например, `administrator` имеет export.run, но не имеет deal.read, и получает 403 на /exports/deals.
+         *     Выгрузка ограничена 10 000 строками: превышение отклоняется целиком, файл не обрезается молча.
+         */
+        get: operations["runExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/organizations/register": {
         parameters: {
             query?: never;
@@ -2084,6 +2105,34 @@ export interface operations {
             };
             /** @description Origin отсутствует или не относится к известному продукту. */
             401: components["responses"]["Error"];
+        };
+    };
+    runExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity: "leads" | "deals" | "contacts" | "tasks";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description XLSX-файл выгрузки (Content-Disposition attachment, имя файла в filename* RFC 5987) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            /** @description VALIDATION_FAILED — неизвестная сущность ИЛИ превышен потолок в 10 000 строк */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет export.run ЛИБО нет права на чтение этой сущности */
+            403: components["responses"]["Error"];
         };
     };
     registerOrganization: {
