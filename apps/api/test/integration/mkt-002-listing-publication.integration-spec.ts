@@ -160,13 +160,13 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
 
   async function createActiveListing(owner: { cookie: string }, dealType: 'sale' | 'rent_long' | 'rent_short' = 'sale') {
     const asset = (
-      await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload() })
+      await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload() })
     ).json();
     const listing = (
       await app.inject({
         method: 'POST',
         url: `/api/v1/property-assets/${asset._id}/listings`,
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { dealType, price: { amountMinorUnits: 10_000_000, currency: 'USD' } },
       })
     ).json();
@@ -229,7 +229,7 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
         await app.inject({
           method: 'POST',
           url: `/api/v1/property-assets/${asset._id}/listings`,
-          headers: { cookie: owner.cookie },
+          headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
           payload: { dealType: 'rent_short', price: { amountMinorUnits: 500_00, currency: 'GEL' } },
         })
       ).json();
@@ -271,12 +271,12 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
   // 6. rent listing публикуется независимо от sale.
   it('6. sale и rent_long listing на одном asset публикуются независимо', async () => {
     const owner = await ownerCookie('flow6');
-    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload() })).json();
+    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload() })).json();
     const sale = (
-      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
+      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
     ).json();
     const rent = (
-      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'rent_long', price: { amountMinorUnits: 200, currency: 'GEL' } } })
+      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'rent_long', price: { amountMinorUnits: 200, currency: 'GEL' } } })
     ).json();
     await app.inject({ method: 'PATCH', url: `/api/v1/property-assets/${asset._id}/listings/${sale._id}/activate`, headers: { cookie: owner.cookie } });
     await app.inject({ method: 'PATCH', url: `/api/v1/property-assets/${asset._id}/listings/${rent._id}/activate`, headers: { cookie: owner.cookie } });
@@ -325,9 +325,9 @@ describe('MKT-002: Listing publication + public secondary/rent data-layer (real 
   // 8. expired listing не публикуется.
   it('8. publish отклоняется, если listing не в статусе active (draft)', async () => {
     const owner = await ownerCookie('flow8');
-    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload() })).json();
+    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload() })).json();
     const draft = (
-      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
+      await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
     ).json();
 
     const publishResponse = await publishListing(owner, asset._id, draft._id);

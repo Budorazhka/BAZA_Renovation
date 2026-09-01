@@ -325,7 +325,7 @@ describe('Admin HTTP routes — integration (полный AppModule, реаль�
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/accounts',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: { identityId: targetIdentityId.toString(), isSuperAdmin: true },
       });
       expect(response.statusCode).toBe(403);

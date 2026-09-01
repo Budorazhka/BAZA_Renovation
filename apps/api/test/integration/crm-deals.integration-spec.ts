@@ -177,7 +177,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
     });
 
     it('POST /deals without session returns 401 AUTH_NO_SESSION', async () => {
-      const res = await app.inject({
+      const res = await app.inject({ headers: { 'idempotency-key': new Types.ObjectId().toString() },
         method: 'POST',
         url: '/api/v1/deals',
         payload: { title: 'Deal without auth', contactId: new Types.ObjectId().toString() },
@@ -216,7 +216,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload,
       });
 
@@ -257,7 +257,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: tenantA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: tenantA.cookie },
         payload: {
           title: 'Попытка кражи контакта',
           contactId: foreignContactId.toString(),
@@ -276,7 +276,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: tenantA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: tenantA.cookie },
         payload: {
           title: 'Сделка с чужим юристом',
           contactId: contactA.toString(),
@@ -295,7 +295,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: {
           title: 'Дубль участников',
           contactId: contactId.toString(),
@@ -318,7 +318,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Стадии сделки', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -356,7 +356,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Невалидный скачок', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -382,7 +382,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Конфликт версий', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -413,7 +413,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Сделка сорвалась', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -446,7 +446,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Гонка стадий', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -481,7 +481,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Сделка с участниками', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -527,7 +527,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: {
           title: 'Сделка с чек-листом',
           contactId: contactId.toString(),
@@ -588,7 +588,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: {
           title: 'Гонка чек-листа',
           contactId: contactId.toString(),
@@ -630,7 +630,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: managerA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: managerA.cookie },
         payload: { title: 'Сделка на реассайн', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -664,7 +664,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: managerA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: managerA.cookie },
         payload: { title: 'Менеджер не может переназначить сам', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -687,7 +687,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Правка без реассайна', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -711,7 +711,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Чужая позиция', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -734,7 +734,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { title: 'Устаревшая версия', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -764,7 +764,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const createRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: managerA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: managerA.cookie },
         payload: { title: 'Тот же владелец', contactId: contactId.toString() },
       });
       const dealId = JSON.parse(createRes.body).id;
@@ -798,7 +798,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const dealARes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: managerA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: managerA.cookie },
         payload: { title: 'Сделка Менеджера А', contactId: contactId.toString() },
       });
       const dealAId = JSON.parse(dealARes.body).id;
@@ -807,7 +807,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
       const dealBRes = await app.inject({
         method: 'POST',
         url: '/api/v1/deals',
-        headers: { cookie: managerB.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: managerB.cookie },
         payload: { title: 'Сделка Менеджера Б', contactId: contactId.toString() },
       });
       const dealBId = JSON.parse(dealBRes.body).id;
@@ -861,7 +861,7 @@ describe('CRM Deals — HTTP Integration (AppModule)', () => {
         await app.inject({
           method: 'POST',
           url: '/api/v1/deals',
-          headers: { cookie: owner.cookie },
+          headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
           payload: { title: `Сделка ${i}`, contactId: contactId.toString() },
         });
       }

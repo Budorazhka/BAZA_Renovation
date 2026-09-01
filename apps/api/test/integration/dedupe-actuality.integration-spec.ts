@@ -125,7 +125,7 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
   }
 
   async function createAsset(owner: { cookie: string }, overrides: Parameters<typeof makeAssetPayload>[0] = {}) {
-    const response = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload(overrides) });
+    const response = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload(overrides) });
     expect(response.statusCode).toBe(201);
     return response.json();
   }
@@ -135,7 +135,7 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       await app.inject({
         method: 'POST',
         url: `/api/v1/property-assets/${assetId}/listings`,
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { dealType, price: { amountMinorUnits: 10_000_000, currency: 'USD' } },
       })
     ).json();
@@ -391,7 +391,7 @@ describe('DEDUPE-001 + ACT-001: duplicate candidates and actuality workflow (rea
       const assetResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/property-assets',
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { propertyType: 'commercial', location: { country: 'GE', city: 'Batumi', address: 'Commercial Address', geo: { type: 'Point', coordinates: [41.6, 41.64] } }, characteristics: { area: 100 }, representativePhone: '+995500666779' },
       });
       const asset = assetResponse.json();

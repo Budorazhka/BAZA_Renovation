@@ -143,7 +143,7 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
     const devRes = await app.inject({
       method: 'POST',
       url: '/api/v1/developments',
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: {
         name: `ЖК Тест ${counter}`,
         location: {
@@ -309,7 +309,7 @@ describe('Public development lead reveal flow — Integration (real HTTP + real 
     const devRes = await app.inject({
       method: 'POST',
       url: '/api/v1/developments',
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: {
         name: 'ЖК Черновик',
         location: {
