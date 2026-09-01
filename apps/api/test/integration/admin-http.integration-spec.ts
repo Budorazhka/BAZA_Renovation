@@ -16,6 +16,8 @@ import { AuthService } from '../../src/modules/identity/auth.service';
 import { AdminAccountService } from '../../src/modules/admin/admin-account.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
 import { withSession } from './support/with-session';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * HTTP-уровневый integration-тест против ПОЛНОГО AppModule + реальных
@@ -48,7 +50,10 @@ describe('Admin HTTP routes — integration (полный AppModule, реаль�
     process.env.MINIO_BUCKET_PUBLIC = 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 
     // Воспроизводит main.api.ts один в один (hook-регистрация, порядок,

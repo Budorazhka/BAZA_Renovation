@@ -13,6 +13,8 @@ import { AdminContextMiddleware } from '../../src/shared/admin/admin-context.mid
 import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplace-account/marketplace-account-context.middleware';
 import { AuthService } from '../../src/modules/identity/auth.service';
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * CRM-004: transactional outbox events for the CRM Task lifecycle
@@ -40,7 +42,10 @@ describe('CRM Task lifecycle outbox events — HTTP + Mongo integration (AppModu
     process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 
     await app.register(fastifyCookie);

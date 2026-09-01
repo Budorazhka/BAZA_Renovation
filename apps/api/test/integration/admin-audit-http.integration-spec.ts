@@ -16,6 +16,8 @@ import { AuthService } from '../../src/modules/identity/auth.service';
 import { AdminAccountService } from '../../src/modules/admin/admin-account.service';
 import type { AdminContext } from '../../src/shared/admin/admin-context';
 import { withSession } from './support/with-session';
+import { RedisService } from '../../src/shared/redis/redis.service';
+import { createRedisMockService } from './support/redis-mock';
 
 /**
  * D-07 read-only admin audit trail — тот же полный-AppModule/реальные
@@ -42,7 +44,10 @@ describe('Admin audit trail HTTP routes — integration (полный AppModule,
     process.env.MINIO_BUCKET_PUBLIC = 'test-public';
     process.env.REDIS_URL ??= 'redis://localhost:6379';
 
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(RedisService)
+      .useValue(createRedisMockService())
+      .compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
 
     await app.register(fastifyCookie);
