@@ -8369,6 +8369,7 @@ export const en: TranslationSchema<typeof ru> = {
       "личный_и_командный_т": "Personal and team task tracker",
       "новая_задача": "New task",
       "задач_не_найдено": "No tasks found",
+      "показаны_не_все_зада": "Not all tasks are shown: the registry is too large to read at once",
       "взять_в_работу": "Start working",
       "вернуть_в_новые": "Move back to new",
       "загружаю_задачи": "Loading tasks…",

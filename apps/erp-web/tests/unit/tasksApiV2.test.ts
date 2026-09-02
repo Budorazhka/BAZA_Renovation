@@ -106,6 +106,36 @@ describe('tasksApiV2', () => {
     })
   })
 
+  it('listAll() дочитывает страницы до конца — иначе часть реестра выдавалась бы за весь', async () => {
+    const { tasksApiV2 } = await import('@/services/tasksApiV2')
+    getMock
+      .mockResolvedValueOnce({ data: { items: [{ id: 'a' }], nextCursor: 'cursor-1' } })
+      .mockResolvedValueOnce({ data: { items: [{ id: 'b' }], nextCursor: 'cursor-2' } })
+      .mockResolvedValueOnce({ data: { items: [{ id: 'c' }], nextCursor: null } })
+
+    const result = await tasksApiV2.listAll()
+
+    expect(result.items.map(task => task.id)).toEqual(['a', 'b', 'c'])
+    expect(result.complete).toBe(true)
+    // Курсор предыдущей страницы уходит в следующий запрос, иначе третий
+    // вызов вернул бы ту же первую страницу.
+    expect(getMock).toHaveBeenNthCalledWith(2, '/api/v1/tasks', {
+      params: { limit: 100, cursor: 'cursor-1' },
+    })
+  })
+
+  it('listAll() останавливается на пределе страниц и честно говорит, что реестр неполон', async () => {
+    const { tasksApiV2 } = await import('@/services/tasksApiV2')
+    getMock.mockResolvedValue({ data: { items: [{ id: 'x' }], nextCursor: 'бесконечность' } })
+
+    const result = await tasksApiV2.listAll(undefined, 3)
+
+    expect(getMock).toHaveBeenCalledTimes(3)
+    expect(result.items).toHaveLength(3)
+    // Не молча усечённый список, а признак: экран обязан сказать об этом.
+    expect(result.complete).toBe(false)
+  })
+
   it('не проглатывает отказ сервера', async () => {
     const { tasksApiV2 } = await import('@/services/tasksApiV2')
     getMock.mockRejectedValue({ response: { status: 403 } })

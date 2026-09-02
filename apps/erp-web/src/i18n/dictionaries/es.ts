@@ -8366,6 +8366,7 @@ export const es = {
       "личный_и_командный_т": "Rastreador de tareas personales y de equipo",
       "новая_задача": "Nueva tarea",
       "задач_не_найдено": "No se encontraron tareas",
+      "показаны_не_все_зада": "No se muestran todas las tareas: el registro es demasiado grande para leerlo de una vez",
       "взять_в_работу": "Empezar a trabajar",
       "вернуть_в_новые": "Devolver a nuevas",
       "загружаю_задачи": "Cargando tareas…",

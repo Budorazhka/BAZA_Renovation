@@ -14,7 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const listTasksMock = vi.fn()
+const listAllTasksMock = vi.fn()
 const completeTaskMock = vi.fn()
 const setStatusMock = vi.fn()
 const setSubtasksMock = vi.fn()
@@ -48,7 +48,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastErrorMock } })
 
 vi.mock('@/services/tasksApiV2', () => ({
   tasksApiV2: {
-    list: listTasksMock,
+    listAll: listAllTasksMock,
     complete: completeTaskMock,
     setStatus: setStatusMock,
     setSubtasks: setSubtasksMock,
@@ -104,7 +104,7 @@ function serverTask(overrides: Record<string, unknown> = {}) {
 }
 
 async function renderPage(task = serverTask()) {
-  listTasksMock.mockResolvedValue({ items: [task], nextCursor: null })
+  listAllTasksMock.mockResolvedValue({ items: [task], complete: true })
   listTeamMock.mockResolvedValue(TEAM)
   const { TasksPage } = await import('@/components/tasks/TasksPage')
   const result = render(createElement(TasksPage))
@@ -114,7 +114,7 @@ async function renderPage(task = serverTask()) {
 
 describe('TasksPage: действия над задачей', () => {
   beforeEach(() => {
-    listTasksMock.mockReset()
+    listAllTasksMock.mockReset()
     listTeamMock.mockReset()
     completeTaskMock.mockReset()
     setStatusMock.mockReset()
@@ -145,10 +145,7 @@ describe('TasksPage: действия над задачей', () => {
   it('у взятой в работу задачи кнопка возвращает её в новые', async () => {
     setStatusMock.mockResolvedValue(serverTask({ status: 'open', version: 4 }))
 
-    listTasksMock.mockResolvedValue({
-      items: [serverTask({ status: 'in_progress' })],
-      nextCursor: null,
-    })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask({ status: 'in_progress' })], complete: true })
     listTeamMock.mockResolvedValue(TEAM)
     const { TasksPage } = await import('@/components/tasks/TasksPage')
     render(createElement(TasksPage))
@@ -174,11 +171,11 @@ describe('TasksPage: действия над задачей', () => {
     setStatusMock.mockRejectedValue({ response: { status: 409 } })
 
     await renderPage()
-    expect(listTasksMock).toHaveBeenCalledTimes(1)
+    expect(listAllTasksMock).toHaveBeenCalledTimes(1)
 
     fireEvent.click(screen.getByText('tasks.tasksPage.взять_в_работу'))
 
-    await waitFor(() => expect(listTasksMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(listAllTasksMock).toHaveBeenCalledTimes(2))
   })
 
   it('отметка подзадачи отправляет весь список с перевёрнутым флагом', async () => {
@@ -207,10 +204,7 @@ describe('TasksPage: действия над задачей', () => {
   })
 
   it('у выполненной задачи кнопки смены статуса нет', async () => {
-    listTasksMock.mockResolvedValue({
-      items: [serverTask({ status: 'completed', completedAt: '2026-09-02T10:00:00.000Z' })],
-      nextCursor: null,
-    })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask({ status: 'completed', completedAt: '2026-09-02T10:00:00.000Z' })], complete: true })
     listTeamMock.mockResolvedValue(TEAM)
     const { TasksPage } = await import('@/components/tasks/TasksPage')
     render(createElement(TasksPage))

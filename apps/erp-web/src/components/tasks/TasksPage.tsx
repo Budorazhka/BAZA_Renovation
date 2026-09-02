@@ -44,8 +44,12 @@ const EISENHOWER_PRIORITY_LABELS: Record<Task['priority'], string> = {
   low: 'Не срочно и не важно',
 }
 
-/** Реестр читается одной страницей: серверный предел — 100 задач за запрос. */
-const TASKS_PAGE_LIMIT = 100
+/**
+ * Реестр читается целиком, страницами по 100. Предел страниц — защита от
+ * бесконечного опроса, а не молчаливое усечение: при упоре в него экран
+ * говорит, что показаны не все задачи.
+ */
+const MAX_REGISTRY_PAGES = 20
 
 function describeLoadError(error: unknown): string {
   const status = (error as { response?: { status?: number } })?.response?.status
@@ -106,6 +110,7 @@ export function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [teamUnavailable, setTeamUnavailable] = useState(false)
+  const [registryTruncated, setRegistryTruncated] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
@@ -143,14 +148,16 @@ export function TasksPage() {
       )
       .catch(() => null)
     try {
-      const response = await tasksApiV2.list({ limit: TASKS_PAGE_LIMIT })
+      const response = await tasksApiV2.listAll(undefined, MAX_REGISTRY_PAGES)
       const members = await teamPromise
       setServerTasks(response.items.filter(isDisplayableTaskV2))
+      setRegistryTruncated(!response.complete)
       setTeam(members ?? [])
       setTeamUnavailable(members === null)
       setLoadError(null)
     } catch (error) {
       setServerTasks([])
+      setRegistryTruncated(false)
       setLoadError(describeLoadError(error))
     } finally {
       setLoading(false)
@@ -445,6 +452,20 @@ export function TasksPage() {
             >
               {t('tasks.tasksPage.повторить')}</button>
           </div>
+        )}
+
+        {registryTruncated && !loadError && (
+          <div
+            style={{
+              padding: '12px 14px',
+              marginBottom: 14,
+              borderRadius: 6,
+              background: 'rgba(255,180,171,0.08)',
+              fontSize: 16,
+              color: '#ffb4ab',
+            }}
+          >
+            {t('tasks.tasksPage.показаны_не_все_зада')}</div>
         )}
 
         {teamUnavailable && !loadError && (

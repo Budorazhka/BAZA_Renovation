@@ -17,8 +17,12 @@ type ActionItem = {
   sub: string
 }
 
-/** Виджет показывает вершину списка — одной страницы задач для этого достаточно. */
-const TASKS_LIMIT = 100
+/**
+ * Виджет показывает вершину списка, но выбирать просроченные обязан из всего
+ * реестра: просроченная задача — по определению старая, а старые лежат на
+ * последних страницах. Первая страница дала бы обратный отбор — самые свежие.
+ */
+const MAX_TASK_PAGES = 20
 
 /**
  * `currentUserId` больше не принимается: он был id человека из старой CRM и
@@ -46,7 +50,7 @@ export function WidgetNextActions({
   useEffect(() => {
     let cancelled = false
     tasksApiV2
-      .list({ limit: TASKS_LIMIT })
+      .listAll(undefined, MAX_TASK_PAGES)
       .then(response => {
         if (cancelled) return
         setOverdueTasks(response.items.filter(task => isDisplayableTaskV2(task) && task.isOverdue))

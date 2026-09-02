@@ -11,7 +11,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const listTasksMock = vi.fn()
+const listAllTasksMock = vi.fn()
 
 vi.mock('@/i18n', () => ({
   useI18n: () => ({ t: (key: string, fallback?: string) => fallback ?? key }),
@@ -22,7 +22,7 @@ vi.mock('@/context/AuthContext', () => ({
 }))
 
 vi.mock('@/services/tasksApiV2', () => ({
-  tasksApiV2: { list: listTasksMock },
+  tasksApiV2: { listAll: listAllTasksMock },
 }))
 
 function serverTask(overrides: Record<string, unknown> = {}) {
@@ -67,7 +67,7 @@ async function renderWidget() {
 
 describe('WidgetNextActions: просроченные задачи', () => {
   beforeEach(() => {
-    listTasksMock.mockReset()
+    listAllTasksMock.mockReset()
     vi.resetModules()
   })
 
@@ -77,7 +77,7 @@ describe('WidgetNextActions: просроченные задачи', () => {
   })
 
   it('показывает просроченные задачи с сервера', async () => {
-    listTasksMock.mockResolvedValue({ items: [serverTask()], nextCursor: null })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask()], complete: true })
 
     await renderWidget()
 
@@ -85,9 +85,9 @@ describe('WidgetNextActions: просроченные задачи', () => {
   })
 
   it('не показывает чужие задачи как своё следующее действие', async () => {
-    listTasksMock.mockResolvedValue({
+    listAllTasksMock.mockResolvedValue({
       items: [serverTask({ id: 'task-2', title: 'Чужая задача', assignedPositionId: 'pos-99' })],
-      nextCursor: null,
+      complete: true,
     })
 
     await renderWidget()
@@ -99,9 +99,9 @@ describe('WidgetNextActions: просроченные задачи', () => {
   it('берёт просрочку у сервера, а не сравнивает даты сам', async () => {
     // Срок в прошлом, но сервер сказал «не просрочена» (например, задача
     // завершена или отменена) — виджет её не показывает.
-    listTasksMock.mockResolvedValue({
+    listAllTasksMock.mockResolvedValue({
       items: [serverTask({ id: 'task-3', title: 'Уже закрытая', isOverdue: false })],
-      nextCursor: null,
+      complete: true,
     })
 
     await renderWidget()
@@ -111,7 +111,7 @@ describe('WidgetNextActions: просроченные задачи', () => {
   })
 
   it('при отказе сервера говорит об этом и не подставляет мок-задачи', async () => {
-    listTasksMock.mockRejectedValue({ response: { status: 500 } })
+    listAllTasksMock.mockRejectedValue({ response: { status: 500 } })
 
     await renderWidget()
 

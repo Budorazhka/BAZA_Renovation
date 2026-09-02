@@ -8366,6 +8366,7 @@ export const tr = {
       "личный_и_командный_т": "Kişisel ve ekip görev izleyicisi",
       "новая_задача": "Yeni görev",
       "задач_не_найдено": "Hiçbir görev bulunamadı",
+      "показаны_не_все_зада": "Tüm görevler gösterilmiyor: kayıt tek seferde okunamayacak kadar büyük",
       "взять_в_работу": "Çalışmaya başla",
       "вернуть_в_новые": "Yenilere geri al",
       "загружаю_задачи": "Görevler yükleniyor…",

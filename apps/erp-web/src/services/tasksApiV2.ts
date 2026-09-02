@@ -38,6 +38,17 @@ const api = axios.create({
  * после обрыва) не должен создавать вторую задачу. Генерируется один раз на
  * попытку отправки, а не на каждый HTTP-запрос.
  */
+/** Предел одного запроса на стороне сервера (MAX_TASK_LIST_LIMIT). */
+const TASKS_PER_REQUEST = 100
+
+/**
+ * Сколько страниц дочитываем, прежде чем признать реестр слишком большим для
+ * разового чтения. Предел нужен, чтобы одна организация с десятками тысяч
+ * задач не вешала экран бесконечным опросом; при упоре в него интерфейс
+ * обязан сказать, что показаны не все задачи, а не молчать.
+ */
+const MAX_TASK_PAGES = 20
+
 export function newIdempotencyKey(): string {
   const globalCrypto = globalThis.crypto
   if (globalCrypto && typeof globalCrypto.randomUUID === 'function') {
@@ -51,6 +62,38 @@ export const tasksApiV2 = {
   async list(params?: ListTasksV2Params): Promise<ListTasksV2Response> {
     const { data } = await api.get<ListTasksV2Response>('/api/v1/tasks', { params })
     return data
+  },
+
+  /**
+   * Все задачи, а не первая страница. Сервер отдаёт максимум 100 записей за
+   * запрос и `nextCursor`, если есть ещё; экран показывает реестр целиком, и
+   * взять только первую страницу значило бы выдать часть за всё: у
+   * организации со 120 задачами двадцать старших молча исчезли бы из вкладок,
+   * счётчиков и архива, ничем себя не обозначив.
+   *
+   * `complete: false` означает, что упёрлись в предел страниц и показаны не
+   * все задачи. Это состояние обязано быть видно пользователю — молчаливая
+   * половина реестра ничем не лучше молчаливого мока.
+   */
+  async listAll(
+    params?: Omit<ListTasksV2Params, 'cursor'>,
+    maxPages = MAX_TASK_PAGES,
+  ): Promise<{ items: TaskV2[]; complete: boolean }> {
+    const items: TaskV2[] = []
+    let cursor: string | undefined
+    let complete = false
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const response = await this.list({ ...params, limit: TASKS_PER_REQUEST, cursor })
+      items.push(...response.items)
+      if (!response.nextCursor) {
+        complete = true
+        break
+      }
+      cursor = response.nextCursor
+    }
+
+    return { items, complete }
   },
 
   /** GET /api/v1/tasks/:taskId */

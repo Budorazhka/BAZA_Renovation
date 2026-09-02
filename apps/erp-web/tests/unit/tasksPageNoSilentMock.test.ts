@@ -14,7 +14,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const listTasksMock = vi.fn()
+const listAllTasksMock = vi.fn()
 const completeTaskMock = vi.fn()
 const reopenTaskMock = vi.fn()
 const createTaskMock = vi.fn()
@@ -47,7 +47,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 vi.mock('@/services/tasksApiV2', () => ({
   tasksApiV2: {
-    list: listTasksMock,
+    listAll: listAllTasksMock,
     complete: completeTaskMock,
     reopen: reopenTaskMock,
     create: createTaskMock,
@@ -101,7 +101,7 @@ async function renderPage() {
 
 describe('TasksPage: реестр задач и отказы сервера', () => {
   beforeEach(() => {
-    listTasksMock.mockReset()
+    listAllTasksMock.mockReset()
     listTeamMock.mockReset()
     completeTaskMock.mockReset()
     reopenTaskMock.mockReset()
@@ -115,7 +115,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('показывает задачи сервера с именами из состава команды', async () => {
-    listTasksMock.mockResolvedValue({ items: [serverTask()], nextCursor: null })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask()], complete: true })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -126,7 +126,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('при 500 не показывает ни одной задачи и говорит об ошибке', async () => {
-    listTasksMock.mockRejectedValue({ response: { status: 500 } })
+    listAllTasksMock.mockRejectedValue({ response: { status: 500 } })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -136,7 +136,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('при 401 сообщает про сессию, а не про отсутствие задач', async () => {
-    listTasksMock.mockRejectedValue({ response: { status: 401 } })
+    listAllTasksMock.mockRejectedValue({ response: { status: 401 } })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -145,7 +145,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('при 403 не утверждает «задач не найдено» — данные не загружены, а не отсутствуют', async () => {
-    listTasksMock.mockRejectedValue({ response: { status: 403 } })
+    listAllTasksMock.mockRejectedValue({ response: { status: 403 } })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -155,7 +155,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('пустой ответ сервера — это именно «задач не найдено»', async () => {
-    listTasksMock.mockResolvedValue({ items: [], nextCursor: null })
+    listAllTasksMock.mockResolvedValue({ items: [], complete: true })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -163,11 +163,30 @@ describe('TasksPage: реестр задач и отказы сервера', ()
     expect(await screen.findByText('tasks.tasksPage.задач_не_найдено')).toBeTruthy()
   })
 
+  it('неполный реестр не выдаётся за полный', async () => {
+    // Сервер отдал не всё: экран показывает задачи, но говорит, что список
+    // неполон. Молчание здесь означало бы «других задач нет» — утверждение,
+    // которого никто не проверял.
+    listAllTasksMock.mockResolvedValue({ items: [serverTask()], complete: false })
+    listTeamMock.mockResolvedValue(TEAM)
+
+    await renderPage()
+
+    expect(await screen.findByText('tasks.tasksPage.показаны_не_все_зада')).toBeTruthy()
+  })
+
+  it('полный реестр не показывает предупреждение о неполноте', async () => {
+    listAllTasksMock.mockResolvedValue({ items: [serverTask()], complete: true })
+    listTeamMock.mockResolvedValue(TEAM)
+
+    await renderPage()
+
+    await screen.findAllByText('Настоящая задача с сервера')
+    expect(screen.queryByText('tasks.tasksPage.показаны_не_все_зада')).toBeNull()
+  })
+
   it('отменённые задачи на экран не попадают: такого состояния в интерфейсе нет', async () => {
-    listTasksMock.mockResolvedValue({
-      items: [serverTask({ id: 'task-2', title: 'Отменённая', status: 'cancelled' })],
-      nextCursor: null,
-    })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask({ id: 'task-2', title: 'Отменённая', status: 'cancelled' })], complete: true })
     listTeamMock.mockResolvedValue(TEAM)
 
     await renderPage()
@@ -177,7 +196,7 @@ describe('TasksPage: реестр задач и отказы сервера', ()
   })
 
   it('недоступный состав команды не прячет задачи, но и не молчит', async () => {
-    listTasksMock.mockResolvedValue({ items: [serverTask()], nextCursor: null })
+    listAllTasksMock.mockResolvedValue({ items: [serverTask()], complete: true })
     listTeamMock.mockRejectedValue(new Error('network'))
 
     await renderPage()
