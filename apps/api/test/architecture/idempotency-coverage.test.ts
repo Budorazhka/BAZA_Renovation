@@ -84,6 +84,10 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /team-users/ensure-self': 'upsert по identity: повтор возвращает ту же позицию',
   'POST /team-users/ensure-team': 'upsert по организации: повтор возвращает ту же команду',
   'POST /team-users/invite/:token/activate': 'токен одноразовый, повтор отклоняется',
+  'POST /team-users/positions':
+    'дубль — вторая вакантная позиция без occupant, не искажённые отчётные данные (в отличие от ' +
+    'lead/deal/task): видна в списке команды, тривиально удаляется тем же DELETE /team-users/positions/:id, ' +
+    'который уже идемпотентен',
   'POST /team-users/positions/:positionId/assign': 'условный update позиции',
   'POST /team-users/positions/:positionId/vacate': 'условный update: повтор на свободной позиции — 409',
   'PATCH /team-users/positions/:positionId': 'обновление по id, повтор идемпотентен',

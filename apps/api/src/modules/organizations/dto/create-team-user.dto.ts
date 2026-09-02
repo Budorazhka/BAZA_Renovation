@@ -1,6 +1,6 @@
 import { IsArray, IsEmail, IsIn, IsMongoId, IsOptional, IsString, Length, MinLength } from 'class-validator';
 
-const FIXED_ROLES = ['owner', 'director', 'rop', 'manager', 'administrator', 'marketer'] as const;
+export const FIXED_ROLES = ['owner', 'director', 'rop', 'manager', 'administrator', 'marketer'] as const;
 
 /**
  * teamApi.ts::create(payload) — второй, отдельный от assignOccupant путь

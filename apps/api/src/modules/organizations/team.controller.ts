@@ -13,6 +13,7 @@ import { SetPositionStatusDto } from './dto/set-position-status.dto';
 import { AssignOccupantDto } from './dto/assign-occupant.dto';
 import { SetPositionAvatarDto } from './dto/set-position-avatar.dto';
 import { CreateTeamUserDto } from './dto/create-team-user.dto';
+import { CreateTeamAccountSlotDto } from './dto/create-team-account-slot.dto';
 import { UpdateTeamUserProfileDto } from './dto/update-team-user-profile.dto';
 
 interface ApiResponse<T> {
@@ -59,6 +60,29 @@ export class TeamController {
   }
 
   /**
+   * teamApi.ts::getById(id) — GET /team-users/:positionId, одна позиция.
+   * Тот же position.read grant, что list() — оба отдают HR-PII, только
+   * list() всех позиций сразу, этот метод одну по id. TeamService.getById
+   * scoped по organizationId из TenantContext (не из URL) тем же
+   * findByIdForOrganization-паттерном, что assignOccupant — единый
+   * NOT_FOUND для "не существует" и "чужая организация".
+   */
+  @Get(':positionId')
+  @UseGuards(PermissionGuard)
+  @RequirePermission('position', 'read')
+  async getById(
+    @Req() req: FastifyRequest,
+    @Param('positionId') positionIdParam: string,
+  ): Promise<ApiResponse<TeamUserView>> {
+    const tenantContext = requireTenantContext(req);
+    const data = await this.teamService.getById(
+      new Types.ObjectId(positionIdParam),
+      new Types.ObjectId(tenantContext.organizationId),
+    );
+    return { success: true, data };
+  }
+
+  /**
    * teamApi.ts::create(payload) — второй, отдельный от assignOccupant-
    * invite-flow путь: руководитель сам задаёт пароль новому сотруднику
    * (не invite-token/activate-ссылка). Composite-команда, см. TeamService.
@@ -100,6 +124,31 @@ export class TeamController {
         instagram: dto.instagram,
         website: dto.website,
       },
+    });
+    return { success: true, data };
+  }
+
+  /**
+   * teamApi.ts::createAccountSlot(payload) — «Добавить слот менеджера»:
+   * вакантная позиция БЕЗ occupant'а (POST /team-users/positions), в
+   * отличие от create() выше не требует loginEmail/password. Тот же
+   * position.create grant — это тоже создание позиции, только пустой.
+   * position/accessProfile из payload не сохраняются, см.
+   * CreateTeamAccountSlotDto/TeamService.createVacantSlot комментарии.
+   */
+  @Post('positions')
+  @HttpCode(201)
+  @UseGuards(PermissionGuard)
+  @RequirePermission('position', 'create')
+  async createSlot(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreateTeamAccountSlotDto,
+  ): Promise<ApiResponse<TeamUserView>> {
+    const tenantContext = requireTenantContext(req);
+    const data = await this.teamService.createVacantSlot({
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      fixedRole: dto.role,
+      managerId: dto.managerId ? new Types.ObjectId(dto.managerId) : null,
     });
     return { success: true, data };
   }

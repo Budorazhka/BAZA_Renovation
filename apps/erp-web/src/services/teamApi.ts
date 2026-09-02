@@ -95,13 +95,10 @@ export const teamApi = {
   },
 
   /**
-   * BLOCKER: backend не реализует `GET /team-users/:id` — TeamController
-   * содержит только `list()` (всех позиций организации), отдельного
-   * по-id эндпоинта нет. Вызов всегда получит 404, пока эндпоинт не появится
-   * на стороне apps/api/src/modules/organizations/team.controller.ts. Не
-   * подставляем мок вместо честной ошибки — единственный вызывающий код
-   * (AccountSettingsPage.tsx) уже ловит отказ и остаётся на данных из
-   * currentUser.
+   * GET /team-users/:id (id — positionId) — реализовано на backend
+   * (TeamController.getById). Tenant-scoped: чужая, несуществующая или
+   * закрытая позиция отвечает единым 404 (non-disclosure), не раскрывает
+   * cross-tenant существование.
    */
   async getById(id: string): Promise<TeamUser> {
     const { data } = await platformApi.get<ApiResponse<TeamUser>>(`/api/v1/team-users/${id}`)
@@ -164,13 +161,13 @@ export const teamApi = {
   },
 
   /**
-   * BLOCKER: backend не реализует `POST /team-users/positions` (пустая
-   * позиция-слот без occupant'а) — TeamController.create требует полный
-   * `CreateTeamUserDto` (name/loginEmail/password), то есть всегда создаёт
-   * занятую позицию. Отдельного эндпоинта для «слота менеджера без человека»
-   * нет. Вызов всегда получит 404, пока эндпоинт не появится на стороне
-   * apps/api. Используется кнопкой «Добавить слот менеджера» в PersonnelPage —
-   * там уже есть обработка ошибки (setTeamError), мок не подставляем.
+   * POST /team-users/positions — вакантный слот без occupant'а, реализовано
+   * на backend. `position` (человекочитаемый заголовок) и `accessProfile`
+   * уходят в теле запроса, но backend их молча НЕ сохраняет: позиция не
+   * хранит произвольный текст (только fixedRole enum), а bulk-набор
+   * permission grant'ов из accessProfile сохранить одним вызовом сейчас
+   * некуда — позиция получает только стартовый набор прав своей роли. См.
+   * apps/api CreateTeamAccountSlotDto/TeamService.createVacantSlot.
    */
   async createAccountSlot(payload: CreateTeamAccountSlotPayload): Promise<TeamUser> {
     const { data } = await platformApi.post<ApiResponse<TeamUser>>('/api/v1/team-users/positions', payload)

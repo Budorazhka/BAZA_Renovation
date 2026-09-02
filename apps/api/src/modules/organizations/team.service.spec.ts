@@ -677,3 +677,148 @@ describe('TeamService.updateProfile', () => {
     expect(upsertFieldsSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('TeamService.getById', () => {
+  it('занятая позиция: возвращает TeamUserView с обогащённым login/status, не вызывает listForOrganization-путь', async () => {
+    const organizationId = new Types.ObjectId();
+    const identityId = new Types.ObjectId();
+    const position = makePosition({ organizationId, currentOccupantName: 'Иван Иванов', fixedRole: 'rop' });
+    const findAllByOrganizationSpy = jest.fn();
+
+    const service = new TeamService(
+      {
+        findByIdForOrganization: jest.fn().mockResolvedValue(position),
+        findAllByOrganization: findAllByOrganizationSpy,
+      } as unknown as PositionRepository,
+      {
+        findActiveByPosition: jest.fn().mockResolvedValue({ positionId: position._id, identityId }),
+      } as unknown as PositionAssignmentRepository,
+      { findByPositionId: jest.fn().mockResolvedValue(null) } as unknown as PositionProfileRepository,
+      {
+        findByIds: jest.fn().mockResolvedValue([{ id: identityId, normalizedLogin: 'ivan@example.com', status: 'active' }]),
+      } as unknown as AuthService,
+      {} as unknown as MediaService,
+      {} as unknown as OrganizationsService,
+      {} as unknown as Connection,
+    );
+
+    const view = await service.getById(position._id, organizationId);
+
+    expect(view).toMatchObject({
+      id: position._id.toString(),
+      name: 'Иван Иванов',
+      role: 'rop',
+      loginEmail: 'ivan@example.com',
+      status: 'active',
+      vacant: false,
+    });
+    // Не строит представление через полный список позиций организации —
+    // резолвит lookup'ы только для одной запрошенной позиции.
+    expect(findAllByOrganizationSpy).not.toHaveBeenCalled();
+  });
+
+  it('вакантная позиция: не вызывает AuthService.findByIds (нет активного assignment)', async () => {
+    const organizationId = new Types.ObjectId();
+    const position = makePosition({ organizationId, status: 'vacant' });
+    const findByIdsSpy = jest.fn();
+
+    const service = new TeamService(
+      { findByIdForOrganization: jest.fn().mockResolvedValue(position) } as unknown as PositionRepository,
+      { findActiveByPosition: jest.fn().mockResolvedValue(null) } as unknown as PositionAssignmentRepository,
+      { findByPositionId: jest.fn().mockResolvedValue(null) } as unknown as PositionProfileRepository,
+      { findByIds: findByIdsSpy } as unknown as AuthService,
+      {} as unknown as MediaService,
+      {} as unknown as OrganizationsService,
+      {} as unknown as Connection,
+    );
+
+    const view = await service.getById(position._id, organizationId);
+
+    expect(view.vacant).toBe(true);
+    expect(findByIdsSpy).not.toHaveBeenCalled();
+  });
+
+  it('позиция не найдена в организации (или чужая) → NotFoundException', async () => {
+    const service = new TeamService(
+      { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as unknown as PositionRepository,
+      {} as unknown as PositionAssignmentRepository,
+      {} as unknown as PositionProfileRepository,
+      {} as unknown as AuthService,
+      {} as unknown as MediaService,
+      {} as unknown as OrganizationsService,
+      {} as unknown as Connection,
+    );
+
+    await expect(service.getById(new Types.ObjectId(), new Types.ObjectId())).rejects.toThrow();
+  });
+
+  it('позиция closed → NotFoundException (та же семантика, что list исключает закрытые)', async () => {
+    const organizationId = new Types.ObjectId();
+    const position = makePosition({ organizationId, status: 'closed' });
+
+    const service = new TeamService(
+      { findByIdForOrganization: jest.fn().mockResolvedValue(position) } as unknown as PositionRepository,
+      {} as unknown as PositionAssignmentRepository,
+      {} as unknown as PositionProfileRepository,
+      {} as unknown as AuthService,
+      {} as unknown as MediaService,
+      {} as unknown as OrganizationsService,
+      {} as unknown as Connection,
+    );
+
+    await expect(service.getById(position._id, organizationId)).rejects.toThrow();
+  });
+});
+
+describe('TeamService.createVacantSlot', () => {
+  it('создаёт вакантную позицию через OrganizationsService.createVacantPosition, без Identity/assignment', async () => {
+    const organizationId = new Types.ObjectId();
+    const managerId = new Types.ObjectId();
+    const vacantPosition = makePosition({ organizationId, status: 'vacant', fixedRole: 'manager', parentPositionId: managerId });
+    const createVacantPositionSpy = jest.fn().mockResolvedValue(vacantPosition._id);
+
+    const service = new TeamService(
+      {
+        findAllByOrganization: jest.fn().mockResolvedValue([vacantPosition]),
+      } as unknown as PositionRepository,
+      { findAllActiveByOrganization: jest.fn().mockResolvedValue([]) } as unknown as PositionAssignmentRepository,
+      { findByPositionIds: jest.fn().mockResolvedValue([]) } as unknown as PositionProfileRepository,
+      { findByIds: jest.fn().mockResolvedValue([]) } as unknown as AuthService,
+      {} as unknown as MediaService,
+      { createVacantPosition: createVacantPositionSpy } as unknown as OrganizationsService,
+      fakeConnection(),
+    );
+
+    const view = await service.createVacantSlot({ organizationId, fixedRole: 'manager', managerId });
+
+    expect(createVacantPositionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, fixedRole: 'manager', parentPositionId: managerId }),
+    );
+    // Внутри транзакции — createVacantPosition получила session.
+    expect(createVacantPositionSpy.mock.calls[0][0].session).toBeDefined();
+    expect(view.vacant).toBe(true);
+    expect(view.role).toBe('manager');
+  });
+
+  it('managerId:null → parentPositionId не передаётся (undefined, не null)', async () => {
+    const organizationId = new Types.ObjectId();
+    const vacantPosition = makePosition({ organizationId, status: 'vacant', fixedRole: 'owner' });
+    const createVacantPositionSpy = jest.fn().mockResolvedValue(vacantPosition._id);
+
+    const service = new TeamService(
+      { findAllByOrganization: jest.fn().mockResolvedValue([vacantPosition]) } as unknown as PositionRepository,
+      { findAllActiveByOrganization: jest.fn().mockResolvedValue([]) } as unknown as PositionAssignmentRepository,
+      { findByPositionIds: jest.fn().mockResolvedValue([]) } as unknown as PositionProfileRepository,
+      { findByIds: jest.fn().mockResolvedValue([]) } as unknown as AuthService,
+      {} as unknown as MediaService,
+      { createVacantPosition: createVacantPositionSpy } as unknown as OrganizationsService,
+      fakeConnection(),
+    );
+
+    await service.createVacantSlot({ organizationId, fixedRole: 'owner', managerId: null });
+
+    expect(createVacantPositionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, fixedRole: 'owner', parentPositionId: undefined }),
+    );
+  });
+});
