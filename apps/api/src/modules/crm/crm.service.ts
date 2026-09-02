@@ -1494,6 +1494,10 @@ export class CrmService {
      */
     requiredOwnerPositionId?: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: повтор не должен применить смену стадии дважды — искажает воронку и метрики. */
+    idempotencyKey: string;
+    /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
+    idempotencyRequestBody: Record<string, unknown>;
   }) {
     const lead = await this.leadRepository.findByIdForOrganization(
       params.leadId,
@@ -1593,7 +1597,7 @@ export class CrmService {
         session,
       );
 
-      return {
+      const readModel = {
         id: lead._id.toString(),
         organizationId: lead.organizationId.toString(),
         contactId: lead.contactId.toString(),
@@ -1602,6 +1606,24 @@ export class CrmService {
         version: params.expectedVersion + 1,
         source: lead.source,
       };
+
+      // ADR-006: запись идемпотентности идёт В ТОЙ ЖЕ транзакции, что и сама
+      // смена стадии — тот же принцип, что createLead: иначе возможен разрыв
+      // между применённой сменой стадии и незаписанной идемпотентностью, и
+      // повтор применит смену стадии второй раз.
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'changeLeadStage',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 200,
+          responseBody: readModel,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 

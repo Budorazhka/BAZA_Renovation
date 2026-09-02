@@ -35,6 +35,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /marketplace/property-assets/:assetId/listings/:listingId/publish':
     'publish листинга в marketplace-потоке',
   'POST /leads': 'дубль лида искажает воронку и отчётность по менеджерам — данные, по которым принимают решения',
+  'PATCH /leads/:leadId/stage':
+    'стадия лида напрямую участвует в отчётах по воронке и метриках менеджеров — повтор (клиентский таймаут+ретрай) не должен применить смену дважды и задвоить историю переходов',
   'POST /deals': 'дубль сделки удваивает ожидаемую комиссию в отчётах',
   'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
   'POST /marketplace/property-assets': 'дубль объекта в мастере публикации — клиент шлёт стабильный ключ на повтор шага',
@@ -135,7 +137,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 
   // --- CRM ---
   'POST /leads/:leadId/assign': 'условный update владельца',
-  'PATCH /leads/:leadId/stage': 'переход стадии условный, повтор не применяется дважды',
   'PATCH /deals/:dealId': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',

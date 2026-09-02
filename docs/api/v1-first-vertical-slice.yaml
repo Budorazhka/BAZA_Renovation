@@ -1535,6 +1535,7 @@ paths:
           in: path
           required: true
           schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
         required: true
         content:

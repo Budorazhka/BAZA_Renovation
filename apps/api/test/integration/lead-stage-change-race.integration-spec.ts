@@ -146,7 +146,7 @@ describe('PATCH /leads/:id/stage — гонка параллельных зап�
       app.inject({
         method: 'PATCH',
         url: `/api/v1/leads/${lead._id.toString()}/stage`,
-        headers: { cookie },
+        headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
         payload: { stage: newStage, expectedVersion: 0 },
       });
 
@@ -194,7 +194,7 @@ describe('PATCH /leads/:id/stage — гонка параллельных зап�
     const firstRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/leads/${lead._id.toString()}/stage`,
-      headers: { cookie },
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
       payload: { stage: 'contacted', expectedVersion: 0 },
     });
     expect(firstRes.statusCode).toBe(200);
@@ -202,17 +202,19 @@ describe('PATCH /leads/:id/stage — гонка параллельных зап�
     const staleRetryRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/leads/${lead._id.toString()}/stage`,
-      headers: { cookie },
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
       payload: { stage: 'lost', expectedVersion: 0 },
     });
     expect(staleRetryRes.statusCode).toBe(409);
 
     // Клиент делает ровно то, что 409-ответ ожидает от него: перечитывает
-    // актуальную version и повторяет попытку с ней.
+    // актуальную version и повторяет попытку с ней. Новая попытка — новый
+    // Idempotency-Key (проигравшая попытка не была записана: record()
+    // выполняется только после успешного modifiedCount, см. changeLeadStage).
     const freshRetryRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/leads/${lead._id.toString()}/stage`,
-      headers: { cookie },
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
       payload: { stage: 'lost', expectedVersion: 1 },
     });
     expect(freshRetryRes.statusCode).toBe(200);
@@ -253,7 +255,7 @@ describe('PATCH /leads/:id/stage — гонка параллельных зап�
     const patchRes = await app.inject({
       method: 'PATCH',
       url: `/api/v1/leads/${leadId.toString()}/stage`,
-      headers: { cookie },
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
       payload: { stage: 'contacted', expectedVersion: 0 },
     });
     expect(patchRes.statusCode).toBe(200);
