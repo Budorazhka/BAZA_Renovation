@@ -4800,6 +4800,7 @@ export const en: TranslationSchema<typeof ru> = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "No urgent action",
+        "просроченные_задачи_": "Overdue tasks failed to load - the list may be incomplete",
         "следующие_действия": "Next steps"
       },
       widgetObjectQuality: {

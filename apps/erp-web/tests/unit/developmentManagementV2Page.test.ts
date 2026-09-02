@@ -930,7 +930,15 @@ describe('DevelopmentManagementV2Page — P1-фикс: StrictMode dedup', () => 
     // initial-fetch (дедуплицированный от StrictMode-дубля) + первый
     // polling-тик (тоже дедуплицированный от своего StrictMode-дубля) — ровно
     // 2 реальных запроса, не 4 (2×StrictMode-дубль на каждый из двух шагов).
-    expect(getPublicationStatusMock).toHaveBeenCalledTimes(2)
+    //
+    // Через waitFor, а не мгновенной проверкой: значок «pending» появляется уже
+    // после initial-fetch, и под нагрузкой первый polling-тик к этому моменту
+    // мог не успеть — тест падал на «expected 2, got 1» примерно в половине
+    // параллельных прогонов. Смысл проверки сохранён: если запросов станет 4,
+    // равенство двум не наступит никогда и waitFor упадёт по таймауту.
+    await waitFor(() => {
+      expect(getPublicationStatusMock).toHaveBeenCalledTimes(2)
+    })
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000)

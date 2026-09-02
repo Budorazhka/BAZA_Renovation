@@ -49,7 +49,6 @@ interface ScreenTwoProps {
   allLeads: Lead[]
   deals: Deal[]
   progress: HomeProgressMetrics
-  currentUserId: string | null
 }
 
 function WidgetRenderer({
@@ -58,7 +57,6 @@ function WidgetRenderer({
   leads,
   deals,
   progress,
-  currentUserId,
   className,
 }: {
   widgetId: WidgetId
@@ -66,7 +64,6 @@ function WidgetRenderer({
   leads: Lead[]
   deals: Deal[]
   progress: HomeProgressMetrics
-  currentUserId: string | null
   className?: string
 }) {
     const { t } = useI18n();
@@ -74,7 +71,7 @@ function WidgetRenderer({
     switch (widgetId) {
       case 'funnel':         return <WidgetFunnel leads={leads} deals={deals} slot={slot} />
       case 'opportunities':  return <WidgetOpportunities leads={leads} slot={slot} />
-      case 'next_actions':   return <WidgetNextActions leads={leads} currentUserId={currentUserId} slot={slot} />
+      case 'next_actions':   return <WidgetNextActions leads={leads} slot={slot} />
       case 'clients':        return <WidgetClients leads={leads} slot={slot} />
       case 'prospect_leads': return <WidgetProspectLeads leads={leads} slot={slot} />
       case 'problem_leads':  return <WidgetProblemLeads leads={leads} slot={slot} />
@@ -118,15 +115,13 @@ function BentoGrid({
   leads,
   deals,
   progress,
-  currentUserId,
 }: {
   cells: BentoCell[]
   leads: Lead[]
   deals: Deal[]
   progress: HomeProgressMetrics
-  currentUserId: string | null
 }) {
-  const sharedProps = { leads, deals, progress, currentUserId }
+  const sharedProps = { leads, deals, progress }
   const rowCount = Math.max(2, ...cells.map((cell) => cell.row + (cell.rowSpan ?? 1) - 1))
 
   return (
@@ -159,7 +154,7 @@ function BentoGrid({
   )
 }
 
-export function ScreenTwo({ role, accountType, leads, allLeads: _allLeads, deals, progress, currentUserId }: ScreenTwoProps) {
+export function ScreenTwo({ role, accountType, leads, allLeads: _allLeads, deals, progress }: ScreenTwoProps) {
     const { t } = useI18n();
   const cells = accountType === 'developer' ? ROLE_BENTO.developer : ROLE_BENTO[role]
 
@@ -176,7 +171,6 @@ export function ScreenTwo({ role, accountType, leads, allLeads: _allLeads, deals
       leads={leads}
       deals={deals}
       progress={progress}
-      currentUserId={currentUserId}
     />
   )
 }

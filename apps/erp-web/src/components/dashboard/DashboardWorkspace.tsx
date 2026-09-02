@@ -1259,7 +1259,6 @@ export function DashboardWorkspace() {
             allLeads={state.leadPool}
             deals={DEALS_MOCK}
             progress={progress}
-            currentUserId={currentUser?.id ?? null}
           />
         </div>
       )}

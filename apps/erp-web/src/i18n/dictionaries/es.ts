@@ -4797,6 +4797,7 @@ export const es = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "Ninguna acción urgente",
+        "просроченные_задачи_": "No se pudieron cargar las tareas vencidas: la lista puede estar incompleta",
         "следующие_действия": "Próximos pasos"
       },
       widgetObjectQuality: {

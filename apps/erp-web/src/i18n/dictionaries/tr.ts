@@ -4797,6 +4797,7 @@ export const tr = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "Acil eylem yok",
+        "просроченные_задачи_": "Gecikmiş görevler yüklenemedi - liste eksik olabilir",
         "следующие_действия": "Sonraki adımlar"
       },
       widgetObjectQuality: {
