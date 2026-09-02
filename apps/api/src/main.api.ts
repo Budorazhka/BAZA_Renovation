@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
+import fastifyMultipart from '@fastify/multipart';
 import { AppModule } from './app.module';
 import { AppExceptionFilter } from './shared/errors/app-exception.filter';
 import { CorrelationIdMiddleware } from './shared/errors/correlation-id.middleware';
@@ -48,6 +49,15 @@ async function bootstrap(): Promise<void> {
   );
 
   await app.register(fastifyCookie);
+
+  // POST /leads/import — единственный потребитель на 03.09.2026. Обычный
+  // multipart upload, не MediaModule (presigned + image-variants worker'ом
+  // рассчитаны на постоянное хранение медиа, файл импорта разбирается и
+  // выбрасывается в рамках одного запроса). Лимит 10MB — с большим запасом
+  // для потолка в 2000 строк CSV/XLSX (LeadImportService.MAX_IMPORT_ROWS).
+  await app.register(fastifyMultipart, {
+    limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  });
 
   // Security review: apps/api не имел ни одного security-заголовка (нет
   // HSTS/X-Content-Type-Options/X-Frame-Options/Referrer-Policy) — master

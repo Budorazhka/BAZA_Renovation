@@ -1725,6 +1725,80 @@ paths:
           description: FORBIDDEN — нет lead.read
           $ref: '#/components/responses/Error'
 
+  /leads/import:
+    post:
+      operationId: importLeads
+      summary: >
+        Импорт лидов из CSV/XLSX построчным отчётом об ошибках (import.run).
+        Обычный multipart/form-data upload (поле `file`), не MediaModule —
+        файл разбирается и отбрасывается в рамках одного запроса, нигде не
+        хранится после обработки.
+
+        ВАЖНО: сам грант import.run НЕ даёт доступа создавать лиды.
+        Дополнительно требуется lead.create — тот же принцип, что у
+        export.run/<entity>.read (см. /exports/{entity} выше): без него
+        403, даже если import.run выдан.
+
+        Колонки файла: `name` (опционально), `phone` (обязательно) —
+        первая строка заголовок, порядок колонок не важен, matching по
+        имени заголовка case-insensitive. Обработка СИНХРОННАЯ в рамках
+        HTTP-запроса (не фоновое задание) — потолок 2000 строк, превышение
+        отклоняется целиком, файл не обрезается молча (тот же принцип, что
+        у /exports/{entity}, но ниже: создание лида — транзакция, на
+        порядок тяжелее чтения проекции).
+
+        Идемпотентность: ключ на строку детерминированно вычисляется на
+        сервере из (organizationId, phone) — повторная загрузка ТОГО ЖЕ
+        файла не создаёт вторую партию лидов, строки с уже импортированным
+        телефоном засчитываются как успешные без создания дубля.
+
+        `row` в `errors[]` — 1-indexed номер строки ДАННЫХ (без заголовка).
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Импорт обработан (сам факт наличия ошибок в отдельных строках не делает ответ ошибкой)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data:
+                    type: object
+                    required: [total, created, failed, errors]
+                    properties:
+                      total: {type: integer}
+                      created: {type: integer}
+                      failed: {type: integer}
+                      errors:
+                        type: array
+                        items:
+                          type: object
+                          required: [row, message]
+                          properties:
+                            row: {type: integer}
+                            message: {type: string}
+        '400':
+          description: VALIDATION_FAILED — файл не передан, формат не распознан, нет обязательной колонки phone, либо превышен потолок в 2000 строк
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет import.run ЛИБО нет lead.create
+          $ref: '#/components/responses/Error'
+
   /leads/{leadId}/events:
     get:
       operationId: listLeadEvents

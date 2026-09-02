@@ -829,6 +829,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leads/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Импорт лидов из CSV/XLSX построчным отчётом об ошибках (import.run). Обычный multipart/form-data upload (поле `file`), не MediaModule — файл разбирается и отбрасывается в рамках одного запроса, нигде не хранится после обработки.
+         *     ВАЖНО: сам грант import.run НЕ даёт доступа создавать лиды. Дополнительно требуется lead.create — тот же принцип, что у export.run/<entity>.read (см. /exports/{entity} выше): без него 403, даже если import.run выдан.
+         *     Колонки файла: `name` (опционально), `phone` (обязательно) — первая строка заголовок, порядок колонок не важен, matching по имени заголовка case-insensitive. Обработка СИНХРОННАЯ в рамках HTTP-запроса (не фоновое задание) — потолок 2000 строк, превышение отклоняется целиком, файл не обрезается молча (тот же принцип, что у /exports/{entity}, но ниже: создание лида — транзакция, на порядок тяжелее чтения проекции).
+         *     Идемпотентность: ключ на строку детерминированно вычисляется на сервере из (organizationId, phone) — повторная загрузка ТОГО ЖЕ файла не создаёт вторую партию лидов, строки с уже импортированным телефоном засчитываются как успешные без создания дубля.
+         *     `row` в `errors[]` — 1-indexed номер строки ДАННЫХ (без заголовка).
+         */
+        post: operations["importLeads"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/leads/{leadId}/events": {
         parameters: {
             query?: never;
@@ -4854,6 +4877,49 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description contactId указывает на несуществующий/чужой контакт */
             404: components["responses"]["Error"];
+        };
+    };
+    importLeads: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Импорт обработан (сам факт наличия ошибок в отдельных строках не делает ответ ошибкой) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: {
+                            total: number;
+                            created: number;
+                            failed: number;
+                            errors: {
+                                row: number;
+                                message: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED — файл не передан, формат не распознан, нет обязательной колонки phone, либо превышен потолок в 2000 строк */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет import.run ЛИБО нет lead.create */
+            403: components["responses"]["Error"];
         };
     };
     listLeadEvents: {

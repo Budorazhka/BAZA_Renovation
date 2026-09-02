@@ -74,8 +74,11 @@ Deny-by-default: отсутствие явного grant означает отк
 | `finance.read.organization` | ✓ | ✓ | — | — | — | — |
 | `manual_ledger.read.organization` | ✓ | — | — | — | — | — |
 | `export.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `import.organization` | ✓ | ✓ | ✓ | ✓ | ✓ | — |
 
 **`manual_ledger.read.organization` только owner**: биллинговая история — самая чувствительная финансовая информация организации, не расширяется на director по умолчанию (может быть добавлено индивидуальным grant, если владелец организации явно решит).
+
+**`import.organization` (03.09.2026, POST /leads/import)** — CSV/XLSX импорт лидов построчным отчётом об ошибках, `[technical decision]` по прямой аналогии с `export.organization`: сам грант не даёт права заводить лиды, дополнительно требуется `lead.create` (та же двухступенчатая проверка, что у export/read — см. раздел 1.5 выше и докстринг `ExportService.buildExport`). Выдан ровно тем ролям, у которых уже есть `lead.create.organization` (owner/director/rop/manager/administrator), включая `manager`, у которого нет `export.organization` — импорт не расширяет реальных возможностей роли, только даёт завести много лидов одним файлом вместо ручной формы по одному. `marketer` не получает — нет `lead.create`.
 
 ---
 
@@ -133,6 +136,7 @@ Deny-by-default: отсутствие явного grant означает отк
 | **Manual ledger change** | Admin grant `manual_ledger.write.*` | **обязательный reason**, append-only (никогда update, только новая компенсирующая запись, domain-model.md) |
 | **Impersonation** | super_admin или explicit Admin grant `impersonation.start.*` | обязательная причина, короткий TTL, заметная UI-плашка, запрет ряда критических действий во время impersonation-сессии, полный audit (master plan разд.5.4) |
 | **Export** (bulk data) | `export.organization` (ERP) / соответствующий Admin grant | audit с указанием объёма/типа экспортируемых данных |
+| **Import** (bulk lead create) | `import.organization` + `lead.create.organization` | один audit-batch на весь файл (actor, filename, total/created/failed), не построчно — тот же принцип "каждый клик не надо" |
 
 **Общий принцип для audit-требований** (`[owner decision — xlsx #139]`): «Важные типо блокировок и редактур. Каждый клик не надо» — audit-событие пишется на перечисленные выше critical actions и на изменения статуса/прав/блокировок, **не** на каждое чтение или тривиальное UI-действие (навигация, открытие карточки для просмотра).
 

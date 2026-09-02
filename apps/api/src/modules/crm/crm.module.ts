@@ -35,6 +35,8 @@ import { TaskController } from './task.controller';
 import { DealController } from './deal.controller';
 import { ExportController } from './export.controller';
 import { ExportService } from './export.service';
+import { LeadImportController } from './lead-import.controller';
+import { LeadImportService } from './lead-import.service';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -75,6 +77,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     TaskController,
     DealController,
     ExportController,
+    LeadImportController,
   ],
   providers: [
     ContactRepository,
@@ -89,6 +92,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     ListingRepository,
     CrmService,
     ExportService,
+    LeadImportService,
   ],
   exports: [TaskRepository, DealRepository, CrmService],
 })
