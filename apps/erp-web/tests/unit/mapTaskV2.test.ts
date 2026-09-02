@@ -190,6 +190,18 @@ describe('buildCreateTaskPayload', () => {
     expect(payload.leadId).toBe('68b6a1f2c3d4e5f6a7b8c9d0')
   })
 
+  it('золотой пресет формы уходит на сервер как hex, а не как CSS-токен', () => {
+    // Сервер принимает только #rrggbb; токен var(--gold) давал 400 на
+    // создание задачи ровно при выборе золотой метки.
+    const payload = buildCreateTaskPayload({ ...formTask, colorHex: 'var(--gold)' }, {})
+    expect(payload.colorHex).toBe('#e6c364')
+  })
+
+  it('hex-цвет и отсутствие метки проходят без изменений', () => {
+    expect(buildCreateTaskPayload({ ...formTask, colorHex: '#60a5fa' }, {}).colorHex).toBe('#60a5fa')
+    expect(buildCreateTaskPayload({ ...formTask, colorHex: null }, {}).colorHex).toBeNull()
+  })
+
   it('переводит дату и время формы в момент времени', () => {
     const payload = buildCreateTaskPayload(formTask, {})
     expect(payload.dueAt).toBe(new Date('2026-09-10T19:00').toISOString())
