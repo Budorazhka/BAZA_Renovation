@@ -81,14 +81,28 @@ function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0]
 }
 
+export interface TaskAssigneeOption {
+  /** positionId позиции в организации — именно его ждёт сервер, не id человека. */
+  id: string
+  name: string
+}
+
 export function CreateTaskModal({
   open,
   onOpenChange,
   onCreate,
+  assignees,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onCreate: (task: Task) => void
+  /**
+   * Сохранение задачи. Асинхронное и может отказать: модалка закрывается
+   * только после успеха, иначе пользователь считал бы несозданную задачу
+   * созданной.
+   */
+  onCreate: (task: Task) => void | Promise<void>
+  /** Живой состав команды (позиции организации). Пустой список — исполнителя выбрать не из кого. */
+  assignees: TaskAssigneeOption[]
 }) {
     const { t } = useI18n();
   const formId = useId()
@@ -113,13 +127,14 @@ export function CreateTaskModal({
   const [newSubtask, setNewSubtask] = useState('')
   const [attachmentNames, setAttachmentNames] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setTitle('')
     setLeadQuery('')
     setSelectedLeadId(null)
-    setAssigneeId(currentUser?.id ?? 'lm-1')
+    setAssigneeId('')
     setDescription('')
     setUrgent(false)
     setImportant(true)
@@ -135,6 +150,7 @@ export function CreateTaskModal({
     setNewSubtask('')
     setAttachmentNames([])
     setError(null)
+    setSubmitting(false)
   }, [open, currentUser?.id])
 
   const selectedLead = useMemo(
@@ -142,27 +158,32 @@ export function CreateTaskModal({
     [selectedLeadId, leadsState.leadPool],
   )
 
-  useEffect(() => {
-    if (!open || !selectedLead?.managerId) return
-    setAssigneeId(selectedLead.managerId)
-  }, [open, selectedLead?.managerId])
+  /**
+   * Исполнители — живой состав команды из Platform API, переданный страницей.
+   * Раньше список собирался из менеджеров старой CRM и дополнялся выдуманным
+   * `lm-1`, если текущего пользователя там не было: выбранный «исполнитель»
+   * мог не существовать ни в одной организации.
+   */
+  const assigneeOptions = assignees
 
-  const assigneeOptions = useMemo(() => {
-    const options = leadsState.leadManagers.map(manager => ({
-      id: manager.id,
-      name: manager.name,
-    }))
-    const fallbackId = currentUser?.id ?? 'lm-1'
-    const fallbackName = currentUser?.name ?? 'Пользователь'
-    if (!options.some(option => option.id === fallbackId)) {
-      options.unshift({ id: fallbackId, name: fallbackName })
+  /**
+   * Исполнитель по умолчанию — сам пользователь, и только если его позиция
+   * действительно есть в составе команды. Вычисляется, а не проставляется
+   * эффектом: состав приходит с сервера асинхронно, и запись в состояние
+   * затирала бы уже сделанный выбор.
+   */
+  const effectiveAssigneeId = useMemo(() => {
+    if (assigneeId) return assigneeId
+    const myPositionId = currentUser?.positionId
+    if (myPositionId && assigneeOptions.some(option => option.id === myPositionId)) {
+      return myPositionId
     }
-    return options
-  }, [currentUser?.id, currentUser?.name, leadsState.leadManagers])
+    return ''
+  }, [assigneeId, assigneeOptions, currentUser?.positionId])
 
   const selectedAssignee = useMemo(
-    () => assigneeOptions.find(option => option.id === assigneeId) ?? null,
-    [assigneeId, assigneeOptions],
+    () => assigneeOptions.find(option => option.id === effectiveAssigneeId) ?? null,
+    [effectiveAssigneeId, assigneeOptions],
   )
 
   const canSubmit =
@@ -170,7 +191,8 @@ export function CreateTaskModal({
     title.trim().length <= TITLE_MAX &&
     Boolean(startDate) &&
     Boolean(endDate) &&
-    Boolean(assigneeId)
+    Boolean(effectiveAssigneeId) &&
+    !submitting
 
   const leadSuggestions = useMemo(() => {
     const q = leadQuery.trim().toLowerCase()
@@ -210,8 +232,9 @@ export function CreateTaskModal({
     e.target.value = ''
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (submitting) return
     const t = title.trim()
     if (!t) {
       setError('Укажите заголовок')
@@ -229,7 +252,7 @@ export function CreateTaskModal({
       setError('Укажите срок окончания')
       return
     }
-    if (!assigneeId || !selectedAssignee) {
+    if (!effectiveAssigneeId || !selectedAssignee) {
       setError('Выберите исполнителя')
       return
     }
@@ -283,8 +306,18 @@ export function CreateTaskModal({
       createdAt: todayIsoDate(),
     }
 
-    onCreate(row)
-    onOpenChange(false)
+    setSubmitting(true)
+    setError(null)
+    try {
+      await onCreate(row)
+      onOpenChange(false)
+    } catch (createError) {
+      // Отказ сервера остаётся на экране: закрыть модалку значило бы показать
+      // пользователю, что задача создана, когда её нет.
+      setError(createError instanceof Error ? createError.message : 'Задача не создана')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -371,7 +404,7 @@ export function CreateTaskModal({
             <Label className="text-[color:var(--app-text)]">
               {t('tasks.createTaskModal.исполнитель')}<span className="text-rose-400">*</span>
             </Label>
-            <Select value={assigneeId || undefined} onValueChange={setAssigneeId}>
+            <Select value={effectiveAssigneeId || undefined} onValueChange={setAssigneeId}>
               <SelectTrigger className="border-[var(--green-border)] bg-[var(--green-deep)] text-[color:var(--app-text)]">
                 <SelectValue placeholder={t('tasks.createTaskModal.выберите_исполнителя')} />
               </SelectTrigger>
@@ -383,9 +416,9 @@ export function CreateTaskModal({
                 ))}
               </SelectContent>
             </Select>
-            {selectedLead?.managerId && (
-              <p className="text-[11px] text-[color:var(--app-text-muted)]">
-                {t('tasks.createTaskModal.при_выборе_лида_испо')}</p>
+            {selectedLead && (
+              <p className="text-base text-[color:var(--app-text)]/80">
+                {t('tasks.createTaskModal.задача_сохранится_бе')}</p>
             )}
           </div>
 

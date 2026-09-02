@@ -1,10 +1,14 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { Plus, Zap, Clock, AlertTriangle, CheckCircle, Circle, MapPin, ListChecks, Paperclip, Flame, Target, Timer, Archive } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { CreateTaskModal } from '@/components/tasks/CreateTaskModal'
+import { CreateTaskModal, type TaskAssigneeOption } from '@/components/tasks/CreateTaskModal'
 import { useAuth } from '@/context/AuthContext'
-import { TASKS_MOCK } from '@/data/tasks-mock'
+import { buildCreateTaskPayload, isDisplayableTaskV2, mapTaskV2ToUiTask } from '@/lib/map-task-v2'
+import { newIdempotencyKey, tasksApiV2 } from '@/services/tasksApiV2'
+import { teamApi } from '@/services/teamApi'
+import type { TaskV2 } from '@/types/tasksV2'
 import {
   PRIORITY_COLORS, STATUS_LABELS,
   type Task, type TaskStatus
@@ -40,6 +44,31 @@ const EISENHOWER_PRIORITY_LABELS: Record<Task['priority'], string> = {
   low: 'Не срочно и не важно',
 }
 
+/** Реестр читается одной страницей: серверный предел — 100 задач за запрос. */
+const TASKS_PAGE_LIMIT = 100
+
+function describeLoadError(error: unknown): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status === 401) return 'Сессия истекла. Войдите заново, чтобы увидеть задачи.'
+  if (status === 403) return 'Нет прав на просмотр задач организации.'
+  if (status) return `Сервер ответил ошибкой ${status}. Задачи не загружены.`
+  return 'Не удалось связаться с сервером. Задачи не загружены.'
+}
+
+/**
+ * Отказ создания переводится в человеческий текст здесь, а не показывается
+ * как «Request failed with status code 403»: сообщение читает менеджер, а не
+ * разработчик.
+ */
+function describeCreateError(error: unknown): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status === 401) return 'Сессия истекла — задача не создана. Войдите заново.'
+  if (status === 403) return 'Нет прав на создание задач.'
+  if (status === 400) return 'Сервер отклонил задачу: проверьте исполнителя и срок.'
+  if (status) return `Задача не создана: сервер ответил ошибкой ${status}.`
+  return 'Задача не создана: сервер недоступен.'
+}
+
 function taskSortValue(task: Task) {
   const created = new Date(task.createdAt).getTime()
   if (!Number.isNaN(created)) return created
@@ -51,6 +80,8 @@ function sortTasksNewestFirst(items: Task[]) {
 }
 
 function formatTaskDate(date: string, time?: string) {
+  // Задача без срока — законное состояние модели, а не потерянная дата.
+  if (!date) return 'Без срока'
   const value = new Date(`${date}T${time || '12:00'}`)
   if (Number.isNaN(value.getTime())) return `${date}${time ? ` ${time}` : ''}`
   return value.toLocaleDateString('ru-RU', {
@@ -67,11 +98,75 @@ export function TasksPage() {
   const createSuccessRef = useRef(false)
   const { currentUser } = useAuth()
   const [filter, setFilter] = useState<Filter>('my')
-  const [tasks, setTasks] = useState(TASKS_MOCK)
+  const [serverTasks, setServerTasks] = useState<TaskV2[]>([])
+  const [team, setTeam] = useState<TaskAssigneeOption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [teamUnavailable, setTeamUnavailable] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
+
+  /**
+   * «Мои» — это назначенные на мою позицию плюс личные задачи без исполнителя.
+   * Раньше признаком личной задачи служило `entityType === 'none'`: в мок-данных
+   * связь с лидом или сделкой была почти у всех, и правило работало. На живых
+   * данных связей пока нет ни у кого, и то же правило показало бы в «Моих»
+   * задачи всей организации.
+   */
+  const myPositionId = currentUser?.positionId ?? null
+  const isMyScope = useCallback(
+    (task: Task) =>
+      (myPositionId !== null && task.assignedToId === myPositionId) ||
+      (task.taskCategory === 'personal' && task.assignedToId === ''),
+    [myPositionId],
+  )
+
+  /**
+   * Реестр задач читается с Platform API. Отказ сервера остаётся отказом:
+   * подставлять демо-задачи при 401/403/500 значило бы показать сотруднику
+   * чужую выдумку вместо его работы — ровно тот класс подмены, который
+   * закрывался в карточке объекта 01.09.2026.
+   */
+  const loadTasks = useCallback(async () => {
+    setLoading(true)
+    // Имена сотрудников — вторая, необязательная выборка: их отсутствие не
+    // повод прятать задачи, но и молчать о нём нельзя.
+    const teamPromise = teamApi
+      .list()
+      .then(users =>
+        users.map(user => ({ id: user.positionId ?? user.id, name: user.name })),
+      )
+      .catch(() => null)
+    try {
+      const response = await tasksApiV2.list({ limit: TASKS_PAGE_LIMIT })
+      const members = await teamPromise
+      setServerTasks(response.items.filter(isDisplayableTaskV2))
+      setTeam(members ?? [])
+      setTeamUnavailable(members === null)
+      setLoadError(null)
+    } catch (error) {
+      setServerTasks([])
+      setLoadError(describeLoadError(error))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadTasks()
+  }, [loadTasks])
+
+  const namesByPositionId = useMemo(
+    () => new Map(team.map(member => [member.id, member.name])),
+    [team],
+  )
+
+  const tasks = useMemo(
+    () => serverTasks.map(task => mapTaskV2ToUiTask(task, namesByPositionId)),
+    [serverTasks, namesByPositionId],
+  )
 
   useEffect(() => {
     const p = location.pathname
@@ -83,9 +178,6 @@ export function TasksPage() {
   }, [location.pathname])
 
   const filtered = useMemo(() => {
-    const isPersonalTask = (t: Task) => t.taskCategory === 'personal' || t.entityType === 'none'
-    const isMyScope = (t: Task) =>
-      isPersonalTask(t) || t.assignedToId === currentUser?.id
     let result: Task[]
     switch (filter) {
       case 'my':
@@ -95,7 +187,9 @@ export function TasksPage() {
         result = tasks.filter(t => isMyScope(t) && t.dueDate === today && t.status !== 'done')
         break
       case 'overdue':
-        result = tasks.filter(t => isMyScope(t) && (t.status === 'overdue' || (t.dueDate < today && t.status !== 'done')))
+        // Просрочку определяет сервер (isOverdue) — клиент её не пересчитывает:
+        // при пустом сроке сравнение строк дало бы «просрочена» задаче без срока.
+        result = tasks.filter(t => isMyScope(t) && t.status === 'overdue')
         break
       case 'team':
         result = tasks.filter(t => t.status !== 'done')
@@ -110,7 +204,7 @@ export function TasksPage() {
         result = tasks
     }
     return sortTasksNewestFirst(result)
-  }, [filter, tasks, currentUser?.id, today])
+  }, [filter, tasks, isMyScope, today])
 
   useEffect(() => {
     if (filtered.length === 0) {
@@ -142,19 +236,45 @@ export function TasksPage() {
     return buckets
   }, [filtered])
 
-  function toggleDone(taskId: string) {
-    setTasks(prev => prev.map(t => {
-      if (t.id !== taskId) return t
-      return { ...t, status: t.status === 'done' ? 'pending' : 'done' }
-    }))
+  /**
+   * Отметка о выполнении уходит на сервер и возвращается оттуда. Локально
+   * статус не переключается: иначе галочка стояла бы и в том случае, когда
+   * сервер отказал, а после перезагрузки исчезала без объяснений.
+   *
+   * `expectedVersion` — версия, которую клиент прочитал: при 409 задача
+   * изменилась параллельно, и правильный ответ — перечитать реестр, а не
+   * настаивать на своей версии.
+   */
+  async function toggleDone(taskId: string) {
+    const current = serverTasks.find(task => task.id === taskId)
+    if (!current) return
+    try {
+      const updated =
+        current.status === 'completed'
+          ? await tasksApiV2.reopen(taskId, current.version)
+          : await tasksApiV2.complete(taskId, current.version)
+      setServerTasks(prev => prev.map(task => (task.id === taskId ? updated : task)))
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 409) {
+        toast.error('Задачу изменил кто-то ещё. Реестр обновлён.')
+        void loadTasks()
+        return
+      }
+      toast.error(
+        current.status === 'completed'
+          ? 'Не удалось снять отметку о выполнении'
+          : 'Не удалось отметить задачу выполненной',
+      )
+    }
   }
 
   const FILTERS: { key: Filter; label: string; count: () => number }[] = [
-    { key: 'my', label: 'Мои задачи', count: () => tasks.filter(t => (t.taskCategory === 'personal' || t.entityType === 'none' || t.assignedToId === currentUser?.id) && t.status !== 'done').length },
-    { key: 'today', label: 'Сегодня', count: () => tasks.filter(t => (t.taskCategory === 'personal' || t.entityType === 'none' || t.assignedToId === currentUser?.id) && t.dueDate === today && t.status !== 'done').length },
-    { key: 'overdue', label: 'Просроченные', count: () => tasks.filter(t => (t.taskCategory === 'personal' || t.entityType === 'none' || t.assignedToId === currentUser?.id) && (t.status === 'overdue' || (t.dueDate < today && t.status !== 'done'))).length },
-    { key: 'auto', label: 'Автоматические', count: () => tasks.filter(t => (t.taskCategory === 'personal' || t.entityType === 'none' || t.assignedToId === currentUser?.id) && t.isAutomatic && t.status !== 'done').length },
-    { key: 'archive', label: 'Архив', count: () => tasks.filter(t => (t.taskCategory === 'personal' || t.entityType === 'none' || t.assignedToId === currentUser?.id) && t.status === 'done').length },
+    { key: 'my', label: 'Мои задачи', count: () => tasks.filter(t => isMyScope(t) && t.status !== 'done').length },
+    { key: 'today', label: 'Сегодня', count: () => tasks.filter(t => isMyScope(t) && t.dueDate === today && t.status !== 'done').length },
+    { key: 'overdue', label: 'Просроченные', count: () => tasks.filter(t => isMyScope(t) && t.status === 'overdue').length },
+    { key: 'auto', label: 'Автоматические', count: () => tasks.filter(t => isMyScope(t) && t.isAutomatic && t.status !== 'done').length },
+    { key: 'archive', label: 'Архив', count: () => tasks.filter(t => isMyScope(t) && t.status === 'done').length },
     { key: 'team', label: 'Вся команда', count: () => tasks.filter(t => t.status !== 'done').length },
     { key: 'all', label: 'Все', count: () => tasks.length },
   ]
@@ -230,6 +350,59 @@ export function TasksPage() {
           })}
         </div>
 
+        {loading && (
+          <div style={{ padding: '10px 0 14px', fontSize: 16, color: 'rgba(255,255,255,0.72)' }}>
+            {t('tasks.tasksPage.загружаю_задачи')}</div>
+        )}
+
+        {loadError && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              flexWrap: 'wrap' as const,
+              padding: '12px 14px',
+              marginBottom: 14,
+              borderRadius: 6,
+              background: 'rgba(255,180,171,0.08)',
+              fontSize: 16,
+              color: '#ffb4ab',
+            }}
+          >
+            <span>{loadError}</span>
+            <button
+              type="button"
+              onClick={() => void loadTasks()}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 4,
+                border: '1px solid rgba(230,195,100,0.4)',
+                background: 'transparent',
+                color: C.gold,
+                fontSize: 16,
+                fontWeight: 400,
+                cursor: 'pointer',
+              }}
+            >
+              {t('tasks.tasksPage.повторить')}</button>
+          </div>
+        )}
+
+        {teamUnavailable && !loadError && (
+          <div
+            style={{
+              padding: '12px 14px',
+              marginBottom: 14,
+              borderRadius: 6,
+              background: 'rgba(255,180,171,0.08)',
+              fontSize: 16,
+              color: '#ffb4ab',
+            }}
+          >
+            {t('tasks.tasksPage.состав_команды_не_за')}</div>
+        )}
+
         {/* Workspace */}
         <div
           style={{
@@ -287,7 +460,9 @@ export function TasksPage() {
             </div>
 
             <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {filtered.length === 0 && (
+              {/* «Задач не найдено» — утверждение о данных, и говорить его,
+                  когда данные не загрузились, нельзя: это разные сообщения. */}
+              {!loading && !loadError && filtered.length === 0 && (
                 <div style={{ padding: '40px', textAlign: 'center' as const, color: C.whiteLow }}>
                   {t('tasks.tasksPage.задач_не_найдено')}</div>
               )}
@@ -324,9 +499,21 @@ export function TasksPage() {
             }
           }
         }}
-        onCreate={task => {
+        assignees={team}
+        onCreate={async task => {
+          // Ключ идемпотентности один на попытку отправки: повтор после
+          // обрыва не создаст вторую задачу (conventions.md §8).
+          let created
+          try {
+            created = await tasksApiV2.create(
+              buildCreateTaskPayload(task, { assignedPositionId: task.assignedToId || undefined }),
+              newIdempotencyKey(),
+            )
+          } catch (error) {
+            throw new Error(describeCreateError(error))
+          }
           createSuccessRef.current = true
-          setTasks(prev => [task, ...prev])
+          setServerTasks(prev => [created, ...prev])
           navigate('/dashboard/tasks/my', { replace: true })
         }}
       />
