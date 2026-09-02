@@ -218,6 +218,495 @@ paths:
           description: CONFLICT — у Identity уже есть организация или имя занято
           $ref: '#/components/responses/Error'
 
+  /team-users/invite/{token}/activate:
+    post:
+      operationId: activateInvitation
+      summary: >
+        Активация приглашения одноразовым токеном (публичный, анонимный —
+        приглашённый ещё не залогинен, нет cookie/сессии). Rate-limit по IP
+        (invite-activate, 10/60с) — приглашение принимает password для новой
+        Identity, тот же класс защиты, что /auth/login.
+      tags: [organizations]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: {type: string, format: password, minLength: 8}
+      responses:
+        '200':
+          description: Приглашение активировано
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data:
+                    type: object
+                    properties:
+                      activated: {type: boolean}
+                      email: {type: string}
+        '404':
+          description: NOT_FOUND — токен невалиден, истёк или уже использован
+          $ref: '#/components/responses/Error'
+        '429':
+          description: RATE_LIMITED
+          $ref: '#/components/responses/Error'
+
+  /organizations/{organizationId}/positions/{positionId}/assign:
+    post:
+      operationId: assignOccupantByIdentity
+      summary: >
+        Назначить существующую Identity на Position по identityId
+        (position.assign_occupant.organization). :organizationId в URL —
+        только читаемость пути, фактическая tenant-принадлежность проверяется
+        сервером по TenantContext (URL/body от клиента не является источником
+        истины) — расхождение с текущим tenant даёт 404, не 400.
+      tags: [organizations]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identityId, occupantDisplayName]
+              properties:
+                identityId: {type: string}
+                occupantDisplayName: {type: string, minLength: 1, maxLength: 200}
+      responses:
+        '200':
+          description: Identity назначена на Position
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assignmentId]
+                properties:
+                  assignmentId: {type: string}
+        '403':
+          description: FORBIDDEN — нет position.assign_occupant
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — organizationId в URL не совпадает с TenantContext, либо Position не существует/чужая
+          $ref: '#/components/responses/Error'
+
+  /organizations/{organizationId}/positions/{positionId}/grants:
+    post:
+      operationId: grantPositionPermission
+      summary: >
+        Выдать точечный permission grant позиции (personal_access.grant) —
+        owner/director explicit ⚙-toggle. :organizationId в URL — та же
+        читаемость-only роль, что assign выше.
+      tags: [organizations]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action, scope]
+              properties:
+                resource: {type: string, minLength: 1}
+                action: {type: string, minLength: 1}
+                scope: {type: string, enum: [own, position, team, organization, project, city, global, assigned, domain]}
+                scopeValue: {type: string}
+      responses:
+        '200':
+          description: Grant выдан
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [granted]
+                properties:
+                  granted: {type: boolean, enum: [true]}
+        '403':
+          description: FORBIDDEN — нет personal_access.grant
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — organizationId в URL не совпадает с TenantContext, либо Position не существует/чужая
+          $ref: '#/components/responses/Error'
+
+  /team-users:
+    get:
+      operationId: listTeamUsers
+      summary: >
+        Список всех позиций организации, включая HR-PII (loginEmail/phone/
+        birthDate/telegram/...) — position.read (security review 31.08.2026:
+        раньше без PermissionGuard, отдавал PII любой сессии организации).
+        Ответ обёрнут в {success, data} — контракт, которого ожидает
+        существующий ERP-клиент (teamApi.ts), не общий формат остальных
+        controller'ов этой кодовой базы.
+      tags: [organizations]
+      responses:
+        '200':
+          description: Все позиции организации
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {type: array, items: {$ref: '#/components/schemas/TeamUserView'}}
+        '403':
+          description: FORBIDDEN — нет position.read
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createTeamUser
+      summary: >
+        Создать позицию и сразу назначить occupant'а с паролем, заданным
+        руководителем (position.create.organization) — отдельный от
+        email-invite путь /team-users/positions/{positionId}/assign.
+      tags: [organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamUserRequest'
+      responses:
+        '201':
+          description: Позиция создана и занята
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет position.create
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}:
+    patch:
+      operationId: updateTeamUserProfile
+      summary: >
+        Частичное обновление HR-профильных полей позиции (роль/менеджер/
+        пароль здесь не меняются) — переиспользует position.vacate grant
+        (тот же круг прав, что vacate/move/status).
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTeamUserProfileRequest'
+      responses:
+        '200':
+          description: Позиция после обновления профиля
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: removeTeamUser
+      summary: >
+        Закрыть позицию (position.vacate). Возвращает {success:true, data:null}
+        для консистентности с остальными endpoint'ами контроллера, не пустой 204.
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Позиция закрыта
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {type: object, nullable: true}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}/avatar:
+    patch:
+      operationId: setTeamUserAvatar
+      summary: >
+        Привязать аватар к позиции по уже подтверждённому assetId (полный
+        upload завершается заранее через POST /media/upload-intent →
+        presigned URL → POST /media/{assetId}/confirm, не multipart здесь).
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetId]
+              properties:
+                assetId: {type: string}
+      responses:
+        '200':
+          description: Позиция с обновлённым аватаром
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}/move:
+    patch:
+      operationId: moveTeamUserPosition
+      summary: Сменить руководителя позиции (managerId=null — сделать позицию верхнего уровня)
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                managerId: {type: string, nullable: true}
+      responses:
+        '200':
+          description: Позиция после смены руководителя
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}/status:
+    patch:
+      operationId: setTeamUserStatus
+      summary: Сменить статус occupant'а позиции — переиспользует position.vacate grant
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: {type: string, enum: [active, blocked, invited]}
+      responses:
+        '200':
+          description: Позиция после смены статуса
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+
+  /team-users/ensure-self:
+    post:
+      operationId: ensureSelfTeamUser
+      summary: >
+        Возвращает TeamUserView текущей сессии (self, не весь список) —
+        не создаёт ничего, только TenantGuard (без PermissionGuard),
+        не раскрывает чужие данные.
+      tags: [organizations]
+      responses:
+        '200':
+          description: Собственная позиция текущей сессии, либо null
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView', nullable: true}
+
+  /team-users/ensure-team:
+    post:
+      operationId: ensureTeam
+      summary: >
+        Idempotent no-op: организация владельца уже создаётся атомарно при
+        регистрации (OrganizationsService.createOrganizationWithOwner), этот
+        endpoint только возвращает уже существующие organizationId/positions
+        текущего TenantContext — не создаёт ничего нового. position.read.
+      tags: [organizations]
+      responses:
+        '200':
+          description: Команда организации текущего TenantContext
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data:
+                    type: object
+                    nullable: true
+                    properties:
+                      teamId: {type: string}
+                      positions: {type: array, items: {$ref: '#/components/schemas/TeamUserView'}}
+        '403':
+          description: FORBIDDEN — нет position.read
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}/assign:
+    post:
+      operationId: assignTeamUserOccupant
+      summary: >
+        Email-based invite-flow (position.assign_occupant.organization, тот же
+        grant, что OrganizationsController.assignOccupant identityId-путь) —
+        фронтенд не знает identityId заранее, резолвит по email: существующая
+        Identity линкуется сразу, для новой создаётся pending_invite +
+        Invitation с токеном для /team-users/invite/{token}/activate.
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, loginEmail]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 200}
+                email: {type: string, format: email}
+                loginEmail: {type: string, format: email}
+                phone: {type: string, maxLength: 40}
+                telegram: {type: string, maxLength: 100}
+      responses:
+        '200':
+          description: Occupant назначен или создано приглашение
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data:
+                    type: object
+                    properties:
+                      user: {$ref: '#/components/schemas/TeamUserView', nullable: true}
+                      linkedExisting: {type: boolean}
+                      inviteToken: {type: string, nullable: true}
+                      inviteTokenExpiresAt: {type: string, format: date-time, nullable: true}
+        '403':
+          description: FORBIDDEN — нет position.assign_occupant
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions/{positionId}/vacate:
+    post:
+      operationId: vacateTeamUserPosition
+      summary: >
+        Освободить позицию (position.vacate.organization) — закрывает
+        assignment, немедленно отзывает все ERP-сессии этой identity.
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                handoverNote: {type: string, maxLength: 500}
+      responses:
+        '200':
+          description: Позиция освобождена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView', nullable: true}
+        '403':
+          description: FORBIDDEN — нет position.vacate
+          $ref: '#/components/responses/Error'
+
   /developments:
     post:
       operationId: createDevelopment
@@ -272,6 +761,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Development'
         '404':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateDevelopment
+      summary: >
+        Частичное обновление ЖК (development.edit.organization) — optimistic
+        concurrency (conventions.md разд.5): клиент присылает expectedVersion,
+        совпадающий с текущим Development.version. Если ЖК сейчас опубликован
+        (MarketplacePublication.status:published), обновление транзакционно
+        перевыпускает публикацию (rebuildIfCurrentlyPublished), не оставляя
+        витрину со старыми данными до следующего явного publish.
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDevelopmentRequest'
+      responses:
+        '200':
+          description: Development после обновления
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Development'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion не совпадает с текущим
           $ref: '#/components/responses/Error'
 
   /developments/{developmentId}/chessboard/export:
@@ -335,6 +858,98 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Building'
+    get:
+      operationId: listBuildings
+      summary: >
+        Список корпусов ЖК (development.read.organization). Единый 404 для
+        "ЖК не существует" и "чужая организация" (tenant isolation).
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      responses:
+        '200':
+          description: Корпуса ЖК
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Building'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /developments/{developmentId}/publication-status:
+    get:
+      operationId: getDevelopmentPublicationStatus
+      summary: >
+        D-03: ERP polling после publish — читает РЕАЛЬНЫЙ статус
+        MarketplacePublication (publication_pending/published/unpublished/
+        build_failed), не canonical Development.status. Единый 404 для "ЖК не
+        существует/чужой" и "публикация никогда не запускалась" (publish ни
+        разу не вызывался).
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+      responses:
+        '200':
+          description: Статус публикации ЖК
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevelopmentPublicationStatus'
+        '404':
+          description: NOT_FOUND — ЖК не существует/чужой, либо публикация никогда не запускалась
+          $ref: '#/components/responses/Error'
+
+  /buildings/{buildingId}/sections:
+    post:
+      operationId: createSection
+      summary: >
+        Создать секцию внутри корпуса (development.edit.organization) —
+        опциональное расширение: Unit может ссылаться напрямую на Building
+        без Section, если секций у корпуса нет.
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSectionRequest'
+      responses:
+        '201':
+          description: Section создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Section'
+        '404':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listSections
+      summary: Список секций корпуса (development.read.organization)
+      tags: [erp-development]
+      parameters:
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Секции корпуса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Section'
+        '404':
+          $ref: '#/components/responses/Error'
 
   /buildings/{buildingId}/floors:
     post:
@@ -360,6 +975,196 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Floor'
+    get:
+      operationId: listFloors
+      summary: Список этажей корпуса (development.read.organization)
+      tags: [erp-development]
+      parameters:
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Этажи корпуса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Floor'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /buildings/{buildingId}/floor-plans:
+    post:
+      operationId: createFloorPlan
+      summary: Создать планировку внутри корпуса (переиспользуется несколькими Unit)
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFloorPlanRequest'
+      responses:
+        '201':
+          description: FloorPlan создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FloorPlan'
+        '404':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listFloorPlans
+      summary: Список планировок корпуса (development.read.organization)
+      tags: [erp-development]
+      parameters:
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Планировки корпуса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FloorPlan'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /buildings/{buildingId}/units:
+    get:
+      operationId: listUnits
+      summary: >
+        Список юнитов корпуса (development.read.organization). kind/status/
+        limit — единственные принимаемые query-фильтры (ListUnitsQueryDto),
+        глобальный ValidationPipe отклоняет любое другое поле с 400.
+      tags: [erp-development]
+      parameters:
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: kind
+          in: query
+          schema: {type: string, enum: [apartment, commercial, office, parking, storage, other]}
+        - name: status
+          in: query
+          schema: {type: string, enum: [available, reserved, sold, hidden]}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 100, minimum: 1, maximum: 500}
+      responses:
+        '200':
+          description: Юниты корпуса
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Unit'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /units/{unitId}:
+    get:
+      operationId: getUnit
+      summary: Получить юнит по id (tenant-scoped)
+      tags: [erp-development]
+      parameters:
+        - name: unitId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Unit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /units/{unitId}/price:
+    patch:
+      operationId: updateUnitPrice
+      summary: >
+        Изменить цену юнита (unit.price.update.project — critical action,
+        audit + outbox UnitPriceChanged). Optimistic concurrency: expectedVersion
+        должен совпадать с текущим Unit.version.
+      tags: [erp-development]
+      parameters:
+        - name: unitId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUnitPriceRequest'
+      responses:
+        '200':
+          description: Unit после изменения цены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion не совпадает с текущим
+          $ref: '#/components/responses/Error'
+
+  /units/{unitId}/status:
+    patch:
+      operationId: updateUnitStatus
+      summary: >
+        Изменить статус юнита (unit.status.update.project — critical action,
+        audit + outbox UnitStatusChanged). Разрешены только явно допустимые
+        переходы (sold — терминальный статус, без исходящих переходов).
+        Optimistic concurrency: expectedVersion должен совпадать с текущим
+        Unit.version.
+      tags: [erp-development]
+      parameters:
+        - name: unitId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUnitStatusRequest'
+      responses:
+        '200':
+          description: Unit после изменения статуса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Unit'
+        '400':
+          description: UNIT_INVALID_STATUS_TRANSITION — переход между статусами недопустим при актуальной version
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion не совпадает с текущим
+          $ref: '#/components/responses/Error'
 
   /floors/{floorId}/units:
     post:
@@ -682,6 +1487,82 @@ paths:
                 $ref: '#/components/schemas/Lead'
         '403':
           description: FORBIDDEN — нет lead.assign.organization
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}:
+    get:
+      operationId: getLead
+      summary: >
+        Карточка одного лида (lead.read) — тот же own/organization scope
+        сужение, что GET /leads (own-scope видит только лиды, где
+        ownerPositionId совпадает с его Position). Единый 404 для "не
+        существует" и "не ваш own lead" (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Лид
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListItem'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/stage:
+    patch:
+      operationId: changeLeadStage
+      summary: >
+        Смена стадии лида (lead.changeStage — отдельный grant от lead.assign,
+        manager может менять стадию ТОЛЬКО своих (own-scope) лидов).
+        Optimistic concurrency: expectedVersion должен совпадать с текущим
+        Lead.version. Переход между стадиями ограничен явной матрицей —
+        недопустимый переход при АКТУАЛЬНОЙ version отклоняется 400, устаревшая
+        version — 409 (клиент должен обновить данные и повторить).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, stage]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                stage: {type: string, enum: [new, contacted, qualified, converted, lost]}
+      responses:
+        '200':
+          description: Лид после смены стадии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        '400':
+          description: VALIDATION_FAILED — переход между стадиями недопустим при актуальной version
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.changeStage
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion не совпадает с текущим
           $ref: '#/components/responses/Error'
 
   /leads:
@@ -2053,6 +2934,64 @@ paths:
           description: NOT_FOUND — publicationId не существует
           $ref: '#/components/responses/Error'
 
+  /media/upload-intent:
+    post:
+      operationId: createMediaUploadIntent
+      summary: >
+        ERP tenant-scoped upload intent для медиа вне property-asset (план
+        этажа, аватар позиции, документ агентства, вложение задачи) —
+        media_asset.upload (ADR-008). purpose определяет bucket
+        (private/public) по серверному whitelist, не клиентскому выбору.
+      tags: [erp-media]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMediaUploadIntentRequest'
+      responses:
+        '201':
+          description: Upload intent создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMediaUploadIntentResponse'
+        '400':
+          description: VALIDATION_FAILED — неизвестный purpose/mimeType, либо превышен MAX_UPLOAD_SIZE_BYTES
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет media_asset.upload
+          $ref: '#/components/responses/Error'
+
+  /media/{assetId}/confirm:
+    post:
+      operationId: confirmMediaUpload
+      summary: >
+        Подтвердить загрузку (magic-byte проверка MIME, ADR-008) ассета,
+        созданного через /media/upload-intent.
+      tags: [erp-media]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Результат проверки загрузки
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, enum: [verified, rejected]}
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет media_asset.upload
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
   /property-assets:
     post:
       operationId: createPropertyAsset
@@ -2116,6 +3055,40 @@ paths:
         '403':
           $ref: '#/components/responses/Error'
         '404':
+          $ref: '#/components/responses/Error'
+
+  /property-assets/{assetId}/revisions:
+    get:
+      operationId: listPropertyAssetRevisions
+      summary: >
+        ADMIN-OPS-001, Часть 1: недельная история версий карточки —
+        денормализованные снапшоты (цена/статус/характеристики/медиа-ключи)
+        на момент каждой значимой мутации, retention 7 дней (TTL-индекс).
+        Тот же permission, что остальные read-эндпоинты этого объекта
+        (listing.read) — не отдельный resource. `listingId` опционален: без
+        него возвращается вся история asset'а, включая `asset_created` (до
+        появления любого Listing).
+      tags: [erp-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - name: listingId
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: История версий, newest-first (может быть пустой)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ListingRevision'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — asset не существует/чужой, либо listingId не принадлежит asset'у
           $ref: '#/components/responses/Error'
 
   /property-assets/{assetId}/media/upload-intent:
@@ -3216,6 +4189,126 @@ paths:
           description: RATE_LIMITED
           $ref: '#/components/responses/Error'
 
+  /public/listings/{slug}/complaints:
+    post:
+      operationId: submitComplaint
+      summary: >
+        ADMIN-OPS-001: публичная, анонимная подача жалобы на опубликованный
+        listing по его публичному slug. Жалоба сама по себе НЕ является
+        доказательством нарушения (master plan разд.6.3) — только попадает в
+        admin review queue. Rate-limit по IP (complaint-submit, 5/60с).
+      tags: [public-marketplace]
+      security: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitComplaintRequest'
+      responses:
+        '201':
+          description: Жалоба принята в очередь на проверку
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [pending]}
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — публикация с этим slug не найдена или не является листингом
+          $ref: '#/components/responses/Error'
+        '429':
+          description: RATE_LIMITED
+          $ref: '#/components/responses/Error'
+
+  /admin/complaints:
+    get:
+      operationId: adminListComplaints
+      summary: >
+        ADMIN-OPS-001: admin review queue жалоб — complaint.resolve
+        city-scoped (permission-matrix.md разд.2.2 «Модератор вторички
+        Батуми»). Deny-by-default: ни одного city-гранта на complaint.resolve
+        — пустая очередь, не 403 (тот же принцип, что adminListPublications).
+        Без явного status — очередь на проверку (status:pending).
+      tags: [admin]
+      parameters:
+        - name: status
+          in: query
+          schema: {type: string, enum: [pending, resolved_upheld, resolved_dismissed]}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Жалобы в разрешённом city-scope admin'а
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdminComplaintListItem'
+                  nextCursor: {type: string, nullable: true}
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+
+  /admin/complaints/{complaintId}/resolve:
+    post:
+      operationId: adminResolveComplaint
+      summary: >
+        Admin critical action: резолюция жалобы (upheld/dismissed), reason
+        обязателен (permission-matrix.md разд.4). При decision:upheld
+        переиспользует уже существующий D-06 admin unpublish-путь, если
+        публикация сейчас status:published (повторное снятие с публикации
+        уже снятого listing не является ошибкой этого сценария).
+      tags: [admin]
+      parameters:
+        - name: complaintId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveComplaintRequest'
+      responses:
+        '200':
+          description: Жалоба резолюцирована
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [resolved_upheld, resolved_dismissed]}
+        '400':
+          description: ADMIN_REASON_REQUIRED — reason короче 10 символов
+          $ref: '#/components/responses/Error'
+        '403':
+          description: ADMIN_SCOPE_INSUFFICIENT — нет complaint.resolve в этом city-scope
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Жалоба не найдена
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Жалоба уже резолюцирована (status не pending)
+          $ref: '#/components/responses/Error'
+
 
 components:
   securitySchemes:
@@ -3349,6 +4442,48 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/Development'}}
         nextCursor: {type: string, nullable: true}
 
+    UpdateDevelopmentRequest:
+      type: object
+      required: [expectedVersion]
+      description: "Partial update — только переданные поля меняются. expectedVersion — conventions.md разд.5 optimistic concurrency."
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        name: {type: string}
+        location:
+          type: object
+          required: [country, city, geo]
+          properties:
+            country: {type: string}
+            city: {type: string}
+            address: {type: string}
+            geo:
+              type: object
+              properties:
+                type: {type: string, enum: [Point]}
+                coordinates: {type: array, items: {type: number}, minItems: 2, maxItems: 2}
+        contact:
+          type: object
+          required: [phone]
+          properties:
+            phone: {type: string}
+            whatsapp: {type: string}
+            telegram: {type: string}
+        classType: {type: string}
+        startDate: {type: string, format: date}
+        completionDate: {type: string, format: date}
+        description: {type: string}
+
+    DevelopmentPublicationStatus:
+      type: object
+      properties:
+        publicationId: {type: string}
+        status: {type: string, enum: [publication_pending, published, unpublished, build_failed]}
+        slug: {type: string, nullable: true}
+        version: {type: integer}
+        publishedAt: {type: string, format: date-time, nullable: true}
+        unpublishedAt: {type: string, format: date-time, nullable: true}
+        buildError: {type: string, nullable: true, description: "Безопасный константный текст при build_failed, не реальная причина сборки"}
+
     CreateBuildingRequest:
       type: object
       required: [name, floorsCount]
@@ -3367,6 +4502,20 @@ components:
         name: {type: string}
         floorsCount: {type: integer}
 
+    CreateSectionRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+
+    Section:
+      type: object
+      properties:
+        id: {type: string}
+        buildingId: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+
     CreateFloorRequest:
       type: object
       required: [floorNumber]
@@ -3382,6 +4531,30 @@ components:
         buildingId: {type: string}
         organizationId: {type: string}
         floorNumber: {type: integer}
+
+    CreateFloorPlanRequest:
+      type: object
+      required: [name, rooms, area]
+      properties:
+        name: {type: string}
+        rooms: {type: integer, minimum: 0}
+        area: {type: number, minimum: 0}
+        isEuro: {type: boolean}
+        imageAssetId: {type: string, nullable: true}
+        tags: {type: array, items: {type: string}}
+
+    FloorPlan:
+      type: object
+      properties:
+        id: {type: string}
+        buildingId: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        rooms: {type: integer}
+        area: {type: number}
+        isEuro: {type: boolean}
+        imageAssetId: {type: string, nullable: true}
+        tags: {type: array, items: {type: string}}
 
     CreateUnitRequest:
       type: object
@@ -3407,6 +4580,20 @@ components:
         price: {$ref: '#/components/schemas/MoneyAmount'}
         status: {type: string, enum: [available, reserved, sold, hidden]}
         version: {type: integer}
+
+    UpdateUnitPriceRequest:
+      type: object
+      required: [expectedVersion, price]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+
+    UpdateUnitStatusRequest:
+      type: object
+      required: [expectedVersion, status]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        status: {type: string, enum: [available, reserved, sold, hidden]}
 
     CreateBookingRequest:
       type: object
@@ -3490,6 +4677,45 @@ components:
           $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
         assetB:
           $ref: '#/components/schemas/AdminDuplicateCandidateAsset'
+
+    SubmitComplaintRequest:
+      type: object
+      required: [category]
+      description: >
+        Публичный, анонимный — все reporter*-поля опциональны (тот же
+        принцип, что RevealContactRequest).
+      properties:
+        category: {type: string, enum: [not_available, wrong_info, scam, duplicate, other]}
+        details: {type: string, maxLength: 2000}
+        reporterName: {type: string, maxLength: 200}
+        reporterPhone: {type: string, maxLength: 30}
+        reporterEmail: {type: string, format: email}
+
+    AdminComplaintListItem:
+      type: object
+      properties:
+        id: {type: string}
+        status: {type: string, enum: [pending, resolved_upheld, resolved_dismissed]}
+        category: {type: string, enum: [not_available, wrong_info, scam, duplicate, other]}
+        details: {type: string, nullable: true}
+        propertyAssetId: {type: string}
+        listingId: {type: string}
+        scopeCity: {type: string}
+        respondentScope:
+          type: object
+          properties:
+            type: {type: string, enum: [organization, marketplace_account]}
+            organizationId: {type: string, nullable: true}
+        createdAt: {type: string, format: date-time}
+        resolvedAt: {type: string, nullable: true, format: date-time}
+        resolutionReason: {type: string, nullable: true}
+
+    ResolveComplaintRequest:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: {type: string, enum: [upheld, dismissed]}
+        reason: {type: string, minLength: 10}
 
     PublicDevelopmentList:
       type: object
@@ -3776,6 +5002,35 @@ components:
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
 
+    ListingRevision:
+      type: object
+      description: >
+        Append-only снапшот (listing_revisions), retention 7 дней — недельная
+        история версий карточки (ADMIN-OPS-001, Часть 1).
+      properties:
+        id: {type: string}
+        propertyAssetId: {type: string}
+        listingId: {type: string, nullable: true, description: "Отсутствует у asset_created — снапшот пишется до появления любого Listing"}
+        publisherScope: {type: object}
+        actor:
+          type: object
+          properties:
+            type: {type: string, enum: [identity, admin_account, system]}
+            id: {type: string, nullable: true}
+        changeType: {type: string, enum: [asset_created, listing_created, listing_activated, listing_published, listing_unpublished]}
+        price: {$ref: '#/components/schemas/MoneyAmount'}
+        status: {type: string, nullable: true}
+        characteristics:
+          type: object
+          nullable: true
+          properties:
+            area: {type: number}
+            rooms: {type: number}
+            floor: {type: number}
+            totalFloors: {type: number}
+        mediaKeys: {type: array, items: {type: string}}
+        changedAt: {type: string, format: date-time}
+
     ListingActuality:
       type: object
       properties:
@@ -3815,6 +5070,21 @@ components:
         role: {type: string, enum: [cover, gallery]}
         sortOrder: {type: integer}
         alt: {type: string, nullable: true}
+
+    CreateMediaUploadIntentRequest:
+      type: object
+      required: [declaredMimeType, sizeBytes, purpose]
+      properties:
+        declaredMimeType: {type: string, enum: [image/jpeg, image/png, image/webp, application/pdf]}
+        sizeBytes: {type: integer, maximum: 20971520, description: "MAX_UPLOAD_SIZE_BYTES — 20 МБ"}
+        purpose: {type: string, enum: [unit_photo, floor_plan, agency_document, profile_avatar, property_photo, task_attachment]}
+
+    CreateMediaUploadIntentResponse:
+      type: object
+      required: [assetId, uploadUrl]
+      properties:
+        assetId: {type: string}
+        uploadUrl: {type: string}
 
     CreatePropertyAssetMediaUploadIntentRequest:
       type: object
@@ -4473,4 +5743,84 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ErpMePermission'
+
+    TeamUserView:
+      type: object
+      description: >
+        TeamService.TeamUserView — форма, которую ожидает существующий
+        ERP-клиент teamApi.ts. Включает HR-PII (loginEmail/phone/birthDate/
+        telegram/...), поэтому GET /team-users и /team-users/ensure-team
+        требуют явный grant position.read (security review 31.08.2026).
+      required: [id, platformUserId, teamId, name, role, position, managerId, loginEmail, email, status, skills, permissionOverrides, positionId, parentPositionId, vacant, occupancyHistory]
+      properties:
+        id: {type: string}
+        platformUserId: {type: string}
+        teamId: {type: string}
+        name: {type: string}
+        role: {type: string, enum: [owner, director, rop, manager, administrator, marketer]}
+        position: {type: string}
+        managerId: {type: string, nullable: true}
+        loginEmail: {type: string}
+        email: {type: string}
+        status: {type: string, enum: [active, blocked, invited]}
+        skills: {type: array, items: {type: string}}
+        permissionOverrides: {type: object, additionalProperties: {type: string}}
+        positionId: {type: string}
+        parentPositionId: {type: string, nullable: true}
+        vacant: {type: boolean}
+        occupancyHistory: {type: array, items: {}}
+        avatarUrl: {type: string}
+        phone: {type: string}
+        hireDate: {type: string}
+        birthDate: {type: string}
+        department: {type: string}
+        city: {type: string}
+        telegram: {type: string}
+        aboutMe: {type: string}
+        aboutCompany: {type: string}
+        whatsapp: {type: string}
+        vk: {type: string}
+        instagram: {type: string}
+        website: {type: string}
+
+    CreateTeamUserRequest:
+      type: object
+      required: [name, role, loginEmail, password]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        role: {type: string, enum: [owner, director, rop, manager, administrator, marketer]}
+        managerId: {type: string, nullable: true}
+        loginEmail: {type: string, format: email}
+        password: {type: string, format: password, minLength: 8}
+        phone: {type: string}
+        hireDate: {type: string}
+        birthDate: {type: string}
+        department: {type: string}
+        city: {type: string}
+        telegram: {type: string}
+        aboutMe: {type: string}
+        aboutCompany: {type: string}
+        skills: {type: array, items: {type: string}}
+        whatsapp: {type: string}
+        vk: {type: string}
+        instagram: {type: string}
+        website: {type: string}
+
+    UpdateTeamUserProfileRequest:
+      type: object
+      description: "Partial update — только HR-профильные поля, все опциональны"
+      properties:
+        phone: {type: string}
+        hireDate: {type: string}
+        birthDate: {type: string}
+        department: {type: string}
+        city: {type: string}
+        telegram: {type: string}
+        aboutMe: {type: string}
+        aboutCompany: {type: string}
+        skills: {type: array, items: {type: string}}
+        whatsapp: {type: string}
+        vk: {type: string}
+        instagram: {type: string}
+        website: {type: string}
 
