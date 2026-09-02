@@ -124,6 +124,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 ### Сверки состояния
 
 - [current-state-reconciliation-2026-08-31.md](operations/current-state-reconciliation-2026-08-31.md) — что реально реализовано в CRM на 31.08.
+- [current-state-reconciliation-2026-09-02.md](operations/current-state-reconciliation-2026-09-02.md) — сверка на конец 02.09: стражей 4 → 7, пробелов контракта 49 → 30, задачи ERP без мока.
 - [consolidation-2026-08-31.md](operations/consolidation-2026-08-31.md) — сведение веток в `codex/integration`.
 
 ## Прочее
