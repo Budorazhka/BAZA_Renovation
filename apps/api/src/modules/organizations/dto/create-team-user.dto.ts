@@ -5,9 +5,19 @@ export const FIXED_ROLES = ['owner', 'director', 'rop', 'manager', 'administrato
 /**
  * teamApi.ts::create(payload) — второй, отдельный от assignOccupant путь
  * создания сотрудника: руководитель сам задаёт password (не invite-token).
- * position (человекочитаемый title) НЕ принимается — backend не хранит
- * произвольный текст, только fixedRole enum (см. TeamService.
- * createOccupiedPosition комментарий).
+ *
+ * `position` (человекочитаемый title) и `email` объявлены здесь ТОЛЬКО
+ * чтобы не упасть на глобальном ValidationPipe({forbidNonWhitelisted:true})
+ * — ERP реально отправляет оба поля (PersonnelPage.tsx::handleAdd). До
+ * этого исправления (найдено 03.09.2026 при закрытии backend-хвостов
+ * TEAM-001) их отсутствие в DTO означало 400 VALIDATION_FAILED на КАЖДЫЙ
+ * вызов создания сотрудника — форма была полностью нерабочей, а
+ * предыдущий комментарий («НЕ принимается») ошибочно читался как «поле
+ * необязательно», а не как «весь запрос отклоняется». Backend их не
+ * сохраняет: `position` — тот же честный пробел, что у
+ * CreateTeamAccountSlotDto (Position не хранит произвольный текст, только
+ * fixedRole enum); `email` дублирует `loginEmail` без дополнительного
+ * смысла на этом эндпоинте.
  */
 export class CreateTeamUserDto {
   @IsString()
@@ -18,11 +28,20 @@ export class CreateTeamUserDto {
   role!: (typeof FIXED_ROLES)[number];
 
   @IsOptional()
+  @IsString()
+  @Length(0, 200)
+  position?: string;
+
+  @IsOptional()
   @IsMongoId()
   managerId?: string;
 
   @IsEmail()
   loginEmail!: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @IsString()
   @MinLength(8)

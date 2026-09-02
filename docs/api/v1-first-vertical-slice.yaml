@@ -5857,12 +5857,19 @@ components:
 
     CreateTeamUserRequest:
       type: object
+      description: >
+        `position`/`email` принимаются для совместимости с уже написанным
+        ERP-клиентом (PersonnelPage.tsx::handleAdd отправляет оба поля), но
+        backend их не сохраняет — см. CreateTeamAccountSlotRequest, тот же
+        честный пробел для `position`; `email` дублирует `loginEmail`.
       required: [name, role, loginEmail, password]
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
         role: {type: string, enum: [owner, director, rop, manager, administrator, marketer]}
+        position: {type: string, maxLength: 200}
         managerId: {type: string, nullable: true}
         loginEmail: {type: string, format: email}
+        email: {type: string, format: email}
         password: {type: string, format: password, minLength: 8}
         phone: {type: string}
         hireDate: {type: string}

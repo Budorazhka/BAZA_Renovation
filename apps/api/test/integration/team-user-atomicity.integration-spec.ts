@@ -125,11 +125,20 @@ describe('POST /team-users — атомарность org-стороны', () =>
     };
   }
 
+  /**
+   * Форма точно соответствует тому, что реально шлёт
+   * PersonnelPage.tsx::handleAdd (position/email включены намеренно) —
+   * 03.09.2026 нашлось, что их отсутствие в DTO давало 400 на каждый вызов
+   * из-за forbidNonWhitelisted:true, а этот файл гонял только урезанный
+   * payload и бага не ловил. Теперь весь файл — регрессионный страж формы.
+   */
   function newEmployeePayload(loginEmail: string) {
     return {
       name: 'Новый Менеджер',
       role: 'manager',
+      position: 'Менеджер по продажам',
       loginEmail,
+      email: loginEmail,
       password: 'another correct horse battery',
       phone: '+79990000000',
     };
