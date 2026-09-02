@@ -22,12 +22,13 @@ import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage } from './schemas/lead.schema';
-import type {
-  TaskDocument,
-  TaskStatus,
-  TaskPriority,
-  TaskCategory,
-  TaskEntityType,
+import {
+  priorityFromFlags,
+  type TaskDocument,
+  type TaskStatus,
+  type TaskPriority,
+  type TaskCategory,
+  type TaskEntityType,
 } from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
 
@@ -138,6 +139,10 @@ export interface CrmTaskReadModel {
   // Поля, которыми экран задач ERP уже пользуется (требование: интерфейс не
   // меняется, модель подстраивается под него).
   startAt: string | null;
+  /** Признаки матрицы Эйзенхауэра — то, что хранится. */
+  isUrgent: boolean;
+  isImportant: boolean;
+  /** Название квадранта для экрана. Выводится из признаков, не хранится. */
   priority: TaskPriority;
   taskCategory: TaskCategory;
   colorHex: string | null;
@@ -774,16 +779,13 @@ export class CrmService {
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
     startAt?: Date;
-    priority?: TaskPriority;
+    isUrgent?: boolean;
+    isImportant?: boolean;
     taskCategory?: TaskCategory;
     colorHex?: string | null;
     reminderOffsetsMinutes?: number[];
     subtasks?: Array<{ id: string; title: string; done: boolean }>;
     attachmentFileNames?: string[];
-    entityType?: TaskEntityType;
-    entityId?: Types.ObjectId;
-    isAutomatic?: boolean;
-    triggerType?: string;
     correlationId: string;
     /** ADR-006: дубль задачи засоряет список «следующих действий» менеджера. */
     idempotencyKey: string;
@@ -846,16 +848,13 @@ export class CrmService {
           contactId: resolvedContactId,
           status: 'open',
           startAt: params.startAt,
-          priority: params.priority,
+          isUrgent: params.isUrgent,
+          isImportant: params.isImportant,
           taskCategory: params.taskCategory,
           colorHex: params.colorHex,
           reminderOffsetsMinutes: params.reminderOffsetsMinutes,
           subtasks: params.subtasks,
           attachmentFileNames: params.attachmentFileNames,
-          entityType: params.entityType,
-          entityId: params.entityId,
-          isAutomatic: params.isAutomatic,
-          triggerType: params.triggerType,
           // Создателя не принимаем из запроса: он берётся из серверного
           // TenantContext, иначе автора задачи можно было бы подделать.
           createdByPositionId: params.actorPositionId,
@@ -2770,7 +2769,9 @@ export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
 
     startAt: task.startAt ? task.startAt.toISOString() : null,
-    priority: task.priority ?? 'medium',
+    isUrgent: Boolean(task.isUrgent),
+    isImportant: task.isImportant ?? true,
+    priority: priorityFromFlags(Boolean(task.isUrgent), task.isImportant ?? true),
     taskCategory: task.taskCategory ?? 'work',
     colorHex: task.colorHex ?? null,
     reminderOffsetsMinutes: task.reminderOffsetsMinutes ?? [],
@@ -2780,8 +2781,9 @@ export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
       done: Boolean(item.done),
     })),
     attachmentFileNames: task.attachmentFileNames ?? [],
-    entityType: task.entityType ?? 'none',
-    entityId: task.entityId ? task.entityId.toString() : null,
+    // Связь выводится из хранимых ссылок, как isOverdue из dueAt: одна правда.
+    entityType: task.leadId ? 'lead' : task.contactId ? 'client' : 'none',
+    entityId: task.leadId ? task.leadId.toString() : task.contactId ? task.contactId.toString() : null,
     isAutomatic: Boolean(task.isAutomatic),
     triggerType: task.triggerType ?? null,
     // Открытая или взятая в работу задача со сроком в прошлом — просрочена.

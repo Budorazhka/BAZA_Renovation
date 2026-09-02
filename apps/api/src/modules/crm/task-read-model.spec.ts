@@ -22,9 +22,9 @@ function makeTask(overrides: Partial<TaskDocument> = {}): TaskDocument {
     status: 'open',
     version: 0,
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
-    priority: 'medium',
+    isUrgent: false,
+    isImportant: true,
     taskCategory: 'work',
-    entityType: 'none',
     isAutomatic: false,
     reminderOffsetsMinutes: [],
     subtasks: [],
@@ -65,17 +65,17 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
   }
 
   it('новые поля доезжают до модели чтения, а отсутствующие получают безопасные значения', () => {
-    const entityId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
     const view = toTaskReadModel(
       makeTask({
-        priority: 'critical',
+        isUrgent: true,
+        isImportant: true,
         taskCategory: 'personal',
         colorHex: '#e11d48',
         reminderOffsetsMinutes: [15, 60],
         subtasks: [{ id: 's-1', title: 'Подготовить договор', done: true }],
         attachmentFileNames: ['договор.pdf'],
-        entityType: 'deal',
-        entityId,
+        leadId,
         isAutomatic: true,
         triggerType: 'new_lead_sla',
         startAt: new Date('2026-09-02T08:00:00.000Z'),
@@ -88,11 +88,44 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
     expect(view.reminderOffsetsMinutes).toEqual([15, 60]);
     expect(view.subtasks).toEqual([{ id: 's-1', title: 'Подготовить договор', done: true }]);
     expect(view.attachmentFileNames).toEqual(['договор.pdf']);
-    expect(view.entityType).toBe('deal');
-    expect(view.entityId).toBe(entityId.toString());
+    expect(view.entityType).toBe('lead');
+    expect(view.entityId).toBe(leadId.toString());
     expect(view.isAutomatic).toBe(true);
     expect(view.triggerType).toBe('new_lead_sla');
     expect(view.startAt).toBe('2026-09-02T08:00:00.000Z');
+  });
+
+  it('приоритет выводится из пары «срочно / важно» — квадрант, а не шкала', () => {
+    const quadrant = (isUrgent: boolean, isImportant: boolean) =>
+      toTaskReadModel(makeTask({ isUrgent, isImportant } as Partial<TaskDocument>)).priority;
+
+    expect(quadrant(true, true)).toBe('critical');
+    expect(quadrant(true, false)).toBe('high');
+    expect(quadrant(false, true)).toBe('medium');
+    expect(quadrant(false, false)).toBe('low');
+  });
+
+  it('признаки доезжают до модели чтения как есть', () => {
+    const view = toTaskReadModel(makeTask({ isUrgent: true, isImportant: false } as Partial<TaskDocument>));
+    expect(view.isUrgent).toBe(true);
+    expect(view.isImportant).toBe(false);
+  });
+
+  it('связь выводится из хранимых ссылок: лид, иначе контакт, иначе ничего', () => {
+    const leadId = new Types.ObjectId();
+    const contactId = new Types.ObjectId();
+
+    const withLead = toTaskReadModel(makeTask({ leadId, contactId } as Partial<TaskDocument>));
+    expect(withLead.entityType).toBe('lead');
+    expect(withLead.entityId).toBe(leadId.toString());
+
+    const withContact = toTaskReadModel(makeTask({ contactId } as Partial<TaskDocument>));
+    expect(withContact.entityType).toBe('client');
+    expect(withContact.entityId).toBe(contactId.toString());
+
+    const alone = toTaskReadModel(makeTask());
+    expect(alone.entityType).toBe('none');
+    expect(alone.entityId).toBeNull();
   });
 
   it('создатель попадает в модель чтения — экран показывает «Создал»', () => {

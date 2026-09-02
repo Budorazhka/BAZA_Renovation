@@ -15,14 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  TASK_CATEGORIES,
-  TASK_ENTITY_TYPES,
-  TASK_PRIORITIES,
-  type TaskCategory,
-  type TaskEntityType,
-  type TaskPriority,
-} from '../schemas/task.schema';
+import { TASK_CATEGORIES, type TaskCategory } from '../schemas/task.schema';
 
 /** Подзадача. `id` генерирует клиент — он же переставляет их локально до сохранения. */
 export class CreateTaskSubtaskDto {
@@ -72,9 +65,14 @@ export class CreateTaskDto {
   @IsDateString()
   startAt?: string;
 
+  /** Признаки матрицы Эйзенхауэра. По умолчанию — «важно, не срочно», как в форме. */
   @IsOptional()
-  @IsIn(TASK_PRIORITIES)
-  priority?: TaskPriority;
+  @IsBoolean()
+  isUrgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isImportant?: boolean;
 
   @IsOptional()
   @IsIn(TASK_CATEGORIES)
@@ -106,20 +104,6 @@ export class CreateTaskDto {
   @MaxLength(255, { each: true })
   attachmentFileNames?: string[];
 
-  @IsOptional()
-  @IsIn(TASK_ENTITY_TYPES)
-  entityType?: TaskEntityType;
-
-  @IsOptional()
-  @IsMongoId()
-  entityId?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isAutomatic?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  triggerType?: string;
+  // entityType/entityId не принимаются: связь выводится из leadId/contactId.
+  // isAutomatic/triggerType не принимаются: провенанс ставит только сервер.
 }

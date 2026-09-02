@@ -4101,9 +4101,12 @@ components:
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time, nullable: true}
         startAt: {type: string, format: date-time, nullable: true}
+        isUrgent: {type: boolean, description: "Признак матрицы Эйзенхауэра — хранится"}
+        isImportant: {type: boolean, description: "Признак матрицы Эйзенхауэра — хранится"}
         priority:
           type: string
           enum: [low, medium, high, critical]
+          description: "ВЫЧИСЛЯЕМОЕ из isUrgent/isImportant: critical = срочно и важно, high = срочно, medium = важно, low = ни то ни другое. Не порядковая шкала — high не «выше» medium."
         taskCategory:
           type: string
           enum: [work, personal]
@@ -4126,9 +4129,10 @@ components:
         entityType:
           type: string
           enum: [lead, client, deal, property, booking, none]
-        entityId: {type: string, nullable: true}
-        isAutomatic: {type: boolean}
-        triggerType: {type: string, nullable: true}
+          description: "ВЫЧИСЛЯЕМОЕ из leadId/contactId — одна связь, один источник правды"
+        entityId: {type: string, nullable: true, description: "ВЫЧИСЛЯЕМОЕ: leadId либо contactId"}
+        isAutomatic: {type: boolean, description: "Провенанс — ставит только сервер"}
+        triggerType: {type: string, nullable: true, description: "Ссылка на правило, создавшее задачу; ставит только сервер"}
         isOverdue:
           type: boolean
           description: "ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь."
@@ -4154,9 +4158,8 @@ components:
         leadId: {type: string}
         contactId: {type: string}
         startAt: {type: string, format: date-time}
-        priority:
-          type: string
-          enum: [low, medium, high, critical]
+        isUrgent: {type: boolean, description: "По умолчанию false"}
+        isImportant: {type: boolean, description: "По умолчанию true — как в форме"}
         taskCategory:
           type: string
           enum: [work, personal]
@@ -4179,12 +4182,6 @@ components:
           type: array
           maxItems: 20
           items: {type: string, maxLength: 255}
-        entityType:
-          type: string
-          enum: [lead, client, deal, property, booking, none]
-        entityId: {type: string}
-        isAutomatic: {type: boolean}
-        triggerType: {type: string, maxLength: 120}
 
     UpdateTaskRequest:
       type: object

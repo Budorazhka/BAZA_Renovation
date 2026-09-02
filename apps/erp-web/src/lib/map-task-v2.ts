@@ -133,17 +133,18 @@ export function buildCreateTaskPayload(
     description: task.description,
     dueAt: joinLocalPartsToIso(task.dueDate, task.dueTime),
     startAt: task.startDate ? joinLocalPartsToIso(task.startDate, task.startTime) : undefined,
-    priority: task.priority,
+    // Экран оперирует парой «срочно / важно»; название квадранта обратимо
+    // без потерь, и сервер хранит именно пару, а не порядковую шкалу.
+    isUrgent: task.priority === 'critical' || task.priority === 'high',
+    isImportant: task.priority === 'critical' || task.priority === 'medium',
     taskCategory: task.taskCategory,
     colorHex: toStoredColor(task.colorHex),
     reminderOffsetsMinutes: task.reminderOffsetsMinutes,
     subtasks: task.subtasks,
     attachmentFileNames: task.attachmentFileNames,
-    // Привязка сохраняется только когда у неё есть идентификатор в новом API.
-    // Иначе задача уходит без связи, а не со связью в никуда: `entityType`
-    // без `entityId` — это заявка на объект, которого нет.
-    entityType: options.leadId ? 'lead' : 'none',
-    entityId: options.leadId,
+    // Связь уходит одной ссылкой: entityType/entityId сервер выводит сам из
+    // leadId/contactId. Две пары полей про одну связь были двумя источниками
+    // правды, которые никто не сверял.
     assignedPositionId: options.assignedPositionId,
     leadId: options.leadId,
   }

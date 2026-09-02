@@ -266,6 +266,71 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       expect(audit?.after?.title).toBe('Подготовить презентацию ЖК');
     });
 
+    it('провенанс не принимается от клиента: isAutomatic в теле — 400, а не «автозадача»', async () => {
+      const { cookie } = await seedOwnerSession();
+
+      // Каждое поле отдельным запросом: вместе они прятали бы друг друга —
+      // 400 от одного маскировал бы принятие другого.
+      for (const payload of [
+        { title: 'Подделка автозадачи', isAutomatic: true },
+        { title: 'Подделка правила', triggerType: 'new_lead_sla' },
+      ]) {
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/v1/tasks',
+          headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+          payload,
+        });
+
+        // forbidNonWhitelisted: поле вне DTO — ошибка, а не молчаливый пропуск.
+        expect(res.statusCode).toBe(400);
+      }
+    });
+
+    it('приоритет хранится парой признаков и отдаётся квадрантом', async () => {
+      const { cookie } = await seedOwnerSession();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Срочно, не важно', isUrgent: true, isImportant: false },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.isUrgent).toBe(true);
+      expect(body.isImportant).toBe(false);
+      expect(body.priority).toBe('high');
+
+      // Старой порядковой шкалы в контракте больше нет.
+      const legacy = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Старое поле', priority: 'high' },
+      });
+      expect(legacy.statusCode).toBe(400);
+    });
+
+    it('связь с лидом отдаётся одной парой, выведенной из leadId', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadId = await seedLead(organizationId, contactId);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Перезвонить', leadId: leadId.toString() },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.entityType).toBe('lead');
+      expect(body.entityId).toBe(leadId.toString());
+    });
+
     it('returns 404 when associating with non-existent or foreign lead', async () => {
       const { cookie } = await seedOwnerSession();
       const foreignLeadId = new Types.ObjectId();

@@ -31,16 +31,13 @@ export interface CreateTaskParams {
   leadId?: Types.ObjectId;
   contactId?: Types.ObjectId;
   startAt?: Date;
-  priority?: TaskPriority;
+  isUrgent?: boolean;
+  isImportant?: boolean;
   taskCategory?: TaskCategory;
   colorHex?: string | null;
   reminderOffsetsMinutes?: number[];
   subtasks?: Array<{ id: string; title: string; done: boolean }>;
   attachmentFileNames?: string[];
-  entityType?: TaskEntityType;
-  entityId?: Types.ObjectId;
-  isAutomatic?: boolean;
-  triggerType?: string;
   createdByPositionId?: Types.ObjectId;
 }
 
@@ -76,16 +73,13 @@ export class TaskRepository {
     // только если пришло: у остальных работают defaults схемы, и запись «как
     // есть» не должна затирать их undefined'ом.
     if (params.startAt !== undefined) docData.startAt = params.startAt;
-    if (params.priority !== undefined) docData.priority = params.priority;
+    if (params.isUrgent !== undefined) docData.isUrgent = params.isUrgent;
+    if (params.isImportant !== undefined) docData.isImportant = params.isImportant;
     if (params.taskCategory !== undefined) docData.taskCategory = params.taskCategory;
     if (params.colorHex !== undefined) docData.colorHex = params.colorHex;
     if (params.reminderOffsetsMinutes !== undefined) docData.reminderOffsetsMinutes = params.reminderOffsetsMinutes;
     if (params.subtasks !== undefined) docData.subtasks = params.subtasks;
     if (params.attachmentFileNames !== undefined) docData.attachmentFileNames = params.attachmentFileNames;
-    if (params.entityType !== undefined) docData.entityType = params.entityType;
-    if (params.entityId !== undefined) docData.entityId = params.entityId;
-    if (params.isAutomatic !== undefined) docData.isAutomatic = params.isAutomatic;
-    if (params.triggerType !== undefined) docData.triggerType = params.triggerType;
     if (params.createdByPositionId !== undefined) docData.createdByPositionId = params.createdByPositionId;
 
     const [created] = await this.model.create([docData], { session });

@@ -25,6 +25,10 @@ export interface TaskV2 {
   /** Срок, ISO-момент времени. Разделение на дату и время — забота представления. */
   dueAt: string | null
   startAt: string | null
+  /** Признаки матрицы Эйзенхауэра — то, что сервер хранит. */
+  isUrgent: boolean
+  isImportant: boolean
+  /** Квадрант для экрана. Сервер выводит из признаков, не хранит. */
   priority: TaskPriorityV2
   taskCategory: TaskCategoryV2
   colorHex: string | null
@@ -74,14 +78,13 @@ export interface CreateTaskV2Payload {
   description?: string
   dueAt?: string
   startAt?: string
-  priority?: TaskPriorityV2
+  isUrgent?: boolean
+  isImportant?: boolean
   taskCategory?: TaskCategoryV2
   colorHex?: string | null
   reminderOffsetsMinutes?: number[]
   subtasks?: TaskSubtaskV2[]
   attachmentFileNames?: string[]
-  entityType?: TaskEntityTypeV2
-  entityId?: string
   assignedPositionId?: string
   leadId?: string
   contactId?: string

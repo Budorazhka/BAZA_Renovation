@@ -127,16 +127,13 @@ export class TaskController {
       leadId: dto.leadId ? new Types.ObjectId(dto.leadId) : undefined,
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       startAt: dto.startAt ? new Date(dto.startAt) : undefined,
-      priority: dto.priority,
+      isUrgent: dto.isUrgent,
+      isImportant: dto.isImportant,
       taskCategory: dto.taskCategory,
       colorHex: dto.colorHex,
       reminderOffsetsMinutes: dto.reminderOffsetsMinutes,
       subtasks: dto.subtasks?.map((item) => ({ id: item.id, title: item.title, done: item.done ?? false })),
       attachmentFileNames: dto.attachmentFileNames,
-      entityType: dto.entityType,
-      entityId: dto.entityId ? new Types.ObjectId(dto.entityId) : undefined,
-      isAutomatic: dto.isAutomatic,
-      triggerType: dto.triggerType,
       correlationId: req.correlationId,
     });
   }
