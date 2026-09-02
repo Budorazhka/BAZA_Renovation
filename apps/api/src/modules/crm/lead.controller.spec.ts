@@ -73,6 +73,93 @@ describe('LeadController.createLead', () => {
   });
 });
 
+describe('LeadController.changeStage', () => {
+  it('без Idempotency-Key — IDEMPOTENCY_KEY_REQUIRED, сервис не вызывается', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const changeLeadStage = jest.fn();
+    const checkReplay = jest.fn();
+    const controller = new LeadController(
+      { changeLeadStage } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      { checkReplay } as unknown as IdempotencyService,
+    );
+
+    await expect(
+      controller.changeStage(makeRequest(organizationId, positionId) as never, leadId, {
+        stage: 'contacted',
+        expectedVersion: 0,
+      }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REQUIRED' });
+    expect(changeLeadStage).not.toHaveBeenCalled();
+    expect(checkReplay).not.toHaveBeenCalled();
+  });
+
+  it('повтор с тем же Idempotency-Key возвращает сохранённый ответ, не вызывает сервис повторно', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const changeLeadStage = jest.fn();
+    const checkReplay = jest.fn().mockResolvedValue({
+      responseStatus: 200,
+      responseBody: { id: leadId.toString(), stage: 'contacted', version: 1 },
+    });
+    const controller = new LeadController(
+      { changeLeadStage } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      { checkReplay } as unknown as IdempotencyService,
+    );
+
+    const result = await controller.changeStage(
+      makeRequest(organizationId, positionId) as never,
+      leadId,
+      { stage: 'contacted', expectedVersion: 0 },
+      'same-key',
+    );
+
+    expect(result).toEqual({ id: leadId.toString(), stage: 'contacted', version: 1 });
+    expect(changeLeadStage).not.toHaveBeenCalled();
+  });
+
+  it('пробрасывает leadId/stage/expectedVersion + actor/organization из tenantContext, с idempotencyKey', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const changeLeadStage = jest.fn().mockResolvedValue({ id: leadId.toString(), stage: 'contacted', version: 1 });
+    const controller = new LeadController(
+      { changeLeadStage } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      { checkReplay: jest.fn().mockResolvedValue(null) } as unknown as IdempotencyService,
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.changeStage(
+      req as never,
+      leadId,
+      { stage: 'contacted', expectedVersion: 0 },
+      'key-1',
+    );
+
+    expect(changeLeadStage).toHaveBeenCalledWith({
+      leadId,
+      newStage: 'contacted',
+      expectedVersion: 0,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      expectedOrganizationId: organizationId,
+      requiredOwnerPositionId: undefined,
+      correlationId: undefined,
+      idempotencyKey: 'key-1',
+      idempotencyRequestBody: {
+        leadId: leadId.toString(),
+        stage: 'contacted',
+        expectedVersion: 0,
+      },
+    });
+  });
+});
+
 describe('LeadController — read scope', () => {
   it('сужает GET /leads для own-grant до текущей Position прямо в CRM query', async () => {
     const organizationId = new Types.ObjectId();

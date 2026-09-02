@@ -188,6 +188,12 @@ export class LeadController {
    * PolicyEvaluatorService.scopeCovers) — own-scope сужение до конкретного
    * лида делает ownerFilterForAction ниже, тот же паттерн, что уже
    * применяется для read.
+   *
+   * Idempotency-Key ОБЯЗАТЕЛЕН — тот же паттерн, что createLead выше:
+   * стадия лида напрямую участвует в отчётах по воронке и метриках
+   * менеджеров, повтор запроса (клиентский таймаут + ретрай) не должен
+   * применить смену стадии дважды и задвоить запись в истории переходов
+   * (leadEventRepository.append — event-based история).
    */
   @Patch(':leadId/stage')
   @HttpCode(200)
@@ -196,17 +202,41 @@ export class LeadController {
     @Req() req: FastifyRequest,
     @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
     @Body() dto: ChangeLeadStageDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const idempotencyRequestBody = {
+      leadId: leadId.toString(),
+      stage: dto.stage,
+      expectedVersion: dto.expectedVersion,
+    };
+
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'changeLeadStage',
+      key: idempotencyKey,
+      requestBody: idempotencyRequestBody,
+    });
+    if (replay) {
+      return replay.responseBody;
+    }
+
     return this.crmService.changeLeadStage({
       leadId,
       newStage: dto.stage,
       expectedVersion: dto.expectedVersion,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId,
       expectedOrganizationId: new Types.ObjectId(tenantContext.organizationId),
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'changeStage'),
       correlationId: req.correlationId,
+      idempotencyKey,
+      idempotencyRequestBody,
     });
   }
 

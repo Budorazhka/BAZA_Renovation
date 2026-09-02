@@ -993,6 +993,8 @@ describe('CrmService.changeLeadStage', () => {
       actorIdentityId,
       expectedOrganizationId: organizationId,
       correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: {},
     });
 
     expect(changeStageSpy).toHaveBeenCalledWith(lead._id, organizationId, lead.version, 'qualified', ['contacted'], expect.anything());
@@ -1021,6 +1023,8 @@ describe('CrmService.changeLeadStage', () => {
         actorIdentityId: new Types.ObjectId(),
         expectedOrganizationId: new Types.ObjectId(),
         correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: {},
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
@@ -1059,6 +1063,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).resolves.toBeDefined();
     });
@@ -1087,6 +1093,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
       expect(changeStageSpy).not.toHaveBeenCalled();
@@ -1109,6 +1117,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(changeStageSpy).not.toHaveBeenCalled();
@@ -1139,6 +1149,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
@@ -1164,6 +1176,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
     });
@@ -1189,6 +1203,8 @@ describe('CrmService.changeLeadStage', () => {
           actorIdentityId: new Types.ObjectId(),
           expectedOrganizationId: organizationId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -1218,6 +1234,8 @@ describe('CrmService.changeLeadStage', () => {
         expectedOrganizationId: organizationId,
         requiredOwnerPositionId: managerPositionId,
         correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: {},
       });
 
       expect(findByIdForOrganizationSpy).toHaveBeenCalledWith(lead._id, organizationId, managerPositionId);
@@ -1240,6 +1258,8 @@ describe('CrmService.changeLeadStage', () => {
           expectedOrganizationId: organizationId,
           requiredOwnerPositionId: managerPositionId,
           correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
