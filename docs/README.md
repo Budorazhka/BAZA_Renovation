@@ -101,6 +101,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [admin-control-plane.md](operations/admin-control-plane.md) — панель: аккаунты, гранты, аудит.
 - [admin-duplicate-candidates-review.md](operations/admin-duplicate-candidates-review.md) — очередь модерации дублей.
 - [first-super-admin-bootstrap.md](operations/first-super-admin-bootstrap.md) — создание первого супер-админа.
+- [team-user-atomicity.md](operations/team-user-atomicity.md) — создание сотрудника: позиция, гранты, назначение и профиль одной транзакцией.
 
 ### ЖК и шахматка
 

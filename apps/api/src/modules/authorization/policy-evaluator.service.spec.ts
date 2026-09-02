@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { PolicyEvaluatorService } from './policy-evaluator.service';
 import type { PermissionGrantRepository } from './repository/permission-grant.repository';
 import type { PermissionGrantDocument } from './schemas/permission-grant.schema';
@@ -266,7 +266,19 @@ describe('PolicyEvaluatorService.grantMany', () => {
     await evaluator.grantMany(items);
 
     expect(createManySpy).toHaveBeenCalledTimes(1);
-    expect(createManySpy).toHaveBeenCalledWith(items);
+    // Сессия прокидывается как есть: без неё гранты писались бы вне
+    // транзакции вызывающего и переживали бы её откат.
+    expect(createManySpy).toHaveBeenCalledWith(items, undefined);
+  });
+
+  it('прокидывает сессию транзакции в репозиторий', async () => {
+    const createManySpy = jest.fn().mockResolvedValue(undefined);
+    const evaluator = new PolicyEvaluatorService({ createMany: createManySpy } as unknown as PermissionGrantRepository);
+    const session = { id: 'session' } as unknown as ClientSession;
+
+    await evaluator.grantMany([], session);
+
+    expect(createManySpy).toHaveBeenCalledWith([], session);
   });
 });
 

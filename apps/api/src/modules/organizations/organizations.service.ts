@@ -2,7 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { InjectConnection } from '@nestjs/mongoose';
 import { randomBytes, createHash } from 'node:crypto';
 import { ClientSession, Connection, Types } from 'mongoose';
-import { runInTransaction } from '../../shared/transactions/run-in-transaction';
+import { runInTransaction, runInTransactionOrReuse } from '../../shared/transactions/run-in-transaction';
 import { OrganizationRepository } from './repository/organization.repository';
 import { PositionRepository } from './repository/position.repository';
 import { PositionAssignmentRepository } from './repository/position-assignment.repository';
@@ -52,7 +52,11 @@ export class OrganizationsService {
    * модуля, ADR-001 модульная граница; риск временного рассинхрона
    * безопаснее в сторону недодоступа, не сверхдоступа).
    */
-  private async grantDefaultRolePermissions(positionId: Types.ObjectId, fixedRole: FixedRole): Promise<void> {
+  private async grantDefaultRolePermissions(
+    positionId: Types.ObjectId,
+    fixedRole: FixedRole,
+    session?: ClientSession,
+  ): Promise<void> {
     const defaults = DEFAULT_ROLE_GRANTS[fixedRole];
     // grantMany — один insertMany вместо N последовательных round-trips
     // (second-opinion ревью: до 21 записи для owner).
@@ -64,6 +68,7 @@ export class OrganizationsService {
         action: grant.action,
         scope: grant.scope,
       })),
+      session,
     );
   }
 
@@ -240,9 +245,11 @@ export class OrganizationsService {
     organizationId: Types.ObjectId;
     fixedRole: FixedRole;
     parentPositionId?: Types.ObjectId;
+    /** Сессия внешней транзакции: позиция и её стартовые гранты обязаны появляться и исчезать вместе. */
+    session?: ClientSession;
   }): Promise<Types.ObjectId> {
-    const position = await this.positionRepository.create(params);
-    await this.grantDefaultRolePermissions(position._id, params.fixedRole);
+    const position = await this.positionRepository.create(params, params.session);
+    await this.grantDefaultRolePermissions(position._id, params.fixedRole, params.session);
     return position._id;
   }
 
@@ -311,8 +318,16 @@ export class OrganizationsService {
     actorIdentityId: Types.ObjectId;
     expectedOrganizationId: Types.ObjectId;
     correlationId: string;
+    /**
+     * Сессия внешней транзакции. Когда она передана, назначение становится
+     * шагом более крупной команды (createOccupiedPosition) и не коммитится
+     * само по себе, а выдачу ProductAccess делает вызывающий — после
+     * коммита, как того требует ADR-001: `product_accesses` принадлежит
+     * Identity-модулю и внутри транзакции Organizations ей не место.
+     */
+    session?: ClientSession;
   }): Promise<Types.ObjectId> {
-    const assignmentId = await runInTransaction(this.connection, async (session) => {
+    const assignmentId = await runInTransactionOrReuse(this.connection, params.session, async (session) => {
       // findByIdForOrganization (не findById) — session-aware чтение внутри
       // транзакции, не рассинхронизированное с последующими write в том же
       // session (second-opinion ревью: findById без session — потенциальный
@@ -404,7 +419,13 @@ export class OrganizationsService {
     // у revoke: если grantErpAccess упадёт после успешного assignOccupant,
     // человек просто ещё на несколько мгновений не сможет залогиниться в
     // ERP — не "получит доступ, которого не должно быть".
-    await this.authService.grantErpAccess(params.identityId);
+    //
+    // Внутри внешней транзакции этот шаг пропускается: она ещё не
+    // закоммичена, и «после коммита» здесь означало бы «до». Вызывающий
+    // делает его сам, когда транзакция завершится.
+    if (!params.session) {
+      await this.authService.grantErpAccess(params.identityId);
+    }
 
     return assignmentId;
   }

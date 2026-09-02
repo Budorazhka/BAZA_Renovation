@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
+import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { PositionRepository } from './repository/position.repository';
 import { PositionAssignmentRepository } from './repository/position-assignment.repository';
 import { PositionProfileRepository, type PositionProfileFields } from './repository/position-profile.repository';
@@ -70,6 +72,7 @@ export class TeamService {
     private readonly authService: AuthService,
     private readonly mediaService: MediaService,
     private readonly organizationsService: OrganizationsService,
+    @InjectConnection() private readonly connection: Connection,
   ) {}
 
   /**
@@ -197,24 +200,54 @@ export class TeamService {
     occupantDisplayName: string;
     profile: PositionProfileFields;
   }): Promise<TeamUserView> {
+    // Identity создаётся ВНЕ транзакции и раньше остальных шагов: `identities`
+    // принадлежит Identity-модулю, и запись в неё изнутри транзакции
+    // Organizations нарушала бы ADR-001 — тот же принцип, по которому
+    // grantErpAccess вынесен за коммит, а assignOccupantByEmail резолвит
+    // identity двухфазно.
     const identityId = await this.authService.registerIdentity({ login: params.loginEmail, password: params.password });
 
-    const positionId = await this.organizationsService.createVacantPosition({
-      organizationId: params.organizationId,
-      fixedRole: params.fixedRole,
-      parentPositionId: params.managerId ?? undefined,
+    // Всё, что принадлежит Organizations, — одной транзакцией. Раньше это
+    // были четыре последовательные команды без общей границы: падение на
+    // середине оставляло вакантную позицию со стартовыми грантами, за
+    // которой нет человека, или занятую позицию без профиля. Ни то, ни
+    // другое не видно из интерфейса как ошибка — выглядит как настоящий
+    // состав команды.
+    const positionId = await runInTransaction(this.connection, async (session) => {
+      const createdPositionId = await this.organizationsService.createVacantPosition({
+        organizationId: params.organizationId,
+        fixedRole: params.fixedRole,
+        parentPositionId: params.managerId ?? undefined,
+        session,
+      });
+
+      await this.organizationsService.assignOccupant({
+        positionId: createdPositionId,
+        identityId,
+        occupantDisplayName: params.occupantDisplayName,
+        actorIdentityId: params.actorIdentityId,
+        expectedOrganizationId: params.organizationId,
+        correlationId: params.correlationId,
+        session,
+      });
+
+      await this.positionProfileRepository.create(
+        createdPositionId,
+        params.organizationId,
+        params.profile,
+        session,
+      );
+
+      return createdPositionId;
     });
 
-    await this.organizationsService.assignOccupant({
-      positionId,
-      identityId,
-      occupantDisplayName: params.occupantDisplayName,
-      actorIdentityId: params.actorIdentityId,
-      expectedOrganizationId: params.organizationId,
-      correlationId: params.correlationId,
-    });
-
-    await this.positionProfileRepository.create(positionId, params.organizationId, params.profile);
+    // ProductAccess — коллекция Identity-модуля, поэтому после коммита, а не
+    // внутри него (ADR-001). Внутри транзакции assignOccupant этот шаг
+    // пропускает и оставляет вызывающему: «после коммита» имеет смысл только
+    // здесь. Если шаг упадёт, человек несколько мгновений не сможет войти в
+    // ERP — это безопасная сторона отказа, обратная («доступ есть, позиции
+    // нет») была бы небезопасной.
+    await this.authService.grantErpAccess(identityId);
 
     const view = await this.ensureSelf(params.organizationId, positionId);
     return view!;

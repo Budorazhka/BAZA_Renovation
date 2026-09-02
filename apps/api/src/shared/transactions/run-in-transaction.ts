@@ -13,6 +13,26 @@ import { Connection, ClientSession } from 'mongoose';
  * паттерна, где конкурентные транзакции ожидаемо получают write conflict
  * и должны повторяться, не падать с ошибкой наружу.
  */
+/**
+ * Выполнить работу в уже открытой транзакции, если сессия передана, и в новой,
+ * если нет.
+ *
+ * Нужно там, где операция вызывается и сама по себе (HTTP-ручка), и как шаг
+ * более крупной атомарной команды. Без этого шаг открывал бы вложенную
+ * транзакцию: она коммитится независимо, то есть внешний откат её уже не
+ * отменит — атомарность была бы мнимой.
+ */
+export async function runInTransactionOrReuse<T>(
+  connection: Connection,
+  session: ClientSession | undefined,
+  work: (session: ClientSession) => Promise<T>,
+): Promise<T> {
+  if (session) {
+    return work(session);
+  }
+  return runInTransaction(connection, work);
+}
+
 export async function runInTransaction<T>(
   connection: Connection,
   work: (session: ClientSession) => Promise<T>,
