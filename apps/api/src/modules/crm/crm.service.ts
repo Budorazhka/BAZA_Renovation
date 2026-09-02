@@ -130,6 +130,7 @@ export interface CrmTaskReadModel {
   contactId: string | null;
   completedAt: string | null;
   completedByPositionId: string | null;
+  createdByPositionId: string | null;
   version: number;
   createdAt: string;
   updatedAt: string | null;
@@ -855,6 +856,9 @@ export class CrmService {
           entityId: params.entityId,
           isAutomatic: params.isAutomatic,
           triggerType: params.triggerType,
+          // Создателя не принимаем из запроса: он берётся из серверного
+          // TenantContext, иначе автора задачи можно было бы подделать.
+          createdByPositionId: params.actorPositionId,
         },
         session,
       );
@@ -2758,6 +2762,7 @@ export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     contactId: task.contactId ? task.contactId.toString() : null,
     completedAt: task.completedAt ? task.completedAt.toISOString() : null,
     completedByPositionId: task.completedByPositionId ? task.completedByPositionId.toString() : null,
+    createdByPositionId: task.createdByPositionId ? task.createdByPositionId.toString() : null,
     version: task.version ?? 0,
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,

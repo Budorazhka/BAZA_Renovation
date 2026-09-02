@@ -95,6 +95,15 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
     expect(view.startAt).toBe('2026-09-02T08:00:00.000Z');
   });
 
+  it('создатель попадает в модель чтения — экран показывает «Создал»', () => {
+    const createdBy = new Types.ObjectId();
+
+    expect(toTaskReadModel(makeTask({ createdByPositionId: createdBy } as Partial<TaskDocument>)).createdByPositionId).toBe(
+      createdBy.toString(),
+    );
+    expect(toTaskReadModel(makeTask()).createdByPositionId).toBeNull();
+  });
+
   it('задача, созданная до расширения модели, читается без падения', () => {
     // У старых документов новых полей физически нет — читатель обязан это
     // переживать, иначе расширение модели ломает уже существующие данные.
