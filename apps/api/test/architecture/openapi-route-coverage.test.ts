@@ -135,6 +135,16 @@ const CONTRACT_GAPS: Record<string, string> = {
     'управление составом команды: позиции, назначения, статусы, аватары',
   'ПРОБЕЛ: POST /team-users/positions/{positionId}/vacate':
     'управление составом команды: позиции, назначения, статусы, аватары',
+
+  // property-assets.controller.ts / public-complaint.controller.ts / admin-complaint.controller.ts
+  'ПРОБЕЛ: GET /property-assets/{assetId}/revisions':
+    'ADMIN-OPS-001/недельная история версий карточки — новый эндпоинт этого прохода, контракт ещё не описан',
+  'ПРОБЕЛ: POST /public/listings/{slug}/complaints':
+    'ADMIN-OPS-001/очередь жалоб — новый эндпоинт этого прохода, контракт ещё не описан',
+  'ПРОБЕЛ: GET /admin/complaints':
+    'ADMIN-OPS-001/очередь жалоб — новый эндпоинт этого прохода, контракт ещё не описан',
+  'ПРОБЕЛ: POST /admin/complaints/{complaintId}/resolve':
+    'ADMIN-OPS-001/очередь жалоб — новый эндпоинт этого прохода, контракт ещё не описан',
 };
 
 function listControllers(dir: string): string[] {
@@ -233,6 +243,6 @@ describe('Соответствие OpenAPI-контракта фактическ
   it('размер долга зафиксирован числом и молча вырасти не может', () => {
     // Число живёт здесь, а не выводится из длины реестра: иначе оно росло бы
     // вместе с ним и ничего не сторожило.
-    expect(Object.keys(CONTRACT_GAPS)).toHaveLength(30);
+    expect(Object.keys(CONTRACT_GAPS)).toHaveLength(34);
   });
 });

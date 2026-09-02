@@ -49,6 +49,7 @@ const INTENTIONALLY_UNAUTHORIZED: Record<string, string> = {
   'GET /public/listings/:slug': 'публичная карточка листинга',
   'POST /public/developments/:slug/reveal-contact': 'публичное раскрытие контакта: анонимный посетитель по определению; защищено rate-limit и своей идемпотентностью',
   'POST /public/listings/:slug/reveal-contact': 'то же для листинга: анонимное раскрытие контакта, rate-limit и собственная запись идемпотентности',
+  'POST /public/listings/:slug/complaints': 'ADMIN-OPS-001: подача жалобы анонимным посетителем по определению (жалоба сама по себе не даёт прав ни над чем); защищено IpRateLimitGuard',
 };
 
 function listControllers(dir: string): string[] {

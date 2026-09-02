@@ -150,6 +150,8 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /public/developments/:slug/reveal-contact':
     'своя запись идемпотентности (public-reveal-idempotency-record)',
   'POST /public/listings/:slug/reveal-contact': 'своя запись идемпотентности',
+  'POST /public/listings/:slug/complaints':
+    'анонимная non-critical подача, защищена IpRateLimitGuard; повторная отправка создаёт вторую запись pending-жалобы, но не искажает CRM-отчётность (в отличие от leads/deals/tasks) — admin резолюцирует каждую независимо, дубль не вводит в заблуждение о состоянии listing',
 
   // --- Админ ---
   'POST /admin/accounts/:adminAccountId/deactivate': 'условный update по статусу',
@@ -158,6 +160,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /admin/accounts/:adminAccountId/grants/:grantId/revoke': 'условный update гранта',
   'POST /admin/duplicate-candidates/:duplicateCandidateId/confirm': 'условный update кандидата',
   'POST /admin/publications/:publicationId/unpublish': 'условный update (conventions.md §8)',
+  'POST /admin/complaints/:complaintId/resolve': 'условный update по status:pending (CAS), повтор с уже резолюцированной жалобой — 409',
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
