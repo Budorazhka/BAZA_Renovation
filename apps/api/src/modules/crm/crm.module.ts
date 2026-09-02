@@ -41,6 +41,7 @@ import { OrganizationsModule } from '../organizations/organizations.module';
 import { PublicRevealIdempotencyModule } from '../../shared/idempotency/public-reveal-idempotency.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
+import { MediaModule } from '../media/media.module';
 import { OutboxModule } from '../outbox/outbox.module';
 
 @Module({
@@ -64,6 +65,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     IdempotencyModule,
     RateLimitModule,
     OutboxModule,
+    MediaModule,
   ],
   controllers: [
     CrmController,

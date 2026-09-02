@@ -37,5 +37,6 @@ export const MEDIA_PURPOSE_BUCKET: Record<string, 'private' | 'public'> = {
   agency_document: 'private',
   profile_avatar: 'public',
   property_photo: 'public',
+  task_attachment: 'private',
 };
 

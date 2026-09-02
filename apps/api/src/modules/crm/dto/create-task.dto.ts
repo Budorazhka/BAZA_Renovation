@@ -15,14 +15,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import {
-  TASK_CATEGORIES,
-  TASK_ENTITY_TYPES,
-  TASK_PRIORITIES,
-  type TaskCategory,
-  type TaskEntityType,
-  type TaskPriority,
-} from '../schemas/task.schema';
+import { TASK_CATEGORIES, type TaskCategory } from '../schemas/task.schema';
 
 /** Подзадача. `id` генерирует клиент — он же переставляет их локально до сохранения. */
 export class CreateTaskSubtaskDto {
@@ -39,6 +32,17 @@ export class CreateTaskSubtaskDto {
   @IsOptional()
   @IsBoolean()
   done?: boolean;
+}
+
+/** Вложение: уже загруженный и подтверждённый MediaAsset плюс имя для экрана. */
+export class CreateTaskAttachmentDto {
+  @IsMongoId()
+  assetId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  fileName!: string;
 }
 
 export class CreateTaskDto {
@@ -72,9 +76,14 @@ export class CreateTaskDto {
   @IsDateString()
   startAt?: string;
 
+  /** Признаки матрицы Эйзенхауэра. По умолчанию — «важно, не срочно», как в форме. */
   @IsOptional()
-  @IsIn(TASK_PRIORITIES)
-  priority?: TaskPriority;
+  @IsBoolean()
+  isUrgent?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isImportant?: boolean;
 
   @IsOptional()
   @IsIn(TASK_CATEGORIES)
@@ -99,27 +108,18 @@ export class CreateTaskDto {
   @Type(() => CreateTaskSubtaskDto)
   subtasks?: CreateTaskSubtaskDto[];
 
+  /**
+   * Файлы загружаются заранее через POST /media/upload-intent с purpose
+   * task_attachment и подтверждаются; сюда приходят только ссылки. Сервер
+   * проверяет, что каждый asset принадлежит организации и подтверждён.
+   */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsString({ each: true })
-  @MaxLength(255, { each: true })
-  attachmentFileNames?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskAttachmentDto)
+  attachments?: CreateTaskAttachmentDto[];
 
-  @IsOptional()
-  @IsIn(TASK_ENTITY_TYPES)
-  entityType?: TaskEntityType;
-
-  @IsOptional()
-  @IsMongoId()
-  entityId?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  isAutomatic?: boolean;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  triggerType?: string;
+  // entityType/entityId не принимаются: связь выводится из leadId/contactId.
+  // isAutomatic/triggerType не принимаются: провенанс ставит только сервер.
 }

@@ -10,6 +10,11 @@ export type TaskPriorityV2 = 'low' | 'medium' | 'high' | 'critical'
 export type TaskCategoryV2 = 'work' | 'personal'
 export type TaskEntityTypeV2 = 'lead' | 'client' | 'deal' | 'property' | 'booking' | 'none'
 
+export interface TaskAttachmentV2 {
+  assetId: string
+  fileName: string
+}
+
 export interface TaskSubtaskV2 {
   id: string
   title: string
@@ -25,11 +30,18 @@ export interface TaskV2 {
   /** Срок, ISO-момент времени. Разделение на дату и время — забота представления. */
   dueAt: string | null
   startAt: string | null
+  /** Признаки матрицы Эйзенхауэра — то, что сервер хранит. */
+  isUrgent: boolean
+  isImportant: boolean
+  /** Квадрант для экрана. Сервер выводит из признаков, не хранит. */
   priority: TaskPriorityV2
   taskCategory: TaskCategoryV2
   colorHex: string | null
   reminderOffsetsMinutes: number[]
   subtasks: TaskSubtaskV2[]
+  /** Ссылки на подтверждённые файлы с именами для экрана. */
+  attachments: TaskAttachmentV2[]
+  /** Имена вложений — сервер выводит из attachments. */
   attachmentFileNames: string[]
   entityType: TaskEntityTypeV2
   entityId: string | null
@@ -74,14 +86,14 @@ export interface CreateTaskV2Payload {
   description?: string
   dueAt?: string
   startAt?: string
-  priority?: TaskPriorityV2
+  isUrgent?: boolean
+  isImportant?: boolean
   taskCategory?: TaskCategoryV2
   colorHex?: string | null
   reminderOffsetsMinutes?: number[]
   subtasks?: TaskSubtaskV2[]
-  attachmentFileNames?: string[]
-  entityType?: TaskEntityTypeV2
-  entityId?: string
+  /** Файлы загружены заранее (mediaApiV2.uploadFile, purpose task_attachment); здесь только ссылки. */
+  attachments?: TaskAttachmentV2[]
   assignedPositionId?: string
   leadId?: string
   contactId?: string

@@ -1,3 +1,4 @@
+import { MediaService } from '../media/media.service';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CrmService } from './crm.service';
@@ -45,6 +46,7 @@ function createTestCrmService(overrides: {
   dealRepository?: unknown;
   dealEventRepository?: unknown;
   outboxService?: unknown;
+  mediaService?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -74,6 +76,9 @@ function createTestCrmService(overrides: {
     (overrides.dealRepository ?? {}) as unknown as DealRepository,
     (overrides.dealEventRepository ?? {}) as unknown as DealEventRepository,
     (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as unknown as OutboxService,
+    (overrides.mediaService ?? {
+      getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()),
+    }) as unknown as MediaService,
   );
 }
 

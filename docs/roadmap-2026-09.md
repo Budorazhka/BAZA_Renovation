@@ -178,6 +178,17 @@ CRM, и карточные экраны — визуально остаётся 
 - ~~`WidgetNextActions` остался на `tasks-mock`~~ — закрыто, мок задач больше
   не импортируется нигде. Оба — [erp-tasks-mock-debt-closed.md](operations/erp-tasks-mock-debt-closed.md).
 
+**Аудит правила (02.09, вечер).** Независимый разбор
+([screen-as-spec-boundary-audit-2026-09-02.md](architecture/screen-as-spec-boundary-audit-2026-09-02.md))
+показал, что правило верное, а применено было к схеме хранения вместо контракта
+чтения. Три вердикта из шести закрыты сразу
+([task-model-audit-followup.md](operations/task-model-audit-followup.md)):
+приоритет парой признаков, связь без дубля, провенанс от сервера. Четвёртый —
+вложения как ссылки на `MediaAsset` вместо имён без файлов —
+[task-attachments-media-assets.md](operations/task-attachments-media-assets.md).
+Осталось: напоминания (продуктовая развилка), видимость личных задач на
+сервере, скачивание вложений из приватного бакета.
+
 Третий срез закрыл обратную асимметрию: сервер умел больше, чем позволял экран.
 Взять в работу, отметить подзадачу и сменить исполнителя теперь можно из
 карточки — [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md).

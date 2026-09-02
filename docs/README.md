@@ -72,6 +72,8 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [erp-tasks-live-api.md](operations/erp-tasks-live-api.md) — реестр задач ERP снят с мока: чтение, завершение и создание через Platform API.
 - [erp-tasks-mock-debt-closed.md](operations/erp-tasks-mock-debt-closed.md) — статус «В работе» стал достижим, виджет дашборда снят с мока, `hasOpenNextAction` перестал гаснуть при взятии задачи в работу.
 - [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
+- [task-model-audit-followup.md](operations/task-model-audit-followup.md) — три вердикта аудита применены: приоритет парой признаков, связь без дубля, провенанс только от сервера.
+- [task-attachments-media-assets.md](operations/task-attachments-media-assets.md) — вложения задачи стали файлами: ссылки на подтверждённые `MediaAsset` вместо имён без файлов.
 - [crm-pipeline-activity-timeline.md](operations/crm-pipeline-activity-timeline.md) — таймлайн активности, детект залипших лидов.
 - [crm-deal-core.md](operations/crm-deal-core.md) — ядро сделок, оптимистическая блокировка.
 - [deal-client-reassign.md](operations/deal-client-reassign.md) — передача сделки, включение гранта `client.reassign`.
@@ -128,6 +130,8 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [consolidation-2026-08-31.md](operations/consolidation-2026-08-31.md) — сведение веток в `codex/integration`.
 
 ## Прочее
+
+- [architecture/screen-as-spec-boundary-audit-2026-09-02.md](architecture/screen-as-spec-boundary-audit-2026-09-02.md) — аудит правила «экран — спецификация»: где граница между контрактом чтения и схемой хранения, вердикты по двенадцати полям задачи, предсказания к 02.11.
 
 - [discovery/figma-local-handoff.md](discovery/figma-local-handoff.md) — передача макетов.
 - [codex/plans/](codex/plans/) — планы отдельных работ, писавшиеся до реализации.

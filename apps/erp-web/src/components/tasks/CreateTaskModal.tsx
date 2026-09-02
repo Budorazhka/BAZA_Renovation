@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { EisenhowerChips } from '@/components/shared/EisenhowerChips'
 import { useAuth } from '@/context/AuthContext'
+import { MediaUploadError, mediaApiV2 } from '@/services/mediaApiV2'
 import { useLeads } from '@/context/LeadsContext'
 import { mockPhoneForLead } from '@/lib/lead-contact-mock'
 import { cn } from '@/lib/utils'
@@ -125,7 +126,9 @@ export function CreateTaskModal({
   const [endTime, setEndTime] = useState('19:00')
   const [subtaskDrafts, setSubtaskDrafts] = useState<string[]>([])
   const [newSubtask, setNewSubtask] = useState('')
-  const [attachmentNames, setAttachmentNames] = useState<string[]>([])
+  // Файлы, а не имена: до 02.09.2026 форма выбрасывала тела и отправляла
+  // строки — «демо, без загрузки», как честно называл это легаси-тип.
+  const [attachmentFiles, setAttachmentFiles] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -148,7 +151,7 @@ export function CreateTaskModal({
     setEndTime('19:00')
     setSubtaskDrafts([])
     setNewSubtask('')
-    setAttachmentNames([])
+    setAttachmentFiles([])
     setError(null)
     setSubmitting(false)
   }, [open, currentUser?.id])
@@ -225,10 +228,7 @@ export function CreateTaskModal({
   function onFilesPick(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files?.length) return
-    const names = Array.from(files)
-      .slice(0, 10)
-      .map(f => f.name)
-    setAttachmentNames(names)
+    setAttachmentFiles(Array.from(files).slice(0, 10))
     e.target.value = ''
   }
 
@@ -298,7 +298,7 @@ export function CreateTaskModal({
       colorHex: colorHex ?? undefined,
       reminderOffsetsMinutes: reminders.length ? reminders : undefined,
       subtasks,
-      attachmentFileNames: attachmentNames.length ? attachmentNames : undefined,
+      attachmentFileNames: attachmentFiles.length ? attachmentFiles.map(file => file.name) : undefined,
       entityType,
       entityId,
       entityLabel,
@@ -309,12 +309,25 @@ export function CreateTaskModal({
     setSubmitting(true)
     setError(null)
     try {
-      await onCreate(row)
+      // Файлы уходят в хранилище до создания задачи: задача ссылается на
+      // подтверждённые asset'ы, и сервер отклонит ссылку на файл, которого
+      // нет. Сбой любого файла — отказ формы, а не задача «с вложением»,
+      // которого не существует.
+      const attachments: Array<{ assetId: string; fileName: string }> = []
+      for (const file of attachmentFiles) {
+        const { assetId } = await mediaApiV2.uploadFile(file, 'task_attachment')
+        attachments.push({ assetId, fileName: file.name })
+      }
+      await onCreate({ ...row, attachments })
       onOpenChange(false)
     } catch (createError) {
       // Отказ сервера остаётся на экране: закрыть модалку значило бы показать
       // пользователю, что задача создана, когда её нет.
-      setError(createError instanceof Error ? createError.message : 'Задача не создана')
+      if (createError instanceof MediaUploadError) {
+        setError(`Файл «${createError.fileName}» не загружен: ${createError.message}. Задача не создана.`)
+      } else {
+        setError(createError instanceof Error ? createError.message : 'Задача не создана')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -621,8 +634,8 @@ export function CreateTaskModal({
             >
               <Paperclip className="h-3.5 w-3.5" />
               {t('tasks.createTaskModal.прикрепить_файлы_мак')}</label>
-            {attachmentNames.length > 0 && (
-              <p className="text-[11px] text-[color:var(--app-text)]/55">{t('tasks.createTaskModal.выбрано')}{attachmentNames.join(', ')}</p>
+            {attachmentFiles.length > 0 && (
+              <p className="text-base text-[color:var(--app-text)]/80">{t('tasks.createTaskModal.выбрано')}{attachmentFiles.map(file => file.name).join(', ')}</p>
             )}
           </div>
 

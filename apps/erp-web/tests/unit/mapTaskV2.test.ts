@@ -32,6 +32,8 @@ function serverTask(overrides: Partial<TaskV2> = {}): TaskV2 {
     status: 'open',
     dueAt: '2026-09-10T09:00:00.000Z',
     startAt: null,
+    isUrgent: false,
+    isImportant: true,
     priority: 'medium',
     taskCategory: 'work',
     colorHex: null,
@@ -176,18 +178,51 @@ describe('buildCreateTaskPayload', () => {
     // Лид выбран в старой CRM: его id не существует в Platform, и задача
     // уходит вообще без связи, а не со связью в никуда.
     const payload = buildCreateTaskPayload(formTask, { assignedPositionId: 'pos-1' })
-    expect(payload.entityType).toBe('none')
-    expect(payload.entityId).toBeUndefined()
     expect(payload.leadId).toBeUndefined()
+    // Связь идёт одной ссылкой — второй пары полей в теле запроса нет.
+    expect(payload).not.toHaveProperty('entityType')
+    expect(payload).not.toHaveProperty('entityId')
   })
 
-  it('сохраняет связь, когда идентификатор лида известен новому API', () => {
+  it('сохраняет связь одной ссылкой, когда идентификатор лида известен новому API', () => {
     const payload = buildCreateTaskPayload(formTask, {
       assignedPositionId: 'pos-1',
       leadId: '68b6a1f2c3d4e5f6a7b8c9d0',
     })
-    expect(payload.entityType).toBe('lead')
     expect(payload.leadId).toBe('68b6a1f2c3d4e5f6a7b8c9d0')
+  })
+
+  it('квадрант формы уходит на сервер парой признаков, обратимо', () => {
+    const flags = (priority: Task['priority']) => {
+      const payload = buildCreateTaskPayload({ ...formTask, priority }, {})
+      return [payload.isUrgent, payload.isImportant]
+    }
+    expect(flags('critical')).toEqual([true, true])
+    expect(flags('high')).toEqual([true, false])
+    expect(flags('medium')).toEqual([false, true])
+    expect(flags('low')).toEqual([false, false])
+    expect(buildCreateTaskPayload(formTask, {})).not.toHaveProperty('priority')
+  })
+
+  it('золотой пресет формы уходит на сервер как hex, а не как CSS-токен', () => {
+    // Сервер принимает только #rrggbb; токен var(--gold) давал 400 на
+    // создание задачи ровно при выборе золотой метки.
+    const payload = buildCreateTaskPayload({ ...formTask, colorHex: 'var(--gold)' }, {})
+    expect(payload.colorHex).toBe('#e6c364')
+  })
+
+  it('hex-цвет и отсутствие метки проходят без изменений', () => {
+    expect(buildCreateTaskPayload({ ...formTask, colorHex: '#60a5fa' }, {}).colorHex).toBe('#60a5fa')
+    expect(buildCreateTaskPayload({ ...formTask, colorHex: null }, {}).colorHex).toBeNull()
+  })
+
+  it('в тело уходят ссылки на файлы, а не имена без файлов', () => {
+    const payload = buildCreateTaskPayload(
+      { ...formTask, attachmentFileNames: ['договор.pdf'], attachments: [{ assetId: 'asset-1', fileName: 'договор.pdf' }] },
+      {},
+    )
+    expect(payload.attachments).toEqual([{ assetId: 'asset-1', fileName: 'договор.pdf' }])
+    expect(payload).not.toHaveProperty('attachmentFileNames')
   })
 
   it('переводит дату и время формы в момент времени', () => {

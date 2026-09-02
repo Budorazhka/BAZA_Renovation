@@ -22,6 +22,7 @@ const reassignMock = vi.fn()
 const createTaskMock = vi.fn()
 const listTeamMock = vi.fn()
 const toastErrorMock = vi.fn()
+let keyCounter = 1
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
@@ -40,8 +41,14 @@ vi.mock('@/components/layout/DashboardShell', () => ({
   DashboardShell: ({ children }: { children: React.ReactNode }) => createElement('div', null, children),
 }))
 
+// Модалка не рисуется, но её onCreate нужен: повтор отправки после отказа
+// проверяется именно через него.
+let capturedOnCreate: ((task: unknown) => Promise<void>) | null = null
 vi.mock('@/components/tasks/CreateTaskModal', () => ({
-  CreateTaskModal: () => null,
+  CreateTaskModal: (props: { onCreate: (task: unknown) => Promise<void> }) => {
+    capturedOnCreate = props.onCreate
+    return null
+  },
 }))
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: toastErrorMock } }))
@@ -55,7 +62,9 @@ vi.mock('@/services/tasksApiV2', () => ({
     reassign: reassignMock,
     create: createTaskMock,
   },
-  newIdempotencyKey: () => 'key-1',
+  // Каждый вызов даёт новый ключ — иначе проверки «тот же / другой ключ»
+  // проходили бы из-за мока, а не из-за поведения экрана.
+  newIdempotencyKey: () => `key-${keyCounter++}`,
 }))
 
 vi.mock('@/services/teamApi', () => ({
@@ -122,6 +131,7 @@ describe('TasksPage: действия над задачей', () => {
     reassignMock.mockReset()
     createTaskMock.mockReset()
     toastErrorMock.mockReset()
+    capturedOnCreate = null
     vi.resetModules()
   })
 
@@ -201,6 +211,118 @@ describe('TasksPage: действия над задачей', () => {
     })
 
     await waitFor(() => expect(reassignMock).toHaveBeenCalledWith('task-1', 3, 'pos-2'))
+  })
+
+  it('задача без срока не рисуется просроченной', async () => {
+    // Сервер сказал isOverdue:false, срока нет. Пустая строка в dueDate
+    // раньше проходила сравнение `'' < сегодня` и красила карточку красным.
+    listAllTasksMock.mockResolvedValue({
+      items: [serverTask({ dueAt: null, isOverdue: false })],
+      complete: true,
+    })
+    listTeamMock.mockResolvedValue(TEAM)
+    const { TasksPage } = await import('@/components/tasks/TasksPage')
+    render(createElement(TasksPage))
+
+    const due = await screen.findByText('Без срока')
+    expect((due as HTMLElement).style.color).not.toBe('rgb(252, 165, 165)')
+  })
+
+  it('просроченная задача остаётся выделенной — признак берётся у сервера', async () => {
+    listAllTasksMock.mockResolvedValue({
+      items: [serverTask({ isOverdue: true })],
+      complete: true,
+    })
+    listTeamMock.mockResolvedValue(TEAM)
+    const { TasksPage } = await import('@/components/tasks/TasksPage')
+    render(createElement(TasksPage))
+
+    // «Просрочена» — статус, выведенный из серверного isOverdue.
+    expect(await screen.findAllByText('Просрочена')).toBeTruthy()
+  })
+
+  it('повтор отправки той же формы идёт с тем же ключом идемпотентности', async () => {
+    // Сервер мог создать задачу и потерять ответ. Новый ключ на повторе создал
+    // бы вторую — ровно то, ради чего ключ и заведён.
+    await renderPage()
+    const formTask = {
+      id: 'local-1',
+      title: 'Перезвонить',
+      status: 'pending',
+      priority: 'medium',
+      assignedToId: 'pos-1',
+      assignedToName: 'Анна Первичкина',
+      createdByName: 'Анна Первичкина',
+      dueDate: '2026-09-10',
+      dueTime: '19:00',
+      taskCategory: 'work',
+      entityType: 'none',
+      isAutomatic: false,
+      createdAt: '2026-09-10',
+    }
+
+    createTaskMock.mockRejectedValueOnce({ response: { status: 500 } })
+    await expect(capturedOnCreate!(formTask)).rejects.toThrow()
+
+    createTaskMock.mockResolvedValueOnce(serverTask({ id: 'task-created' }))
+    await capturedOnCreate!(formTask)
+
+    const [firstKey, secondKey] = createTaskMock.mock.calls.map(call => call[1])
+    expect(secondKey).toBe(firstKey)
+  })
+
+  it('изменение содержимого формы даёт новый ключ — иначе сервер ответит конфликтом', async () => {
+    await renderPage()
+    const base = {
+      id: 'local-1',
+      title: 'Перезвонить',
+      status: 'pending',
+      priority: 'medium',
+      assignedToId: 'pos-1',
+      assignedToName: 'Анна Первичкина',
+      createdByName: 'Анна Первичкина',
+      dueDate: '2026-09-10',
+      dueTime: '19:00',
+      taskCategory: 'work',
+      entityType: 'none',
+      isAutomatic: false,
+      createdAt: '2026-09-10',
+    }
+
+    createTaskMock.mockRejectedValueOnce({ response: { status: 400 } })
+    await expect(capturedOnCreate!(base)).rejects.toThrow()
+
+    createTaskMock.mockResolvedValueOnce(serverTask({ id: 'task-created' }))
+    await capturedOnCreate!({ ...base, title: 'Перезвонить ещё раз' })
+
+    const [firstKey, secondKey] = createTaskMock.mock.calls.map(call => call[1])
+    expect(secondKey).not.toBe(firstKey)
+  })
+
+  it('после успеха следующая задача создаётся новым ключом', async () => {
+    await renderPage()
+    const formTask = {
+      id: 'local-1',
+      title: 'Перезвонить',
+      status: 'pending',
+      priority: 'medium',
+      assignedToId: 'pos-1',
+      assignedToName: 'Анна Первичкина',
+      createdByName: 'Анна Первичкина',
+      dueDate: '2026-09-10',
+      dueTime: '19:00',
+      taskCategory: 'work',
+      entityType: 'none',
+      isAutomatic: false,
+      createdAt: '2026-09-10',
+    }
+
+    createTaskMock.mockResolvedValue(serverTask({ id: 'task-created' }))
+    await capturedOnCreate!(formTask)
+    await capturedOnCreate!(formTask)
+
+    const [firstKey, secondKey] = createTaskMock.mock.calls.map(call => call[1])
+    expect(secondKey).not.toBe(firstKey)
   })
 
   it('у выполненной задачи кнопки смены статуса нет', async () => {

@@ -2210,7 +2210,14 @@ export interface components {
             updatedAt?: string | null;
             /** Format: date-time */
             startAt?: string | null;
-            /** @enum {string} */
+            /** @description Признак матрицы Эйзенхауэра — хранится */
+            isUrgent?: boolean;
+            /** @description Признак матрицы Эйзенхауэра — хранится */
+            isImportant?: boolean;
+            /**
+             * @description ВЫЧИСЛЯЕМОЕ из isUrgent/isImportant: critical = срочно и важно, high = срочно, medium = важно, low = ни то ни другое. Не порядковая шкала — high не «выше» medium.
+             * @enum {string}
+             */
             priority?: "low" | "medium" | "high" | "critical";
             /** @enum {string} */
             taskCategory?: "work" | "personal";
@@ -2222,11 +2229,23 @@ export interface components {
                 title: string;
                 done: boolean;
             }[];
+            /** @description Ссылки на подтверждённые MediaAsset'ы (purpose task_attachment) с именами для экрана */
+            attachments?: {
+                assetId: string;
+                fileName: string;
+            }[];
+            /** @description ВЫЧИСЛЯЕМОЕ из attachments — имена для экрана */
             attachmentFileNames?: string[];
-            /** @enum {string} */
+            /**
+             * @description ВЫЧИСЛЯЕМОЕ из leadId/contactId — одна связь, один источник правды
+             * @enum {string}
+             */
             entityType?: "lead" | "client" | "deal" | "property" | "booking" | "none";
+            /** @description ВЫЧИСЛЯЕМОЕ: leadId либо contactId */
             entityId?: string | null;
+            /** @description Провенанс — ставит только сервер */
             isAutomatic?: boolean;
+            /** @description Ссылка на правило, создавшее задачу; ставит только сервер */
             triggerType?: string | null;
             /** @description ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь. */
             isOverdue?: boolean;
@@ -2245,8 +2264,10 @@ export interface components {
             contactId?: string;
             /** Format: date-time */
             startAt?: string;
-            /** @enum {string} */
-            priority?: "low" | "medium" | "high" | "critical";
+            /** @description По умолчанию false */
+            isUrgent?: boolean;
+            /** @description По умолчанию true — как в форме */
+            isImportant?: boolean;
             /** @enum {string} */
             taskCategory?: "work" | "personal";
             colorHex?: string | null;
@@ -2256,12 +2277,11 @@ export interface components {
                 title: string;
                 done?: boolean;
             }[];
-            attachmentFileNames?: string[];
-            /** @enum {string} */
-            entityType?: "lead" | "client" | "deal" | "property" | "booking" | "none";
-            entityId?: string;
-            isAutomatic?: boolean;
-            triggerType?: string;
+            /** @description Файлы загружаются заранее через POST /media/upload-intent с purpose task_attachment и подтверждаются; сюда приходят только ссылки. Сервер проверяет принадлежность организации и статус verified. */
+            attachments?: {
+                assetId: string;
+                fileName: string;
+            }[];
         };
         /** @description НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign. */
         UpdateTaskRequest: {

@@ -21,6 +21,21 @@ import type { CreateTaskV2Payload, TaskV2 } from '@/types/tasksV2'
 export const UNKNOWN_VALUE = '—'
 
 /**
+ * Пресеты цвета в форме — CSS-значения экрана, а сервер хранит цвет как
+ * `#rrggbb` и другого не принимает. Золотой пресет в форме записан токеном
+ * `var(--gold)`: без перевода выбор золотой метки отвечал 400 на создание
+ * задачи (найдено аудитом 02.09.2026). Значение токена — из DESIGN.md.
+ */
+const CSS_COLOR_TOKENS: Record<string, string> = {
+  'var(--gold)': '#e6c364',
+}
+
+export function toStoredColor(colorHex: string | null | undefined): string | null {
+  if (!colorHex) return null
+  return CSS_COLOR_TOKENS[colorHex] ?? colorHex
+}
+
+/**
  * Отменённые задачи экран не показывает: состояния «Отменена» в интерфейсе
  * нет, а рисовать её как «Новая» значило бы соврать. Отбор вынесен отдельной
  * функцией, чтобы пропажа была видна в коде страницы, а не спрятана в маппере.
@@ -118,17 +133,21 @@ export function buildCreateTaskPayload(
     description: task.description,
     dueAt: joinLocalPartsToIso(task.dueDate, task.dueTime),
     startAt: task.startDate ? joinLocalPartsToIso(task.startDate, task.startTime) : undefined,
-    priority: task.priority,
+    // Экран оперирует парой «срочно / важно»; название квадранта обратимо
+    // без потерь, и сервер хранит именно пару, а не порядковую шкалу.
+    isUrgent: task.priority === 'critical' || task.priority === 'high',
+    isImportant: task.priority === 'critical' || task.priority === 'medium',
     taskCategory: task.taskCategory,
-    colorHex: task.colorHex ?? null,
+    colorHex: toStoredColor(task.colorHex),
     reminderOffsetsMinutes: task.reminderOffsetsMinutes,
     subtasks: task.subtasks,
-    attachmentFileNames: task.attachmentFileNames,
-    // Привязка сохраняется только когда у неё есть идентификатор в новом API.
-    // Иначе задача уходит без связи, а не со связью в никуда: `entityType`
-    // без `entityId` — это заявка на объект, которого нет.
-    entityType: options.leadId ? 'lead' : 'none',
-    entityId: options.leadId,
+    // Только ссылки на уже загруженные файлы. Имена без файлов сервер больше
+    // не принимает — они были «демо, без загрузки», как честно говорил
+    // легаси-тип.
+    attachments: task.attachments,
+    // Связь уходит одной ссылкой: entityType/entityId сервер выводит сам из
+    // leadId/contactId. Две пары полей про одну связь были двумя источниками
+    // правды, которые никто не сверял.
     assignedPositionId: options.assignedPositionId,
     leadId: options.leadId,
   }
