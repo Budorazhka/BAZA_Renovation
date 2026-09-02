@@ -5,9 +5,7 @@ import {
   TaskDocument,
   UNFINISHED_TASK_STATUSES,
   type TaskStatus,
-  type TaskPriority,
   type TaskCategory,
-  type TaskEntityType,
 } from '../schemas/task.schema';
 
 export interface ListTasksFilter {
