@@ -154,6 +154,246 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/team-users/invite/{token}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Активация приглашения одноразовым токеном (публичный, анонимный — приглашённый ещё не залогинен, нет cookie/сессии). Rate-limit по IP (invite-activate, 10/60с) — приглашение принимает password для новой Identity, тот же класс защиты, что /auth/login. */
+        post: operations["activateInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organizationId}/positions/{positionId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Назначить существующую Identity на Position по identityId (position.assign_occupant.organization). :organizationId в URL — только читаемость пути, фактическая tenant-принадлежность проверяется сервером по TenantContext (URL/body от клиента не является источником истины) — расхождение с текущим tenant даёт 404, не 400. */
+        post: operations["assignOccupantByIdentity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organizations/{organizationId}/positions/{positionId}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Выдать точечный permission grant позиции (personal_access.grant) — owner/director explicit ⚙-toggle. :organizationId в URL — та же читаемость-only роль, что assign выше. */
+        post: operations["grantPositionPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список всех позиций организации, включая HR-PII (loginEmail/phone/ birthDate/telegram/...) — position.read (security review 31.08.2026: раньше без PermissionGuard, отдавал PII любой сессии организации). Ответ обёрнут в {success, data} — контракт, которого ожидает существующий ERP-клиент (teamApi.ts), не общий формат остальных controller'ов этой кодовой базы. */
+        get: operations["listTeamUsers"];
+        put?: never;
+        /** Создать позицию и сразу назначить occupant'а с паролем, заданным руководителем (position.create.organization) — отдельный от email-invite путь /team-users/positions/{positionId}/assign. */
+        post: operations["createTeamUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/{positionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Одна позиция по id (position.read, тот же grant, что список) — tenant-scoped: чужая или несуществующая позиция отвечает единым 404 (non-disclosure), закрытая (status:closed) — тоже 404, та же семантика, что список исключает закрытые позиции. */
+        get: operations["getTeamUserById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Создать вакантную позицию БЕЗ occupant'а («Добавить слот менеджера») — position.create.organization, тот же grant, что POST /team-users (это тоже создание позиции, просто без человека). `position` (человекочитаемый title) и `accessProfile` (custom permission map) в теле запроса принимаются, но НЕ сохраняются — backend не хранит произвольный текст на позиции (только fixedRole), а bulk-набор grant'ов из accessProfile сохранить одним вызовом некуда: единственный существующий путь выдачи grant'а — один grant за вызов. Позиция получает только стартовый набор прав своей роли (DEFAULT_ROLE_GRANTS[fixedRole]), тот же, что обычное создание позиции. */
+        post: operations["createTeamAccountSlot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Закрыть позицию (position.vacate). Возвращает {success:true, data:null} для консистентности с остальными endpoint'ами контроллера, не пустой 204. */
+        delete: operations["removeTeamUser"];
+        options?: never;
+        head?: never;
+        /** Частичное обновление HR-профильных полей позиции (роль/менеджер/ пароль здесь не меняются) — переиспользует position.vacate grant (тот же круг прав, что vacate/move/status). */
+        patch: operations["updateTeamUserProfile"];
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Привязать аватар к позиции по уже подтверждённому assetId (полный upload завершается заранее через POST /media/upload-intent → presigned URL → POST /media/{assetId}/confirm, не multipart здесь). */
+        patch: operations["setTeamUserAvatar"];
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Сменить руководителя позиции (managerId=null — сделать позицию верхнего уровня) */
+        patch: operations["moveTeamUserPosition"];
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Сменить статус occupant'а позиции — переиспользует position.vacate grant */
+        patch: operations["setTeamUserStatus"];
+        trace?: never;
+    };
+    "/team-users/ensure-self": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Возвращает TeamUserView текущей сессии (self, не весь список) — не создаёт ничего, только TenantGuard (без PermissionGuard), не раскрывает чужие данные. */
+        post: operations["ensureSelfTeamUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/ensure-team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Idempotent no-op: организация владельца уже создаётся атомарно при регистрации (OrganizationsService.createOrganizationWithOwner), этот endpoint только возвращает уже существующие organizationId/positions текущего TenantContext — не создаёт ничего нового. position.read. */
+        post: operations["ensureTeam"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Email-based invite-flow (position.assign_occupant.organization, тот же grant, что OrganizationsController.assignOccupant identityId-путь) — фронтенд не знает identityId заранее, резолвит по email: существующая Identity линкуется сразу, для новой создаётся pending_invite + Invitation с токеном для /team-users/invite/{token}/activate. */
+        post: operations["assignTeamUserOccupant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/team-users/positions/{positionId}/vacate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Освободить позицию (position.vacate.organization) — закрывает assignment, немедленно отзывает все ERP-сессии этой identity. */
+        post: operations["vacateTeamUserPosition"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/developments": {
         parameters: {
             query?: never;
@@ -186,7 +426,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Частичное обновление ЖК (development.edit.organization) — optimistic concurrency (conventions.md разд.5): клиент присылает expectedVersion, совпадающий с текущим Development.version. Если ЖК сейчас опубликован (MarketplacePublication.status:published), обновление транзакционно перевыпускает публикацию (rebuildIfCurrentlyPublished), не оставляя витрину со старыми данными до следующего явного publish. */
+        patch: operations["updateDevelopment"];
         trace?: never;
     };
     "/developments/{developmentId}/chessboard/export": {
@@ -213,10 +454,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Список корпусов ЖК (development.read.organization). Единый 404 для "ЖК не существует" и "чужая организация" (tenant isolation). */
+        get: operations["listBuildings"];
         put?: never;
         /** Создать корпус внутри ЖК */
         post: operations["createBuilding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/developments/{developmentId}/publication-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** D-03: ERP polling после publish — читает РЕАЛЬНЫЙ статус MarketplacePublication (publication_pending/published/unpublished/ build_failed), не canonical Development.status. Единый 404 для "ЖК не существует/чужой" и "публикация никогда не запускалась" (publish ни разу не вызывался). */
+        get: operations["getDevelopmentPublicationStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/buildings/{buildingId}/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список секций корпуса (development.read.organization) */
+        get: operations["listSections"];
+        put?: never;
+        /** Создать секцию внутри корпуса (development.edit.organization) — опциональное расширение: Unit может ссылаться напрямую на Building без Section, если секций у корпуса нет. */
+        post: operations["createSection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -230,7 +507,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Список этажей корпуса (development.read.organization) */
+        get: operations["listFloors"];
         put?: never;
         /** Создать этаж внутри корпуса */
         post: operations["createFloor"];
@@ -238,6 +516,92 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/buildings/{buildingId}/floor-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список планировок корпуса (development.read.organization) */
+        get: operations["listFloorPlans"];
+        put?: never;
+        /** Создать планировку внутри корпуса (переиспользуется несколькими Unit) */
+        post: operations["createFloorPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/buildings/{buildingId}/units": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список юнитов корпуса (development.read.organization). kind/status/ limit — единственные принимаемые query-фильтры (ListUnitsQueryDto), глобальный ValidationPipe отклоняет любое другое поле с 400. */
+        get: operations["listUnits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units/{unitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить юнит по id (tenant-scoped) */
+        get: operations["getUnit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/units/{unitId}/price": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить цену юнита (unit.price.update.project — critical action, audit + outbox UnitPriceChanged). Optimistic concurrency: expectedVersion должен совпадать с текущим Unit.version. */
+        patch: operations["updateUnitPrice"];
+        trace?: never;
+    };
+    "/units/{unitId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить статус юнита (unit.status.update.project — critical action, audit + outbox UnitStatusChanged). Разрешены только явно допустимые переходы (sold — терминальный статус, без исходящих переходов). Optimistic concurrency: expectedVersion должен совпадать с текущим Unit.version. */
+        patch: operations["updateUnitStatus"];
         trace?: never;
     };
     "/floors/{floorId}/units": {
@@ -411,6 +775,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Карточка одного лида (lead.read) — тот же own/organization scope сужение, что GET /leads (own-scope видит только лиды, где ownerPositionId совпадает с его Position). Единый 404 для "не существует" и "не ваш own lead" (non-disclosure). */
+        get: operations["getLead"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/stage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена стадии лида (lead.changeStage — отдельный grant от lead.assign, manager может менять стадию ТОЛЬКО своих (own-scope) лидов). Optimistic concurrency: expectedVersion должен совпадать с текущим Lead.version. Переход между стадиями ограничен явной матрицей — недопустимый переход при АКТУАЛЬНОЙ version отклоняется 400, устаревшая version — 409 (клиент должен обновить данные и повторить). */
+        patch: operations["changeLeadStage"];
         trace?: never;
     };
     "/leads": {
@@ -913,6 +1311,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/upload-intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ERP tenant-scoped upload intent для медиа вне property-asset (план этажа, аватар позиции, документ агентства, вложение задачи) — media_asset.upload (ADR-008). purpose определяет bucket (private/public) по серверному whitelist, не клиентскому выбору. */
+        post: operations["createMediaUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/{assetId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подтвердить загрузку (magic-byte проверка MIME, ADR-008) ассета, созданного через /media/upload-intent. */
+        post: operations["confirmMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/property-assets": {
         parameters: {
             query?: never;
@@ -940,6 +1372,23 @@ export interface paths {
         };
         /** Получить PropertyAsset по ID (tenant-scoped) */
         get: operations["getPropertyAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/property-assets/{assetId}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ADMIN-OPS-001, Часть 1: недельная история версий карточки — денормализованные снапшоты (цена/статус/характеристики/медиа-ключи) на момент каждой значимой мутации, retention 7 дней (TTL-индекс). Тот же permission, что остальные read-эндпоинты этого объекта (listing.read) — не отдельный resource. `listingId` опционален: без него возвращается вся история asset'а, включая `asset_created` (до появления любого Listing). */
+        get: operations["listPropertyAssetRevisions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1571,6 +2020,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/listings/{slug}/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ADMIN-OPS-001: публичная, анонимная подача жалобы на опубликованный listing по его публичному slug. Жалоба сама по себе НЕ является доказательством нарушения (master plan разд.6.3) — только попадает в admin review queue. Rate-limit по IP (complaint-submit, 5/60с). */
+        post: operations["submitComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/complaints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** ADMIN-OPS-001: admin review queue жалоб — complaint.resolve city-scoped (permission-matrix.md разд.2.2 «Модератор вторички Батуми»). Deny-by-default: ни одного city-гранта на complaint.resolve — пустая очередь, не 403 (тот же принцип, что adminListPublications). Без явного status — очередь на проверку (status:pending). */
+        get: operations["adminListComplaints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/complaints/{complaintId}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Admin critical action: резолюция жалобы (upheld/dismissed), reason обязателен (permission-matrix.md разд.4). При decision:upheld переиспользует уже существующий D-06 admin unpublish-путь, если публикация сейчас status:published (повторное снятие с публикации уже снятого listing не является ошибкой этого сценария). */
+        post: operations["adminResolveComplaint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1626,6 +2126,45 @@ export interface components {
             items?: components["schemas"]["Development"][];
             nextCursor?: string | null;
         };
+        /** @description Partial update — только переданные поля меняются. expectedVersion — conventions.md разд.5 optimistic concurrency. */
+        UpdateDevelopmentRequest: {
+            expectedVersion: number;
+            name?: string;
+            location?: {
+                country: string;
+                city: string;
+                address?: string;
+                geo: {
+                    /** @enum {string} */
+                    type?: "Point";
+                    coordinates?: number[];
+                };
+            };
+            contact?: {
+                phone: string;
+                whatsapp?: string;
+                telegram?: string;
+            };
+            classType?: string;
+            /** Format: date */
+            startDate?: string;
+            /** Format: date */
+            completionDate?: string;
+            description?: string;
+        };
+        DevelopmentPublicationStatus: {
+            publicationId?: string;
+            /** @enum {string} */
+            status?: "publication_pending" | "published" | "unpublished" | "build_failed";
+            slug?: string | null;
+            version?: number;
+            /** Format: date-time */
+            publishedAt?: string | null;
+            /** Format: date-time */
+            unpublishedAt?: string | null;
+            /** @description Безопасный константный текст при build_failed, не реальная причина сборки */
+            buildError?: string | null;
+        };
         CreateBuildingRequest: {
             name: string;
             floorsCount: number;
@@ -1641,6 +2180,15 @@ export interface components {
             name?: string;
             floorsCount?: number;
         };
+        CreateSectionRequest: {
+            name: string;
+        };
+        Section: {
+            id?: string;
+            buildingId?: string;
+            organizationId?: string;
+            name?: string;
+        };
         CreateFloorRequest: {
             floorNumber: number;
             sectionId?: string | null;
@@ -1651,6 +2199,25 @@ export interface components {
             buildingId?: string;
             organizationId?: string;
             floorNumber?: number;
+        };
+        CreateFloorPlanRequest: {
+            name: string;
+            rooms: number;
+            area: number;
+            isEuro?: boolean;
+            imageAssetId?: string | null;
+            tags?: string[];
+        };
+        FloorPlan: {
+            id?: string;
+            buildingId?: string;
+            organizationId?: string;
+            name?: string;
+            rooms?: number;
+            area?: number;
+            isEuro?: boolean;
+            imageAssetId?: string | null;
+            tags?: string[];
         };
         CreateUnitRequest: {
             number: string;
@@ -1676,6 +2243,15 @@ export interface components {
             /** @enum {string} */
             status?: "available" | "reserved" | "sold" | "hidden";
             version?: number;
+        };
+        UpdateUnitPriceRequest: {
+            expectedVersion: number;
+            price: components["schemas"]["MoneyAmount"];
+        };
+        UpdateUnitStatusRequest: {
+            expectedVersion: number;
+            /** @enum {string} */
+            status: "available" | "reserved" | "sold" | "hidden";
         };
         CreateBookingRequest: {
             unitId: string;
@@ -1753,6 +2329,42 @@ export interface components {
             confirmedAt?: string | null;
             assetA?: components["schemas"]["AdminDuplicateCandidateAsset"];
             assetB?: components["schemas"]["AdminDuplicateCandidateAsset"];
+        };
+        /** @description Публичный, анонимный — все reporter*-поля опциональны (тот же принцип, что RevealContactRequest). */
+        SubmitComplaintRequest: {
+            /** @enum {string} */
+            category: "not_available" | "wrong_info" | "scam" | "duplicate" | "other";
+            details?: string;
+            reporterName?: string;
+            reporterPhone?: string;
+            /** Format: email */
+            reporterEmail?: string;
+        };
+        AdminComplaintListItem: {
+            id?: string;
+            /** @enum {string} */
+            status?: "pending" | "resolved_upheld" | "resolved_dismissed";
+            /** @enum {string} */
+            category?: "not_available" | "wrong_info" | "scam" | "duplicate" | "other";
+            details?: string | null;
+            propertyAssetId?: string;
+            listingId?: string;
+            scopeCity?: string;
+            respondentScope?: {
+                /** @enum {string} */
+                type?: "organization" | "marketplace_account";
+                organizationId?: string | null;
+            };
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            resolvedAt?: string | null;
+            resolutionReason?: string | null;
+        };
+        ResolveComplaintRequest: {
+            /** @enum {string} */
+            decision: "upheld" | "dismissed";
+            reason: string;
         };
         PublicDevelopmentList: {
             items: components["schemas"]["PublicDevelopmentCard"][];
@@ -1983,6 +2595,32 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        /** @description Append-only снапшот (listing_revisions), retention 7 дней — недельная история версий карточки (ADMIN-OPS-001, Часть 1). */
+        ListingRevision: {
+            id?: string;
+            propertyAssetId?: string;
+            /** @description Отсутствует у asset_created — снапшот пишется до появления любого Listing */
+            listingId?: string | null;
+            publisherScope?: Record<string, never>;
+            actor?: {
+                /** @enum {string} */
+                type?: "identity" | "admin_account" | "system";
+                id?: string | null;
+            };
+            /** @enum {string} */
+            changeType?: "asset_created" | "listing_created" | "listing_activated" | "listing_published" | "listing_unpublished";
+            price?: components["schemas"]["MoneyAmount"];
+            status?: string | null;
+            characteristics?: {
+                area?: number;
+                rooms?: number;
+                floor?: number;
+                totalFloors?: number;
+            } | null;
+            mediaKeys?: string[];
+            /** Format: date-time */
+            changedAt?: string;
+        };
         ListingActuality: {
             status?: string;
             category?: string;
@@ -2016,6 +2654,18 @@ export interface components {
             role: "cover" | "gallery";
             sortOrder: number;
             alt?: string | null;
+        };
+        CreateMediaUploadIntentRequest: {
+            /** @enum {string} */
+            declaredMimeType: "image/jpeg" | "image/png" | "image/webp" | "application/pdf";
+            /** @description MAX_UPLOAD_SIZE_BYTES — 20 МБ */
+            sizeBytes: number;
+            /** @enum {string} */
+            purpose: "unit_photo" | "floor_plan" | "agency_document" | "profile_avatar" | "property_photo" | "task_attachment";
+        };
+        CreateMediaUploadIntentResponse: {
+            assetId: string;
+            uploadUrl: string;
         };
         CreatePropertyAssetMediaUploadIntentRequest: {
             /** @enum {string} */
@@ -2454,6 +3104,95 @@ export interface components {
             };
             permissions: components["schemas"]["ErpMePermission"][];
         };
+        /** @description TeamService.TeamUserView — форма, которую ожидает существующий ERP-клиент teamApi.ts. Включает HR-PII (loginEmail/phone/birthDate/ telegram/...), поэтому GET /team-users и /team-users/ensure-team требуют явный grant position.read (security review 31.08.2026). */
+        TeamUserView: {
+            id: string;
+            platformUserId: string;
+            teamId: string;
+            name: string;
+            /** @enum {string} */
+            role: "owner" | "director" | "rop" | "manager" | "administrator" | "marketer";
+            position: string;
+            managerId: string | null;
+            loginEmail: string;
+            email: string;
+            /** @enum {string} */
+            status: "active" | "blocked" | "invited";
+            skills: string[];
+            permissionOverrides: {
+                [key: string]: string;
+            };
+            positionId: string;
+            parentPositionId: string | null;
+            vacant: boolean;
+            occupancyHistory: unknown[];
+            avatarUrl?: string;
+            phone?: string;
+            hireDate?: string;
+            birthDate?: string;
+            department?: string;
+            city?: string;
+            telegram?: string;
+            aboutMe?: string;
+            aboutCompany?: string;
+            whatsapp?: string;
+            vk?: string;
+            instagram?: string;
+            website?: string;
+        };
+        /** @description `position`/`email` принимаются для совместимости с уже написанным ERP-клиентом (PersonnelPage.tsx::handleAdd отправляет оба поля), но backend их не сохраняет — см. CreateTeamAccountSlotRequest, тот же честный пробел для `position`; `email` дублирует `loginEmail`. */
+        CreateTeamUserRequest: {
+            name: string;
+            /** @enum {string} */
+            role: "owner" | "director" | "rop" | "manager" | "administrator" | "marketer";
+            position?: string;
+            managerId?: string | null;
+            /** Format: email */
+            loginEmail: string;
+            /** Format: email */
+            email?: string;
+            /** Format: password */
+            password: string;
+            phone?: string;
+            hireDate?: string;
+            birthDate?: string;
+            department?: string;
+            city?: string;
+            telegram?: string;
+            aboutMe?: string;
+            aboutCompany?: string;
+            skills?: string[];
+            whatsapp?: string;
+            vk?: string;
+            instagram?: string;
+            website?: string;
+        };
+        /** @description POST /team-users/positions. `position`/`accessProfile` принимаются для совместимости с уже написанным ERP-клиентом, но backend их не сохраняет — см. summary операции. */
+        CreateTeamAccountSlotRequest: {
+            /** @enum {string} */
+            role: "owner" | "director" | "rop" | "manager" | "administrator" | "marketer";
+            position: string;
+            managerId?: string | null;
+            accessProfile?: {
+                [key: string]: string;
+            };
+        };
+        /** @description Partial update — только HR-профильные поля, все опциональны */
+        UpdateTeamUserProfileRequest: {
+            phone?: string;
+            hireDate?: string;
+            birthDate?: string;
+            department?: string;
+            city?: string;
+            telegram?: string;
+            aboutMe?: string;
+            aboutCompany?: string;
+            skills?: string[];
+            whatsapp?: string;
+            vk?: string;
+            instagram?: string;
+            website?: string;
+        };
     };
     responses: {
         /** @description Стандартный формат ошибки (conventions.md разд.3) */
@@ -2657,6 +3396,522 @@ export interface operations {
             409: components["responses"]["Error"];
         };
     };
+    activateInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: password */
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Приглашение активировано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: {
+                            activated?: boolean;
+                            email?: string;
+                        };
+                    };
+                };
+            };
+            /** @description NOT_FOUND — токен невалиден, истёк или уже использован */
+            404: components["responses"]["Error"];
+            /** @description RATE_LIMITED */
+            429: components["responses"]["Error"];
+        };
+    };
+    assignOccupantByIdentity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    identityId: string;
+                    occupantDisplayName: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Identity назначена на Position */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assignmentId: string;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.assign_occupant */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — organizationId в URL не совпадает с TenantContext, либо Position не существует/чужая */
+            404: components["responses"]["Error"];
+        };
+    };
+    grantPositionPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    resource: string;
+                    action: string;
+                    /** @enum {string} */
+                    scope: "own" | "position" | "team" | "organization" | "project" | "city" | "global" | "assigned" | "domain";
+                    scopeValue?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Grant выдан */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        granted: true;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет personal_access.grant */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — organizationId в URL не совпадает с TenantContext, либо Position не существует/чужая */
+            404: components["responses"]["Error"];
+        };
+    };
+    listTeamUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все позиции организации */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"][];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createTeamUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamUserRequest"];
+            };
+        };
+        responses: {
+            /** @description Позиция создана и занята */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет position.create */
+            403: components["responses"]["Error"];
+        };
+    };
+    getTeamUserById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Позиция */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — позиция не существует, чужая организация, или закрыта */
+            404: components["responses"]["Error"];
+        };
+    };
+    createTeamAccountSlot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTeamAccountSlotRequest"];
+            };
+        };
+        responses: {
+            /** @description Вакантная позиция создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет position.create */
+            403: components["responses"]["Error"];
+        };
+    };
+    removeTeamUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Позиция закрыта */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: Record<string, never> | null;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
+    updateTeamUserProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTeamUserProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Позиция после обновления профиля */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
+    setTeamUserAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    assetId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Позиция с обновлённым аватаром */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
+    moveTeamUserPosition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    managerId?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Позиция после смены руководителя */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
+    setTeamUserStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    status: "active" | "blocked" | "invited";
+                };
+            };
+        };
+        responses: {
+            /** @description Позиция после смены статуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
+    ensureSelfTeamUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Собственная позиция текущей сессии, либо null */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+        };
+    };
+    ensureTeam: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Команда организации текущего TenantContext */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: {
+                            teamId?: string;
+                            positions?: components["schemas"]["TeamUserView"][];
+                        } | null;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    assignTeamUserOccupant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    /** Format: email */
+                    email: string;
+                    /** Format: email */
+                    loginEmail: string;
+                    phone?: string;
+                    telegram?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Occupant назначен или создано приглашение */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: {
+                            user?: components["schemas"]["TeamUserView"];
+                            linkedExisting?: boolean;
+                            inviteToken?: string | null;
+                            /** Format: date-time */
+                            inviteTokenExpiresAt?: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.assign_occupant */
+            403: components["responses"]["Error"];
+        };
+    };
+    vacateTeamUserPosition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                positionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    handoverNote?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Позиция освобождена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                        data: components["schemas"]["TeamUserView"];
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет position.vacate */
+            403: components["responses"]["Error"];
+        };
+    };
     listDevelopments: {
         parameters: {
             query?: {
@@ -2733,6 +3988,37 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    updateDevelopment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDevelopmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Development после обновления */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Development"];
+                };
+            };
+            400: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion не совпадает с текущим */
+            409: components["responses"]["Error"];
+        };
+    };
     exportChessboard: {
         parameters: {
             query?: never;
@@ -2760,6 +4046,29 @@ export interface operations {
             /** @description FORBIDDEN — нет chessboard.export */
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+        };
+    };
+    listBuildings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Корпуса ЖК */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Building"][];
+                };
+            };
             404: components["responses"]["Error"];
         };
     };
@@ -2792,6 +4101,106 @@ export interface operations {
             };
         };
     };
+    getDevelopmentPublicationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Статус публикации ЖК */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevelopmentPublicationStatus"];
+                };
+            };
+            /** @description NOT_FOUND — ЖК не существует/чужой, либо публикация никогда не запускалась */
+            404: components["responses"]["Error"];
+        };
+    };
+    listSections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Секции корпуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Section"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    createSection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Section создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Section"];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    listFloors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Этажи корпуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Floor"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
     createFloor: {
         parameters: {
             query?: never;
@@ -2819,6 +4228,169 @@ export interface operations {
                     "application/json": components["schemas"]["Floor"];
                 };
             };
+        };
+    };
+    listFloorPlans: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Планировки корпуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FloorPlan"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    createFloorPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFloorPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description FloorPlan создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FloorPlan"];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    listUnits: {
+        parameters: {
+            query?: {
+                kind?: "apartment" | "commercial" | "office" | "parking" | "storage" | "other";
+                status?: "available" | "reserved" | "sold" | "hidden";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Юниты корпуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"][];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    getUnit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Unit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"];
+                };
+            };
+            404: components["responses"]["Error"];
+        };
+    };
+    updateUnitPrice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUnitPriceRequest"];
+            };
+        };
+        responses: {
+            /** @description Unit после изменения цены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"];
+                };
+            };
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion не совпадает с текущим */
+            409: components["responses"]["Error"];
+        };
+    };
+    updateUnitStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUnitStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Unit после изменения статуса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unit"];
+                };
+            };
+            /** @description UNIT_INVALID_STATUS_TRANSITION — переход между статусами недопустим при актуальной version */
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion не совпадает с текущим */
+            409: components["responses"]["Error"];
         };
     };
     createUnit: {
@@ -3142,6 +4714,74 @@ export interface operations {
             };
             /** @description FORBIDDEN — нет lead.assign.organization */
             403: components["responses"]["Error"];
+        };
+    };
+    getLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лид */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListItem"];
+                };
+            };
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    changeLeadStage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                    /** @enum {string} */
+                    stage: "new" | "contacted" | "qualified" | "converted" | "lost";
+                };
+            };
+        };
+        responses: {
+            /** @description Лид после смены стадии */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lead"];
+                };
+            };
+            /** @description VALIDATION_FAILED — переход между стадиями недопустим при актуальной version */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.changeStage */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion не совпадает с текущим */
+            409: components["responses"]["Error"];
         };
     };
     listLeads: {
@@ -4358,6 +5998,64 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    createMediaUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMediaUploadIntentRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload intent создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateMediaUploadIntentResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED — неизвестный purpose/mimeType, либо превышен MAX_UPLOAD_SIZE_BYTES */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет media_asset.upload */
+            403: components["responses"]["Error"];
+        };
+    };
+    confirmMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Результат проверки загрузки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "verified" | "rejected";
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет media_asset.upload */
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
     listPropertyAssets: {
         parameters: {
             query?: never;
@@ -4432,6 +6130,34 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listPropertyAssetRevisions: {
+        parameters: {
+            query?: {
+                listingId?: string;
+            };
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description История версий, newest-first (может быть пустой) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingRevision"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — asset не существует/чужой, либо listingId не принадлежит asset'у */
             404: components["responses"]["Error"];
         };
     };
@@ -5541,6 +7267,110 @@ export interface operations {
             409: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
+        };
+    };
+    submitComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitComplaintRequest"];
+            };
+        };
+        responses: {
+            /** @description Жалоба принята в очередь на проверку */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** @enum {string} */
+                        status: "pending";
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description NOT_FOUND — публикация с этим slug не найдена или не является листингом */
+            404: components["responses"]["Error"];
+            /** @description RATE_LIMITED */
+            429: components["responses"]["Error"];
+        };
+    };
+    adminListComplaints: {
+        parameters: {
+            query?: {
+                status?: "pending" | "resolved_upheld" | "resolved_dismissed";
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Жалобы в разрешённом city-scope admin'а */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items?: components["schemas"]["AdminComplaintListItem"][];
+                        nextCursor?: string | null;
+                    };
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+        };
+    };
+    adminResolveComplaint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                complaintId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveComplaintRequest"];
+            };
+        };
+        responses: {
+            /** @description Жалоба резолюцирована */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** @enum {string} */
+                        status: "resolved_upheld" | "resolved_dismissed";
+                    };
+                };
+            };
+            /** @description ADMIN_REASON_REQUIRED — reason короче 10 символов */
+            400: components["responses"]["Error"];
+            /** @description ADMIN_SCOPE_INSUFFICIENT — нет complaint.resolve в этом city-scope */
+            403: components["responses"]["Error"];
+            /** @description Жалоба не найдена */
+            404: components["responses"]["Error"];
+            /** @description Жалоба уже резолюцирована (status не pending) */
+            409: components["responses"]["Error"];
         };
     };
 }
