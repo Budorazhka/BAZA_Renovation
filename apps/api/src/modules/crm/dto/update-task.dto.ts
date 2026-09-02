@@ -1,4 +1,18 @@
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Min, MaxLength, MinLength } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+  MaxLength,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { CreateTaskSubtaskDto } from './create-task.dto';
 import type { TaskStatus } from '../schemas/task.schema';
 
 /**
@@ -41,4 +55,21 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsIn(['open', 'in_progress', 'cancelled'])
   status?: TaskStatus;
+
+  /**
+   * Полный список подзадач. Заменяет прежний целиком, а не сливается с ним:
+   * подзадачи живут только внутри своей задачи, экран всегда держит их все и
+   * отправляет тоже все. Частичное слияние потребовало бы отдельного языка
+   * операций ради списка из трёх строк.
+   *
+   * Добавлено 02.09.2026: модель хранила `done` у каждой подзадачи с самого
+   * начала, но поставить эту отметку было нечем — экран показывал чекбоксы,
+   * которые не сохранялись.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskSubtaskDto)
+  subtasks?: CreateTaskSubtaskDto[];
 }

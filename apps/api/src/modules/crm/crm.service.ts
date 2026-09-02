@@ -938,6 +938,7 @@ export class CrmService {
     description?: string | null;
     dueAt?: Date | null;
     status?: TaskStatus;
+    subtasks?: Array<{ id: string; title: string; done: boolean }>;
     correlationId: string;
   }): Promise<CrmTaskReadModel> {
     const existingTask = await this.taskRepository.findByIdForOrganization(
@@ -963,6 +964,7 @@ export class CrmService {
           description: params.description,
           dueAt: params.dueAt,
           status: params.status,
+          subtasks: params.subtasks,
         },
         session,
       );

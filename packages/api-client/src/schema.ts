@@ -1929,6 +1929,12 @@ export interface components {
              * @enum {string}
              */
             status?: "open" | "in_progress" | "cancelled";
+            /** @description Полный список подзадач; заменяет прежний целиком, а не сливается с ним. */
+            subtasks?: {
+                id: string;
+                title: string;
+                done?: boolean;
+            }[];
         };
         ReassignTaskRequest: {
             expectedVersion: number;

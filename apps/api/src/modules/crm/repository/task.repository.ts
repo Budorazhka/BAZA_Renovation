@@ -49,6 +49,7 @@ export interface UpdateTaskParams {
   description?: string | null;
   status?: TaskStatus;
   dueAt?: Date | null;
+  subtasks?: Array<{ id: string; title: string; done: boolean }>;
 }
 
 /**
@@ -168,6 +169,7 @@ export class TaskRepository {
 
     if (params.title !== undefined) $set.title = params.title;
     if (params.status !== undefined) $set.status = params.status;
+    if (params.subtasks !== undefined) $set.subtasks = params.subtasks;
 
     if (params.description === null) {
       $unset.description = 1;

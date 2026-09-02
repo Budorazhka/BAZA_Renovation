@@ -469,6 +469,43 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       expect(body.completedAt).not.toBeNull();
     });
 
+    it('отмечает подзадачу выполненной — экран показывает чекбоксы, и они сохраняются', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { title: 'Собрать документы', assignedPositionId: positionId });
+
+      const patchRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: {
+          expectedVersion: 0,
+          subtasks: [
+            { id: 'st-1', title: 'Паспорт', done: true },
+            { id: 'st-2', title: 'Выписка ЕГРН', done: false },
+          ],
+        },
+      });
+
+      expect(patchRes.statusCode).toBe(200);
+      const body = JSON.parse(patchRes.body);
+      expect(body.subtasks).toEqual([
+        { id: 'st-1', title: 'Паспорт', done: true },
+        { id: 'st-2', title: 'Выписка ЕГРН', done: false },
+      ]);
+
+      // Список заменяется целиком: подзадачи не существуют вне своей задачи,
+      // и экран всегда отправляет их все.
+      const replaceRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 1, subtasks: [{ id: 'st-1', title: 'Паспорт', done: false }] },
+      });
+
+      expect(replaceRes.statusCode).toBe(200);
+      expect(JSON.parse(replaceRes.body).subtasks).toEqual([{ id: 'st-1', title: 'Паспорт', done: false }]);
+    });
+
     it('PATCH не завершает задачу: completed ставит только команда complete', async () => {
       const { cookie, organizationId, positionId } = await seedOwnerSession();
       const taskId = await seedTask(organizationId, { title: 'Отправить подборку', assignedPositionId: positionId });

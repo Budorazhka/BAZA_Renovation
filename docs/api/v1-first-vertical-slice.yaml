@@ -3652,6 +3652,19 @@ components:
             POST /tasks/{taskId}/complete — он пишет completedAt,
             completedByPositionId и событие TaskCompleted.
           enum: [open, in_progress, cancelled]
+        subtasks:
+          type: array
+          maxItems: 50
+          description: >
+            Полный список подзадач; заменяет прежний целиком, а не сливается
+            с ним.
+          items:
+            type: object
+            required: [id, title]
+            properties:
+              id: {type: string, maxLength: 120}
+              title: {type: string, maxLength: 255}
+              done: {type: boolean}
 
     ReassignTaskRequest:
       type: object
