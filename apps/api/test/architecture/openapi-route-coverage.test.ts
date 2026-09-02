@@ -1,0 +1,260 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+/**
+ * Опубликованный контракт и фактические маршруты обязаны совпадать.
+ *
+ * ЗАЧЕМ. Расхождение «документ против кода» в этом проекте уже стоило дорого:
+ * 02.09.2026 выяснилось, что девять операций требуют `Idempotency-Key` на
+ * сервере, а в OpenAPI объявляют `header?: never` — сгенерированный из спеки
+ * клиент получил бы 400 вместо создания ресурса. Тогда же всплыло, что часть
+ * эндпоинтов в спеке отсутствует вовсе, но насколько — никто не знал: вопрос
+ * «сколько у нас недокументированных маршрутов» задать было нечем.
+ *
+ * Этот страж отвечает на него числом и держит его от роста.
+ *
+ * ДВЕ СТОРОНЫ, и обе важны:
+ *
+ * 1. **Мёртвое обещание** — путь есть в спеке, а в коде его нет. Клиент,
+ *    сгенерированный из такой спеки, зовёт несуществующий эндпоинт и получает
+ *    404. Таких быть не должно ни одного.
+ * 2. **Недокументированный маршрут** — эндпоинт есть в коде, а в контракте
+ *    его нет. Сгенерированный клиент про него не знает, и интеграция пишется
+ *    по чтению исходников вместо контракта.
+ *
+ * Второе сейчас массовое, поэтому оформлено реестром: каждый пробел записан
+ * поимённо с причиной. Реестр обязан совпадать с реальностью точно — новый
+ * недокументированный маршрут уронит страж, и закрытый пробел, забытый в
+ * реестре, уронит его тоже.
+ */
+
+const SRC_ROOT = join(__dirname, '../../src');
+const SPEC_PATH = join(__dirname, '../../../../docs/api/v1-first-vertical-slice.yaml');
+
+/** Маршрут → почему его нет и не должно быть в продуктовом контракте. */
+const INTENTIONALLY_UNDOCUMENTED: Record<string, string> = {
+  'GET /health': 'проба живости для оркестратора, не часть продуктового API',
+  'GET /health/ready': 'проба готовности для оркестратора',
+};
+
+/**
+ * Измеренный долг документации: маршрут → почему он пока не в спеке.
+ *
+ * Это не «сломано»: эндпоинты работают, покрыты правами и тестами. Это разрыв
+ * между кодом и опубликованным контрактом, который до сегодняшнего дня никто
+ * не измерял. Закрывать его следует пачками по модулям, вычёркивая строки
+ * отсюда; страж проследит, чтобы список не пополнялся молча.
+ */
+const CONTRACT_GAPS: Record<string, string> = {
+  // developments.controller.ts
+  'ПРОБЕЛ: GET /buildings/{buildingId}/floor-plans':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /buildings/{buildingId}/floors':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /buildings/{buildingId}/sections':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /buildings/{buildingId}/units':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /developments/{developmentId}/buildings':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /developments/{developmentId}/publication-status':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: GET /units/{unitId}':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: PATCH /developments/{developmentId}':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: PATCH /units/{unitId}/price':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: PATCH /units/{unitId}/status':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: POST /buildings/{buildingId}/floor-plans':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+  'ПРОБЕЛ: POST /buildings/{buildingId}/sections':
+    'иерархия ЖК: чтение корпусов, секций, этажей и юнитов плюс правки — в спеку вошла цепочка D-07 (создание и публикация), остальное дописывалось прямо в коде',
+
+  // invitation.controller.ts
+  'ПРОБЕЛ: POST /team-users/invite/{token}/activate':
+    'активация приглашения одноразовым токеном',
+
+  // lead.controller.ts
+  'ПРОБЕЛ: GET /leads/{leadId}':
+    'карточка лида и смена стадии — список лидов в спеке есть, эти два маршрута нет',
+  'ПРОБЕЛ: PATCH /leads/{leadId}/stage':
+    'карточка лида и смена стадии — список лидов в спеке есть, эти два маршрута нет',
+
+  // marketplace-property-assets.controller.ts
+  'ПРОБЕЛ: DELETE /marketplace/property-assets/{assetId}/media/{mediaAssetId}':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/duplicate-candidates':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings/{listingId}/actuality':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings/{listingId}/publication-status':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/media':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/listings/{listingId}/activate':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/listings/{listingId}/confirm-actuality':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/media/{mediaAssetId}':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/duplicate-candidates/{duplicateCandidateId}/override':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings/{listingId}/publish':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings/{listingId}/unpublish':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/media/upload-intent':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/media/{mediaAssetId}/confirm':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+  'ПРОБЕЛ: PUT /marketplace/property-assets/{assetId}/media/order':
+    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
+
+  // media.controller.ts
+  'ПРОБЕЛ: POST /media/upload-intent':
+    'загрузка медиа вне property-asset (план этажа, аватар, документ агентства)',
+  'ПРОБЕЛ: POST /media/{assetId}/confirm':
+    'загрузка медиа вне property-asset (план этажа, аватар, документ агентства)',
+
+  // organizations.controller.ts
+  'ПРОБЕЛ: POST /organizations/{organizationId}/positions/{positionId}/assign':
+    'назначение человека на позицию и выдача гранта',
+  'ПРОБЕЛ: POST /organizations/{organizationId}/positions/{positionId}/grants':
+    'назначение человека на позицию и выдача гранта',
+
+  // team.controller.ts
+  'ПРОБЕЛ: DELETE /team-users/positions/{positionId}':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: GET /team-users':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: PATCH /team-users/positions/{positionId}':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: PATCH /team-users/positions/{positionId}/avatar':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: PATCH /team-users/positions/{positionId}/move':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: PATCH /team-users/positions/{positionId}/status':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: POST /team-users':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: POST /team-users/ensure-self':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: POST /team-users/ensure-team':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: POST /team-users/positions/{positionId}/assign':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+  'ПРОБЕЛ: POST /team-users/positions/{positionId}/vacate':
+    'управление составом команды: позиции, назначения, статусы, аватары',
+};
+
+function listControllers(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const fullPath = join(dir, entry);
+    if (statSync(fullPath).isDirectory()) files.push(...listControllers(fullPath));
+    else if (entry.endsWith('.controller.ts')) files.push(fullPath);
+  }
+  return files;
+}
+
+/** `:taskId` в Nest — это `{taskId}` в OpenAPI; сравниваем в одной записи. */
+function toOpenApiPath(path: string): string {
+  return path.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
+}
+
+function collectControllerRoutes(): string[] {
+  const routes = new Set<string>();
+
+  for (const file of listControllers(SRC_ROOT)) {
+    const source = readFileSync(file, 'utf8');
+    const base = source.match(/@Controller\(\s*'([^']*)'\s*\)/)?.[1] ?? '';
+
+    for (const line of source.split(/\r?\n/)) {
+      const match = line.match(/^\s*@(Get|Post|Patch|Put|Delete)\(\s*(?:'([^']*)')?\s*\)/);
+      if (!match) continue;
+      const path = '/' + [base, match[2] ?? ''].filter(Boolean).join('/');
+      routes.add(`${match[1]!.toUpperCase()} ${toOpenApiPath(path)}`);
+    }
+  }
+
+  return [...routes].sort();
+}
+
+/**
+ * Разбор `paths:` построчно, без YAML-парсера: в apps/api его нет, а тянуть
+ * зависимость ради двух уровней отступа не стоит. Форма спеки жёсткая — путь
+ * на двух пробелах, метод на четырёх, — а «парсер молча вернул пустоту»
+ * ловится проверкой на объём ниже.
+ */
+function collectSpecRoutes(): string[] {
+  const routes = new Set<string>();
+  let currentPath: string | null = null;
+
+  for (const line of readFileSync(SPEC_PATH, 'utf8').split(/\r?\n/)) {
+    const pathMatch = line.match(/^ {2}(\/[^:]*):\s*$/);
+    if (pathMatch) {
+      currentPath = pathMatch[1]!;
+      continue;
+    }
+    const methodMatch = line.match(/^ {4}(get|post|patch|put|delete):\s*$/);
+    if (methodMatch && currentPath) {
+      routes.add(`${methodMatch[1]!.toUpperCase()} ${currentPath}`);
+    }
+  }
+
+  return [...routes].sort();
+}
+
+describe('Соответствие OpenAPI-контракта фактическим маршрутам', () => {
+  const controllerRoutes = collectControllerRoutes();
+  const specRoutes = collectSpecRoutes();
+
+  it('оба разбора что-то нашли — защита от молчаливо сломанного парсера', () => {
+    expect(controllerRoutes.length).toBeGreaterThan(100);
+    expect(specRoutes.length).toBeGreaterThan(70);
+  });
+
+  it('в спеке нет мёртвых обещаний: каждый описанный путь существует в коде', () => {
+    const inCode = new Set(controllerRoutes);
+    const dead = specRoutes.filter((route) => !inCode.has(route));
+
+    expect(dead).toEqual([]);
+  });
+
+  it('недокументированные маршруты совпадают с реестром пробелов', () => {
+    const documented = new Set(specRoutes);
+    const known = new Set([
+      ...Object.keys(CONTRACT_GAPS).map((key) => key.replace('ПРОБЕЛ: ', '')),
+      ...Object.keys(INTENTIONALLY_UNDOCUMENTED),
+    ]);
+
+    const undocumented = controllerRoutes.filter((route) => !documented.has(route));
+
+    // Новый маршрут мимо контракта — ошибка: либо описать в спеке, либо
+    // внести в реестр осознанно.
+    expect(undocumented.filter((route) => !known.has(route))).toEqual([]);
+
+    // Пробел закрыт, но забыт в реестре — тоже ошибка: реестр перестанет
+    // отражать реальность, и через месяц ему нельзя будет верить.
+    const stale = [...known].filter((route) => !undocumented.includes(route)).sort();
+    expect(stale).toEqual([]);
+  });
+
+  it('размер долга зафиксирован числом и молча вырасти не может', () => {
+    // Число живёт здесь, а не выводится из длины реестра: иначе оно росло бы
+    // вместе с ним и ничего не сторожило.
+    expect(Object.keys(CONTRACT_GAPS)).toHaveLength(49);
+  });
+});

@@ -113,6 +113,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [runtime-release-gate.md](operations/runtime-release-gate.md) — воспроизводимый релизный гейт.
 - [d07-runtime-e2e-gate.md](operations/d07-runtime-e2e-gate.md) — Playwright против живых HTTP-процессов.
 - [nest11-fastify5-migration.md](operations/nest11-fastify5-migration.md) — миграция Nest 10→11 и Fastify 4→5, уязвимости 19 → 0.
+- [openapi-route-coverage.md](operations/openapi-route-coverage.md) — страж соответствия контракта маршрутам: 132 маршрута против 81 пути в спеке, 49 пробелов измерены и закреплены.
 
 ### Асинхронный контур
 
