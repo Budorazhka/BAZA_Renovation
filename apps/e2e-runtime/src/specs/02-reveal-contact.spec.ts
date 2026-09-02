@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { test, expect } from '../fixtures/test';
 import type { APIRequestContext } from '@playwright/test';
 import { apiUrl } from '../fixtures/env';
@@ -30,7 +31,7 @@ test.describe('listing reveal-contact', () => {
     });
     expect(onboarding.status()).toBe(201);
 
-    const assetResponse = await request.post(apiUrl('/property-assets'), {
+    const assetResponse = await request.post(apiUrl('/property-assets'), { headers: { 'Idempotency-Key': randomUUID() },
       data: {
         propertyType: 'apartment',
         location: {
@@ -46,7 +47,7 @@ test.describe('listing reveal-contact', () => {
     expect(assetResponse.status()).toBe(201);
     const asset = await assetResponse.json();
 
-    const listingResponse = await request.post(apiUrl(`/property-assets/${asset._id}/listings`), {
+    const listingResponse = await request.post(apiUrl(`/property-assets/${asset._id}/listings`), { headers: { 'Idempotency-Key': randomUUID() },
       data: { dealType: 'sale', price: { amountMinorUnits: 8_500_000, currency: 'USD' } },
     });
     expect(listingResponse.status()).toBe(201);
