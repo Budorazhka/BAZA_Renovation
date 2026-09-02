@@ -99,6 +99,9 @@ export function TasksPage() {
   const { currentUser } = useAuth()
   const [filter, setFilter] = useState<Filter>('my')
   const [serverTasks, setServerTasks] = useState<TaskV2[]>([])
+  // Обработчики берут задачу отсюда: иначе версия, прочитанная при рендере,
+  // устаревала бы после первого же изменения и следующий запрос падал бы 409.
+  const serverTasksRef = useRef<TaskV2[]>([])
   const [team, setTeam] = useState<TaskAssigneeOption[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -162,6 +165,10 @@ export function TasksPage() {
     () => new Map(team.map(member => [member.id, member.name])),
     [team],
   )
+
+  useEffect(() => {
+    serverTasksRef.current = serverTasks
+  }, [serverTasks])
 
   const tasks = useMemo(
     () => serverTasks.map(task => mapTaskV2ToUiTask(task, namesByPositionId)),
@@ -237,36 +244,87 @@ export function TasksPage() {
   }, [filtered])
 
   /**
-   * Отметка о выполнении уходит на сервер и возвращается оттуда. Локально
-   * статус не переключается: иначе галочка стояла бы и в том случае, когда
-   * сервер отказал, а после перезагрузки исчезала без объяснений.
+   * Любое изменение задачи уходит на сервер и возвращается оттуда. Локально
+   * состояние не подкручивается: иначе галочка стояла бы и в том случае,
+   * когда сервер отказал, а после перезагрузки исчезала без объяснений.
    *
-   * `expectedVersion` — версия, которую клиент прочитал: при 409 задача
-   * изменилась параллельно, и правильный ответ — перечитать реестр, а не
+   * `expectedVersion` — версия, которую клиент прочитал: при 409 задачу
+   * изменили параллельно, и правильный ответ — перечитать реестр, а не
    * настаивать на своей версии.
    */
-  async function toggleDone(taskId: string) {
+  const applyTaskChange = useCallback(
+    async (
+      taskId: string,
+      change: (task: TaskV2) => Promise<TaskV2>,
+      failureMessage: string,
+    ) => {
+      const current = serverTasksRef.current.find(task => task.id === taskId)
+      if (!current) return
+      try {
+        const updated = await change(current)
+        setServerTasks(prev => prev.map(task => (task.id === taskId ? updated : task)))
+      } catch (error) {
+        const status = (error as { response?: { status?: number } })?.response?.status
+        if (status === 409) {
+          toast.error('Задачу изменил кто-то ещё. Реестр обновлён.')
+          void loadTasks()
+          return
+        }
+        if (status === 403) {
+          toast.error('Нет прав на это действие.')
+          return
+        }
+        toast.error(failureMessage)
+      }
+    },
+    [loadTasks],
+  )
+
+  function toggleDone(taskId: string) {
     const current = serverTasks.find(task => task.id === taskId)
     if (!current) return
-    try {
-      const updated =
-        current.status === 'completed'
-          ? await tasksApiV2.reopen(taskId, current.version)
-          : await tasksApiV2.complete(taskId, current.version)
-      setServerTasks(prev => prev.map(task => (task.id === taskId ? updated : task)))
-    } catch (error) {
-      const status = (error as { response?: { status?: number } })?.response?.status
-      if (status === 409) {
-        toast.error('Задачу изменил кто-то ещё. Реестр обновлён.')
-        void loadTasks()
-        return
-      }
-      toast.error(
-        current.status === 'completed'
-          ? 'Не удалось снять отметку о выполнении'
-          : 'Не удалось отметить задачу выполненной',
-      )
-    }
+    const wasCompleted = current.status === 'completed'
+    void applyTaskChange(
+      taskId,
+      task =>
+        wasCompleted
+          ? tasksApiV2.setStatus(taskId, task.version, 'open')
+          : tasksApiV2.complete(taskId, task.version),
+      wasCompleted
+        ? 'Не удалось снять отметку о выполнении'
+        : 'Не удалось отметить задачу выполненной',
+    )
+  }
+
+  function setInProgress(taskId: string, inProgress: boolean) {
+    void applyTaskChange(
+      taskId,
+      task => tasksApiV2.setStatus(taskId, task.version, inProgress ? 'in_progress' : 'open'),
+      inProgress ? 'Не удалось взять задачу в работу' : 'Не удалось вернуть задачу в новые',
+    )
+  }
+
+  function toggleSubtask(taskId: string, subtaskId: string) {
+    void applyTaskChange(
+      taskId,
+      task =>
+        tasksApiV2.setSubtasks(
+          taskId,
+          task.version,
+          task.subtasks.map(subtask =>
+            subtask.id === subtaskId ? { ...subtask, done: !subtask.done } : subtask,
+          ),
+        ),
+      'Не удалось изменить подзадачу',
+    )
+  }
+
+  function reassignTask(taskId: string, positionId: string) {
+    void applyTaskChange(
+      taskId,
+      task => tasksApiV2.reassign(taskId, task.version, positionId || null),
+      'Не удалось сменить исполнителя',
+    )
   }
 
   const FILTERS: { key: Filter; label: string; count: () => number }[] = [
@@ -481,7 +539,15 @@ export function TasksPage() {
           </div>
 
           {/* Right: details */}
-          <TaskDetailsPanel task={selectedTask} today={today} total={filtered.length} />
+          <TaskDetailsPanel
+            task={selectedTask}
+            today={today}
+            total={filtered.length}
+            assignees={team}
+            onSetInProgress={setInProgress}
+            onToggleSubtask={toggleSubtask}
+            onReassign={reassignTask}
+          />
         </div>
       </div>
 
@@ -709,10 +775,18 @@ function TaskDetailsPanel({
   task,
   today,
   total,
+  assignees,
+  onSetInProgress,
+  onToggleSubtask,
+  onReassign,
 }: {
   task: Task | null
   today: string
   total: number
+  assignees: TaskAssigneeOption[]
+  onSetInProgress: (taskId: string, inProgress: boolean) => void
+  onToggleSubtask: (taskId: string, subtaskId: string) => void
+  onReassign: (taskId: string, positionId: string) => void
 }) {
     const { t } = useI18n();
   if (!task) {
@@ -736,11 +810,62 @@ function TaskDetailsPanel({
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Meta label={t('tasks.tasksPage.статус')} value={STATUS_LABELS[task.status]} warn={isOverdue} />
           <Meta label={t('tasks.tasksPage.приоритет')} value={EISENHOWER_PRIORITY_LABELS[task.priority]} />
-          <Meta label={t('tasks.tasksPage.исполнитель')} value={task.assignedToName} />
           <Meta label={t('tasks.tasksPage.создал')} value={task.createdByName} />
           <Meta label={t('tasks.tasksPage.срок')} value={formatTaskDate(task.dueDate, task.dueTime)} warn={isOverdue} />
           <Meta label={t('tasks.tasksPage.тип')} value={task.isAutomatic ? 'Автоматическая' : 'Ручная'} />
         </div>
+
+        {/* Исполнитель — не текст, а выбор: смена исполнителя уходит в
+            PATCH /tasks/:id/reassign, у которого своё право task.reassign.
+            design-ok: rgba(255,255,255,0.035) — заливка блока, как у соседних
+            Meta, а не цвет текста. */}
+        <div style={{ /* design-ok: заливка блока, как у соседних Meta, не цвет текста */ marginTop: 8, border: '1px solid rgba(110,231,183,0.14)', borderRadius: 7, padding: '8px 9px', background: 'rgba(255,255,255,0.035)' }}>
+          <label htmlFor="task-assignee" style={{ display: 'block', fontSize: 16, color: 'rgba(241,217,157,0.76)', marginBottom: 4 }}>
+            {t('tasks.tasksPage.исполнитель')}</label>
+          <select
+            id="task-assignee"
+            value={task.assignedToId}
+            onChange={event => onReassign(task.id, event.target.value)}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              borderRadius: 4,
+              border: '1px solid rgba(110,231,183,0.2)',
+              background: 'rgba(0,0,0,0.25)',
+              color: 'rgba(255,255,255,0.92)',
+              fontSize: 16,
+              fontWeight: 400,
+            }}
+          >
+            <option value="">{task.assignedToName}</option>
+            {assignees.map(member => (
+              <option key={member.id} value={member.id}>
+                {member.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {task.status !== 'done' && (
+          <button
+            type="button"
+            onClick={() => onSetInProgress(task.id, task.status !== 'in_progress')}
+            style={{
+              marginTop: 8,
+              padding: '8px 14px',
+              borderRadius: 4,
+              border: '1px solid rgba(230,195,100,0.4)',
+              background: 'transparent',
+              color: C.gold,
+              fontSize: 16,
+              fontWeight: 400,
+              cursor: 'pointer',
+            }}
+          >
+            {task.status === 'in_progress'
+              ? t('tasks.tasksPage.вернуть_в_новые')
+              : t('tasks.tasksPage.взять_в_работу')}</button>
+        )}
       </div>
 
       {task.entityLabel && (
@@ -752,8 +877,30 @@ function TaskDetailsPanel({
       {task.subtasks && task.subtasks.length > 0 && (
         <div style={{ border: '1px solid rgba(110,231,183,0.16)', borderRadius: 8, padding: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 400, color: '#fff', marginBottom: 6 }}>{t('tasks.tasksPage.подзадачи')}</div>
-          <ul style={{ margin: 0, paddingLeft: 16, color: 'rgba(216,239,228,0.82)', fontSize: 13 }}>
-            {task.subtasks.map(st => <li key={st.id}>{st.title}</li>)}
+          {/* Отметка подзадачи уходит на сервер: модель хранила `done` с самого
+              начала, но экран показывал список, который ничего не сохранял. */}
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', color: 'rgba(216,239,228,0.82)', fontSize: 16 }}>
+            {task.subtasks.map(st => (
+              <li key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}>
+                <input
+                  type="checkbox"
+                  id={`subtask-${st.id}`}
+                  checked={st.done}
+                  onChange={() => onToggleSubtask(task.id, st.id)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--gold)', cursor: 'pointer' }}
+                />
+                <label
+                  htmlFor={`subtask-${st.id}`}
+                  style={{
+                    cursor: 'pointer',
+                    textDecoration: st.done ? 'line-through' : 'none',
+                    color: st.done ? 'rgba(216,239,228,0.72)' : 'rgba(216,239,228,0.92)',
+                  }}
+                >
+                  {st.title}
+                </label>
+              </li>
+            ))}
           </ul>
         </div>
       )}

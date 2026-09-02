@@ -8366,6 +8366,8 @@ export const es = {
       "личный_и_командный_т": "Rastreador de tareas personales y de equipo",
       "новая_задача": "Nueva tarea",
       "задач_не_найдено": "No se encontraron tareas",
+      "взять_в_работу": "Empezar a trabajar",
+      "вернуть_в_новые": "Devolver a nuevas",
       "загружаю_задачи": "Cargando tareas…",
       "повторить": "Reintentar",
       "состав_команды_не_за": "No se pudo cargar el equipo: el responsable y el creador se muestran con un guion y no hay a quién asignar una tarea nueva.",

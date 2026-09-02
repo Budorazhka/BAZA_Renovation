@@ -4,6 +4,7 @@ import type {
   CreateTaskV2Payload,
   ListTasksV2Params,
   ListTasksV2Response,
+  TaskSubtaskV2,
   TaskV2,
 } from '@/types/tasksV2'
 
@@ -78,14 +79,50 @@ export const tasksApiV2 = {
   },
 
   /**
-   * Снятие отметки о выполнении — PATCH со статусом `open`. Отдельного
-   * эндпоинта reopen на сервере нет, и заводить его ради одной кнопки не
-   * нужно: PATCH уже умеет ровно этот переход.
+   * Смена статуса — PATCH. Отдельных эндпоинтов reopen/start на сервере нет,
+   * и заводить их ради двух кнопок не нужно: PATCH умеет ровно эти переходы.
+   *
+   * `completed` сюда не передаётся: завершение — команда `complete`, она
+   * пишет `completedAt`, `completedByPositionId` и событие `TaskCompleted`.
    */
-  async reopen(taskId: string, expectedVersion: number): Promise<TaskV2> {
-    const { data } = await api.patch<TaskV2>(`/api/v1/tasks/${taskId}`, {
+  async setStatus(
+    taskId: string,
+    expectedVersion: number,
+    status: 'open' | 'in_progress' | 'cancelled',
+  ): Promise<TaskV2> {
+    const { data } = await api.patch<TaskV2>(`/api/v1/tasks/${taskId}`, { expectedVersion, status })
+    return data
+  },
+
+  /**
+   * Подзадачи заменяются целиком: сервер принимает полный список, а не
+   * поштучные операции. Экран всегда держит их все, поэтому отправлять
+   * различия было бы сложнее, чем отправить список.
+   */
+  async setSubtasks(
+    taskId: string,
+    expectedVersion: number,
+    subtasks: TaskSubtaskV2[],
+  ): Promise<TaskV2> {
+    const { data } = await api.patch<TaskV2>(`/api/v1/tasks/${taskId}`, { expectedVersion, subtasks })
+    return data
+  },
+
+  /**
+   * Смена исполнителя — отдельный эндпоинт и отдельное право `task.reassign`,
+   * не `task.edit`: у менеджера может быть право править свою задачу и не быть
+   * права передать её другому.
+   *
+   * `null` — снять назначение.
+   */
+  async reassign(
+    taskId: string,
+    expectedVersion: number,
+    assignedPositionId: string | null,
+  ): Promise<TaskV2> {
+    const { data } = await api.patch<TaskV2>(`/api/v1/tasks/${taskId}/reassign`, {
       expectedVersion,
-      status: 'open',
+      assignedPositionId,
     })
     return data
   },

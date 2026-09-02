@@ -61,18 +61,48 @@ describe('tasksApiV2', () => {
     )
   })
 
-  it('complete() и reopen() передают прочитанную клиентом version', async () => {
+  it('complete() и setStatus() передают прочитанную клиентом version', async () => {
     const { tasksApiV2 } = await import('@/services/tasksApiV2')
     postMock.mockResolvedValue({ data: { id: 'task-1' } })
     patchMock.mockResolvedValue({ data: { id: 'task-1' } })
 
     await tasksApiV2.complete('task-1', 7)
-    await tasksApiV2.reopen('task-1', 8)
+    await tasksApiV2.setStatus('task-1', 8, 'in_progress')
 
     expect(postMock).toHaveBeenCalledWith('/api/v1/tasks/task-1/complete', { expectedVersion: 7 })
     expect(patchMock).toHaveBeenCalledWith('/api/v1/tasks/task-1', {
       expectedVersion: 8,
-      status: 'open',
+      status: 'in_progress',
+    })
+  })
+
+  it('setSubtasks() отправляет полный список — сервер заменяет его целиком', async () => {
+    const { tasksApiV2 } = await import('@/services/tasksApiV2')
+    patchMock.mockResolvedValue({ data: { id: 'task-1' } })
+
+    await tasksApiV2.setSubtasks('task-1', 2, [{ id: 'st-1', title: 'Паспорт', done: true }])
+
+    expect(patchMock).toHaveBeenCalledWith('/api/v1/tasks/task-1', {
+      expectedVersion: 2,
+      subtasks: [{ id: 'st-1', title: 'Паспорт', done: true }],
+    })
+  })
+
+  it('reassign() идёт на свой эндпоинт: у смены исполнителя своё право', async () => {
+    const { tasksApiV2 } = await import('@/services/tasksApiV2')
+    patchMock.mockResolvedValue({ data: { id: 'task-1' } })
+
+    await tasksApiV2.reassign('task-1', 5, 'pos-2')
+    await tasksApiV2.reassign('task-1', 6, null)
+
+    expect(patchMock).toHaveBeenCalledWith('/api/v1/tasks/task-1/reassign', {
+      expectedVersion: 5,
+      assignedPositionId: 'pos-2',
+    })
+    // null — снять назначение, а не «оставить как было».
+    expect(patchMock).toHaveBeenCalledWith('/api/v1/tasks/task-1/reassign', {
+      expectedVersion: 6,
+      assignedPositionId: null,
     })
   })
 

@@ -8369,6 +8369,8 @@ export const en: TranslationSchema<typeof ru> = {
       "личный_и_командный_т": "Personal and team task tracker",
       "новая_задача": "New task",
       "задач_не_найдено": "No tasks found",
+      "взять_в_работу": "Start working",
+      "вернуть_в_новые": "Move back to new",
       "загружаю_задачи": "Loading tasks…",
       "повторить": "Retry",
       "состав_команды_не_за": "The team roster failed to load: assignee and creator are shown as a dash, and there is nobody to pick as the assignee of a new task.",

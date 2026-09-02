@@ -8366,6 +8366,8 @@ export const tr = {
       "личный_и_командный_т": "Kişisel ve ekip görev izleyicisi",
       "новая_задача": "Yeni görev",
       "задач_не_найдено": "Hiçbir görev bulunamadı",
+      "взять_в_работу": "Çalışmaya başla",
+      "вернуть_в_новые": "Yenilere geri al",
       "загружаю_задачи": "Görevler yükleniyor…",
       "повторить": "Yeniden dene",
       "состав_команды_не_за": "Ekip listesi yüklenemedi: atanan ve oluşturan tire ile gösteriliyor, yeni göreve atanacak kimse yok.",
