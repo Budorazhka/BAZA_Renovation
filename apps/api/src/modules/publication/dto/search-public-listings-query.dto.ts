@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
 import { IsBboxConstraint } from './is-bbox.constraint';
+import { IsPolygonConstraint } from './is-polygon.constraint';
 import { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from './search-public-developments-query.dto';
 
 const DEAL_TYPES = ['sale', 'rent_long', 'rent_short'] as const;
@@ -49,4 +50,12 @@ export class SearchPublicListingsQueryDto {
   @IsOptional()
   @Validate(IsBboxConstraint)
   bbox?: string;
+
+  // SEARCH-001: bbox и polygon — независимые способы geo-фильтрации, оба
+  // валидируются здесь по отдельности; проверка "нельзя одновременно"
+  // происходит в контроллере (см. public-listings.controller.ts) — там же,
+  // где bbox уже парсится, а не через cross-field class-validator.
+  @IsOptional()
+  @Validate(IsPolygonConstraint)
+  polygon?: string;
 }

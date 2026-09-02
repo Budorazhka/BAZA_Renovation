@@ -163,4 +163,35 @@ describe('PublicListingsController — whitelist границы public response'
       await expect(controller.getPublicListing('does-not-exist')).rejects.toThrow('Publication not found');
     });
   });
+
+  describe('SEARCH-001: bbox/polygon geo-фильтр', () => {
+    it('bbox и polygon одновременно — 400, репозиторий не вызывается', async () => {
+      const listPublishedByFilterPage = jest.fn();
+      const repository = { listPublishedByFilterPage } as unknown as MarketplacePublicationRepository;
+      const controller = new PublicListingsController(repository);
+      const query = Object.assign(new SearchPublicListingsQueryDto(), {
+        limit: 20,
+        bbox: '44,41,45,42',
+        polygon: '44,41,45,41,44.5,42',
+      });
+
+      await expect(controller.searchPublicListings(query)).rejects.toThrow('bbox и polygon нельзя передавать одновременно');
+      expect(listPublishedByFilterPage).not.toHaveBeenCalled();
+    });
+
+    it('polygon без bbox — парсится и передаётся в репозиторий как GeoJSON Polygon', async () => {
+      const listPublishedByFilterPage = jest.fn().mockResolvedValue({ items: [], total: 0 });
+      const repository = { listPublishedByFilterPage } as unknown as MarketplacePublicationRepository;
+      const controller = new PublicListingsController(repository);
+      const query = Object.assign(new SearchPublicListingsQueryDto(), { limit: 20, polygon: '44,41,45,41,44.5,42' });
+
+      await controller.searchPublicListings(query);
+
+      expect(listPublishedByFilterPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          polygon: { type: 'Polygon', coordinates: [[[44, 41], [45, 41], [44.5, 42], [44, 41]]] },
+        }),
+      );
+    });
+  });
 });

@@ -180,6 +180,44 @@ describe('MarketplacePublicationRepository', () => {
         $geoWithin: { $box: [[44, 41], [45, 42]] },
       });
     });
+
+    it('SEARCH-001: с polygon добавляет $geoWithin/$geometry фильтр', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const polygon = { type: 'Polygon' as const, coordinates: [[[44, 41], [45, 41], [44.5, 42], [44, 41]]] as [number, number][][] };
+      await repository.listPublished({ limit: 20, polygon });
+
+      const [filter] = findSpy.mock.calls[0] as [{ 'searchProjection.geo': unknown }];
+      expect(filter['searchProjection.geo']).toEqual({
+        $geoWithin: { $geometry: polygon },
+      });
+    });
+
+    it('SEARCH-001: bbox и polygon одновременно — polygon побеждает (контроллер уже должен был отклонить эту комбинацию 400)', async () => {
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const polygon = { type: 'Polygon' as const, coordinates: [[[44, 41], [45, 41], [44.5, 42], [44, 41]]] as [number, number][][] };
+      await repository.listPublished({
+        limit: 20,
+        bbox: { minLng: 44, minLat: 41, maxLng: 45, maxLat: 42 },
+        polygon,
+      });
+
+      const [filter] = findSpy.mock.calls[0] as [{ 'searchProjection.geo': unknown }];
+      expect(filter['searchProjection.geo']).toEqual({
+        $geoWithin: { $geometry: polygon },
+      });
+    });
   });
 
   describe('public page methods', () => {
@@ -221,6 +259,24 @@ describe('MarketplacePublicationRepository', () => {
         'searchProjection.city': 'Batumi',
       });
       expect(result).toEqual({ items: [document], total: 7 });
+    });
+
+    it('SEARCH-001: polygon добавляет $geoWithin/$geometry в baseFilter (влияет и на find, и на countDocuments)', async () => {
+      const findExec = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: findExec });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const countExec = jest.fn().mockResolvedValue(0);
+      const countDocumentsSpy = jest.fn().mockReturnValue({ exec: countExec });
+      const mockModel = { find: findSpy, countDocuments: countDocumentsSpy };
+
+      const repository = new MarketplacePublicationRepository(mockModel as never);
+      const polygon = { type: 'Polygon' as const, coordinates: [[[44, 41], [45, 41], [44.5, 42], [44, 41]]] as [number, number][][] };
+      await repository.listPublishedByFilterPage({ sourceType: 'listing', limit: 20, polygon });
+
+      const expectedGeo = { $geoWithin: { $geometry: polygon } };
+      expect(findSpy).toHaveBeenCalledWith(expect.objectContaining({ 'searchProjection.geo': expectedGeo }));
+      expect(countDocumentsSpy).toHaveBeenCalledWith(expect.objectContaining({ 'searchProjection.geo': expectedGeo }));
     });
   });
 

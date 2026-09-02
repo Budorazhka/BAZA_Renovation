@@ -238,6 +238,38 @@ describe('GET /public/developments — list, cursor pagination, validation, filt
     expect(items[0]!.slug).toBe(inside.slug);
   });
 
+  it('SEARCH-001: polygon с нечётным количеством чисел → 400', async () => {
+    const response = await get('?polygon=44,41,45,41,44.5');
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('SEARCH-001: polygon с менее чем 3 точками → 400', async () => {
+    const response = await get('?polygon=44,41,45,42');
+    expect(response.statusCode).toBe(400);
+  });
+
+  it('SEARCH-001: polygon с longitude/latitude вне диапазона → 400', async () => {
+    expect((await get('?polygon=-200,41,45,41,44.5,42')).statusCode).toBe(400);
+    expect((await get('?polygon=44,-100,45,41,44.5,42')).statusCode).toBe(400);
+  });
+
+  it('SEARCH-001: валидный polygon реально фильтрует — только объект внутри ring возвращается', async () => {
+    const inside = await seedPublished({ geo: [41.6, 41.6] });
+    await seedPublished({ geo: [50.0, 50.0] });
+
+    // Треугольник вокруг [41.6, 41.6].
+    const response = await get('?polygon=41,41,42,41,41.5,42');
+    expect(response.statusCode).toBe(200);
+    const items = response.body.items as Array<Record<string, unknown>>;
+    expect(items).toHaveLength(1);
+    expect(items[0]!.slug).toBe(inside.slug);
+  });
+
+  it('SEARCH-001: bbox и polygon одновременно → 400', async () => {
+    const response = await get('?bbox=41,41,42,42&polygon=41,41,42,41,41.5,42');
+    expect(response.statusCode).toBe(400);
+  });
+
   it('city фильтр реально фильтрует', async () => {
     const batumi = await seedPublished({ city: 'batumi' });
     await seedPublished({ city: 'tbilisi' });
