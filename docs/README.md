@@ -129,6 +129,8 @@ permission-matrix.md», и ни один из четырёх читателю э
 
 ## Прочее
 
+- [architecture/screen-as-spec-boundary-audit-2026-09-02.md](architecture/screen-as-spec-boundary-audit-2026-09-02.md) — аудит правила «экран — спецификация»: где граница между контрактом чтения и схемой хранения, вердикты по двенадцати полям задачи, предсказания к 02.11.
+
 - [discovery/figma-local-handoff.md](discovery/figma-local-handoff.md) — передача макетов.
 - [codex/plans/](codex/plans/) — планы отдельных работ, писавшиеся до реализации.
 
