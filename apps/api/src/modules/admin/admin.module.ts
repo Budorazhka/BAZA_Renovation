@@ -14,6 +14,8 @@ import { AdminAuditService } from './admin-audit.service';
 import { AdminAuditController } from './admin-audit.controller';
 import { AdminDuplicateCandidateService } from './admin-duplicate-candidate.service';
 import { AdminDuplicateCandidateController } from './admin-duplicate-candidate.controller';
+import { AdminComplaintService } from './admin-complaint.service';
+import { AdminComplaintController } from './admin-complaint.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { PropertyAssetsModule } from '../property-assets/property-assets.module';
@@ -55,6 +57,7 @@ import { IdentityModule } from '../identity/identity.module';
     AdminMeController,
     AdminAuditController,
     AdminDuplicateCandidateController,
+    AdminComplaintController,
   ],
   providers: [
     AdminAccountRepository,
@@ -63,6 +66,7 @@ import { IdentityModule } from '../identity/identity.module';
     AdminPublicationService,
     AdminAuditService,
     AdminDuplicateCandidateService,
+    AdminComplaintService,
   ],
   exports: [AdminAccountRepository],
 })

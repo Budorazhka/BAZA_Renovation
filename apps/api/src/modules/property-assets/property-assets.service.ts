@@ -19,8 +19,16 @@ export interface PropertyAssetMediaViewItem {
 }
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
-import { PropertyAssetRepository, ListingRepository } from '@baza/property-assets';
+import { ClientSession, Connection, Types } from 'mongoose';
+import {
+  PropertyAssetRepository,
+  ListingRepository,
+  ListingRevisionRepository,
+  type PropertyAssetDocument,
+  type ListingDocument,
+  type ListingRevisionActorType,
+  type ListingRevisionChangeType,
+} from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AppException } from '../../shared/errors/app-exception';
@@ -49,8 +57,41 @@ export class PropertyAssetsService {
     private readonly idempotencyService: IdempotencyService,
     private readonly dedupeService: DedupeService,
     private readonly mediaService: MediaService,
+    private readonly listingRevisionRepository: ListingRevisionRepository,
     @InjectConnection() private readonly connection: Connection,
   ) {}
+
+  /**
+   * Часть 1 (хвост Этапа 3: "недельная история версий карточки") —
+   * денормализованный снапшот полей карточки на каждую значимую мутацию.
+   * Один helper, не дублирование field-extraction в каждом write-методе
+   * ниже (createAsset/createListing/activateListing/publishListing/
+   * unpublishListing — пять мест уже оправдывают абстракцию). `session`
+   * опционален — вызывающий метод передаёт её, только если сам уже внутри
+   * runInTransaction (activateListing сегодня не транзакционен).
+   */
+  private async recordRevision(params: {
+    asset: Pick<PropertyAssetDocument, '_id' | 'publisherScope' | 'characteristics' | 'media'>;
+    listing?: Pick<ListingDocument, '_id' | 'status' | 'price'>;
+    actor: { type: ListingRevisionActorType; id?: Types.ObjectId };
+    changeType: ListingRevisionChangeType;
+    session?: ClientSession;
+  }): Promise<void> {
+    await this.listingRevisionRepository.record(
+      {
+        propertyAssetId: params.asset._id,
+        listingId: params.listing?._id,
+        publisherScope: params.asset.publisherScope,
+        actor: params.actor,
+        changeType: params.changeType,
+        price: params.listing?.price,
+        status: params.listing?.status,
+        characteristics: params.asset.characteristics,
+        mediaKeys: (params.asset.media || []).map((m) => m.mediaAssetId.toString()),
+      },
+      params.session,
+    );
+  }
 
   /**
    * DEDUPE-001: dedupe-скан запускается сразу после создания — domain-model.md
@@ -99,6 +140,13 @@ export class PropertyAssetsService {
         session,
       );
 
+      await this.recordRevision({
+        asset: created,
+        actor: { type: 'identity', id: idempotency.identityId },
+        changeType: 'asset_created',
+        session,
+      });
+
       return created;
     });
 
@@ -133,7 +181,7 @@ export class PropertyAssetsService {
     dto: CreateListingDto,
     idempotency: { identityId: Types.ObjectId; key: string; requestBody: Record<string, unknown> },
   ) {
-    await this.getAsset(assetId, organizationId);
+    const asset = await this.getAsset(assetId, organizationId);
 
     return runInTransaction(this.connection, async (session) => {
       const created = await this.listingRepository.create(
@@ -160,6 +208,14 @@ export class PropertyAssetsService {
         session,
       );
 
+      await this.recordRevision({
+        asset,
+        listing: created,
+        actor: { type: 'identity', id: idempotency.identityId },
+        changeType: 'listing_created',
+        session,
+      });
+
       return created;
     });
   }
@@ -179,7 +235,12 @@ export class PropertyAssetsService {
     return this.listingRepository.listForAsset(assetId, organizationId);
   }
 
-  async activateListing(listingId: Types.ObjectId, assetId: Types.ObjectId, organizationId: Types.ObjectId) {
+  async activateListing(
+    listingId: Types.ObjectId,
+    assetId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    actorIdentityId?: Types.ObjectId,
+  ) {
     const listing = await this.listingRepository.findByIdForOrganization(listingId, organizationId);
     if (!listing || !listing.propertyAssetId.equals(assetId)) throw new NotFoundException('Listing not found');
     const existing = await this.listingRepository.findActiveForDealType(listing.propertyAssetId, organizationId, listing.dealType);
@@ -187,6 +248,21 @@ export class PropertyAssetsService {
     try {
       const activated = await this.listingRepository.activate(listingId, organizationId, new Date());
       if (!activated) throw new ConflictException('Listing is not in draft status');
+
+      // Часть 1: не транзакционно (activate сам не использует
+      // runInTransaction сегодня) — best-effort, тот же принцип, что
+      // scanForDuplicates в createAsset: сбой записи истории не должен
+      // откатывать уже успешную активацию listing.
+      const asset = await this.propertyAssetRepository.findByIdForOrganization(assetId, organizationId);
+      if (asset) {
+        await this.recordRevision({
+          asset,
+          listing: activated,
+          actor: { type: 'identity', id: actorIdentityId },
+          changeType: 'listing_activated',
+        });
+      }
+
       return activated;
     } catch (error) {
       if ((error as { code?: number }).code === 11000) throw new ConflictException('Active listing for this deal type already exists');
@@ -302,6 +378,19 @@ export class PropertyAssetsService {
           throw new ConflictException('Listing was modified by another request — refresh and retry');
         }
 
+        // Часть 1: снапшот на момент публикации — тот же asset, что уже
+        // прошёл tenant/ownership-проверку выше (createListing/getAsset).
+        const asset = await this.propertyAssetRepository.findByIdForOrganization(params.assetId, params.organizationId);
+        if (asset) {
+          await this.recordRevision({
+            asset,
+            listing,
+            actor: { type: 'identity', id: params.actorIdentityId },
+            changeType: 'listing_published',
+            session,
+          });
+        }
+
         const publication = await this.publicationService.requestPublication(
           {
             sourceType: 'listing',
@@ -378,8 +467,8 @@ export class PropertyAssetsService {
       throw new NotFoundException('Listing not found');
     }
 
-    await runInTransaction(this.connection, (session) =>
-      this.publicationService.unpublish(
+    await runInTransaction(this.connection, async (session) => {
+      await this.publicationService.unpublish(
         {
           sourceType: 'listing',
           sourceId: params.listingId,
@@ -389,8 +478,39 @@ export class PropertyAssetsService {
           correlationId: params.correlationId,
         },
         session,
-      ),
-    );
+      );
+
+      // Часть 1: снапшот на момент снятия с публикации.
+      const asset = await this.propertyAssetRepository.findByIdForOrganization(params.assetId, params.organizationId);
+      if (asset) {
+        await this.recordRevision({
+          asset,
+          listing,
+          actor: { type: 'identity', id: params.actorIdentityId },
+          changeType: 'listing_unpublished',
+          session,
+        });
+      }
+    });
+  }
+
+  /**
+   * Часть 1: read-путь недельной истории версий карточки. Tenant-scoped —
+   * getAsset уже бросает NotFoundException на чужой/несуществующий assetId
+   * (единый 404, не раскрывает существование чужой карточки), тот же
+   * принцип, что остальные read-эндпоинты этого сервиса. `listingId`
+   * опционален — без него возвращается вся история asset'а (включая
+   * `asset_created`, у которого `listingId` ещё не существовал).
+   */
+  async listRevisions(assetId: Types.ObjectId, organizationId: Types.ObjectId, listingId?: Types.ObjectId) {
+    await this.getAsset(assetId, organizationId);
+    if (listingId) {
+      const listing = await this.listingRepository.findByIdForOrganization(listingId, organizationId);
+      if (!listing || !listing.propertyAssetId.equals(assetId)) {
+        throw new NotFoundException('Listing not found');
+      }
+    }
+    return this.listingRevisionRepository.listForAsset(assetId, { listingId, limit: 100 });
   }
 
   /**

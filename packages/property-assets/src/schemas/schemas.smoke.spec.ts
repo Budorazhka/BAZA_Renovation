@@ -1,6 +1,8 @@
 import { PropertyAssetSchema } from './property-asset.schema';
 import { ListingSchema } from './listing.schema';
 import { DuplicateCandidateSchema } from './duplicate-candidate.schema';
+import { ListingRevisionSchema } from './listing-revision.schema';
+import { ComplaintSchema } from './complaint.schema';
 
 /**
  * Смок-тест: сам факт импорта этого файла загружает и инстанцирует обе
@@ -24,5 +26,13 @@ describe('property-assets package schemas — smoke', () => {
 
   it('DuplicateCandidateSchema инстанцируется без ошибок', () => {
     expect(DuplicateCandidateSchema).toBeDefined();
+  });
+
+  it('ListingRevisionSchema инстанцируется без ошибок', () => {
+    expect(ListingRevisionSchema).toBeDefined();
+  });
+
+  it('ComplaintSchema инстанцируется без ошибок', () => {
+    expect(ComplaintSchema).toBeDefined();
   });
 });

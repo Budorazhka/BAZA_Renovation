@@ -28,3 +28,22 @@ export {
   getActualityThresholds,
   computeActualityState,
 } from './actuality.util';
+export {
+  ListingRevisionDocument,
+  ListingRevisionSchema,
+  type ListingRevisionActorType,
+  type ListingRevisionChangeType,
+  type ListingRevisionCharacteristicsSnapshot,
+  type ListingRevisionPriceSnapshot,
+} from './schemas/listing-revision.schema';
+export {
+  ListingRevisionRepository,
+  type RecordListingRevisionInput,
+} from './repository/listing-revision.repository';
+export {
+  ComplaintDocument,
+  ComplaintSchema,
+  type ComplaintCategory,
+  type ComplaintStatus,
+} from './schemas/complaint.schema';
+export { ComplaintRepository, type CreateComplaintInput } from './repository/complaint.repository';

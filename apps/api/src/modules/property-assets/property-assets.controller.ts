@@ -3,7 +3,7 @@ import { CreatePropertyAssetMediaUploadIntentDto } from './dto/create-property-a
 import { ConfirmPropertyAssetMediaDto } from './dto/confirm-property-asset-media.dto';
 import { UpdatePropertyAssetMediaDto } from './dto/update-property-asset-media.dto';
 import { ReorderPropertyAssetMediaDto } from './dto/reorder-property-asset-media.dto';
-import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { TenantGuard } from '../../shared/tenant/tenant.guard';
@@ -221,6 +221,7 @@ export class PropertyAssetsController {
       objectId(listingId, 'listingId'),
       objectId(assetId, 'assetId'),
       new Types.ObjectId(tenant.organizationId),
+      new Types.ObjectId(tenant.identityId),
     );
   }
 
@@ -322,6 +323,23 @@ export class PropertyAssetsController {
       objectId(listingId, 'listingId'),
       objectId(assetId, 'assetId'),
       new Types.ObjectId(tenant.organizationId),
+    );
+  }
+
+  /**
+   * Часть 1: недельная история версий карточки — тот же permission, что
+   * остальные read-эндпоинты над этим listing/asset (не изобретаем новый
+   * resource). `listingId` опционален (query) — без него возвращается вся
+   * история asset'а, включая `asset_created` (до появления любого listing).
+   */
+  @Get(':assetId/revisions')
+  @RequirePermission('listing', 'read')
+  listRevisions(@Req() req: FastifyRequest, @Param('assetId') assetId: string, @Query('listingId') listingId?: string) {
+    const tenant = requireTenantContext(req);
+    return this.service.listRevisions(
+      objectId(assetId, 'assetId'),
+      new Types.ObjectId(tenant.organizationId),
+      listingId ? objectId(listingId, 'listingId') : undefined,
     );
   }
 

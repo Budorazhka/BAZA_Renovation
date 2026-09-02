@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { PropertyAssetsService } from './property-assets.service';
-import type { PropertyAssetRepository, ListingRepository, PropertyAssetMediaItem } from '@baza/property-assets';
+import type { PropertyAssetRepository, ListingRepository, ListingRevisionRepository, PropertyAssetMediaItem } from '@baza/property-assets';
 import type { PublicationService } from '../publication/publication.service';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
@@ -39,9 +39,15 @@ function makeService(overrides: {
   idempotencyService?: Partial<IdempotencyService>;
   dedupeService?: Partial<DedupeService>;
   mediaService?: Partial<MediaService>;
+  listingRevisionRepository?: Partial<ListingRevisionRepository>;
 } = {}) {
   return new PropertyAssetsService(
-    (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
+    // Дефолт включает findByIdForOrganization -> null (не найден) — тесты
+    // publishListing/unpublishListing/activateListing, не переопределяющие
+    // propertyAssetRepository явно, не проверяют Часть 1 (revision-снапшот)
+    // и не должны падать на вызове этого метода внутри recordRevision-гейта
+    // (`if (asset)`), который эти тесты сегодня не покрывают отдельно.
+    (overrides.propertyAssetRepository ?? { findByIdForOrganization: jest.fn().mockResolvedValue(null) }) as PropertyAssetRepository,
     (overrides.listingRepository ?? {}) as ListingRepository,
     (overrides.publicationService ?? {}) as PublicationService,
     // Дефолт — null (нет существующей публикации), чтобы существующие
@@ -65,6 +71,7 @@ function makeService(overrides: {
     // тесты именно на dedupe-блокировку переопределяют assertNoBlockingDuplicates.
     (overrides.dedupeService ?? { assertNoBlockingDuplicates: jest.fn().mockResolvedValue(undefined), scanForDuplicates: jest.fn().mockResolvedValue(undefined) }) as DedupeService,
     (overrides.mediaService ?? { createUploadIntent: jest.fn(), confirmUpload: jest.fn(), getAssetsForOwnerScope: jest.fn(), getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as unknown as MediaService,
+    (overrides.listingRevisionRepository ?? { record: jest.fn().mockResolvedValue(undefined), listForAsset: jest.fn().mockResolvedValue([]) }) as ListingRevisionRepository,
     makeMockConnection() as never,
   );
 }
@@ -848,6 +855,215 @@ describe('PropertyAssetsService', () => {
           expect.objectContaining({ mediaAssetId: item2Id, role: 'cover' }),
         ]),
       );
+    });
+  });
+
+  describe('Часть 1: недельная история версий карточки (ListingRevision)', () => {
+    it('createAsset пишет revision с changeType asset_created', async () => {
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const assetRepository = {
+        create: jest.fn().mockResolvedValue({
+          _id: assetId,
+          publisherScope: { type: 'organization', organizationId },
+          characteristics: assetDto.characteristics,
+          media: [],
+        }),
+      };
+      const recordSpy = jest.fn().mockResolvedValue(undefined);
+      const service = makeService({
+        propertyAssetRepository: assetRepository as never,
+        listingRevisionRepository: { record: recordSpy } as never,
+      });
+
+      await service.createAsset(organizationId, assetDto, idem());
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ propertyAssetId: assetId, changeType: 'asset_created', listingId: undefined }),
+        expect.anything(),
+      );
+    });
+
+    it('createListing пишет revision с changeType listing_created и снапшотом характеристик asset', async () => {
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const listingId = new Types.ObjectId();
+      const asset = {
+        _id: assetId,
+        publisherScope: { type: 'organization', organizationId },
+        characteristics: { area: 55, rooms: 2 },
+        media: [],
+      };
+      const assetRepository = { findByIdForOrganization: jest.fn().mockResolvedValue(asset) };
+      const listingRepository = {
+        create: jest.fn().mockResolvedValue({ _id: listingId, dealType: 'sale', price, status: 'draft' }),
+      };
+      const recordSpy = jest.fn().mockResolvedValue(undefined);
+      const service = makeService({
+        propertyAssetRepository: assetRepository as never,
+        listingRepository: listingRepository as never,
+        listingRevisionRepository: { record: recordSpy } as never,
+      });
+
+      await service.createListing(assetId, organizationId, { dealType: 'sale', price }, idem());
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyAssetId: assetId,
+          listingId,
+          changeType: 'listing_created',
+          characteristics: asset.characteristics,
+        }),
+        expect.anything(),
+      );
+    });
+
+    it('activateListing пишет revision с changeType listing_activated, если asset найден', async () => {
+      const listingId = new Types.ObjectId();
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+      const activated = { _id: listingId, propertyAssetId: assetId, status: 'active', price };
+      const asset = {
+        _id: assetId,
+        publisherScope: { type: 'organization', organizationId },
+        characteristics: { area: 40 },
+        media: [],
+      };
+      const recordSpy = jest.fn().mockResolvedValue(undefined);
+      const service = makeService({
+        listingRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: assetId, dealType: 'sale' }),
+          findActiveForDealType: jest.fn().mockResolvedValue(null),
+          activate: jest.fn().mockResolvedValue(activated),
+        } as never,
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(asset) } as never,
+        listingRevisionRepository: { record: recordSpy } as never,
+      });
+
+      await service.activateListing(listingId, assetId, organizationId, actorIdentityId);
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyAssetId: assetId,
+          listingId,
+          changeType: 'listing_activated',
+          actor: { type: 'identity', id: actorIdentityId },
+        }),
+        undefined,
+      );
+    });
+
+    it('publishListing пишет revision с changeType listing_published в той же транзакции', async () => {
+      const listingId = new Types.ObjectId();
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+      const asset = {
+        _id: assetId,
+        publisherScope: { type: 'organization', organizationId },
+        characteristics: { area: 60 },
+        media: [],
+      };
+      const recordSpy = jest.fn().mockResolvedValue(undefined);
+      const service = makeService({
+        listingRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: assetId, status: 'active', version: 1, price }),
+          markPublishing: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        } as never,
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(asset) } as never,
+        publicationService: { requestPublication: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), status: 'publication_pending' }) } as never,
+        idempotencyService: { checkReplay: jest.fn().mockResolvedValue(null), record: jest.fn().mockResolvedValue(undefined) } as never,
+        listingRevisionRepository: { record: recordSpy } as never,
+      });
+
+      await service.publishListing({
+        listingId,
+        assetId,
+        organizationId,
+        actorIdentityId,
+        idempotencyKey: 'key',
+        correlationId: 'corr',
+      });
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ propertyAssetId: assetId, listingId, changeType: 'listing_published' }),
+        expect.anything(),
+      );
+    });
+
+    it('unpublishListing пишет revision с changeType listing_unpublished в той же транзакции', async () => {
+      const listingId = new Types.ObjectId();
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+      const asset = {
+        _id: assetId,
+        publisherScope: { type: 'organization', organizationId },
+        characteristics: { area: 60 },
+        media: [],
+      };
+      const recordSpy = jest.fn().mockResolvedValue(undefined);
+      const service = makeService({
+        listingRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: assetId, status: 'active', price }),
+        } as never,
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(asset) } as never,
+        publicationService: { unpublish: jest.fn().mockResolvedValue(undefined) } as never,
+        listingRevisionRepository: { record: recordSpy } as never,
+      });
+
+      await service.unpublishListing({
+        listingId,
+        assetId,
+        organizationId,
+        reason: 'Owner requested removal from marketplace',
+        actorIdentityId,
+        correlationId: 'corr',
+      });
+
+      expect(recordSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ propertyAssetId: assetId, listingId, changeType: 'listing_unpublished' }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('listRevisions', () => {
+    it('делегирует в listingRevisionRepository.listForAsset после проверки владения asset', async () => {
+      const assetId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const listForAssetSpy = jest.fn().mockResolvedValue([]);
+      const service = makeService({
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId }) } as never,
+        listingRevisionRepository: { listForAsset: listForAssetSpy } as never,
+      });
+
+      await service.listRevisions(assetId, organizationId);
+
+      expect(listForAssetSpy).toHaveBeenCalledWith(assetId, { listingId: undefined, limit: 100 });
+    });
+
+    it('чужая организация получает единый 404, не раскрывает существование asset', async () => {
+      const service = makeService({
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as never,
+      });
+
+      await expect(service.listRevisions(new Types.ObjectId(), new Types.ObjectId())).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('listingId, принадлежащий другому asset, отклоняется единым 404', async () => {
+      const assetId = new Types.ObjectId();
+      const wrongAssetId = new Types.ObjectId();
+      const listingId = new Types.ObjectId();
+      const service = makeService({
+        propertyAssetRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: assetId }) } as never,
+        listingRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: listingId, propertyAssetId: wrongAssetId }),
+        } as never,
+      });
+
+      await expect(service.listRevisions(assetId, new Types.ObjectId(), listingId)).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

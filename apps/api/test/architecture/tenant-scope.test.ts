@@ -85,6 +85,15 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
     'Докстринг метода фиксирует контракт: id уже проверен на владение вызывающим, ретраи перечитывают по _id, ' +
     'потому что владение не может смениться посреди операции. Проверено: все 10 мест вызова получают asset ' +
     'через getAsset(assetId, organizationId) либо getAsset(assetId, identityId).',
+  'complaint.repository.ts#findById':
+    'Скоуп проверяется вызывающим (ComplaintService/AdminComplaintService) — admin-резолюция сверяет ' +
+    'complaint.scopeCity против грантов complaint.resolve.city(X), не organizationId ответчика.',
+  'complaint.repository.ts#listForReview':
+    'Админская очередь модерации жалоб — намеренно поверх всех организаций, сужается по scopeCity ' +
+    '(города, куда у admin есть грант complaint.resolve.city), тот же принцип, что duplicate-candidate listForReview.',
+  'listing-revision.repository.ts#listForAsset':
+    'Скоупится propertyAssetId, не organizationId напрямую — PropertyAssetsService.listRevisions вызывает ' +
+    'getAsset(assetId, organizationId) до этого запроса, тот же контракт, что mutateMedia выше.',
 };
 
 const QUERY = /this\.model\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|countDocuments|aggregate|distinct)\b/;
