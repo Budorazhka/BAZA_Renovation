@@ -34,24 +34,51 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /property-assets/:assetId/listings/:listingId/publish': 'publish листинга',
   'POST /marketplace/property-assets/:assetId/listings/:listingId/publish':
     'publish листинга в marketplace-потоке',
+  'POST /leads': 'дубль лида искажает воронку и отчётность по менеджерам — данные, по которым принимают решения',
+  'POST /deals': 'дубль сделки удваивает ожидаемую комиссию в отчётах',
+  'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
+  'POST /marketplace/property-assets': 'дубль объекта в мастере публикации — клиент шлёт стабильный ключ на повтор шага',
+  'POST /marketplace/property-assets/:assetId/listings': 'дубль листинга на том же объекте',
+  'POST /property-assets': 'дубль объекта в ERP — клиент шлёт стабильный ключ на повтор формы',
+  'POST /property-assets/:assetId/listings': 'дубль листинга на том же объекте (ERP)',
+  'POST /developments': 'дубль ЖК — клиент шлёт стабильный ключ на повтор формы мастера',
+  'POST /developments/:developmentId/buildings': 'дубль корпуса',
+  'POST /buildings/:buildingId/sections': 'дубль секции',
+  'POST /buildings/:buildingId/floors': 'дубль этажа',
+  'POST /buildings/:buildingId/floor-plans': 'дубль планировки',
+  'POST /floors/:floorId/units': 'дубль юнита — шахматка показала бы несуществующий лот',
+  'POST /admin/accounts': 'дубль админ-аккаунта: второй аккаунт с админ-доступом на ту же identity',
 };
 
 /**
  * Маршрут → почему ключ НЕ требуется. Проверяется, что он и правда не требуется.
  *
  * Причина, начинающаяся с `ПРОБЕЛ:`, означает осознанно принятый риск, а не
- * безопасность: повтор такого запроса создаёт вторую сущность. Число таких
- * записей закреплено отдельной проверкой — молча вырасти оно не может.
+ * безопасность: повтор такого запроса создаёт вторую сущность, КОТОРАЯ
+ * ОСТАЁТСЯ И ВВОДИТ В ЗАБЛУЖДЕНИЕ. Само по себе «создаёт вторую запись» ещё
+ * не пробел: если дубль недолговечен и убирается сам (см. три upload-intent
+ * ниже), риска он не несёт, а формальная идемпотентность там даже вредна.
+ * Число пробелов закреплено отдельной проверкой — молча вырасти не может.
  */
 const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   // --- Аутентификация ---
   'POST /auth/login': 'выдаёт сессию; повтор даёт новую сессию, а не дубль ресурса',
   'POST /auth/logout': 'идемпотентен по природе: повтор на закрытой сессии ничего не меняет',
   'POST /auth/register': 'повтор отклоняется уникальностью email на уровне БД',
-  'POST /organizations/register': 'ПРОБЕЛ: дубль создаёт вторую организацию',
+  'POST /organizations/register':
+    'НЕ пробел, проверено 02.09.2026: повтор отклоняется уникальным частичным индексом ' +
+    '{identityId} where endedAt not exists на position_assignments — второй активный assignment ' +
+    'для той же identity невозможен на уровне БД. Вся регистрация идёт одной транзакцией ' +
+    '(createOrganizationWithOwner), поэтому отклонённый дубль не оставляет висячей организации. ' +
+    'Ключ здесь был бы к тому же сломан: повтор вернул бы тело, но не поставил session-cookie.',
 
   // --- Команда и позиции ---
-  'POST /team-users': 'ПРОБЕЛ: дубль создаёт вторую позицию',
+  'POST /team-users':
+    'НЕ пробел, проверено 02.09.2026: первый же шаг createOccupiedPosition — registerIdentity — ' +
+    'падает на уникальном индексе normalizedLogin (11000 -> ConflictException), поэтому повтор ' +
+    'с тем же телом вторую позицию создать не может. ОТДЕЛЬНО: сама операция НЕ атомарна ' +
+    '(четыре шага без общей транзакции) — это настоящий дефект, но другого рода, и ключом ' +
+    'он не лечится. См. docs/api/conventions.md §8.',
   'POST /team-users/ensure-self': 'upsert по identity: повтор возвращает ту же позицию',
   'POST /team-users/ensure-team': 'upsert по организации: повтор возвращает ту же команду',
   'POST /team-users/invite/:token/activate': 'токен одноразовый, повтор отклоняется',
@@ -67,25 +94,18 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'грант идемпотентен по паре (subject, resource+action)',
 
   // --- Девелопмент ---
-  'POST /developments': 'ПРОБЕЛ: дубль создаёт второй ЖК',
   'PATCH /developments/:developmentId': 'expectedVersion (CAS) не даст применить дважды',
-  'POST /developments/:developmentId/buildings': 'ПРОБЕЛ: дубль создаёт второй корпус',
-  'POST /buildings/:buildingId/sections': 'ПРОБЕЛ: дубль создаёт вторую секцию',
-  'POST /buildings/:buildingId/floors': 'ПРОБЕЛ: дубль создаёт второй этаж',
-  'POST /buildings/:buildingId/floor-plans': 'ПРОБЕЛ: дубль создаёт второй план этажа',
-  'POST /floors/:floorId/units': 'ПРОБЕЛ: дубль создаёт второй юнит',
   'PATCH /units/:unitId/price': 'expectedVersion (CAS)',
   'PATCH /units/:unitId/status': 'expectedVersion (CAS)',
 
   // --- Объекты и листинги (ERP-поток) ---
-  'POST /property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
-  'POST /property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
   'POST /property-assets/:assetId/listings/:listingId/unpublish':
     'условный update: modifiedCount === 0 → 409 (conventions.md §8)',
   'PATCH /property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
   'PATCH /property-assets/:assetId/listings/:listingId/confirm-actuality':
     'проставляет отметку времени, повтор безвреден',
-  'POST /property-assets/:assetId/media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /property-assets/:assetId/media/upload-intent':
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id, идемпотентно',
   'PATCH /property-assets/:assetId/media/:mediaAssetId': 'обновление по id, идемпотентно',
   'DELETE /property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
@@ -94,15 +114,13 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'условный update кандидата, пишется audit',
 
   // --- Объекты и листинги (marketplace-поток, те же правила) ---
-  'POST /marketplace/property-assets': 'ПРОБЕЛ: дубль создаёт второй объект',
-  'POST /marketplace/property-assets/:assetId/listings': 'ПРОБЕЛ: дубль создаёт второй листинг',
   'POST /marketplace/property-assets/:assetId/listings/:listingId/unpublish':
     'условный update: modifiedCount === 0 → 409',
   'PATCH /marketplace/property-assets/:assetId/listings/:listingId/activate': 'условный update по статусу',
   'PATCH /marketplace/property-assets/:assetId/listings/:listingId/confirm-actuality':
     'проставляет отметку времени, повтор безвреден',
   'POST /marketplace/property-assets/:assetId/media/upload-intent':
-    'ПРОБЕЛ: дубль создаёт второй media asset',
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /marketplace/property-assets/:assetId/media/:mediaAssetId/confirm': 'подтверждение по id',
   'PATCH /marketplace/property-assets/:assetId/media/:mediaAssetId': 'обновление по id',
   'DELETE /marketplace/property-assets/:assetId/media/:mediaAssetId': 'удаление по id идемпотентно',
@@ -111,21 +129,19 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'условный update кандидата, пишется audit',
 
   // --- Медиа ---
-  'POST /media/upload-intent': 'ПРОБЕЛ: дубль создаёт второй media asset',
+  'POST /media/upload-intent':
+    'НЕ пробел, разобрано 02.09.2026: ключ здесь навредил бы. Ответ содержит presigned URL со сроком жизни 5 минут (PRESIGNED_UPLOAD_TTL_SECONDS), а запись идемпотентности живёт несопоставимо дольше — повтор вернул бы МЁРТВУЮ ссылку, и клиент не смог бы загрузить файл. Дубль же самоустраняется: неподтверждённый media asset удаляет media-cleanup через 24 часа.',
   'POST /media/:assetId/confirm': 'подтверждение по id, идемпотентно',
 
   // --- CRM ---
-  'POST /leads': 'ПРОБЕЛ: дубль создаёт второй лид',
   'POST /leads/:leadId/assign': 'условный update владельца',
   'PATCH /leads/:leadId/stage': 'переход стадии условный, повтор не применяется дважды',
-  'POST /deals': 'ПРОБЕЛ: дубль создаёт вторую сделку',
   'PATCH /deals/:dealId': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/reassign': 'expectedVersion (CAS) — см. conventions.md §8',
   'POST /deals/:dealId/participants': 'участник уникален по contactId в рамках сделки',
   'DELETE /deals/:dealId/participants/:contactId': 'удаление по id идемпотентно',
-  'POST /tasks': 'ПРОБЕЛ: дубль создаёт вторую задачу',
   'PATCH /tasks/:taskId': 'expectedVersion (CAS)',
   'PATCH /tasks/:taskId/reassign': 'expectedVersion (CAS)',
   'POST /tasks/:taskId/complete': 'повторное завершение намеренно идемпотентно',
@@ -136,7 +152,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /public/listings/:slug/reveal-contact': 'своя запись идемпотентности',
 
   // --- Админ ---
-  'POST /admin/accounts': 'ПРОБЕЛ: дубль создаёт второй админ-аккаунт',
   'POST /admin/accounts/:adminAccountId/deactivate': 'условный update по статусу',
   'POST /admin/accounts/:adminAccountId/reactivate': 'условный update по статусу',
   'POST /admin/accounts/:adminAccountId/grants': 'грант идемпотентен по (account, resource+action)',
@@ -146,7 +161,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
-const KNOWN_GAPS = 19;
+const KNOWN_GAPS = 0;
 
 interface RouteInfo {
   key: string;

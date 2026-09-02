@@ -16,6 +16,10 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     step: isAuthenticated ? 'location' : 'auth',
   })
 
+  /** Ключи создания объекта и листинга: стабильны при повторе шага, обнуляются при сбросе мастера. */
+  const assetKeyRef = useRef<string | null>(null)
+  const listingKeyRef = useRef<string | null>(null)
+
   // Sync auth state
   useEffect(() => {
     dispatch({ type: 'SET_AUTH_STATUS', isAuthenticated })
@@ -50,10 +54,18 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     dispatch({ type: 'SET_LOADING', isLoading: true })
     dispatch({ type: 'SET_ERROR', error: null })
     try {
-      const asset = await publishingApi.createPropertyAsset({
-        location: state.location,
-        characteristics: state.characteristics,
-      })
+      // Ключ живёт в ref, а не создаётся на каждый вызов: при повторной
+      // попытке того же шага (сеть отвалилась, ответ потерян) должен уйти
+      // ТОТ ЖЕ ключ — иначе сервер создаст второй объект. Сбрасывается вместе
+      // с мастером, как и ключ публикации ниже.
+      if (!assetKeyRef.current) assetKeyRef.current = crypto.randomUUID()
+      const asset = await publishingApi.createPropertyAsset(
+        {
+          location: state.location,
+          characteristics: state.characteristics,
+        },
+        assetKeyRef.current,
+      )
       dispatch({ type: 'SET_ASSET_ID', assetId: asset._id })
       dispatch({ type: 'SET_STEP', step: 'deal' })
     } catch (err: any) {
@@ -73,7 +85,8 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     dispatch({ type: 'SET_LOADING', isLoading: true })
     dispatch({ type: 'SET_ERROR', error: null })
     try {
-      const listing = await publishingApi.createListing(state.assetId, state.deal)
+      if (!listingKeyRef.current) listingKeyRef.current = crypto.randomUUID()
+      const listing = await publishingApi.createListing(state.assetId, state.deal, listingKeyRef.current)
       await publishingApi.activateListing(state.assetId, listing._id)
       dispatch({ type: 'SET_LISTING_ID', listingId: listing._id })
       dispatch({ type: 'SET_STEP', step: 'media' })
@@ -454,6 +467,8 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     if (!isAuthenticated) {
       stopPolling()
       idempotencyKeyRef.current = null
+    assetKeyRef.current = null
+    listingKeyRef.current = null
       isPublishInFlightRef.current = false
       isOverrideInFlightRef.current = false
       pendingUploadsRef.current.clear()
@@ -463,6 +478,8 @@ export function usePublishingWizard(isAuthenticated: boolean) {
   const resetWizard = useCallback(() => {
     stopPolling()
     idempotencyKeyRef.current = null
+    assetKeyRef.current = null
+    listingKeyRef.current = null
     isPublishInFlightRef.current = false
     isOverrideInFlightRef.current = false
     pendingUploadsRef.current.clear()

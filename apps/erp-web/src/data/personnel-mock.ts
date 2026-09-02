@@ -1,0 +1,277 @@
+export type EmployeeRole = 'owner' | 'director' | 'rop' | 'marketer' | 'administrator' | 'manager'
+
+export interface Employee {
+  id: string
+  name: string
+  role: EmployeeRole
+  position: string
+  managerId: string | null
+  phone?: string
+  email?: string
+  hireDate?: string
+  avatarUrl?: string
+  /** Дата рождения (ISO) */
+  birthDate?: string
+  /** Подразделение / отдел */
+  department?: string
+  /** Город / офис */
+  city?: string
+  /** Telegram (@username) */
+  telegram?: string
+  /** О себе — свободный текст */
+  aboutMe?: string
+  /** Навыки и компетенции */
+  skills?: string[]
+  /** WhatsApp (номер) */
+  whatsapp?: string
+  /** Профиль ВКонтакте (ссылка) */
+  vk?: string
+  /** Профиль Instagram (ссылка или @ник) */
+  instagram?: string
+  /** Личный сайт / портфолио */
+  website?: string
+  /** Email для входа (platform-аккаунт) */
+  loginEmail?: string
+  /** ID platform-пользователя */
+  platformUserId?: string
+  /** Статус аккаунта */
+  status?: 'active' | 'blocked' | 'invited'
+  /** Персональные overrides категорий доступа */
+  permissionOverrides?: Record<string, string>
+
+  /* ── Модель позиций (Stage A, фронт): запись = позиция + её занимающий ── */
+  /** Стабильный id позиции (не меняется при смене человека). */
+  positionId?: string
+  /** Позиция-родитель в структуре. */
+  parentPositionId?: string | null
+  /** Позиция свободна (занимающего нет; клиенты и доступы остаются на позиции). */
+  vacant?: boolean
+  /** История занятости позиции. */
+  occupancyHistory?: import('@/types/team').OccupancyEntry[]
+  /** Абсолютный профиль доступа позиции (сериализованный). */
+  accessProfile?: Record<string, string>
+  /** Персональные дельты доступа сотрудника поверх профиля позиции. */
+  personalAccess?: Record<string, string>
+}
+
+export const ROLE_LABELS: Record<EmployeeRole, string> = {
+  owner: 'Собственник',
+  director: 'Директор',
+  rop: 'РОП',
+  marketer: 'Маркетолог',
+  administrator: 'Администратор',
+  manager: 'Менеджер',
+}
+
+export const ROLE_COLORS: Record<EmployeeRole, { bg: string; text: string; border: string }> = {
+  owner:    { bg: 'bg-violet-100', text: 'text-violet-800', border: 'border-violet-200' },
+  director: { bg: 'bg-blue-100',   text: 'text-blue-800',   border: 'border-blue-200' },
+  rop:      { bg: 'bg-amber-100',  text: 'text-amber-800',  border: 'border-amber-200' },
+  marketer: { bg: 'bg-emerald-100',text: 'text-emerald-800',border: 'border-emerald-200' },
+  administrator: { bg: 'bg-emerald-100',text: 'text-emerald-800',border: 'border-emerald-200' },
+  manager:  { bg: 'bg-emerald-100',text: 'text-emerald-800',border: 'border-emerald-200' },
+}
+
+export const MOCK_EMPLOYEES: Employee[] = [
+  {
+    id: 'emp-owner',
+    name: 'Артём Власов',
+    role: 'owner',
+    position: 'Собственник компании',
+    managerId: null,
+    phone: '+7 (999) 100-00-01',
+    email: 'vlasov@estategroup.ru',
+    hireDate: '2018-01-15',
+    birthDate: '1982-04-12',
+    department: 'Управление',
+    city: 'Москва',
+    telegram: '@vlasov_ceo',
+    aboutMe: 'Основал компанию в 2018 году. Отвечаю за стратегию и развитие сети офисов. Верю в сильную команду и прозрачные процессы.',
+    skills: ['Стратегия', 'Управление', 'Переговоры', 'Развитие сети'],
+    whatsapp: '+7 (999) 100-00-01',
+    vk: 'https://vk.com/vlasov',
+    website: 'https://estategroup.ru',
+  },
+  {
+    id: 'emp-director',
+    name: 'Марина Петрова',
+    role: 'director',
+    position: 'Директор агентства',
+    managerId: 'emp-owner',
+    phone: '+7 (999) 100-00-02',
+    email: 'petrova@estategroup.ru',
+    hireDate: '2019-03-01',
+    birthDate: '1986-09-23',
+    department: 'Управление',
+    city: 'Москва',
+    telegram: '@m_petrova',
+    aboutMe: 'Операционное управление агентством: продажи, найм, обучение. Люблю наводить порядок в процессах и растить РОПов.',
+    skills: ['Операционное управление', 'Найм', 'Обучение', 'Аналитика'],
+    whatsapp: '+7 (999) 100-00-02',
+    instagram: '@marina.petrova',
+  },
+  {
+    id: 'emp-rop-msk',
+    name: 'Дмитрий Коваль',
+    role: 'rop',
+    position: 'РОП — Москва',
+    managerId: 'emp-director',
+    phone: '+7 (999) 200-00-01',
+    email: 'koval@estategroup.ru',
+    hireDate: '2020-06-10',
+    birthDate: '1990-01-08',
+    department: 'Продажи — Москва',
+    city: 'Москва',
+    telegram: '@koval_rop',
+    aboutMe: 'Руковожу московским отделом продаж. Из менеджера вырос в РОПа за два года. Кайфую от закрытия сложных сделок.',
+    skills: ['Управление продажами', 'Наставничество', 'CRM', 'Новостройки'],
+    vk: 'https://vk.com/koval',
+  },
+  {
+    id: 'emp-rop-spb',
+    name: 'Сергей Литвинов',
+    role: 'rop',
+    position: 'РОП — Санкт-Петербург',
+    managerId: 'emp-director',
+    phone: '+7 (999) 200-00-02',
+    email: 'litvinov@estategroup.ru',
+    hireDate: '2021-02-15',
+    birthDate: '1988-11-30',
+    department: 'Продажи — СПб',
+    city: 'Санкт-Петербург',
+    telegram: '@litvinov_spb',
+    aboutMe: 'Запускал офис в Санкт-Петербурге с нуля. Фанат регламентов и честной аналитики по воронке.',
+    skills: ['Запуск офиса', 'Воронка продаж', 'Аналитика', 'Команда'],
+  },
+  {
+    id: 'emp-mgr-1',
+    name: 'Анна Первичкина',
+    role: 'manager',
+    position: 'Менеджер по продажам',
+    managerId: 'emp-rop-msk',
+    phone: '+7 (999) 300-00-01',
+    email: 'pervichkina@estategroup.ru',
+    hireDate: '2021-09-01',
+    birthDate: '1995-03-05',
+    department: 'Продажи — Москва',
+    city: 'Москва',
+    telegram: '@anna_first',
+    aboutMe: 'Специализируюсь на первичке. Закрываю клиента вниманием к деталям и быстрым подбором.',
+    skills: ['Первичка', 'Подбор', 'Презентации'],
+    whatsapp: '+7 (999) 300-00-01',
+    instagram: '@anna.realty',
+    website: 'https://anna-estate.ru',
+  },
+  {
+    id: 'emp-mgr-2',
+    name: 'Игорь Смирнов',
+    role: 'manager',
+    position: 'Менеджер по продажам',
+    managerId: 'emp-rop-msk',
+    phone: '+7 (999) 300-00-02',
+    email: 'smirnov@estategroup.ru',
+    hireDate: '2022-01-10',
+    birthDate: '1993-07-19',
+    department: 'Продажи — Москва',
+    city: 'Москва',
+    telegram: '@smirnov_deals',
+    aboutMe: 'В недвижимости с 2017 года. Сильная сторона — работа с возражениями и сопровождение сделки до ключей.',
+    skills: ['Переговоры', 'Ипотека', 'Сопровождение сделок'],
+  },
+  {
+    id: 'emp-mgr-3',
+    name: 'Екатерина Орлова',
+    role: 'manager',
+    position: 'Менеджер по аренде',
+    managerId: 'emp-rop-msk',
+    phone: '+7 (999) 300-00-03',
+    email: 'orlova@estategroup.ru',
+    hireDate: '2022-04-20',
+    birthDate: '1997-12-02',
+    department: 'Аренда',
+    city: 'Москва',
+    telegram: '@orlova_rent',
+    aboutMe: 'Веду направление аренды: быстрый отклик и большая база лояльных арендодателей.',
+    skills: ['Аренда', 'База объектов', 'Клиентский сервис'],
+  },
+  {
+    id: 'emp-mgr-7',
+    name: 'Виктория Кузнецова',
+    role: 'manager',
+    position: 'Менеджер по новостройкам',
+    managerId: 'emp-rop-msk',
+    phone: '+7 (999) 300-00-07',
+    email: 'kuznetsova@estategroup.ru',
+    hireDate: '2022-09-05',
+    birthDate: '1994-06-14',
+    department: 'Новостройки',
+    city: 'Москва',
+    telegram: '@vika_newbuild',
+    aboutMe: 'Знаю все ЖК города наизусть. Помогаю клиентам выбрать проект под бюджет и цели инвестиции.',
+    skills: ['Новостройки', 'Инвестиции', 'Аналитика проектов'],
+  },
+  {
+    id: 'emp-mgr-8',
+    name: 'Роман Соколов',
+    role: 'manager',
+    position: 'Менеджер по продажам',
+    managerId: 'emp-rop-msk',
+    phone: '+7 (999) 300-00-08',
+    email: 'sokolov@estategroup.ru',
+    hireDate: '2023-03-12',
+    birthDate: '1996-10-27',
+    department: 'Продажи — Москва',
+    city: 'Москва',
+    telegram: '@roman_sokolov',
+    aboutMe: 'Пришёл из смежной сферы продаж, быстро вошёл в недвижимость. Люблю работать с тёплой базой.',
+    skills: ['Продажи', 'Холодные звонки', 'CRM'],
+  },
+  {
+    id: 'emp-mgr-4',
+    name: 'Наталья Громова',
+    role: 'manager',
+    position: 'Менеджер по продажам',
+    managerId: 'emp-rop-spb',
+    phone: '+7 (999) 300-00-04',
+    email: 'gromova@estategroup.ru',
+    hireDate: '2021-11-01',
+    birthDate: '1991-02-17',
+    department: 'Продажи — СПб',
+    city: 'Санкт-Петербург',
+    telegram: '@gromova_spb',
+    aboutMe: 'Один из первых менеджеров питерского офиса. Веду премиальный сегмент.',
+    skills: ['Премиум', 'Переговоры', 'Долгие сделки'],
+  },
+  {
+    id: 'emp-mgr-5',
+    name: 'Павел Зайцев',
+    role: 'manager',
+    position: 'Менеджер по продажам',
+    managerId: 'emp-rop-spb',
+    phone: '+7 (999) 300-00-05',
+    email: 'zaytsev@estategroup.ru',
+    hireDate: '2022-07-15',
+    birthDate: '1998-05-09',
+    department: 'Продажи — СПб',
+    city: 'Санкт-Петербург',
+    telegram: '@pavel_z',
+    aboutMe: 'Самый молодой в команде. Беру энергией и скоростью обработки лидов.',
+    skills: ['Лиды', 'Скорость', 'Мессенджеры'],
+  },
+  {
+    id: 'emp-mgr-6',
+    name: 'Ольга Белова',
+    role: 'manager',
+    position: 'Менеджер по вторичке',
+    managerId: 'emp-rop-spb',
+    phone: '+7 (999) 300-00-06',
+    email: 'belova@estategroup.ru',
+    hireDate: '2023-02-01',
+    birthDate: '1992-08-21',
+    department: 'Вторичка — СПб',
+    city: 'Санкт-Петербург',
+    telegram: '@belova_resale',
+    aboutMe: 'Эксперт по вторичному рынку: оценка, торг, юридическая чистота сделки.',
+    skills: ['Вторичка', 'Оценка', 'Юридическая проверка'],
+  },
+]

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MarketplacePublicationDocument, MarketplacePublicationSchema } from '@baza/publication';
+import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 import { AdminAccountDocument, AdminAccountSchema } from './schemas/admin-account.schema';
 import { AdminAccountRepository } from './repository/admin-account.repository';
 import { AdminPolicyService } from './admin-policy.service';
@@ -30,6 +31,7 @@ import { IdentityModule } from '../identity/identity.module';
  */
 @Module({
   imports: [
+    IdempotencyModule,
     MongooseModule.forFeature([
       { name: AdminAccountDocument.name, schema: AdminAccountSchema },
       // MarketplacePublicationDocument уже зарегистрирован в

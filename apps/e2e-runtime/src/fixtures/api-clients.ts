@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import { env, apiUrl } from './env';
 
@@ -76,7 +77,7 @@ export function adminApiClient(request: APIRequestContext) {
 
     async createAccount(params: { identityId: string; isSuperAdmin?: boolean }) {
       const response = await request.post(apiUrl('/admin/accounts'), {
-        headers: { Origin: origin },
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
         data: params,
       });
       return { status: response.status(), body: await response.json().catch(() => undefined) };

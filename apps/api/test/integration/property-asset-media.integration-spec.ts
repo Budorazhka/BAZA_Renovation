@@ -133,7 +133,7 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
     const assetRes = await app.inject({
       method: 'POST',
       url: '/api/v1/property-assets',
-      headers: { cookie: cookieTenantA },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: cookieTenantA },
       payload: makeAssetPayload('A1'),
     });
     expect(assetRes.statusCode).toBe(201);
@@ -282,7 +282,7 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
     const assetRes = await app.inject({
       method: 'POST',
       url: '/api/v1/property-assets',
-      headers: { cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
       payload: makeAssetPayload('RACE1'),
     });
     expect(assetRes.statusCode).toBe(201);
@@ -349,7 +349,7 @@ describe('Property Asset Media Vertical (real HTTP)', () => {
     const assetRes = await app.inject({
       method: 'POST',
       url: '/api/v1/property-assets',
-      headers: { cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
       payload: makeAssetPayload('RACE2'),
     });
     const assetId = assetRes.json()._id;

@@ -48,9 +48,30 @@ export class MarketplacePropertyAssetsController {
 
   @Post()
   @HttpCode(201)
-  create(@Req() req: FastifyRequest, @Body() dto: CreatePropertyAssetDto) {
+  async create(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreatePropertyAssetDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const account = requireMarketplaceAccountContext(req);
-    return this.service.createAsset(new Types.ObjectId(account.identityId), dto);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(account.identityId);
+    const requestBody = {
+      propertyType: dto.propertyType,
+      address: dto.location?.address ?? null,
+      area: dto.characteristics?.area ?? null,
+      representativePhone: dto.representativePhone ?? null,
+    };
+
+    const replay = await this.service.checkCreateReplay(identityId, 'marketplaceCreateAsset', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    return this.service.createAsset(identityId, dto, { key: idempotencyKey, requestBody });
   }
 
   @Get()
@@ -153,9 +174,38 @@ export class MarketplacePropertyAssetsController {
 
   @Post(':assetId/listings')
   @HttpCode(201)
-  createListing(@Req() req: FastifyRequest, @Param('assetId') assetId: string, @Body() dto: CreateListingDto) {
+  async createListing(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: CreateListingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const account = requireMarketplaceAccountContext(req);
-    return this.service.createListing(objectId(assetId, 'assetId'), new Types.ObjectId(account.identityId), dto);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(account.identityId);
+    const requestBody = {
+      assetId,
+      dealType: dto.dealType,
+      price: dto.price ? { ...dto.price } : null,
+    };
+
+    const replay = await this.service.checkCreateReplay(
+      identityId,
+      'marketplaceCreateListing',
+      idempotencyKey,
+      requestBody,
+    );
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    return this.service.createListing(objectId(assetId, 'assetId'), identityId, dto, {
+      key: idempotencyKey,
+      requestBody,
+    });
   }
 
   @Get(':assetId/listings')

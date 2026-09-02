@@ -218,7 +218,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
     });
 
     it('POST /tasks without cookie returns 401 AUTH_NO_SESSION', async () => {
-      const res = await app.inject({
+      const res = await app.inject({ headers: { 'idempotency-key': new Types.ObjectId().toString() },
         method: 'POST',
         url: '/api/v1/tasks',
         payload: { title: 'Call client' },
@@ -237,7 +237,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/tasks',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: {
           title: 'Подготовить презентацию ЖК',
           description: 'Отправить подборку квартир на WhatsApp',
@@ -273,7 +273,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/tasks',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: {
           title: 'Follow up',
           leadId: foreignLeadId.toString(),
@@ -290,7 +290,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/tasks',
-        headers: { cookie: manager.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: manager.cookie },
         payload: {
           title: 'Звонок после просмотра',
         },

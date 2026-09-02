@@ -152,7 +152,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     const assetRes = await app.inject({
       method: 'POST',
       url: '/api/v1/property-assets',
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: assetPayload,
     });
     expect(assetRes.statusCode).toBe(201);
@@ -161,7 +161,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     const listingRes = await app.inject({
       method: 'POST',
       url: `/api/v1/property-assets/${assetId}/listings`,
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: { dealType: 'sale', price: { amountMinorUnits: 8000000, currency: 'USD' } },
     });
     expect(listingRes.statusCode).toBe(201);
@@ -345,7 +345,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     const assetRes = await app.inject({
       method: 'POST',
       url: '/api/v1/property-assets',
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: {
         propertyType: 'apartment',
         location: { country: 'GE', city: 'Batumi', address: 'Draft St 1', geo: { type: 'Point', coordinates: [41.6, 41.64] } },
@@ -358,7 +358,7 @@ describe('Public listing lead reveal flow — Integration (real HTTP + real Mong
     const listingRes = await app.inject({
       method: 'POST',
       url: `/api/v1/property-assets/${assetId}/listings`,
-      headers: { cookie: owner.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
       payload: { dealType: 'sale', price: { amountMinorUnits: 5000000, currency: 'USD' } },
     });
     const listingId = listingRes.json()._id;

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  Headers,
   Controller,
   Delete,
   Get,
@@ -22,6 +23,9 @@ import { RequirePermission } from '../authorization/require-permission.decorator
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
 import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe';
 import { CrmService } from './crm.service';
+import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+import { AppException } from '../../shared/errors/app-exception';
+import { ErrorCode } from '../../shared/errors/error-codes';
 import { CreateDealDto } from './dto/create-deal.dto';
 import { UpdateDealDto } from './dto/update-deal.dto';
 import { ReassignDealDto } from './dto/reassign-deal.dto';
@@ -40,6 +44,7 @@ export class DealController {
   constructor(
     private readonly crmService: CrmService,
     private readonly policyEvaluator: PolicyEvaluatorService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
 
   @Get()
@@ -80,11 +85,37 @@ export class DealController {
   @Post()
   @HttpCode(201)
   @RequirePermission('deal', 'create')
-  async createDeal(@Req() req: FastifyRequest, @Body() dto: CreateDealDto) {
+  async createDeal(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreateDealDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
     const organizationId = new Types.ObjectId(tenantContext.organizationId);
     const actorPositionId = new Types.ObjectId(tenantContext.positionId);
     const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+
+    const idempotencyRequestBody = {
+      contactId: dto.contactId,
+      leadId: dto.leadId ?? null,
+      title: dto.title,
+      stage: dto.stage ?? null,
+      ownerPositionId: dto.ownerPositionId ?? null,
+    };
+
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'createDeal',
+      key: idempotencyKey,
+      requestBody: idempotencyRequestBody,
+    });
+    if (replay) {
+      return replay.responseBody;
+    }
 
     const ownerScopePositionId = await this.ownerFilterForAction(tenantContext.positionId, 'create');
     let ownerPositionId = actorPositionId;
@@ -117,6 +148,8 @@ export class DealController {
       actorPositionId,
       actorIdentityId,
       correlationId: req.correlationId,
+      idempotencyKey,
+      idempotencyRequestBody,
     });
   }
 

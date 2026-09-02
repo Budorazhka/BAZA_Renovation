@@ -204,7 +204,7 @@ describe('CRM Task lifecycle outbox events — HTTP + Mongo integration (AppModu
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/tasks',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: { title: 'Позвонить клиенту', assignedPositionId: positionId.toString(), leadId: leadId.toString() },
       });
       expect(res.statusCode).toBe(201);
@@ -241,7 +241,7 @@ describe('CRM Task lifecycle outbox events — HTTP + Mongo integration (AppModu
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/tasks',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: { title: 'x', leadId: foreignLeadId.toString() },
       });
       expect(res.statusCode).toBe(404);

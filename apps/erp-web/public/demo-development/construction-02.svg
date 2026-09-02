@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#c2d1cb"/><rect y="545" width="1200" height="215" fill="#696e5e"/>
+  <rect x="245" y="105" width="710" height="475" fill="#bcb4a4"/>
+  <rect x="295" y="150" width="610" height="380" fill="#24483c"/>
+  <g stroke="#d5c5a5" stroke-width="14"><path d="M295 225h610M295 300h610M295 375h610M295 450h610"/><path d="M415 150v380M535 150v380M655 150v380M775 150v380"/></g>
+  <path d="M1040 650V210h22v440zM760 210h420v18H760z" fill="#d3ad4d"/>
+  <rect x="60" y="40" width="385" height="66" fill="#12382c"/><text x="90" y="82" fill="#ead9a9" font-family="Montserrat,Arial" font-size="24">СЕНТЯБРЬ 2026 · ФАСАД</text>
+</svg>

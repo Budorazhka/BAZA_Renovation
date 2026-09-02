@@ -91,13 +91,13 @@ describe('PropertyAsset + sale/rent Listing (real HTTP)', () => {
 
   it('one asset supports independent sale and rent listings', async () => {
     const owner = await ownerCookie('prop');
-    const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload('1') });
+    const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload('1') });
     expect(assetResponse.statusCode).toBe(201);
     const asset = assetResponse.json();
     expect(asset.publisherScope.organizationId).toBe(owner.organizationId);
 
-    const sale = await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 10000000, currency: 'USD' } } });
-    const rent = await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'rent_long', price: { amountMinorUnits: 150000, currency: 'GEL' } } });
+    const sale = await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 10000000, currency: 'USD' } } });
+    const rent = await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'rent_long', price: { amountMinorUnits: 150000, currency: 'GEL' } } });
     expect(sale.statusCode).toBe(201);
     expect(rent.statusCode).toBe(201);
     expect((await app.inject({ method: 'GET', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie } })).json()).toHaveLength(2);
@@ -106,16 +106,16 @@ describe('PropertyAsset + sale/rent Listing (real HTTP)', () => {
   it('does not expose an asset to another organization', async () => {
     const first = await ownerCookie('first');
     const second = await ownerCookie('second');
-    const created = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: first.cookie }, payload: makeAssetPayload('2') });
+    const created = await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: first.cookie }, payload: makeAssetPayload('2') });
     const foreignRead = await app.inject({ method: 'GET', url: `/api/v1/property-assets/${created.json()._id}`, headers: { cookie: second.cookie } });
     expect(foreignRead.statusCode).toBe(404);
   });
 
   it('allows one active listing per deal type, while rejecting a second active one', async () => {
     const owner = await ownerCookie('active');
-    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload('3') })).json();
-    const first = (await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })).json();
-    const second = (await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 200, currency: 'USD' } } })).json();
+    const asset = (await app.inject({ method: 'POST', url: '/api/v1/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload('3') })).json();
+    const first = (await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })).json();
+    const second = (await app.inject({ method: 'POST', url: `/api/v1/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 200, currency: 'USD' } } })).json();
     expect((await app.inject({ method: 'PATCH', url: `/api/v1/property-assets/${asset._id}/listings/${first._id}/activate`, headers: { cookie: owner.cookie } })).statusCode).toBe(200);
     expect((await app.inject({ method: 'PATCH', url: `/api/v1/property-assets/${asset._id}/listings/${second._id}/activate`, headers: { cookie: owner.cookie } })).statusCode).toBe(409);
   });

@@ -28,6 +28,12 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import { PublicationService } from '../publication/publication.service';
 import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { DedupeService } from './dedupe.service';
+
+/** Mongoose-документ -> обычный объект для сохранения в записи идемпотентности. */
+function toPlainRecord(doc: unknown): Record<string, unknown> {
+  const candidate = doc as { toObject?: () => Record<string, unknown> };
+  return typeof candidate?.toObject === 'function' ? candidate.toObject() : (doc as Record<string, unknown>);
+}
 import type { CreatePropertyAssetDto } from './dto/create-property-asset.dto';
 import type { CreateListingDto } from './dto/create-listing.dto';
 
@@ -61,15 +67,47 @@ export class MarketplacePropertyAssetsService {
     @InjectConnection() private readonly connection: Connection,
   ) {}
 
-  async createAsset(identityId: Types.ObjectId, dto: CreatePropertyAssetDto) {
-    const asset = await this.propertyAssetRepository.create({
-      publisherScope: { type: 'marketplace_account', identityId },
-      propertyType: dto.propertyType,
-      commercialSubtype: dto.commercialSubtype,
-      location: dto.location,
-      characteristics: dto.characteristics,
-      representativePhone: dto.representativePhone,
-      version: 0,
+  /**
+   * ADR-006: повтор не должен создавать второй объект. Раньше создание шло
+   * одним repository-вызовом без транзакции; теперь запись объекта и запись
+   * идемпотентности сохраняются вместе, иначе возможен разрыв — объект создан,
+   * отметка потеряна, и повтор создаёт дубль.
+   *
+   * Скан дублей намеренно ОСТАЁТСЯ ЗА транзакцией: он best-effort (см. catch
+   * ниже) и его сбой не должен откатывать уже созданный объект.
+   */
+  async createAsset(
+    identityId: Types.ObjectId,
+    dto: CreatePropertyAssetDto,
+    idempotency: { key: string; requestBody: Record<string, unknown> },
+  ) {
+    const asset = await runInTransaction(this.connection, async (session) => {
+      const created = await this.propertyAssetRepository.create(
+        {
+          publisherScope: { type: 'marketplace_account', identityId },
+          propertyType: dto.propertyType,
+          commercialSubtype: dto.commercialSubtype,
+          location: dto.location,
+          characteristics: dto.characteristics,
+          representativePhone: dto.representativePhone,
+          version: 0,
+        },
+        session,
+      );
+
+      await this.idempotencyService.record(
+        {
+          identityId,
+          operation: 'marketplaceCreateAsset',
+          key: idempotency.key,
+          requestBody: idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: toPlainRecord(created),
+        },
+        session,
+      );
+
+      return created;
     });
 
     try {
@@ -83,6 +121,20 @@ export class MarketplacePropertyAssetsService {
     return asset;
   }
 
+  /**
+   * Проверка повтора ДО транзакции. Вынесена в сервис, чтобы контроллер не
+   * зависел от IdempotencyService напрямую — остальные команды этого модуля
+   * (publish) устроены так же.
+   */
+  checkCreateReplay(
+    identityId: Types.ObjectId,
+    operation: string,
+    key: string,
+    requestBody: Record<string, unknown>,
+  ): Promise<IdempotentReplay | null> {
+    return this.idempotencyService.checkReplay({ identityId, operation, key, requestBody });
+  }
+
   async getAsset(id: Types.ObjectId, identityId: Types.ObjectId) {
     const asset = await this.propertyAssetRepository.findByIdForIdentity(id, identityId);
     if (!asset) throw new NotFoundException('Property asset not found');
@@ -93,15 +145,41 @@ export class MarketplacePropertyAssetsService {
     return this.propertyAssetRepository.listForIdentity(identityId);
   }
 
-  async createListing(assetId: Types.ObjectId, identityId: Types.ObjectId, dto: CreateListingDto) {
+  /** ADR-006: повтор не должен создавать второй листинг на том же объекте. */
+  async createListing(
+    assetId: Types.ObjectId,
+    identityId: Types.ObjectId,
+    dto: CreateListingDto,
+    idempotency: { key: string; requestBody: Record<string, unknown> },
+  ) {
     await this.getAsset(assetId, identityId);
-    return this.listingRepository.create({
-      propertyAssetId: assetId,
-      publisherScope: { type: 'marketplace_account', identityId },
-      dealType: dto.dealType,
-      price: dto.price,
-      status: 'draft',
-      version: 0,
+
+    return runInTransaction(this.connection, async (session) => {
+      const created = await this.listingRepository.create(
+        {
+          propertyAssetId: assetId,
+          publisherScope: { type: 'marketplace_account', identityId },
+          dealType: dto.dealType,
+          price: dto.price,
+          status: 'draft',
+          version: 0,
+        },
+        session,
+      );
+
+      await this.idempotencyService.record(
+        {
+          identityId,
+          operation: 'marketplaceCreateListing',
+          key: idempotency.key,
+          requestBody: idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: toPlainRecord(created),
+        },
+        session,
+      );
+
+      return created;
     });
   }
 

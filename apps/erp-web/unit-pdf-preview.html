@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>ЖК «Samarqand Garden» · B-1408 — PDF</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    :root {
+      --bg: #0b1d14;
+      --panel: #122c20;
+      --panel-2: #163826;
+      --gold: #e6c364;
+      --gold-dim: #b9912f;
+      --mint: #d0e8df;
+      --cream: #f4ecd9;
+      --muted: rgba(208,232,223,.66);
+      --line: rgba(230,195,100,.20);
+      --light-card: #f6efe1;
+    }
+    body {
+      background: #07140d;
+      color: var(--cream);
+      font-family: Montserrat, Inter, Arial, sans-serif;
+      font-weight: 400;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .toolbar {
+      position: sticky; top: 0; z-index: 10;
+      display: flex; justify-content: center; gap: 8px;
+      padding: 12px; background: rgba(7,20,13,.92); backdrop-filter: blur(6px);
+    }
+    .toolbar button {
+      cursor: pointer; border: 1px solid var(--gold); background: transparent; color: var(--gold);
+      border-radius: 6px; padding: 10px 18px; font-size: 16px; font-family: inherit;
+    }
+
+    /* ── жёсткий лист A4 ── */
+    .sheet {
+      position: relative;
+      width: 210mm; height: 297mm;
+      margin: 16px auto;
+      background:
+        radial-gradient(120% 80% at 0% 0%, rgba(230,195,100,.06) 0%, transparent 45%),
+        var(--bg);
+      overflow: hidden;
+      display: flex; flex-direction: column;
+      box-shadow: 0 10px 36px rgba(0,0,0,.5);
+      page-break-after: always; break-after: page;
+      color: var(--cream);
+    }
+    .sheet:last-child { page-break-after: auto; break-after: auto; }
+    .pad { padding: 13mm; display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
+
+    .eyebrow { margin: 0; font-size: 30px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: var(--gold); }
+    .block-title { margin: 0 0 16px; font-size: 40px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 12px; }
+    .chip {
+      font-size: 28px; color: var(--cream);
+      background: rgba(230,195,100,.10); border: 1px solid var(--line);
+      border-radius: 8px; padding: 11px 20px;
+    }
+
+    /* ── ЛИСТ 1: обложка ── */
+    .cover-hero { position: relative; height: 92mm; flex-shrink: 0; overflow: hidden; background: #06120c; }
+    .cover-hero img { width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
+    .cover-hero::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(5,14,9,.94) 6%, rgba(5,14,9,.12) 52%, rgba(5,14,9,.34) 100%); }
+    .cover-hero .cap { position: absolute; left: 13mm; right: 13mm; bottom: 9mm; z-index: 1; }
+    .cover-hero h1 { margin: 10px 0 0; font-size: 78px; font-weight: 500; line-height: 1.0; color: var(--cream); }
+    .cover-hero .proj { margin-top: 12px; font-size: 34px; color: var(--mint); }
+
+    .price-band {
+      flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 18px;
+      padding: 12px 16px; border-radius: 12px;
+      background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+    }
+    .price-band .big { font-size: 68px; font-weight: 500; color: var(--gold); line-height: 1; white-space: nowrap; }
+    .price-band > div:first-child { flex-shrink: 0; }
+    .price-band .sub { font-size: 30px; color: var(--muted); margin-top: 8px; }
+    .price-band .spec-inline { font-size: 29px; color: var(--cream); text-align: right; }
+
+    /* план занимает всё свободное место обложки */
+    .plan-card {
+      flex: 1; min-height: 0; border-radius: 14px; overflow: hidden;
+      background: var(--light-card); box-shadow: inset 0 0 0 1px var(--line);
+      display: flex; align-items: center; justify-content: center; position: relative;
+    }
+    .plan-card img { max-width: 100%; max-height: 100%; object-fit: contain; padding: 14px; }
+    .plan-card .tag {
+      position: absolute; left: 12px; top: 12px; font-size: 28px; color: #2a4032;
+      background: rgba(230,195,100,.30); border: 1px solid rgba(120,90,20,.30); border-radius: 7px; padding: 4px 10px;
+    }
+    .cover-foot { flex-shrink: 0; font-size: 26px; color: var(--muted); }
+
+    /* ── ЛИСТ 2: характеристики ── */
+    .banner { flex: 1; min-height: 80mm; border-radius: 14px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); background: #06120c; }
+    .banner img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .specs { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; }
+    .spec { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 13px 2px; border-bottom: 1px solid var(--line); }
+    .spec .l { font-size: 28px; color: var(--muted); }
+    .spec .v { font-size: 30px; font-weight: 500; color: var(--cream); text-align: right; }
+    .promo { flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 17px 20px; border-radius: 12px;
+             background: rgba(230,195,100,.12); box-shadow: inset 0 0 0 1px rgba(230,195,100,.35); color: var(--gold); font-size: 30px; }
+    .promo .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
+    .note { flex-shrink: 0; padding: 14px 16px; border-radius: 12px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+            color: var(--mint); font-size: 16px; line-height: 1.55;
+            display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* ── ЛИСТ 3: проект ── */
+    .about { font-size: 30px; line-height: 1.5; color: var(--mint); margin: 0 0 18px;
+             display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+    /* крупное фото, заполняющее низ листа «О проекте» */
+    .fill-photo { flex: 1; min-height: 0; border-radius: 14px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); background: #06120c; }
+    .fill-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* лист — фотография целиком, во весь экран */
+    .sheet.photo { padding: 0; }
+    .sheet.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .section { margin-bottom: 20px; }
+    .foot { margin-top: auto; font-size: 26px; color: var(--muted); padding-top: 16px; }
+    /* лого на обложке (специфичнее, чтобы не попасть под .cover-hero img) */
+    .cover-hero img.hero-logo {
+      position: absolute; top: 4mm; right: 5mm; z-index: 5;
+      width: 42mm; height: 42mm; object-fit: contain;   /* любой лого клампится в этот бокс */
+      filter: drop-shadow(0 2px 10px rgba(0,0,0,.6));
+    }
+
+    @media print {
+      .toolbar { display: none; }
+      .sheet { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button onclick="window.print()">Сохранить в PDF (печать)</button>
+  </div>
+
+  <!-- ЛИСТ 1 — Обложка с планировкой -->
+  <section class="sheet">
+    <div class="cover-hero">
+      <img src="https://picsum.photos/seed/samarqand/1600/900" alt="" />
+      <img class="hero-logo" src="logo.png" alt="Логотип" />
+      <div class="cap">
+        <p class="eyebrow">Предложение по лоту</p>
+        <h1>B-1408</h1>
+        <div class="proj">ЖК «Samarqand Garden» · Самарканд, пр. Регистан</div>
+      </div>
+    </div>
+    <div class="pad">
+      <div class="chips">
+        <span class="chip">Silk Road Development</span>
+        <span class="chip">Класс: бизнес</span>
+        <span class="chip">Сдача: IV кв. 2026</span>
+        <span class="chip">Отделка: White box</span>
+      </div>
+      <div class="price-band">
+        <div>
+          <div class="big">$204 800</div>
+          <div class="sub">$3 200 / м²</div>
+        </div>
+        <div class="spec-inline">2+1 · 64 м² · 14 этаж · вид на старый город</div>
+      </div>
+      <div class="plan-card">
+        <span class="tag">Планировка</span>
+        <img src="https://picsum.photos/seed/floorplan/1000/1200" alt="Планировка B-1408" />
+      </div>
+      <div class="cover-foot">Silk Road Development · baza.sale · 03.06.2026 · подготовил Виктор Жопин · +998 90 123-45-67</div>
+    </div>
+  </section>
+
+  <!-- ЛИСТ 2 — Характеристики -->
+  <section class="sheet">
+    <div class="pad">
+      <div class="banner"><img src="https://picsum.photos/seed/interior/1600/700" alt="" /></div>
+      <p class="block-title">Характеристики лота</p>
+      <div class="specs">
+        <div class="spec"><span class="l">Корпус</span><span class="v">Башня B</span></div>
+        <div class="spec"><span class="l">Этаж</span><span class="v">14</span></div>
+        <div class="spec"><span class="l">Комнатность</span><span class="v">2+1</span></div>
+        <div class="spec"><span class="l">Потолки</span><span class="v">3,1 м</span></div>
+        <div class="spec"><span class="l">Площадь общая</span><span class="v">64 м²</span></div>
+        <div class="spec"><span class="l">Жилая</span><span class="v">38 м²</span></div>
+        <div class="spec"><span class="l">Балкон</span><span class="v">6 м²</span></div>
+        <div class="spec"><span class="l">Вид из окна</span><span class="v">Старый город</span></div>
+        <div class="spec"><span class="l">Цена за м²</span><span class="v">$3 200</span></div>
+        <div class="spec"><span class="l">Стоимость</span><span class="v">$204 800</span></div>
+      </div>
+      <div class="promo"><span class="dot"></span> Акция: рассрочка 0% на 18 месяцев</div>
+      <div class="chips">
+        <span class="chip">Панорамные окна</span>
+        <span class="chip">Гардеробная</span>
+        <span class="chip">2 санузла</span>
+        <span class="chip">Кладовая</span>
+        <span class="chip">Машиноместо рядом</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ЛИСТ 3 — Проект -->
+  <section class="sheet">
+    <div class="pad">
+      <div class="section">
+        <p class="block-title">О проекте</p>
+        <p class="about">«Samarqand Garden» — жилой комплекс бизнес-класса в историческом центре Самарканда, в шаговой доступности от площади Регистан. Архитектура сочетает современные технологии и мотивы восточного зодчества: айваны, узорная керамика и тенистые внутренние дворы. На охраняемой территории — приватный сад с фонтанами, подземный паркинг, фитнес-центр, детский клуб и собственная служба сервиса. Панорамное остекление открывает виды на старый город и горы. Срок сдачи — IV квартал 2026 года, отделка White box.</p>
+        <div class="chips">
+          <span class="chip">Подземный паркинг</span>
+          <span class="chip">Консьерж 24/7</span>
+          <span class="chip">Фитнес и SPA</span>
+          <span class="chip">Сад с фонтанами</span>
+          <span class="chip">Детский клуб</span>
+          <span class="chip">Видеонаблюдение</span>
+        </div>
+      </div>
+      <div class="section">
+        <p class="block-title">Способы оплаты</p>
+        <div class="chips">
+          <span class="chip">Ипотека от 6%</span>
+          <span class="chip">Рассрочка 0%</span>
+          <span class="chip">100% оплата</span>
+          <span class="chip">Trade-in</span>
+        </div>
+      </div>
+      <div class="fill-photo"><img src="https://picsum.photos/seed/sgmain/1200/900" alt="" /></div>
+      <div class="foot">Silk Road Development · baza.sale · наличие и цены актуальны на момент формирования · 03.06.2026 · подготовил Виктор Жопин · +998 90 123-45-67</div>
+    </div>
+  </section>
+
+  <!-- ЛИСТЫ 4–7 — фото во весь лист -->
+  <section class="sheet photo"><img src="https://picsum.photos/seed/sgphoto1/1240/1750" alt="" /></section>
+  <section class="sheet photo"><img src="https://picsum.photos/seed/sgphoto2/1240/1750" alt="" /></section>
+  <section class="sheet photo"><img src="https://picsum.photos/seed/sgphoto3/1240/1750" alt="" /></section>
+  <section class="sheet photo"><img src="https://picsum.photos/seed/sgphoto4/1240/1750" alt="" /></section>
+</body>
+</html>

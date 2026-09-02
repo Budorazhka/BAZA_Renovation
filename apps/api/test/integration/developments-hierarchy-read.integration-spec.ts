@@ -213,7 +213,8 @@ describe('DevelopmentsService — read hierarchy integration (real MongoDB)', ()
           kind: 'apartment',
           area: 10,
           price: { amountMinorUnits: 1, currency: 'USD' },
-        }),
+      idempotency: { identityId: new Types.ObjectId(), operation: 'test', key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } },
+    }),
       ).rejects.toThrow();
 
       const unitCount = await connection.collection('units').countDocuments({ buildingId: buildingB._id, number: '999' });

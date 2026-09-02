@@ -2,6 +2,10 @@ import { Types } from 'mongoose';
 import { LeadController } from './lead.controller';
 import type { CrmService } from './crm.service';
 import type { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
+import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
+
+/** Повторов в этих тестах нет: checkReplay всегда отдаёт null. */
+const noReplay = () => ({ checkReplay: jest.fn().mockResolvedValue(null) }) as unknown as IdempotencyService;
 
 function makeRequest(organizationId: Types.ObjectId, positionId: Types.ObjectId) {
   return {
@@ -22,13 +26,14 @@ describe('LeadController.createLead', () => {
     const controller = new LeadController(
       { createLead } as unknown as CrmService,
       { matchingScopes: jest.fn() } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
     const req = makeRequest(organizationId, positionId);
 
     const result = await controller.createLead(req as never, {
       contactId: contactId.toString(),
       requesterName: 'Игнорируется, если есть contactId',
-    });
+    }, 'key-1');
 
     expect(createLead).toHaveBeenCalledWith({
       organizationId,
@@ -38,6 +43,12 @@ describe('LeadController.createLead', () => {
       actorPositionId: positionId,
       actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
       correlationId: undefined,
+      idempotencyKey: 'key-1',
+      idempotencyRequestBody: {
+        contactId: contactId.toString(),
+        requesterName: 'Игнорируется, если есть contactId',
+        requesterPhone: null,
+      },
     });
     expect(result).toEqual({ id: 'lead-1', ownerPositionId: null, stage: 'new' });
   });
@@ -49,11 +60,12 @@ describe('LeadController.createLead', () => {
     const controller = new LeadController(
       { createLead } as unknown as CrmService,
       { matchingScopes: jest.fn() } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.createLead(makeRequest(organizationId, positionId) as never, {
       requesterPhone: '+995500000009',
-    });
+    }, 'key-2');
 
     expect(createLead).toHaveBeenCalledWith(
       expect.objectContaining({ contactId: undefined, requesterPhone: '+995500000009' }),
@@ -70,6 +82,7 @@ describe('LeadController — read scope', () => {
     const controller = new LeadController(
       { listLeads } as unknown as CrmService,
       { matchingScopes } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.listLeads(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -90,6 +103,7 @@ describe('LeadController — read scope', () => {
     const controller = new LeadController(
       { listLeads } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.listLeads(makeRequest(organizationId, positionId) as never, { limit: 20 });
@@ -110,6 +124,7 @@ describe('LeadController — read scope', () => {
     const controller = new LeadController(
       { listLeads } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.listLeads(makeRequest(organizationId, positionId) as never, {
@@ -134,6 +149,7 @@ describe('LeadController — read scope', () => {
     const controller = new LeadController(
       { listLeads } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await expect(
@@ -153,6 +169,7 @@ describe('LeadController — read scope', () => {
     const controller = new LeadController(
       { listLeads } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.listLeads(makeRequest(organizationId, positionId) as never, {
@@ -180,6 +197,7 @@ describe('LeadController — GET /leads/:leadId/events', () => {
     const controller = new LeadController(
       { listLeadEvents } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.listLeadEvents(makeRequest(organizationId, positionId) as never, leadId, {
@@ -206,6 +224,7 @@ describe('LeadController — GET /leads/:leadId/timeline', () => {
     const controller = new LeadController(
       { getLeadTimeline } as unknown as CrmService,
       { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
     );
 
     await controller.getLeadTimeline(makeRequest(organizationId, positionId) as never, leadId, {

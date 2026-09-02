@@ -47,10 +47,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const publishingApi = {
-  async createPropertyAsset(data: {
-    location: LocationFormData
-    characteristics: CharacteristicsFormData
-  }): Promise<{ _id: string; version: number }> {
+  async createPropertyAsset(
+    data: {
+      location: LocationFormData
+      characteristics: CharacteristicsFormData
+    },
+    idempotencyKey: string,
+  ): Promise<{ _id: string; version: number }> {
     const payload = {
       propertyType: data.characteristics.propertyType,
       commercialSubtype:
@@ -72,6 +75,8 @@ export const publishingApi = {
 
     return request<{ _id: string; version: number }>('/marketplace/property-assets', {
       method: 'POST',
+      // Ключ обязателен: повтор без него создал бы второй объект (ADR-006).
+      headers: { 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(payload),
     })
   },
@@ -79,6 +84,7 @@ export const publishingApi = {
   async createListing(
     assetId: string,
     deal: DealFormData,
+    idempotencyKey: string,
   ): Promise<{ _id: string; dealType: string; status: string; version: number }> {
     const amountMinorUnits = Math.round(Number(deal.priceAmount) * 100)
     const payload = {
@@ -93,6 +99,8 @@ export const publishingApi = {
       `/marketplace/property-assets/${assetId}/listings`,
       {
         method: 'POST',
+        // Ключ обязателен: повтор без него создал бы второй листинг (ADR-006).
+        headers: { 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(payload),
       },
     )

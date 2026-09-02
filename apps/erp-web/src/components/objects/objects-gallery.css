@@ -1,0 +1,129 @@
+/* Галерея фото объекта: размер/скругление берутся от класса-обёртки
+   (.object-media в списке, .oc-photo в карточке), здесь — только слои и контролы. */
+.obj-gallery {
+  position: relative;
+}
+
+.obj-gallery-stage {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.obj-gallery-stage:not(.obj-gallery-stage-static) {
+  cursor: pointer;
+}
+
+.obj-gallery-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 360ms ease-out, transform 360ms ease-out;
+}
+
+.obj-gallery-img.is-active {
+  opacity: 1;
+}
+
+/* Бейджи-оверлеи не перехватывают клик — он проходит на кнопку-открытие под ними */
+.obj-gallery > .object-status-line,
+.obj-gallery > .object-mls-badge,
+.obj-gallery > .object-media-expand {
+  pointer-events: none;
+}
+
+/* Стрелки перелистывания — полупрозрачное стекло поверх фото */
+.obj-gallery-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.2); /* design-ok: контрол поверх фото */
+  border-radius: var(--objects-radius-sm, 8px);
+  background: rgba(7, 22, 17, 0.5);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition: opacity 160ms ease-out, background 160ms ease-out;
+}
+
+.obj-gallery:hover .obj-gallery-arrow,
+.obj-gallery:focus-within .obj-gallery-arrow {
+  opacity: 1;
+}
+
+.obj-gallery-arrow:hover {
+  background: rgba(7, 22, 17, 0.78);
+}
+
+.obj-gallery-arrow:focus-visible {
+  opacity: 1;
+  outline: 2px solid rgba(255, 255, 255, 0.9); /* design-ok: контрол поверх фото */
+  outline-offset: 2px;
+}
+
+.obj-gallery-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
+.obj-gallery-prev {
+  left: 10px;
+}
+
+.obj-gallery-next {
+  right: 10px;
+}
+
+/* Точки-индикаторы */
+.obj-gallery-dots {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  transform: translateX(-50%);
+  padding: 5px 8px;
+  border-radius: var(--objects-radius-sm, 8px);
+  background: rgba(7, 22, 17, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.obj-gallery-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%; /* design-ok: точка-индикатор */
+  background: rgba(255, 255, 255, 0.5); /* design-ok: индикатор поверх фото */
+  cursor: pointer;
+  transition: background 160ms ease-out, transform 160ms ease-out;
+}
+
+.obj-gallery-dot.is-active {
+  background: rgba(255, 255, 255, 0.95); /* design-ok: индикатор поверх фото */
+  transform: scale(1.25);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .obj-gallery-img,
+  .obj-gallery-arrow,
+  .obj-gallery-dot {
+    transition: none;
+  }
+}

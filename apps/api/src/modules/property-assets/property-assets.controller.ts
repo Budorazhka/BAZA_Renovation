@@ -40,9 +40,34 @@ export class PropertyAssetsController {
   @Post()
   @HttpCode(201)
   @RequirePermission('property_asset', 'create')
-  create(@Req() req: FastifyRequest, @Body() dto: CreatePropertyAssetDto) {
+  async create(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreatePropertyAssetDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const tenant = requireTenantContext(req);
-    return this.service.createAsset(new Types.ObjectId(tenant.organizationId), dto);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenant.identityId);
+    const requestBody = {
+      propertyType: dto.propertyType,
+      address: dto.location?.address ?? null,
+      area: dto.characteristics?.area ?? null,
+      representativePhone: dto.representativePhone ?? null,
+    };
+
+    const replay = await this.service.checkCreateReplay(identityId, 'erpCreateAsset', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    return this.service.createAsset(new Types.ObjectId(tenant.organizationId), dto, {
+      identityId,
+      key: idempotencyKey,
+      requestBody,
+    });
   }
 
   @Get()
@@ -155,9 +180,30 @@ export class PropertyAssetsController {
   @Post(':assetId/listings')
   @HttpCode(201)
   @RequirePermission('listing', 'create')
-  createListing(@Req() req: FastifyRequest, @Param('assetId') assetId: string, @Body() dto: CreateListingDto) {
+  async createListing(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Body() dto: CreateListingDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const tenant = requireTenantContext(req);
-    return this.service.createListing(objectId(assetId, 'assetId'), new Types.ObjectId(tenant.organizationId), dto);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenant.identityId);
+    const requestBody = { assetId, dealType: dto.dealType, price: dto.price ? { ...dto.price } : null };
+
+    const replay = await this.service.checkCreateReplay(identityId, 'erpCreateListing', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    return this.service.createListing(objectId(assetId, 'assetId'), new Types.ObjectId(tenant.organizationId), dto, {
+      identityId,
+      key: idempotencyKey,
+      requestBody,
+    });
   }
 
   @Get(':assetId/listings')

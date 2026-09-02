@@ -171,14 +171,14 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
   }
 
   async function createActiveListing(account: { cookie: string }, dealType: 'sale' | 'rent_long' | 'rent_short' = 'sale') {
-    const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: account.cookie }, payload: makeAssetPayload() });
+    const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie }, payload: makeAssetPayload() });
     expect(assetResponse.statusCode).toBe(201);
     const asset = assetResponse.json();
 
     const listingResponse = await app.inject({
       method: 'POST',
       url: `/api/v1/marketplace/property-assets/${asset._id}/listings`,
-      headers: { cookie: account.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie },
       payload: { dealType, price: { amountMinorUnits: 15_000_000, currency: 'USD' } },
     });
     expect(listingResponse.statusCode).toBe(201);
@@ -205,7 +205,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
   it('marketplace-аккаунт без ERP-организации создаёт PropertyAsset с publisherScope:marketplace_account', async () => {
     const account = await marketplaceAccountCookie('wizard-a');
 
-    const response = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: account.cookie }, payload: makeAssetPayload() });
+    const response = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie }, payload: makeAssetPayload() });
 
     expect(response.statusCode).toBe(201);
     const asset = response.json();
@@ -220,7 +220,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     // marketplace-endpoint" (cookie ЕСТЬ, просто не тот audience) остаётся
     // 403 и отдельно покрыт ниже, см. "ERP-сессия ... НЕ проходит
     // MarketplaceAccountGuard".
-    const response = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', payload: makeAssetPayload() });
+    const response = await app.inject({ headers: { 'idempotency-key': new Types.ObjectId().toString() }, method: 'POST', url: '/api/v1/marketplace/property-assets', payload: makeAssetPayload() });
     expect(response.statusCode).toBe(401);
     expect(response.json().error.code).toBe('AUTH_NO_SESSION');
   });
@@ -229,7 +229,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     const first = await marketplaceAccountCookie('wizard-b');
     const second = await marketplaceAccountCookie('wizard-c');
 
-    const created = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: first.cookie }, payload: makeAssetPayload() });
+    const created = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: first.cookie }, payload: makeAssetPayload() });
     const foreignRead = await app.inject({ method: 'GET', url: `/api/v1/marketplace/property-assets/${created.json()._id}`, headers: { cookie: second.cookie } });
 
     expect(foreignRead.statusCode).toBe(404);
@@ -260,15 +260,15 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     const accountB = await marketplaceAccountCookie('wizard-f');
     const phone = '+995500777888';
 
-    const assetAResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: accountA.cookie }, payload: { ...makeAssetPayload(), representativePhone: phone } });
-    const assetBResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: accountB.cookie }, payload: { ...makeAssetPayload(), representativePhone: phone } });
+    const assetAResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountA.cookie }, payload: { ...makeAssetPayload(), representativePhone: phone } });
+    const assetBResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountB.cookie }, payload: { ...makeAssetPayload(), representativePhone: phone } });
     const assetA = assetAResponse.json();
     void assetBResponse;
 
     const listingResponse = await app.inject({
       method: 'POST',
       url: `/api/v1/marketplace/property-assets/${assetA._id}/listings`,
-      headers: { cookie: accountA.cookie },
+      headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountA.cookie },
       payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } },
     });
     const listing = listingResponse.json();
@@ -323,14 +323,14 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
   describe('Data invariants', () => {
     it('active-per-dealType уникальность держится под реальной гонкой (Promise.all, unique partial index не завязан на publisherScope-ветку)', async () => {
       const account = await marketplaceAccountCookie('wizard-race');
-      const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: account.cookie }, payload: makeAssetPayload() });
+      const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie }, payload: makeAssetPayload() });
       const asset = assetResponse.json();
 
       const first = (
-        await app.inject({ method: 'POST', url: `/api/v1/marketplace/property-assets/${asset._id}/listings`, headers: { cookie: account.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
+        await app.inject({ method: 'POST', url: `/api/v1/marketplace/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } } })
       ).json();
       const second = (
-        await app.inject({ method: 'POST', url: `/api/v1/marketplace/property-assets/${asset._id}/listings`, headers: { cookie: account.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 200, currency: 'USD' } } })
+        await app.inject({ method: 'POST', url: `/api/v1/marketplace/property-assets/${asset._id}/listings`, headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: account.cookie }, payload: { dealType: 'sale', price: { amountMinorUnits: 200, currency: 'USD' } } })
       ).json();
 
       const [activateFirst, activateSecond] = await Promise.all([
@@ -350,12 +350,12 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
     it('activate чужого listing даёт 404', async () => {
       const owner = await marketplaceAccountCookie('wizard-idor-a');
       const stranger = await marketplaceAccountCookie('wizard-idor-b');
-      const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { cookie: owner.cookie }, payload: makeAssetPayload() });
+      const assetResponse = await app.inject({ method: 'POST', url: '/api/v1/marketplace/property-assets', headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie }, payload: makeAssetPayload() });
       const asset = assetResponse.json();
       const listingResponse = await app.inject({
         method: 'POST',
         url: `/api/v1/marketplace/property-assets/${asset._id}/listings`,
-        headers: { cookie: owner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: owner.cookie },
         payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } },
       });
       const listing = listingResponse.json();
@@ -450,7 +450,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: erpOwner.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: erpOwner.cookie },
         payload: makeAssetPayload(),
       });
 
@@ -463,7 +463,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/property-assets',
-        headers: { cookie: marketplaceAccount.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: marketplaceAccount.cookie },
         payload: makeAssetPayload(),
       });
 
@@ -555,13 +555,13 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const assetAResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: accountA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountA.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       const assetBResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: accountB.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountB.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       const assetA = assetAResponse.json();
@@ -570,7 +570,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const listingResponse = await app.inject({
         method: 'POST',
         url: `/api/v1/marketplace/property-assets/${assetA._id}/listings`,
-        headers: { cookie: accountA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountA.cookie },
         payload: { dealType: 'sale', price: { amountMinorUnits: 100, currency: 'USD' } },
       });
       const listing = listingResponse.json();
@@ -610,13 +610,13 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const assetAResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: accountA.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountA.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       const assetBResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: accountB.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: accountB.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       const assetA = assetAResponse.json();
@@ -648,7 +648,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const erpAssetResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/property-assets',
-        headers: { cookie: erpOrgX.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: erpOrgX.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       expect(erpAssetResponse.statusCode).toBe(201);
@@ -658,7 +658,7 @@ describe('Owner/realtor marketplace publishing wizard (real HTTP + real MongoDB)
       const mktAssetResponse = await app.inject({
         method: 'POST',
         url: '/api/v1/marketplace/property-assets',
-        headers: { cookie: marketplaceY.cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie: marketplaceY.cookie },
         payload: { ...makeAssetPayload(), representativePhone: phone },
       });
       expect(mktAssetResponse.statusCode).toBe(201);

@@ -1,0 +1,617 @@
+/* Карточка объекта (детальная страница). Палитра тематическая — читаемо в тёмной,
+   светлой и светло-зелёной темах. Токены повторяют палитру списка объектов. */
+
+.oc-page {
+  --objects-bg: #06130f;
+  --objects-surface: #0b2119;
+  --objects-surface-inner: #112e23;
+  --objects-surface-hover: #16392b;
+
+  --objects-border: rgba(111, 180, 142, 0.14);
+  --objects-border-default: rgba(111, 180, 142, 0.22);
+
+  --objects-ink: #f2f6f4;
+  --objects-muted: #a8b9b1;
+  --objects-subtle: #71877d;
+
+  --objects-success: #53c993;
+  --objects-success-soft: rgba(83, 201, 147, 0.12);
+  --objects-accent: #d6ad49;
+  --objects-accent-soft: rgba(214, 173, 73, 0.12);
+  --objects-warning: #d6ad49;
+  --objects-warning-soft: rgba(214, 173, 73, 0.12);
+  --objects-danger: #ef6d65;
+  --objects-danger-soft: rgba(239, 109, 101, 0.1);
+
+  --objects-radius-sm: 8px;
+  --objects-radius-md: 10px;
+  --objects-radius-lg: 12px;
+  --objects-radius-xl: 16px;
+  --objects-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.02); /* design-ok */
+
+  min-height: 100%;
+  padding: 28px 40px 56px;
+  background: var(--objects-bg);
+  color: var(--objects-ink);
+  font-family: 'Montserrat', sans-serif;
+}
+
+:root[data-theme='light'] .oc-page {
+  --objects-bg: #eef1f4;
+  --objects-surface: #ffffff;
+  --objects-surface-inner: #f4f6f8;
+  --objects-surface-hover: #e8edf1;
+  --objects-border: #d7dee6;
+  --objects-border-default: #c0cad5;
+  --objects-ink: #111827;
+  --objects-muted: #475569;
+  --objects-subtle: #5f6f82;
+  --objects-success: #147a50;
+  --objects-success-soft: #e0f2e9;
+  --objects-accent: #1f2937;
+  --objects-accent-soft: #e5eaf0;
+  --objects-warning: #8a5a00;
+  --objects-warning-soft: #fff2cf;
+  --objects-danger: #b42318;
+  --objects-danger-soft: #fde8e7;
+}
+
+:root[data-theme='light-green'] .oc-page {
+  --objects-bg: #eaf2ee;
+  --objects-surface: #fbfdfc;
+  --objects-surface-inner: #eef5f1;
+  --objects-surface-hover: #dcebe4;
+  --objects-border: #cfe0d7;
+  --objects-border-default: #b3cfc1;
+  --objects-ink: #0b1f15;
+  --objects-muted: #2f5142;
+  --objects-subtle: #456255;
+  --objects-success: #176b4b;
+  --objects-success-soft: #dcece4;
+  --objects-accent: #176b4b;
+  --objects-accent-soft: #dcece4;
+  --objects-warning: #825600;
+  --objects-warning-soft: #fff0c7;
+  --objects-danger: #ad2d25;
+  --objects-danger-soft: #fbe7e5;
+}
+
+.oc-page button {
+  font: inherit;
+}
+
+.oc-page button:focus-visible {
+  outline: 2px solid var(--objects-accent);
+  outline-offset: 2px;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────── */
+
+.oc-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.oc-photo {
+  display: flex;
+  width: 280px;
+  height: 280px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--objects-border);
+  border-radius: 14px;
+  background: var(--objects-surface-inner);
+}
+
+.oc-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.oc-photo svg {
+  width: 48px;
+  height: 48px;
+  color: var(--objects-subtle);
+}
+
+.oc-main {
+  flex: 1;
+  min-width: 260px;
+}
+
+.oc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 4px 11px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px; /* design-ok */
+  font-weight: 500;
+}
+
+.oc-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.oc-status.tone-positive {
+  color: var(--objects-success);
+  background: var(--objects-success-soft);
+  border-color: color-mix(in srgb, var(--objects-success) 30%, transparent);
+}
+
+.oc-status.tone-warning {
+  color: var(--objects-warning);
+  background: var(--objects-warning-soft);
+  border-color: color-mix(in srgb, var(--objects-warning) 30%, transparent);
+}
+
+.oc-status.tone-neutral {
+  color: var(--objects-muted);
+  background: var(--objects-surface-hover);
+  border-color: var(--objects-border);
+}
+
+.oc-title {
+  margin: 0 0 8px;
+  color: var(--objects-ink);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.oc-location {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 18px;
+  color: var(--objects-muted);
+  font-size: 15px; /* design-ok */
+}
+
+.oc-location svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--objects-subtle);
+}
+
+.oc-price {
+  color: var(--objects-accent);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.oc-price-sub {
+  margin: 4px 0 20px;
+  color: var(--objects-muted);
+  font-size: 15px; /* design-ok */
+}
+
+.oc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.oc-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--objects-border);
+  border-radius: var(--objects-radius-sm);
+  background: var(--objects-surface-inner);
+  color: var(--objects-ink);
+  font-size: 15px; /* design-ok */
+}
+
+.oc-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.oc-book-btn {
+  display: inline-flex;
+  height: 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 22px;
+  border: 1px solid color-mix(in srgb, var(--objects-accent) 50%, transparent);
+  border-radius: var(--objects-radius-md);
+  background: var(--objects-accent-soft);
+  color: var(--objects-accent);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 160ms ease-out, border-color 160ms ease-out;
+}
+
+.oc-book-btn:hover {
+  border-color: var(--objects-accent);
+  background: color-mix(in srgb, var(--objects-accent) 18%, transparent);
+}
+
+.oc-book-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── Управление объектом ────────────────────────────────────────────── */
+
+.oc-manage {
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border: 1px solid var(--objects-border);
+  border-radius: var(--objects-radius-lg);
+  background: var(--objects-surface);
+}
+
+.oc-manage .oc-panel-title {
+  margin-bottom: 12px;
+}
+
+/* Главные действия — золото/зелёный/мята, по три в ряд на широком экране */
+.oc-manage-primary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Вторичные действия — компактные кнопки по содержимому, переносом */
+.oc-manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.oc-manage-actions .object-action {
+  width: auto;
+}
+
+/* ── Tabs ───────────────────────────────────────────────────────────── */
+
+.oc-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 22px;
+  box-shadow: inset 0 -1px 0 var(--objects-border);
+}
+
+.oc-tab {
+  padding: 10px 18px;
+  border: 0;
+  background: transparent;
+  color: var(--objects-muted);
+  font-size: 16px;
+  font-weight: 400;
+  cursor: pointer;
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color 160ms ease-out, box-shadow 160ms ease-out;
+}
+
+.oc-tab:hover {
+  color: var(--objects-ink);
+}
+
+.oc-tab.is-active {
+  color: var(--objects-accent);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 var(--objects-accent);
+}
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+
+.oc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.oc-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.oc-panel {
+  padding: 18px 20px;
+  border: 1px solid var(--objects-border);
+  border-radius: var(--objects-radius-lg);
+  background: var(--objects-surface-inner);
+}
+
+.oc-panel-title {
+  margin: 0 0 12px;
+  color: var(--objects-ink);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.oc-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.oc-panel-head .oc-panel-title {
+  margin: 0;
+}
+
+.oc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+  box-shadow: inset 0 -1px 0 var(--objects-border);
+}
+
+.oc-row:last-child {
+  box-shadow: none;
+}
+
+.oc-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--objects-muted);
+  font-size: 15px; /* design-ok */
+}
+
+.oc-row-label svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--objects-subtle);
+}
+
+.oc-row-value {
+  color: var(--objects-ink);
+  font-size: 15px; /* design-ok */
+  font-weight: 500;
+  text-align: right;
+}
+
+.oc-row-value.is-accent {
+  color: var(--objects-accent);
+}
+
+.oc-row-delta {
+  color: var(--objects-success);
+  font-size: 15px; /* design-ok */
+}
+
+/* История цены */
+.oc-hist-info {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.oc-hist-price {
+  color: var(--objects-ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.oc-hist-price.is-accent {
+  color: var(--objects-accent);
+}
+
+.oc-hist-meta {
+  color: var(--objects-subtle);
+  font-size: 14px; /* design-ok */
+}
+
+/* Ответственный */
+.oc-agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.oc-agent-avatar {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--objects-success-soft);
+  color: var(--objects-success);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.oc-agent-name {
+  color: var(--objects-ink);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.oc-agent-role {
+  color: var(--objects-muted);
+  font-size: 14px; /* design-ok */
+}
+
+.oc-desc {
+  color: var(--objects-muted);
+  font-size: 15px; /* design-ok */
+  line-height: 1.7;
+}
+
+.oc-upload-btn {
+  display: inline-flex;
+  height: 38px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--objects-accent) 40%, transparent);
+  border-radius: var(--objects-radius-sm);
+  background: var(--objects-accent-soft);
+  color: var(--objects-accent);
+  font-size: 15px; /* design-ok */
+  cursor: pointer;
+}
+
+.oc-doc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  box-shadow: inset 0 -1px 0 var(--objects-border);
+}
+
+.oc-doc:last-child {
+  box-shadow: none;
+}
+
+.oc-doc > svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  color: var(--objects-subtle);
+}
+
+.oc-doc-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.oc-doc-name {
+  color: var(--objects-ink);
+  font-size: 15px; /* design-ok */
+}
+
+.oc-doc-meta {
+  color: var(--objects-subtle);
+  font-size: 14px; /* design-ok */
+}
+
+.oc-doc-download {
+  border: 0;
+  background: transparent;
+  color: var(--objects-accent);
+  font-size: 15px; /* design-ok */
+  cursor: pointer;
+}
+
+/* ── Заглушка брони ─────────────────────────────────────────────────── */
+
+.oc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(3, 10, 8, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.oc-modal {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  border: 1px solid var(--objects-border-default);
+  border-radius: var(--objects-radius-lg);
+  background: var(--objects-surface);
+  color: var(--objects-ink);
+}
+
+.oc-modal-title {
+  margin: 0 0 6px;
+  color: var(--objects-ink);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.oc-modal-sub {
+  margin: 0 0 20px;
+  color: var(--objects-muted);
+  font-size: 15px; /* design-ok */
+  line-height: 1.5;
+}
+
+.oc-modal-placeholder {
+  display: flex;
+  min-height: 140px;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border: 1px dashed var(--objects-border-default);
+  border-radius: var(--objects-radius-md);
+  background: var(--objects-surface-inner);
+  color: var(--objects-subtle);
+  font-size: 15px; /* design-ok */
+  text-align: center;
+}
+
+.oc-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.oc-modal-close {
+  height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--objects-border-default);
+  border-radius: var(--objects-radius-md);
+  background: transparent;
+  color: var(--objects-ink);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 160ms ease-out;
+}
+
+.oc-modal-close:hover {
+  background: var(--objects-surface-hover);
+}
+
+.oc-modal-x {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--objects-radius-sm);
+  background: transparent;
+  color: var(--objects-muted);
+  cursor: pointer;
+  transition: background 160ms ease-out, color 160ms ease-out;
+}
+
+.oc-modal-x:hover {
+  background: var(--objects-surface-hover);
+  color: var(--objects-ink);
+}
+
+@media (max-width: 900px) {
+  .oc-grid {
+    grid-template-columns: 1fr;
+  }
+}

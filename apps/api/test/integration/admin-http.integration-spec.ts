@@ -133,8 +133,7 @@ describe('Admin HTTP routes — integration (полный AppModule, реаль�
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin,
-      correlationId: 'http-integration-test',
-    });
+      correlationId: 'http-integration-test', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     const session = await authService.login({ login, password: PASSWORD, audience: 'admin' });
     return { cookie: `baza_session=${session.sessionToken}`, adminAccountId: account._id.toString(), identityId, login };
   }
@@ -326,7 +325,7 @@ describe('Admin HTTP routes — integration (полный AppModule, реаль�
       const response = await app.inject({
         method: 'POST',
         url: '/api/v1/admin/accounts',
-        headers: { cookie },
+        headers: { 'idempotency-key': new Types.ObjectId().toString(), cookie },
         payload: { identityId: targetIdentityId.toString(), isSuperAdmin: true },
       });
       expect(response.statusCode).toBe(403);

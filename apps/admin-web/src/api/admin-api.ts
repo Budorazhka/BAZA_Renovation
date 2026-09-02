@@ -112,7 +112,14 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
       identityId: string
       isSuperAdmin: boolean
     }> {
-      return request('/admin/accounts', { method: 'POST', body: JSON.stringify(params) })
+      // Ключ обязателен: повтор без него создал бы второй админ-аккаунт (ADR-006).
+      // Генерируется на вызов — форма создания одноразовая, повтор здесь это
+      // осознанное новое действие оператора, а не автоматический retry.
+      return request('/admin/accounts', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify(params),
+      })
     },
 
     async grantPermission(

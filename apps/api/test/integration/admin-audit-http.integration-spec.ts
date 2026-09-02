@@ -120,8 +120,7 @@ describe('Admin audit trail HTTP routes — integration (полный AppModule,
     const account = await adminAccountService.createAdminAccount(makeSuperAdminContext(), {
       identityId,
       isSuperAdmin,
-      correlationId: 'audit-http-integration-test',
-    });
+      correlationId: 'audit-http-integration-test', idempotency: { actorIdentityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: new Types.ObjectId().toString() } } });
     const session = await authService.login({ login, password: PASSWORD, audience: 'admin' });
     return { cookie: `baza_session=${session.sessionToken}`, adminAccountId: account._id.toString(), identityId, login };
   }

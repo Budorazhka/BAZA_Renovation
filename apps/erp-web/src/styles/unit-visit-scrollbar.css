@@ -1,0 +1,113 @@
+/* Scrollbar визитки — подключается после index.css, перекрывает ERP */
+:root[data-unit-visit-theme],
+:root[data-unit-visit-theme] body {
+  scrollbar-width: thin;
+}
+
+:root[data-unit-visit-theme='baza'],
+:root[data-unit-visit-theme='baza'] body {
+  scrollbar-color: #178b00 #e8efe4;
+}
+
+:root[data-unit-visit-theme='baza']::-webkit-scrollbar,
+:root[data-unit-visit-theme='baza'] body::-webkit-scrollbar,
+:root[data-unit-visit-theme='baza'] ::-webkit-scrollbar,
+.unit-visit-page[data-visit-theme='baza'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+:root[data-unit-visit-theme='baza']::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='baza'] body::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='baza'] ::-webkit-scrollbar-track,
+.unit-visit-page[data-visit-theme='baza'] ::-webkit-scrollbar-track {
+  background: #f7f3eb !important;
+}
+
+:root[data-unit-visit-theme='baza']::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='baza'] body::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='baza'] ::-webkit-scrollbar-thumb,
+.unit-visit-page[data-visit-theme='baza'] ::-webkit-scrollbar-thumb {
+  background: #178b00 !important;
+  border-radius: 4px;
+  border: 2px solid #f7f3eb;
+}
+
+:root[data-unit-visit-theme='baza']::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='baza'] body::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='baza'] ::-webkit-scrollbar-thumb:hover,
+.unit-visit-page[data-visit-theme='baza'] ::-webkit-scrollbar-thumb:hover {
+  background: #1ea300 !important;
+}
+
+:root[data-unit-visit-theme='dark'],
+:root[data-unit-visit-theme='dark'] body {
+  scrollbar-color: #c9a84c #07120a;
+}
+
+:root[data-unit-visit-theme='dark']::-webkit-scrollbar,
+:root[data-unit-visit-theme='dark'] body::-webkit-scrollbar,
+:root[data-unit-visit-theme='dark'] ::-webkit-scrollbar,
+.unit-visit-page[data-visit-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+:root[data-unit-visit-theme='dark']::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='dark'] body::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='dark'] ::-webkit-scrollbar-track,
+.unit-visit-page[data-visit-theme='dark'] ::-webkit-scrollbar-track {
+  background: #07120a !important;
+}
+
+:root[data-unit-visit-theme='dark']::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='dark'] body::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='dark'] ::-webkit-scrollbar-thumb,
+.unit-visit-page[data-visit-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #c9a84c !important;
+  border-radius: 4px;
+  border: 2px solid #07120a;
+}
+
+:root[data-unit-visit-theme='dark']::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='dark'] body::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='dark'] ::-webkit-scrollbar-thumb:hover,
+.unit-visit-page[data-visit-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #e2c97e !important;
+}
+
+:root[data-unit-visit-theme='light'],
+:root[data-unit-visit-theme='light'] body {
+  scrollbar-color: #178b00 #f5f0e8;
+}
+
+:root[data-unit-visit-theme='light']::-webkit-scrollbar,
+:root[data-unit-visit-theme='light'] body::-webkit-scrollbar,
+:root[data-unit-visit-theme='light'] ::-webkit-scrollbar,
+.unit-visit-page[data-visit-theme='light'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+:root[data-unit-visit-theme='light']::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='light'] body::-webkit-scrollbar-track,
+:root[data-unit-visit-theme='light'] ::-webkit-scrollbar-track,
+.unit-visit-page[data-visit-theme='light'] ::-webkit-scrollbar-track {
+  background: #faf7f2 !important;
+}
+
+:root[data-unit-visit-theme='light']::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='light'] body::-webkit-scrollbar-thumb,
+:root[data-unit-visit-theme='light'] ::-webkit-scrollbar-thumb,
+.unit-visit-page[data-visit-theme='light'] ::-webkit-scrollbar-thumb {
+  background: #178b00 !important;
+  border-radius: 4px;
+  border: 2px solid #faf7f2;
+}
+
+:root[data-unit-visit-theme='light']::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='light'] body::-webkit-scrollbar-thumb:hover,
+:root[data-unit-visit-theme='light'] ::-webkit-scrollbar-thumb:hover,
+.unit-visit-page[data-visit-theme='light'] ::-webkit-scrollbar-thumb:hover {
+  background: #1ea300 !important;
+}

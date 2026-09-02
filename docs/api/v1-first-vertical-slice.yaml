@@ -123,6 +123,29 @@ paths:
           description: Origin отсутствует или не относится к известному продукту.
           $ref: '#/components/responses/Error'
 
+  /me:
+    get:
+      operationId: getErpMe
+      summary: Канонический контекст текущего пользователя ERP (Identity, Organization, Position, Permissions)
+      description: >
+        Audience и TenantContext определяются сервером исключительно по baza_session cookie.
+        Возвращает агрегированный профиль identity, organization, position и список эффективных
+        прав (grants).
+      tags: [erp-context]
+      responses:
+        '200':
+          description: Текущий контекст пользователя ERP
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErpMeResponse'
+        '401':
+          description: AUTH_NO_SESSION — нет session cookie
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет активного tenant context (сессия не erp или нет активной позиции)
+          $ref: '#/components/responses/Error'
+
   /exports/{entity}:
     get:
       operationId: runExport
@@ -3497,7 +3520,7 @@ components:
         description: {type: string, nullable: true}
         status:
           type: string
-          enum: [open, completed, cancelled]
+          enum: [open, in_progress, completed, cancelled]
         dueAt: {type: string, format: date-time, nullable: true}
         assignedPositionId: {type: string, nullable: true}
         leadId: {type: string, nullable: true}
@@ -3507,6 +3530,38 @@ components:
         version: {type: integer, description: "conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete"}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time, nullable: true}
+        startAt: {type: string, format: date-time, nullable: true}
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        taskCategory:
+          type: string
+          enum: [work, personal]
+        colorHex: {type: string, nullable: true, description: "Цветовая метка #rrggbb; null — метки нет"}
+        reminderOffsetsMinutes:
+          type: array
+          items: {type: integer}
+        subtasks:
+          type: array
+          items:
+            type: object
+            required: [id, title, done]
+            properties:
+              id: {type: string}
+              title: {type: string}
+              done: {type: boolean}
+        attachmentFileNames:
+          type: array
+          items: {type: string}
+        entityType:
+          type: string
+          enum: [lead, client, deal, property, booking, none]
+        entityId: {type: string, nullable: true}
+        isAutomatic: {type: boolean}
+        triggerType: {type: string, nullable: true}
+        isOverdue:
+          type: boolean
+          description: "ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь."
 
     TaskListResponse:
       type: object
@@ -3528,6 +3583,38 @@ components:
         assignedPositionId: {type: string}
         leadId: {type: string}
         contactId: {type: string}
+        startAt: {type: string, format: date-time}
+        priority:
+          type: string
+          enum: [low, medium, high, critical]
+        taskCategory:
+          type: string
+          enum: [work, personal]
+        colorHex: {type: string, nullable: true}
+        reminderOffsetsMinutes:
+          type: array
+          maxItems: 10
+          items: {type: integer, minimum: 0}
+        subtasks:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [id, title]
+            properties:
+              id: {type: string, maxLength: 120}
+              title: {type: string, maxLength: 255}
+              done: {type: boolean}
+        attachmentFileNames:
+          type: array
+          maxItems: 20
+          items: {type: string, maxLength: 255}
+        entityType:
+          type: string
+          enum: [lead, client, deal, property, booking, none]
+        entityId: {type: string}
+        isAutomatic: {type: boolean}
+        triggerType: {type: string, maxLength: 120}
 
     UpdateTaskRequest:
       type: object
@@ -3741,3 +3828,46 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DealChecklistItemInput'
+
+    ErpMePermission:
+      type: object
+      required: [resource, action, scope]
+      properties:
+        resource: {type: string}
+        action: {type: string}
+        scope: {type: string, enum: [own, position, team, organization, global, city, domain, project, assigned]}
+        scopeValue: {type: string}
+
+    ErpMeResponse:
+      type: object
+      required: [identity, organization, position, permissions]
+      properties:
+        identity:
+          type: object
+          required: [id, login, status]
+          properties:
+            id: {type: string}
+            login: {type: string}
+            status: {type: string}
+        organization:
+          type: object
+          required: [id, name, type, status]
+          properties:
+            id: {type: string}
+            name: {type: string}
+            type: {type: string, enum: [agency, developer, realtor]}
+            status: {type: string}
+        position:
+          type: object
+          required: [id, role, displayName]
+          properties:
+            id: {type: string}
+            role: {type: string, enum: [owner, director, rop, manager, administrator, marketer, developer]}
+            displayName: {type: string}
+            parentPositionId: {type: string, nullable: true}
+            avatarUrl: {type: string}
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErpMePermission'
+

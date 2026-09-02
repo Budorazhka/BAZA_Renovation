@@ -10,6 +10,7 @@ import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
+import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { AuditService } from '../audit/audit.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -21,7 +22,13 @@ import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage } from './schemas/lead.schema';
-import type { TaskDocument, TaskStatus } from './schemas/task.schema';
+import type {
+  TaskDocument,
+  TaskStatus,
+  TaskPriority,
+  TaskCategory,
+  TaskEntityType,
+} from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
 
 import type { TimelineEventType } from './dto/list-timeline.dto';
@@ -126,6 +133,25 @@ export interface CrmTaskReadModel {
   version: number;
   createdAt: string;
   updatedAt: string | null;
+
+  // Поля, которыми экран задач ERP уже пользуется (требование: интерфейс не
+  // меняется, модель подстраивается под него).
+  startAt: string | null;
+  priority: TaskPriority;
+  taskCategory: TaskCategory;
+  colorHex: string | null;
+  reminderOffsetsMinutes: number[];
+  subtasks: Array<{ id: string; title: string; done: boolean }>;
+  attachmentFileNames: string[];
+  entityType: TaskEntityType;
+  entityId: string | null;
+  isAutomatic: boolean;
+  triggerType: string | null;
+  /**
+   * Просрочена ли задача. НЕ хранится: производное от dueAt и статуса,
+   * вычисляется на чтении — иначе поле устаревало бы само каждую полночь.
+   */
+  isOverdue: boolean;
 }
 
 /**
@@ -187,6 +213,7 @@ export class CrmService {
     private readonly auditService: AuditService,
     private readonly organizationsService: OrganizationsService,
     private readonly publicRevealIdempotencyService: PublicRevealIdempotencyService,
+    private readonly idempotencyService: IdempotencyService,
     private readonly taskRepository: TaskRepository,
     private readonly dealRepository: DealRepository,
     private readonly dealEventRepository: DealEventRepository,
@@ -745,7 +772,22 @@ export class CrmService {
     assignedPositionId?: Types.ObjectId;
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
+    startAt?: Date;
+    priority?: TaskPriority;
+    taskCategory?: TaskCategory;
+    colorHex?: string | null;
+    reminderOffsetsMinutes?: number[];
+    subtasks?: Array<{ id: string; title: string; done: boolean }>;
+    attachmentFileNames?: string[];
+    entityType?: TaskEntityType;
+    entityId?: Types.ObjectId;
+    isAutomatic?: boolean;
+    triggerType?: string;
     correlationId: string;
+    /** ADR-006: дубль задачи засоряет список «следующих действий» менеджера. */
+    idempotencyKey: string;
+    /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmTaskReadModel> {
     let resolvedContactId = params.contactId;
 
@@ -802,6 +844,17 @@ export class CrmService {
           leadId: params.leadId,
           contactId: resolvedContactId,
           status: 'open',
+          startAt: params.startAt,
+          priority: params.priority,
+          taskCategory: params.taskCategory,
+          colorHex: params.colorHex,
+          reminderOffsetsMinutes: params.reminderOffsetsMinutes,
+          subtasks: params.subtasks,
+          attachmentFileNames: params.attachmentFileNames,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          isAutomatic: params.isAutomatic,
+          triggerType: params.triggerType,
         },
         session,
       );
@@ -843,7 +896,21 @@ export class CrmService {
         session,
       );
 
-      return toTaskReadModel(task);
+      const readModel = toTaskReadModel(task);
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createTask',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 
@@ -1668,6 +1735,15 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: повтор не должен создавать второй лид — дубль искажает воронку. */
+    idempotencyKey: string;
+    /**
+     * Тело для хеша идемпотентности. Приходит ИЗ КОНТРОЛЛЕРА, а не собирается
+     * здесь заново: `checkReplay` до транзакции и `record` внутри неё обязаны
+     * хешировать одну и ту же форму, иначе повтор просто не найдётся и защита
+     * будет мнимой.
+     */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmLeadReadModel> {
     return runInTransaction(this.connection, async (session) => {
       const contact = params.contactId
@@ -1711,7 +1787,24 @@ export class CrmService {
         session,
       );
 
-      return toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+      const readModel = toLeadReadModel(lead, contact, { stalled: false, hasOpenNextAction: false });
+
+      // ADR-006: запись идемпотентности идёт В ТОЙ ЖЕ транзакции, что и сам
+      // лид. Иначе возможен разрыв: лид создан, запись не сохранилась — и
+      // повтор создаёт второй лид, то есть ровно то, от чего защищаемся.
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createLead',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 
@@ -1828,6 +1921,10 @@ export class CrmService {
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    /** ADR-006: дубль сделки удваивает ожидаемую комиссию в отчётах. */
+    idempotencyKey: string;
+    /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
+    idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmDealReadModel> {
     // 1. Verify primary contact exists in the tenant
     const primaryContact = await this.contactRepository.findByIdForOrganization(
@@ -1944,7 +2041,21 @@ export class CrmService {
         session,
       );
 
-      return toDealReadModel(created, primaryContact, participantContactsById);
+      const readModel = toDealReadModel(created, primaryContact, participantContactsById);
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createDeal',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
     });
   }
 
@@ -2634,7 +2745,7 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
+export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
   return {
     id: task._id.toString(),
     organizationId: task.organizationId.toString(),
@@ -2650,6 +2761,28 @@ function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
     version: task.version ?? 0,
     createdAt: task.createdAt ? task.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: task.updatedAt ? task.updatedAt.toISOString() : null,
+
+    startAt: task.startAt ? task.startAt.toISOString() : null,
+    priority: task.priority ?? 'medium',
+    taskCategory: task.taskCategory ?? 'work',
+    colorHex: task.colorHex ?? null,
+    reminderOffsetsMinutes: task.reminderOffsetsMinutes ?? [],
+    subtasks: (task.subtasks ?? []).map((item) => ({
+      id: item.id,
+      title: item.title,
+      done: Boolean(item.done),
+    })),
+    attachmentFileNames: task.attachmentFileNames ?? [],
+    entityType: task.entityType ?? 'none',
+    entityId: task.entityId ? task.entityId.toString() : null,
+    isAutomatic: Boolean(task.isAutomatic),
+    triggerType: task.triggerType ?? null,
+    // Открытая или взятая в работу задача со сроком в прошлом — просрочена.
+    // Завершённая и отменённая просроченными не считаются никогда.
+    isOverdue:
+      (task.status === 'open' || task.status === 'in_progress') &&
+      Boolean(task.dueAt) &&
+      task.dueAt!.getTime() < Date.now(),
   };
 }
 

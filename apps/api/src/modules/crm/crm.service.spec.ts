@@ -12,6 +12,7 @@ import type { LeadEventRepository } from './repository/lead-event.repository';
 import type { AuditService } from '../audit/audit.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
 import type { PublicRevealIdempotencyService } from '../../shared/idempotency/public-reveal-idempotency.service';
+import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 
 import type { TaskRepository } from './repository/task.repository';
 import type { DealRepository } from './repository/deal.repository';
@@ -39,6 +40,7 @@ function createTestCrmService(overrides: {
   auditService?: unknown;
   organizationsService?: unknown;
   publicRevealIdempotencyService?: unknown;
+  idempotencyService?: unknown;
   taskRepository?: unknown;
   dealRepository?: unknown;
   dealEventRepository?: unknown;
@@ -61,6 +63,10 @@ function createTestCrmService(overrides: {
       checkReplay: jest.fn().mockResolvedValue(null),
       record: jest.fn().mockResolvedValue(undefined),
     }) as unknown as PublicRevealIdempotencyService,
+    (overrides.idempotencyService ?? {
+      checkReplay: jest.fn().mockResolvedValue(null),
+      record: jest.fn().mockResolvedValue(undefined),
+    }) as unknown as IdempotencyService,
     (overrides.taskRepository ?? {
       distinctLeadIdsWithOpenTask: jest.fn().mockResolvedValue([]),
       countOpenForLead: jest.fn().mockResolvedValue(0),
@@ -809,6 +815,8 @@ describe('CrmService.createLead', () => {
       actorPositionId,
       actorIdentityId,
       correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
     });
 
     expect(findContactSpy).toHaveBeenCalledWith(contact._id, organizationId);
@@ -853,6 +861,8 @@ describe('CrmService.createLead', () => {
         actorPositionId: new Types.ObjectId(),
         actorIdentityId: new Types.ObjectId(),
         correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(createLeadSpy).not.toHaveBeenCalled();
@@ -887,6 +897,8 @@ describe('CrmService.createLead', () => {
       actorPositionId: new Types.ObjectId(),
       actorIdentityId: new Types.ObjectId(),
       correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
     });
 
     expect(findByPhoneSpy).toHaveBeenCalledWith(organizationId, '+995500000002');
@@ -921,6 +933,8 @@ describe('CrmService.createLead', () => {
       actorPositionId: new Types.ObjectId(),
       actorIdentityId: new Types.ObjectId(),
       correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
     });
 
     expect(createContactSpy).toHaveBeenCalledWith(
@@ -939,6 +953,8 @@ describe('CrmService.createLead', () => {
         actorPositionId: new Types.ObjectId(),
         actorIdentityId: new Types.ObjectId(),
         correlationId: 'test-correlation-id',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
       }),
     ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
     expect(createLeadSpy).not.toHaveBeenCalled();
@@ -1877,6 +1893,8 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
           actorPositionId: new Types.ObjectId(),
           actorIdentityId: new Types.ObjectId(),
           correlationId: 'corr-owner-validation',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
         }),
       ).rejects.toThrow(NotFoundException);
 
@@ -1934,6 +1952,8 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
           actorPositionId: new Types.ObjectId(),
           actorIdentityId: new Types.ObjectId(),
           correlationId: 'corr-1',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
         }),
       ).rejects.toThrow(NotFoundException);
     });
@@ -1993,6 +2013,8 @@ describe('CrmService — getLeadTimeline & getContactTimeline', () => {
         actorPositionId,
         actorIdentityId,
         correlationId: 'corr-create-deal',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
       });
 
       expect(res.id).toBe(dealId.toString());
@@ -2198,6 +2220,8 @@ describe('CRM-004: Task outbox events', () => {
           leadId?: Types.ObjectId;
           contactId?: Types.ObjectId;
           correlationId: string;
+          idempotencyKey: string;
+          idempotencyRequestBody: Record<string, unknown>;
         }): Promise<unknown>;
       };
     }
@@ -2228,6 +2252,8 @@ describe('CRM-004: Task outbox events', () => {
         leadId,
         contactId,
         correlationId: 'corr-1',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
       });
 
       expect(publish).toHaveBeenCalledTimes(1);
@@ -2270,6 +2296,8 @@ describe('CRM-004: Task outbox events', () => {
           title: 'x',
           leadId: new Types.ObjectId(),
           correlationId: 'corr-1',
+      idempotencyKey: 'test-key',
+      idempotencyRequestBody: { probe: 1 },
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(publish).not.toHaveBeenCalled();

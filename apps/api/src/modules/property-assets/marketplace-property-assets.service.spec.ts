@@ -59,16 +59,24 @@ function makeService(overrides: {
   );
 }
 
+/** Идемпотентность в этих тестах не проверяется — важен сам вызов репозитория. */
+function idem() {
+  return { key: new Types.ObjectId().toString(), requestBody: { probe: 1 } };
+}
+
 describe('MarketplacePropertyAssetsService', () => {
   it('createAsset записывает publisherScope:{type:marketplace_account, identityId}, не organization', async () => {
     const identityId = new Types.ObjectId();
     const assetRepository = { create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) };
     const service = makeService({ propertyAssetRepository: assetRepository as never });
 
-    await service.createAsset(identityId, assetDto);
+    await service.createAsset(identityId, assetDto, idem());
 
     expect(assetRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ publisherScope: { type: 'marketplace_account', identityId }, representativePhone: assetDto.representativePhone }),
+      // второй аргумент — session: запись объекта идёт в транзакции вместе с
+      // отметкой идемпотентности (ADR-006)
+      expect.anything(),
     );
   });
 
@@ -81,7 +89,7 @@ describe('MarketplacePropertyAssetsService', () => {
       dedupeService: { scanForDuplicates: scanForDuplicatesSpy, assertNoBlockingDuplicates: jest.fn() } as never,
     });
 
-    const result = await service.createAsset(new Types.ObjectId(), assetDto);
+    const result = await service.createAsset(new Types.ObjectId(), assetDto, idem());
 
     expect(scanForDuplicatesSpy).toHaveBeenCalledWith(assetId);
     expect(result._id).toBe(assetId);
@@ -100,10 +108,11 @@ describe('MarketplacePropertyAssetsService', () => {
     const listingRepository = { create: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) };
     const service = makeService({ propertyAssetRepository: assetRepository as never, listingRepository: listingRepository as never });
 
-    await service.createListing(assetId, identityId, { dealType: 'sale', price });
+    await service.createListing(assetId, identityId, { dealType: 'sale', price }, idem());
 
     expect(listingRepository.create).toHaveBeenCalledWith(
       expect.objectContaining({ publisherScope: { type: 'marketplace_account', identityId }, dealType: 'sale' }),
+      expect.anything(),
     );
   });
 

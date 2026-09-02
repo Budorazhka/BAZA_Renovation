@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="960" viewBox="0 0 1600 960">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#c9d8d3"/><stop offset="1" stop-color="#eef0e8"/></linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#54766d"/><stop offset=".55" stop-color="#183f34"/><stop offset="1" stop-color="#0c291f"/></linearGradient>
+    <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d9d0bc"/><stop offset="1" stop-color="#a99f8d"/></linearGradient>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#58715f"/><stop offset="1" stop-color="#1e392c"/></linearGradient>
+  </defs>
+  <rect width="1600" height="960" fill="url(#sky)"/>
+  <path d="M0 560L230 420l180 70 210-180 250 145 240-210 260 180 230-95v630H0z" fill="#6f897e" opacity=".36"/>
+  <rect y="690" width="1600" height="270" fill="url(#ground)"/>
+  <path d="M90 960L650 610h310l550 350z" fill="#b8b09f"/>
+  <path d="M230 960L700 650h205l465 310z" fill="#c9c2b3"/>
+  <g transform="translate(390 90)">
+    <path d="M170 0h560l105 88v610H60V88z" fill="url(#stone)"/>
+    <path d="M170 0h560l105 88H60z" fill="#eee8d9"/>
+    <rect x="134" y="72" width="627" height="570" fill="url(#glass)"/>
+    <g fill="#d8cba8" opacity=".95">
+      <rect x="134" y="145" width="627" height="18"/><rect x="134" y="224" width="627" height="18"/>
+      <rect x="134" y="303" width="627" height="18"/><rect x="134" y="382" width="627" height="18"/>
+      <rect x="134" y="461" width="627" height="18"/><rect x="134" y="540" width="627" height="18"/>
+      <rect x="254" y="72" width="16" height="570"/><rect x="382" y="72" width="16" height="570"/>
+      <rect x="510" y="72" width="16" height="570"/><rect x="638" y="72" width="16" height="570"/>
+    </g>
+    <rect x="60" y="642" width="775" height="56" fill="#c3b79f"/>
+    <rect x="390" y="584" width="120" height="114" fill="#08251b"/>
+    <text x="450" y="630" text-anchor="middle" fill="#e6c364" font-family="Montserrat,Arial" font-size="18" letter-spacing="5">BAZA</text>
+  </g>
+  <g fill="#163d2d">
+    <circle cx="220" cy="680" r="78"/><rect x="210" y="680" width="20" height="170"/>
+    <circle cx="1360" cy="650" r="92"/><rect x="1348" y="650" width="24" height="205"/>
+    <circle cx="1160" cy="735" r="54"/><rect x="1152" y="735" width="16" height="120"/>
+  </g>
+  <text x="72" y="90" fill="#15392e" font-family="Montserrat,Arial" font-size="24" letter-spacing="7">BAZA RESIDENCE / TBILISI</text>
+</svg>

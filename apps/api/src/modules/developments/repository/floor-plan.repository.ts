@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { ClientSession, Model, Types } from 'mongoose';
 import { FloorPlanDocument, GeoPolygon2D } from '../schemas/floor-plan.schema';
 
 /**
@@ -12,19 +12,22 @@ export class FloorPlanRepository {
     @InjectModel(FloorPlanDocument.name) private readonly model: Model<FloorPlanDocument>,
   ) {}
 
-  async create(params: {
-    buildingId: Types.ObjectId;
-    organizationId: Types.ObjectId;
-    name: string;
-    rooms: number;
-    area: number;
-    isEuro?: boolean;
-    imageAssetId?: Types.ObjectId;
-    tags?: string[];
-    polygon?: GeoPolygon2D;
-  }): Promise<FloorPlanDocument> {
-    const doc = await this.model.create({ ...params, tags: params.tags ?? [] });
-    return doc;
+  async create(
+    params: {
+      buildingId: Types.ObjectId;
+      organizationId: Types.ObjectId;
+      name: string;
+      rooms: number;
+      area: number;
+      isEuro?: boolean;
+      imageAssetId?: Types.ObjectId;
+      tags?: string[];
+      polygon?: GeoPolygon2D;
+    },
+    session?: ClientSession,
+  ): Promise<FloorPlanDocument> {
+    const [doc] = await this.model.create([{ ...params, tags: params.tags ?? [] }], { session });
+    return doc!;
   }
 
   async findByIdForOrganization(

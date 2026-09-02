@@ -1,4 +1,6 @@
-import { Body, Controller, Get, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { AppException } from '../../shared/errors/app-exception';
+import { ErrorCode } from '../../shared/errors/error-codes';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { AdminGuard } from '../../shared/admin/admin.guard';
@@ -59,12 +61,29 @@ export class AdminAccountController {
   }
 
   @Post()
-  async create(@Req() req: FastifyRequest, @Body() dto: CreateAdminAccountDto) {
+  async create(
+    @Req() req: FastifyRequest,
+    @Body() dto: CreateAdminAccountDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
     const adminContext = requireAdminContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(adminContext.identityId);
+    const requestBody = { identityId: dto.identityId, isSuperAdmin: dto.isSuperAdmin ?? false };
+
+    const replay = await this.adminAccountService.checkCreateReplay(actorIdentityId, idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
     const account = await this.adminAccountService.createAdminAccount(adminContext, {
       identityId: new Types.ObjectId(dto.identityId),
       isSuperAdmin: dto.isSuperAdmin ?? false,
       correlationId: req.correlationId,
+      idempotency: { actorIdentityId, key: idempotencyKey, requestBody },
     });
     return { id: account._id.toString(), identityId: account.identityId.toString(), isSuperAdmin: account.isSuperAdmin };
   }
