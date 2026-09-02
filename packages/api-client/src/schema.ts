@@ -1854,6 +1854,8 @@ export interface components {
             /** Format: date-time */
             completedAt?: string | null;
             completedByPositionId?: string | null;
+            /** @description Кто создал задачу; берётся из серверного TenantContext, из запроса не принимается */
+            createdByPositionId?: string | null;
             /** @description conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete */
             version: number;
             /** Format: date-time */

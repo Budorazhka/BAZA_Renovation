@@ -40,6 +40,7 @@ export interface CreateTaskParams {
   entityId?: Types.ObjectId;
   isAutomatic?: boolean;
   triggerType?: string;
+  createdByPositionId?: Types.ObjectId;
 }
 
 export interface UpdateTaskParams {
@@ -83,6 +84,7 @@ export class TaskRepository {
     if (params.entityId !== undefined) docData.entityId = params.entityId;
     if (params.isAutomatic !== undefined) docData.isAutomatic = params.isAutomatic;
     if (params.triggerType !== undefined) docData.triggerType = params.triggerType;
+    if (params.createdByPositionId !== undefined) docData.createdByPositionId = params.createdByPositionId;
 
     const [created] = await this.model.create([docData], { session });
     return created!;

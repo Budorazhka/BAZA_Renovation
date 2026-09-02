@@ -148,6 +148,14 @@ export class TaskDocument extends Document {
   completedByPositionId?: Types.ObjectId;
 
   /**
+   * Кто создал задачу. Экран показывает «Создал» отдельной строкой, а до
+   * 02.09.2026 создатель нигде не сохранялся — он был известен в момент
+   * создания (actorPositionId) и терялся сразу после.
+   */
+  @Prop({ type: Types.ObjectId, required: false })
+  createdByPositionId?: Types.ObjectId;
+
+  /**
    * conventions.md разд.5 optimistic concurrency — тот же паттерн, что
    * LeadDocument.version/UnitDocument.version: PATCH /tasks/:taskId,
    * POST /tasks/:taskId/complete и PATCH /tasks/:taskId/reassign

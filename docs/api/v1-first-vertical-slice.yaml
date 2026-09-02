@@ -3546,6 +3546,7 @@ components:
         contactId: {type: string, nullable: true}
         completedAt: {type: string, format: date-time, nullable: true}
         completedByPositionId: {type: string, nullable: true}
+        createdByPositionId: {type: string, nullable: true, description: "Кто создал задачу; берётся из серверного TenantContext, из запроса не принимается"}
         version: {type: integer, description: "conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/reassign/complete"}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time, nullable: true}
