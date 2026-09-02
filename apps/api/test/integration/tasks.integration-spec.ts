@@ -331,6 +331,86 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       expect(body.entityId).toBe(leadId.toString());
     });
 
+    async function seedAsset(organizationId: Types.ObjectId, status: 'verified' | 'pending'): Promise<Types.ObjectId> {
+      const assetId = new Types.ObjectId();
+      await connection.collection('media_assets').insertOne({
+        _id: assetId,
+        ownerScope: { type: 'organization', organizationId },
+        status,
+        declaredMimeType: 'application/pdf',
+        sizeBytes: 1000,
+        bucket: 'private',
+        originalPath: `${assetId.toString()}/original.pdf`,
+        variants: [],
+        purpose: 'task_attachment',
+        createdAt: new Date(),
+      });
+      return assetId;
+    }
+
+    it('вложение — ссылка на подтверждённый asset организации, имя выводится в модель чтения', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const assetId = await seedAsset(organizationId, 'verified');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Собрать документы', attachments: [{ assetId: assetId.toString(), fileName: 'договор.pdf' }] },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.body);
+      expect(body.attachments).toEqual([{ assetId: assetId.toString(), fileName: 'договор.pdf' }]);
+      expect(body.attachmentFileNames).toEqual(['договор.pdf']);
+
+      const stored = await connection.collection('tasks').findOne({ _id: new Types.ObjectId(body.id as string) });
+      expect(stored?.attachments?.[0]?.assetId?.toString()).toBe(assetId.toString());
+      // Имена больше не хранятся отдельным полем.
+      expect(stored).not.toHaveProperty('attachmentFileNames');
+    });
+
+    it('неподтверждённый asset не принимается — обещание файла, которого ещё нет', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const assetId = await seedAsset(organizationId, 'pending');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Собрать документы', attachments: [{ assetId: assetId.toString(), fileName: 'договор.pdf' }] },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('asset чужой организации не принимается — тот же 404, что для чужого лида', async () => {
+      const { cookie } = await seedOwnerSession();
+      const foreignAssetId = await seedAsset(new Types.ObjectId(), 'verified');
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Чужой файл', attachments: [{ assetId: foreignAssetId.toString(), fileName: 'секрет.pdf' }] },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('имена файлов без файлов больше не принимаются', async () => {
+      const { cookie } = await seedOwnerSession();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/tasks',
+        headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+        payload: { title: 'Демо-вложение', attachmentFileNames: ['договор.pdf'] },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
     it('returns 404 when associating with non-existent or foreign lead', async () => {
       const { cookie } = await seedOwnerSession();
       const foreignLeadId = new Types.ObjectId();

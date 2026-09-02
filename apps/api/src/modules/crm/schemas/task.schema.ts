@@ -144,12 +144,20 @@ export class TaskDocument extends Document {
   subtasks!: Array<{ id: string; title: string; done: boolean }>;
 
   /**
-   * Имена прикреплённых файлов. ADR-008: тела файлов не ходят через API, а
-   * полноценные вложения потребуют media-asset'ов; пока экран показывает
-   * только имена, и хранится ровно то, что он показывает.
+   * Вложения — ссылки на MediaAsset по образцу avatarAssetId позиции, плюс
+   * имя, которое человек видел при выборе файла. Имя живёт на связи, а не на
+   * asset'е: MediaAsset хранит путь и тип, а имя — это подпись пользователя,
+   * как alt у медиа объекта.
+   *
+   * До 02.09.2026 хранились только имена без файлов — «демо, без загрузки»,
+   * как честно называл это легаси-тип клиента. Экран обещал вложения, а
+   * сервер хранил строки (аудит границы «экран — спецификация»).
    */
-  @Prop({ type: [String], default: [] })
-  attachmentFileNames!: string[];
+  @Prop({
+    type: [{ assetId: { type: Types.ObjectId, ref: 'MediaAssetDocument' }, fileName: String }],
+    default: [],
+  })
+  attachments!: Array<{ assetId: Types.ObjectId; fileName: string }>;
 
   /**
    * Создана автоматически по правилу, а не человеком. Провенанс: ставит только

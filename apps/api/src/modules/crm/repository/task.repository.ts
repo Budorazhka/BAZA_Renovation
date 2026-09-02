@@ -37,7 +37,7 @@ export interface CreateTaskParams {
   colorHex?: string | null;
   reminderOffsetsMinutes?: number[];
   subtasks?: Array<{ id: string; title: string; done: boolean }>;
-  attachmentFileNames?: string[];
+  attachments?: Array<{ assetId: Types.ObjectId; fileName: string }>;
   createdByPositionId?: Types.ObjectId;
 }
 
@@ -79,7 +79,7 @@ export class TaskRepository {
     if (params.colorHex !== undefined) docData.colorHex = params.colorHex;
     if (params.reminderOffsetsMinutes !== undefined) docData.reminderOffsetsMinutes = params.reminderOffsetsMinutes;
     if (params.subtasks !== undefined) docData.subtasks = params.subtasks;
-    if (params.attachmentFileNames !== undefined) docData.attachmentFileNames = params.attachmentFileNames;
+    if (params.attachments !== undefined) docData.attachments = params.attachments;
     if (params.createdByPositionId !== undefined) docData.createdByPositionId = params.createdByPositionId;
 
     const [created] = await this.model.create([docData], { session });

@@ -35,8 +35,10 @@ export interface Task {
   /** Напоминания: за сколько минут до начала */
   reminderOffsetsMinutes?: number[]
   subtasks?: TaskSubtask[]
-  /** Имена прикреплённых файлов (демо, без загрузки на сервер) */
+  /** Имена вложений — для отображения; сервер выводит их из attachments. */
   attachmentFileNames?: string[]
+  /** Загруженные и подтверждённые файлы: ссылка на asset плюс имя. Заполняет форма создания. */
+  attachments?: Array<{ assetId: string; fileName: string }>
   /** Привязка к сущности */
   entityType: TaskEntityType
   entityId?: string

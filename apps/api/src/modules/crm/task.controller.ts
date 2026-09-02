@@ -133,7 +133,10 @@ export class TaskController {
       colorHex: dto.colorHex,
       reminderOffsetsMinutes: dto.reminderOffsetsMinutes,
       subtasks: dto.subtasks?.map((item) => ({ id: item.id, title: item.title, done: item.done ?? false })),
-      attachmentFileNames: dto.attachmentFileNames,
+      attachments: dto.attachments?.map((item) => ({
+        assetId: new Types.ObjectId(item.assetId),
+        fileName: item.fileName,
+      })),
       correlationId: req.correlationId,
     });
   }

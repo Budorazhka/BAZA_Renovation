@@ -216,6 +216,15 @@ describe('buildCreateTaskPayload', () => {
     expect(buildCreateTaskPayload({ ...formTask, colorHex: null }, {}).colorHex).toBeNull()
   })
 
+  it('в тело уходят ссылки на файлы, а не имена без файлов', () => {
+    const payload = buildCreateTaskPayload(
+      { ...formTask, attachmentFileNames: ['договор.pdf'], attachments: [{ assetId: 'asset-1', fileName: 'договор.pdf' }] },
+      {},
+    )
+    expect(payload.attachments).toEqual([{ assetId: 'asset-1', fileName: 'договор.pdf' }])
+    expect(payload).not.toHaveProperty('attachmentFileNames')
+  })
+
   it('переводит дату и время формы в момент времени', () => {
     const payload = buildCreateTaskPayload(formTask, {})
     expect(payload.dueAt).toBe(new Date('2026-09-10T19:00').toISOString())

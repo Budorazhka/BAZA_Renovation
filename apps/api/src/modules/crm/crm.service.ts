@@ -6,6 +6,7 @@ import type { MoneyAmount } from '@baza/contracts';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository, type DevelopmentContact } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
+import { MediaService } from '../media/media.service';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -148,6 +149,9 @@ export interface CrmTaskReadModel {
   colorHex: string | null;
   reminderOffsetsMinutes: number[];
   subtasks: Array<{ id: string; title: string; done: boolean }>;
+  /** Вложения — ссылки на подтверждённые MediaAsset'ы с именами для экрана. */
+  attachments: Array<{ assetId: string; fileName: string }>;
+  /** Имена вложений — выводятся из attachments; контракт чтения экрана не изменился. */
   attachmentFileNames: string[];
   entityType: TaskEntityType;
   entityId: string | null;
@@ -224,6 +228,7 @@ export class CrmService {
     private readonly dealRepository: DealRepository,
     private readonly dealEventRepository: DealEventRepository,
     private readonly outboxService: OutboxService,
+    private readonly mediaService: MediaService,
   ) {}
 
   /** Tenant-scoped lead lookup for cross-module commands (for example
@@ -785,13 +790,34 @@ export class CrmService {
     colorHex?: string | null;
     reminderOffsetsMinutes?: number[];
     subtasks?: Array<{ id: string; title: string; done: boolean }>;
-    attachmentFileNames?: string[];
+    attachments?: Array<{ assetId: Types.ObjectId; fileName: string }>;
     correlationId: string;
     /** ADR-006: дубль задачи засоряет список «следующих действий» менеджера. */
     idempotencyKey: string;
     /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
     idempotencyRequestBody: Record<string, unknown>;
   }): Promise<CrmTaskReadModel> {
+    // Вложения — чужой модуль (Media), поэтому проверка до транзакции и через
+    // публичный сервис, а не репозиторий (ADR-001). Asset обязан принадлежать
+    // этой организации и быть подтверждённым: ссылка на чужой или
+    // непроверенный файл — это либо утечка, либо обещание файла, которого
+    // нет.
+    if (params.attachments && params.attachments.length > 0) {
+      const found = await this.mediaService.getAssetsForOwnerScope(
+        params.attachments.map((item) => item.assetId),
+        { type: 'organization', organizationId: params.organizationId },
+      );
+      for (const item of params.attachments) {
+        const asset = found.get(item.assetId.toString());
+        if (!asset) {
+          throw new NotFoundException('Attachment media asset not found');
+        }
+        if (asset.status !== 'verified') {
+          throw new AppException(ErrorCode.VALIDATION_FAILED, 'Attachment media asset is not verified yet');
+        }
+      }
+    }
+
     let resolvedContactId = params.contactId;
 
     if (params.leadId) {
@@ -854,7 +880,7 @@ export class CrmService {
           colorHex: params.colorHex,
           reminderOffsetsMinutes: params.reminderOffsetsMinutes,
           subtasks: params.subtasks,
-          attachmentFileNames: params.attachmentFileNames,
+          attachments: params.attachments,
           // Создателя не принимаем из запроса: он берётся из серверного
           // TenantContext, иначе автора задачи можно было бы подделать.
           createdByPositionId: params.actorPositionId,
@@ -2780,7 +2806,11 @@ export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
       title: item.title,
       done: Boolean(item.done),
     })),
-    attachmentFileNames: task.attachmentFileNames ?? [],
+    attachments: (task.attachments ?? []).map((item) => ({
+      assetId: item.assetId.toString(),
+      fileName: item.fileName,
+    })),
+    attachmentFileNames: (task.attachments ?? []).map((item) => item.fileName),
     // Связь выводится из хранимых ссылок, как isOverdue из dueAt: одна правда.
     entityType: task.leadId ? 'lead' : task.contactId ? 'client' : 'none',
     entityId: task.leadId ? task.leadId.toString() : task.contactId ? task.contactId.toString() : null,

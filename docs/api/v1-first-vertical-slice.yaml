@@ -4123,8 +4123,18 @@ components:
               id: {type: string}
               title: {type: string}
               done: {type: boolean}
+        attachments:
+          type: array
+          description: "Ссылки на подтверждённые MediaAsset'ы (purpose task_attachment) с именами для экрана"
+          items:
+            type: object
+            required: [assetId, fileName]
+            properties:
+              assetId: {type: string}
+              fileName: {type: string}
         attachmentFileNames:
           type: array
+          description: "ВЫЧИСЛЯЕМОЕ из attachments — имена для экрана"
           items: {type: string}
         entityType:
           type: string
@@ -4178,10 +4188,19 @@ components:
               id: {type: string, maxLength: 120}
               title: {type: string, maxLength: 255}
               done: {type: boolean}
-        attachmentFileNames:
+        attachments:
           type: array
           maxItems: 20
-          items: {type: string, maxLength: 255}
+          description: >
+            Файлы загружаются заранее через POST /media/upload-intent с purpose
+            task_attachment и подтверждаются; сюда приходят только ссылки. Сервер
+            проверяет принадлежность организации и статус verified.
+          items:
+            type: object
+            required: [assetId, fileName]
+            properties:
+              assetId: {type: string}
+              fileName: {type: string, maxLength: 255}
 
     UpdateTaskRequest:
       type: object

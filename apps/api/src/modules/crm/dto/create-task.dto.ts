@@ -34,6 +34,17 @@ export class CreateTaskSubtaskDto {
   done?: boolean;
 }
 
+/** Вложение: уже загруженный и подтверждённый MediaAsset плюс имя для экрана. */
+export class CreateTaskAttachmentDto {
+  @IsMongoId()
+  assetId!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(255)
+  fileName!: string;
+}
+
 export class CreateTaskDto {
   @IsString()
   @MinLength(1)
@@ -97,12 +108,17 @@ export class CreateTaskDto {
   @Type(() => CreateTaskSubtaskDto)
   subtasks?: CreateTaskSubtaskDto[];
 
+  /**
+   * Файлы загружаются заранее через POST /media/upload-intent с purpose
+   * task_attachment и подтверждаются; сюда приходят только ссылки. Сервер
+   * проверяет, что каждый asset принадлежит организации и подтверждён.
+   */
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
-  @IsString({ each: true })
-  @MaxLength(255, { each: true })
-  attachmentFileNames?: string[];
+  @ValidateNested({ each: true })
+  @Type(() => CreateTaskAttachmentDto)
+  attachments?: CreateTaskAttachmentDto[];
 
   // entityType/entityId не принимаются: связь выводится из leadId/contactId.
   // isAutomatic/triggerType не принимаются: провенанс ставит только сервер.

@@ -60,8 +60,8 @@
 
 ## Что осталось из аудита
 
-- **`attachmentFileNames`** — ссылки на `MediaAsset` по образцу аватара
-  позиции; строгий путь, 2–3 дня, следующий шаг.
+- ~~**`attachmentFileNames`**~~ — закрыто в тот же день,
+  [task-attachments-media-assets.md](task-attachments-media-assets.md).
 - **`reminderOffsetsMinutes`** — продуктовая развилка: подключать Notifications
   раньше плана или признать, что чипы врут; отказ от чипов меняет вид.
 - **`taskCategory`** — правило видимости личных задач держит клиент, сервер

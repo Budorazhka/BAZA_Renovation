@@ -2229,6 +2229,12 @@ export interface components {
                 title: string;
                 done: boolean;
             }[];
+            /** @description Ссылки на подтверждённые MediaAsset'ы (purpose task_attachment) с именами для экрана */
+            attachments?: {
+                assetId: string;
+                fileName: string;
+            }[];
+            /** @description ВЫЧИСЛЯЕМОЕ из attachments — имена для экрана */
             attachmentFileNames?: string[];
             /**
              * @description ВЫЧИСЛЯЕМОЕ из leadId/contactId — одна связь, один источник правды
@@ -2271,7 +2277,11 @@ export interface components {
                 title: string;
                 done?: boolean;
             }[];
-            attachmentFileNames?: string[];
+            /** @description Файлы загружаются заранее через POST /media/upload-intent с purpose task_attachment и подтверждаются; сюда приходят только ссылки. Сервер проверяет принадлежность организации и статус verified. */
+            attachments?: {
+                assetId: string;
+                fileName: string;
+            }[];
         };
         /** @description НЕ содержит assignedPositionId — см. PATCH /tasks/{taskId}/reassign. */
         UpdateTaskRequest: {

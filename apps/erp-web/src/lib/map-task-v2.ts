@@ -141,7 +141,10 @@ export function buildCreateTaskPayload(
     colorHex: toStoredColor(task.colorHex),
     reminderOffsetsMinutes: task.reminderOffsetsMinutes,
     subtasks: task.subtasks,
-    attachmentFileNames: task.attachmentFileNames,
+    // Только ссылки на уже загруженные файлы. Имена без файлов сервер больше
+    // не принимает — они были «демо, без загрузки», как честно говорил
+    // легаси-тип.
+    attachments: task.attachments,
     // Связь уходит одной ссылкой: entityType/entityId сервер выводит сам из
     // leadId/contactId. Две пары полей про одну связь были двумя источниками
     // правды, которые никто не сверял.

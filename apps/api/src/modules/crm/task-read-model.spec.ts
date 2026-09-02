@@ -28,7 +28,7 @@ function makeTask(overrides: Partial<TaskDocument> = {}): TaskDocument {
     isAutomatic: false,
     reminderOffsetsMinutes: [],
     subtasks: [],
-    attachmentFileNames: [],
+    attachments: [],
     ...overrides,
   } as unknown as TaskDocument;
 }
@@ -66,6 +66,7 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
 
   it('новые поля доезжают до модели чтения, а отсутствующие получают безопасные значения', () => {
     const leadId = new Types.ObjectId();
+    const attachmentAssetId = new Types.ObjectId();
     const view = toTaskReadModel(
       makeTask({
         isUrgent: true,
@@ -74,7 +75,7 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
         colorHex: '#e11d48',
         reminderOffsetsMinutes: [15, 60],
         subtasks: [{ id: 's-1', title: 'Подготовить договор', done: true }],
-        attachmentFileNames: ['договор.pdf'],
+        attachments: [{ assetId: attachmentAssetId, fileName: 'договор.pdf' }],
         leadId,
         isAutomatic: true,
         triggerType: 'new_lead_sla',
@@ -87,6 +88,8 @@ describe('toTaskReadModel — вычисляемая просрочка', () => 
     expect(view.colorHex).toBe('#e11d48');
     expect(view.reminderOffsetsMinutes).toEqual([15, 60]);
     expect(view.subtasks).toEqual([{ id: 's-1', title: 'Подготовить договор', done: true }]);
+    expect(view.attachments).toEqual([{ assetId: attachmentAssetId.toString(), fileName: 'договор.pdf' }]);
+    // Имена выводятся из вложений — экран читает их как раньше.
     expect(view.attachmentFileNames).toEqual(['договор.pdf']);
     expect(view.entityType).toBe('lead');
     expect(view.entityId).toBe(leadId.toString());
