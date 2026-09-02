@@ -176,6 +176,85 @@ export class TeamService {
   }
 
   /**
+   * GET /team-users/:positionId (teamApi.getById) — одна позиция, tenant-
+   * scoped единым NOT_FOUND для "не существует" и "чужая организация" (тот
+   * же принцип non-disclosure, что findByIdForOrganization везде в этом
+   * модуле). closed исключена явно — та же семантика, что findAllByOrganization
+   * применяет к list() (см. её комментарий: закрытая позиция значит
+   * "удалена", не должна быть видна и по прямому id).
+   *
+   * В отличие от ensureSelf НЕ перевызывает listForOrganization целиком —
+   * резолвит assignment/identity/avatar/profile только для ЭТОЙ одной
+   * позиции, не для всех позиций организации. toView — тот же приватный
+   * builder "одна PositionDocument → один TeamUserView", что и list()
+   * использует внутри своего map(), просто с картами на один элемент.
+   */
+  async getById(positionId: Types.ObjectId, organizationId: Types.ObjectId): Promise<TeamUserView> {
+    const position = await this.positionRepository.findByIdForOrganization(positionId, organizationId);
+    if (!position || position.status === 'closed') {
+      throw new NotFoundException('Position not found');
+    }
+
+    const positionIdStr = positionId.toString();
+
+    const assignment = await this.positionAssignmentRepository.findActiveByPosition(positionId);
+    const assignmentByPositionId = new Map<string, { identityId: Types.ObjectId }>();
+    const identityById = new Map<string, { normalizedLogin: string; status: string }>();
+    if (assignment) {
+      assignmentByPositionId.set(positionIdStr, assignment);
+      const [identity] = await this.authService.findByIds([assignment.identityId]);
+      if (identity) {
+        identityById.set(identity.id.toString(), identity);
+      }
+    }
+
+    const avatarUrlByPositionId = new Map<string, string>();
+    if (position.avatarAssetId) {
+      const url = await this.resolveAvatarUrl(position.avatarAssetId, position.organizationId);
+      if (url) {
+        avatarUrlByPositionId.set(positionIdStr, url);
+      }
+    }
+
+    const profile = await this.positionProfileRepository.findByPositionId(positionId);
+    const profileByPositionId = new Map<string, PositionProfileFields>();
+    if (profile) {
+      profileByPositionId.set(positionIdStr, profile);
+    }
+
+    return this.toView(position, assignmentByPositionId, identityById, avatarUrlByPositionId, profileByPositionId);
+  }
+
+  /**
+   * teamApi.ts::createAccountSlot(payload) — «Добавить слот менеджера»:
+   * вакантная позиция без occupant'а, в отличие от createOccupiedPosition
+   * НЕ трогает Identity/PositionAssignment/PositionProfile вообще.
+   * Position + её стартовые DEFAULT_ROLE_GRANTS — одной транзакцией через
+   * OrganizationsService.createVacantPosition, которая это уже делает (тот
+   * же composite-шаг, что createOccupiedPosition переиспользует).
+   *
+   * `position`/`accessProfile` из payload здесь не участвуют вообще — см.
+   * CreateTeamAccountSlotDto комментарий про honest gap.
+   */
+  async createVacantSlot(params: {
+    organizationId: Types.ObjectId;
+    fixedRole: FixedRole;
+    managerId: Types.ObjectId | null;
+  }): Promise<TeamUserView> {
+    const positionId = await runInTransaction(this.connection, (session) =>
+      this.organizationsService.createVacantPosition({
+        organizationId: params.organizationId,
+        fixedRole: params.fixedRole,
+        parentPositionId: params.managerId ?? undefined,
+        session,
+      }),
+    );
+
+    const view = await this.ensureSelf(params.organizationId, positionId);
+    return view!;
+  }
+
+  /**
    * teamApi.ts::create(payload) — второй, отдельный от assignOccupant-
    * invite-flow путь создания сотрудника: руководитель сам задаёт пароль
    * (payload.password), человек сразу active (не pending_invite/inviteToken).

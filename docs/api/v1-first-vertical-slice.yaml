@@ -411,6 +411,77 @@ paths:
           description: FORBIDDEN — нет position.create
           $ref: '#/components/responses/Error'
 
+  /team-users/{positionId}:
+    get:
+      operationId: getTeamUserById
+      summary: >
+        Одна позиция по id (position.read, тот же grant, что список) —
+        tenant-scoped: чужая или несуществующая позиция отвечает единым
+        404 (non-disclosure), закрытая (status:closed) — тоже 404, та же
+        семантика, что список исключает закрытые позиции.
+      tags: [organizations]
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Позиция
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '403':
+          description: FORBIDDEN — нет position.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — позиция не существует, чужая организация, или закрыта
+          $ref: '#/components/responses/Error'
+
+  /team-users/positions:
+    post:
+      operationId: createTeamAccountSlot
+      summary: >
+        Создать вакантную позицию БЕЗ occupant'а («Добавить слот
+        менеджера») — position.create.organization, тот же grant, что
+        POST /team-users (это тоже создание позиции, просто без человека).
+        `position` (человекочитаемый title) и `accessProfile` (custom
+        permission map) в теле запроса принимаются, но НЕ сохраняются —
+        backend не хранит произвольный текст на позиции (только fixedRole),
+        а bulk-набор grant'ов из accessProfile сохранить одним вызовом
+        некуда: единственный существующий путь выдачи grant'а —
+        один grant за вызов. Позиция получает только стартовый набор прав
+        своей роли (DEFAULT_ROLE_GRANTS[fixedRole]), тот же, что обычное
+        создание позиции.
+      tags: [organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTeamAccountSlotRequest'
+      responses:
+        '201':
+          description: Вакантная позиция создана
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success: {type: boolean}
+                  data: {$ref: '#/components/schemas/TeamUserView'}
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет position.create
+          $ref: '#/components/responses/Error'
+
   /team-users/positions/{positionId}:
     patch:
       operationId: updateTeamUserProfile
@@ -5805,6 +5876,19 @@ components:
         vk: {type: string}
         instagram: {type: string}
         website: {type: string}
+
+    CreateTeamAccountSlotRequest:
+      type: object
+      description: >
+        POST /team-users/positions. `position`/`accessProfile` принимаются
+        для совместимости с уже написанным ERP-клиентом, но backend их не
+        сохраняет — см. summary операции.
+      required: [role, position]
+      properties:
+        role: {type: string, enum: [owner, director, rop, manager, administrator, marketer]}
+        position: {type: string, maxLength: 200}
+        managerId: {type: string, nullable: true}
+        accessProfile: {type: object, additionalProperties: {type: string}}
 
     UpdateTeamUserProfileRequest:
       type: object
