@@ -221,6 +221,8 @@ paths:
   /developments:
     post:
       operationId: createDevelopment
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Создать draft ЖК (застройщик)
       tags: [erp-development]
       requestBody:
@@ -318,6 +320,7 @@ paths:
       summary: Создать корпус внутри ЖК
       tags: [erp-development]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: '#/components/parameters/DevelopmentId'
       requestBody:
         required: true
@@ -339,6 +342,7 @@ paths:
       summary: Создать этаж внутри корпуса
       tags: [erp-development]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - name: buildingId
           in: path
           required: true
@@ -363,6 +367,7 @@ paths:
       summary: Создать юнит на этаже (включая kind=parking для отдельной паркинг-шахматки)
       tags: [erp-development]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - name: floorId
           in: path
           required: true
@@ -682,6 +687,8 @@ paths:
   /leads:
     post:
       operationId: createLead
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: >
         Ручное создание лида в CRM (lead.create.organization) — security review
         31.08.2026: грант был выдан всем ролям, но до этого прохода не
@@ -1010,6 +1017,8 @@ paths:
 
     post:
       operationId: createTask
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Создание новой CRM-задачи с опциональной привязкой к лиду и контакту
       tags: [erp-crm]
       requestBody:
@@ -1250,6 +1259,8 @@ paths:
 
     post:
       operationId: createDeal
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Создание новой CRM-сделки
       tags: [erp-crm]
       requestBody:
@@ -2045,6 +2056,8 @@ paths:
   /property-assets:
     post:
       operationId: createPropertyAsset
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       summary: Создать PropertyAsset организации
       tags: [erp-property-assets]
       requestBody:
@@ -2270,6 +2283,7 @@ paths:
       summary: Создать Listing для PropertyAsset
       tags: [erp-property-assets]
       parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
         - $ref: '#/components/parameters/AssetId'
       requestBody:
         required: true
@@ -2705,7 +2719,12 @@ components:
       in: header
       required: true
       schema: {type: string, format: uuid}
-      description: ADR-006 — обязателен для publish/book/cancel/manual-ledger
+      description: >
+        Обязателен на всех создающих и критических командах. ADR-006 называет
+        publish/book/cancel/manual-ledger как примеры; фактический перечень
+        шире и закреплён тестом
+        apps/api/test/architecture/idempotency-coverage.test.ts —
+        см. docs/api/conventions.md §8.
     IdempotencyKeyHeaderOptional:
       name: Idempotency-Key
       in: header

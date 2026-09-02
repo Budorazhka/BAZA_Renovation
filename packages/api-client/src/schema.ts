@@ -2098,7 +2098,7 @@ export interface components {
         MediaAssetId: string;
         ListingId: string;
         BookingId: string;
-        /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+        /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
         IdempotencyKeyHeader: string;
         /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
         IdempotencyKeyHeaderOptional: string;
@@ -2307,7 +2307,10 @@ export interface operations {
     createDevelopment: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2386,7 +2389,10 @@ export interface operations {
     createBuilding: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path: {
                 developmentId: components["parameters"]["DevelopmentId"];
             };
@@ -2412,7 +2418,10 @@ export interface operations {
     createFloor: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path: {
                 buildingId: string;
             };
@@ -2438,7 +2447,10 @@ export interface operations {
     createUnit: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path: {
                 floorId: string;
             };
@@ -2465,7 +2477,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path: {
@@ -2494,7 +2506,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path?: never;
@@ -2529,7 +2541,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path: {
@@ -2568,7 +2580,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path: {
@@ -2601,7 +2613,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path: {
@@ -2792,7 +2804,10 @@ export interface operations {
     createLead: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3032,7 +3047,10 @@ export interface operations {
     createTask: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3236,7 +3254,10 @@ export interface operations {
     createDeal: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3985,7 +4006,10 @@ export interface operations {
     createPropertyAsset: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4235,7 +4259,10 @@ export interface operations {
     createListing: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path: {
                 assetId: components["parameters"]["AssetId"];
             };
@@ -4416,7 +4443,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description ADR-006 — обязателен для publish/book/cancel/manual-ledger */
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
             };
             path: {
