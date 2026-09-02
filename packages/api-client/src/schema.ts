@@ -1433,6 +1433,20 @@ export interface components {
             slug?: string;
             name?: string;
             location?: components["schemas"]["PublicLocation"];
+            /** @description Класс ЖК из denormalizedFields */
+            classType?: string;
+            /**
+             * Format: date
+             * @description Начало строительства
+             */
+            startDate?: string;
+            /**
+             * Format: date
+             * @description Плановое завершение
+             */
+            completionDate?: string;
+            /** @description Публичное описание ЖК */
+            description?: string;
             priceFrom?: components["schemas"]["MoneyAmount"];
             seo?: {
                 title?: string;

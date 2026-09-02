@@ -2960,6 +2960,10 @@ components:
         slug: {type: string}
         name: {type: string}
         location: {$ref: '#/components/schemas/PublicLocation'}
+        classType: {type: string, description: "Класс ЖК из denormalizedFields"}
+        startDate: {type: string, format: date, description: "Начало строительства"}
+        completionDate: {type: string, format: date, description: "Плановое завершение"}
+        description: {type: string, description: "Публичное описание ЖК"}
         priceFrom: {$ref: '#/components/schemas/MoneyAmount'}
         seo:
           type: object
