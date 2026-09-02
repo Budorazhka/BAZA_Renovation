@@ -2,6 +2,17 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Users2 } from 'lucide-react'
 import { DeskShell, DeskHeader, DeskTab, MiniBar, DESK_HEADER_LINK_CLASS, REPORT_LINKS } from '../desk-shared'
+/**
+ * `INITIAL_LEAD_MANAGERS` — НЕ `personnel-mock` (реестр команды, TEAM-001):
+ * это список менеджеров всей ещё не переведённой на Platform API подсистемы
+ * лидов (`leads-mock.ts`, используется в 16 файлах — LeadsContext,
+ * DealsKanbanPage, BookingsPage и др.). `leads` в этом виджете приходят с
+ * `managerId`, ссылающимся на id из этого же мок-справочника ('lm-1' и т.п.),
+ * не на реальный `positionId`. Подменить только справочник имён на
+ * `teamApi.list()` нельзя — id не совпадут, и виджет перестанет находить
+ * менеджера по лиду вообще. Переезд возможен только вместе с миграцией лидов
+ * на Platform API — отдельная, гораздо более крупная задача, не TEAM-001.
+ */
 import { INITIAL_LEAD_MANAGERS } from '@/data/leads-mock'
 import type { Lead } from '@/types/leads'
 import type { WidgetSlot } from '@/config/widgets-config'

@@ -1,4 +1,4 @@
-import type { EmployeeRole } from './personnel-mock'
+import type { EmployeeRole } from '@/types/personnel'
 
 export type PermissionKey =
   | 'chessboard'

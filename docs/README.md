@@ -72,6 +72,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [erp-tasks-live-api.md](operations/erp-tasks-live-api.md) — реестр задач ERP снят с мока: чтение, завершение и создание через Platform API.
 - [erp-tasks-mock-debt-closed.md](operations/erp-tasks-mock-debt-closed.md) — статус «В работе» стал достижим, виджет дашборда снят с мока, `hasOpenNextAction` перестал гаснуть при взятии задачи в работу.
 - [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
+- [erp-team-mock-debt-closed.md](operations/erp-team-mock-debt-closed.md) — реестр команды (TEAM-001) снят с мока: write-операции чинят битый маршрут на CRM-backend, localStorage и мок-массив убраны, KPI-контур и лиды осознанно оставлены как есть.
 - [crm-pipeline-activity-timeline.md](operations/crm-pipeline-activity-timeline.md) — таймлайн активности, детект залипших лидов.
 - [crm-deal-core.md](operations/crm-deal-core.md) — ядро сделок, оптимистическая блокировка.
 - [deal-client-reassign.md](operations/deal-client-reassign.md) — передача сделки, включение гранта `client.reassign`.
