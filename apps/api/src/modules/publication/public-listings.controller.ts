@@ -1,7 +1,8 @@
-import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicListingsQueryDto } from './dto/search-public-listings-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
+import { parsePolygonOrThrow } from './dto/parse-polygon';
 import { toPublicGeoPoint } from './public-geo';
 import {
   decodePublicCatalogCursor,
@@ -15,7 +16,13 @@ export class PublicListingsController {
 
   @Get()
   async searchPublicListings(@Query() query: SearchPublicListingsQueryDto) {
+    // SEARCH-001: см. комментарий в public.controller.ts — одновременная
+    // bbox+polygon отклоняется явным 400, не молчаливым выбором одного.
+    if (query.bbox && query.polygon) {
+      throw new BadRequestException('bbox и polygon нельзя передавать одновременно');
+    }
     const bbox = query.bbox ? parseBboxOrThrow(query.bbox) : undefined;
+    const polygon = query.polygon ? parsePolygonOrThrow(query.polygon) : undefined;
 
     const sort = query.sort ?? 'newest';
     const cursor = query.cursor ? decodePublicCatalogCursor(query.cursor, sort) : undefined;
@@ -25,6 +32,7 @@ export class PublicListingsController {
       limit: query.limit + 1,
       city: query.city,
       bbox,
+      polygon,
       dealType: query.dealType,
       propertyType: query.propertyType,
       commercialSubtype: query.commercialSubtype,

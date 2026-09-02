@@ -10,6 +10,18 @@ import {
 
 export type PublicCatalogSort = 'newest' | 'price_asc' | 'price_desc' | 'area_asc' | 'area_desc';
 
+export interface GeoBboxFilter {
+  minLng: number;
+  minLat: number;
+  maxLng: number;
+  maxLat: number;
+}
+
+export interface GeoPolygonFilter {
+  type: 'Polygon';
+  coordinates: [number, number][][];
+}
+
 export interface PublicCatalogCursor {
   id: Types.ObjectId;
   value?: number | null;
@@ -18,6 +30,33 @@ export interface PublicCatalogCursor {
 export interface PublicCatalogPage {
   items: MarketplacePublicationDocument[];
   total: number;
+}
+
+/**
+ * SEARCH-001: строит Mongo $geoWithin-условие для searchProjection.geo
+ * (2dsphere index) из bbox ИЛИ polygon — используется во всех трёх местах,
+ * где раньше был только bbox (listPublished/listPublishedByFilter/
+ * queryPublicPage), вынесено сюда, чтобы условие "как построить фильтр"
+ * не расходилось между копиями. Оба параметра одновременно не ожидаются —
+ * вызывающий код (public.controller.ts/public-listings.controller.ts)
+ * отклоняет такую комбинацию 400 раньше, чем дойдёт сюда; если оба всё же
+ * заданы, polygon побеждает как более точный фильтр.
+ */
+function buildGeoFilter(bbox?: GeoBboxFilter, polygon?: GeoPolygonFilter): Record<string, unknown> | undefined {
+  if (polygon) {
+    return { $geoWithin: { $geometry: polygon } };
+  }
+  if (bbox) {
+    return {
+      $geoWithin: {
+        $box: [
+          [bbox.minLng, bbox.minLat],
+          [bbox.maxLng, bbox.maxLat],
+        ],
+      },
+    };
+  }
+  return undefined;
 }
 
 const SORT_FIELDS: Record<Exclude<PublicCatalogSort, 'newest'>, { field: string; direction: 1 | -1 }> = {
@@ -147,7 +186,8 @@ export class MarketplacePublicationRepository {
     cursor?: Types.ObjectId;
     limit: number;
     city?: string;
-    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    bbox?: GeoBboxFilter;
+    polygon?: GeoPolygonFilter;
   }): Promise<MarketplacePublicationDocument[]> {
     const filter: Record<string, unknown> = { status: 'published', sourceType: 'development' };
     if (params.cursor) {
@@ -156,15 +196,9 @@ export class MarketplacePublicationRepository {
     if (params.city) {
       filter['searchProjection.city'] = params.city;
     }
-    if (params.bbox) {
-      filter['searchProjection.geo'] = {
-        $geoWithin: {
-          $box: [
-            [params.bbox.minLng, params.bbox.minLat],
-            [params.bbox.maxLng, params.bbox.maxLat],
-          ],
-        },
-      };
+    const geoFilter = buildGeoFilter(params.bbox, params.polygon);
+    if (geoFilter) {
+      filter['searchProjection.geo'] = geoFilter;
     }
     return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
   }
@@ -185,7 +219,8 @@ export class MarketplacePublicationRepository {
     cursor?: Types.ObjectId;
     limit: number;
     city?: string;
-    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    bbox?: GeoBboxFilter;
+    polygon?: GeoPolygonFilter;
     dealType?: string;
     propertyType?: string;
     commercialSubtype?: string;
@@ -206,15 +241,9 @@ export class MarketplacePublicationRepository {
     if (params.commercialSubtype) {
       filter['searchProjection.commercialSubtype'] = params.commercialSubtype;
     }
-    if (params.bbox) {
-      filter['searchProjection.geo'] = {
-        $geoWithin: {
-          $box: [
-            [params.bbox.minLng, params.bbox.minLat],
-            [params.bbox.maxLng, params.bbox.maxLat],
-          ],
-        },
-      };
+    const geoFilter = buildGeoFilter(params.bbox, params.polygon);
+    if (geoFilter) {
+      filter['searchProjection.geo'] = geoFilter;
     }
     return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
   }
@@ -229,7 +258,8 @@ export class MarketplacePublicationRepository {
     cursor?: PublicCatalogCursor;
     limit: number;
     city?: string;
-    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    bbox?: GeoBboxFilter;
+    polygon?: GeoPolygonFilter;
     sort?: PublicCatalogSort;
   }): Promise<PublicCatalogPage> {
     return this.queryPublicPage({ ...params, sourceType: 'development', sort: params.sort ?? 'newest' });
@@ -240,7 +270,8 @@ export class MarketplacePublicationRepository {
     cursor?: PublicCatalogCursor;
     limit: number;
     city?: string;
-    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    bbox?: GeoBboxFilter;
+    polygon?: GeoPolygonFilter;
     dealType?: string;
     propertyType?: string;
     commercialSubtype?: string;
@@ -254,7 +285,8 @@ export class MarketplacePublicationRepository {
     cursor?: PublicCatalogCursor;
     limit: number;
     city?: string;
-    bbox?: { minLng: number; minLat: number; maxLng: number; maxLat: number };
+    bbox?: GeoBboxFilter;
+    polygon?: GeoPolygonFilter;
     dealType?: string;
     propertyType?: string;
     commercialSubtype?: string;
@@ -265,15 +297,9 @@ export class MarketplacePublicationRepository {
     if (params.dealType) baseFilter['searchProjection.dealType'] = params.dealType;
     if (params.propertyType) baseFilter['searchProjection.propertyType'] = params.propertyType;
     if (params.commercialSubtype) baseFilter['searchProjection.commercialSubtype'] = params.commercialSubtype;
-    if (params.bbox) {
-      baseFilter['searchProjection.geo'] = {
-        $geoWithin: {
-          $box: [
-            [params.bbox.minLng, params.bbox.minLat],
-            [params.bbox.maxLng, params.bbox.maxLat],
-          ],
-        },
-      };
+    const geoFilter = buildGeoFilter(params.bbox, params.polygon);
+    if (geoFilter) {
+      baseFilter['searchProjection.geo'] = geoFilter;
     }
 
     const filter: Record<string, unknown> = { ...baseFilter };

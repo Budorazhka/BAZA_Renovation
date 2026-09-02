@@ -10,4 +10,6 @@ export {
   type PublicCatalogCursor,
   type PublicCatalogPage,
   type PublicCatalogSort,
+  type GeoBboxFilter,
+  type GeoPolygonFilter,
 } from './repository/marketplace-publication.repository';

@@ -126,4 +126,35 @@ describe('PublicController — whitelist границы public response', () => 
       await expect(controller.getPublicDevelopment('does-not-exist')).rejects.toThrow('Publication not found');
     });
   });
+
+  describe('SEARCH-001: bbox/polygon geo-фильтр', () => {
+    it('bbox и polygon одновременно — 400, репозиторий не вызывается', async () => {
+      const listPublishedPage = jest.fn();
+      const repository = { listPublishedPage } as unknown as MarketplacePublicationRepository;
+      const controller = new PublicController(repository);
+      const query = Object.assign(new SearchPublicDevelopmentsQueryDto(), {
+        limit: 20,
+        bbox: '44,41,45,42',
+        polygon: '44,41,45,41,44.5,42',
+      });
+
+      await expect(controller.searchPublicDevelopments(query)).rejects.toThrow('bbox и polygon нельзя передавать одновременно');
+      expect(listPublishedPage).not.toHaveBeenCalled();
+    });
+
+    it('polygon без bbox — парсится и передаётся в репозиторий как GeoJSON Polygon', async () => {
+      const listPublishedPage = jest.fn().mockResolvedValue({ items: [], total: 0 });
+      const repository = { listPublishedPage } as unknown as MarketplacePublicationRepository;
+      const controller = new PublicController(repository);
+      const query = Object.assign(new SearchPublicDevelopmentsQueryDto(), { limit: 20, polygon: '44,41,45,41,44.5,42' });
+
+      await controller.searchPublicDevelopments(query);
+
+      expect(listPublishedPage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          polygon: { type: 'Polygon', coordinates: [[[44, 41], [45, 41], [44.5, 42], [44, 41]]] },
+        }),
+      );
+    });
+  });
 });

@@ -1,7 +1,8 @@
-import { Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
+import { parsePolygonOrThrow } from './dto/parse-polygon';
 import { toPublicGeoPoint } from './public-geo';
 import {
   decodePublicCatalogCursor,
@@ -28,9 +29,17 @@ export class PublicController {
 
   @Get()
   async searchPublicDevelopments(@Query() query: SearchPublicDevelopmentsQueryDto) {
-    // bbox уже провалидирован ValidationPipe (IsBboxConstraint) на входе в
-    // метод — parseBboxOrThrow безопасно вызывать без повторной проверки.
+    // bbox/polygon уже провалидированы ValidationPipe (IsBboxConstraint/
+    // IsPolygonConstraint) на входе в метод — parse*OrThrow безопасно
+    // вызывать без повторной проверки формата. Одновременная передача
+    // обоих отклоняется здесь: пересечение условий усложнило бы репозиторий
+    // без реальной пользы (клиент карты выбирает ОДИН способ очертить
+    // область), явный 400 проще и безопаснее тихого выбора одного из них.
+    if (query.bbox && query.polygon) {
+      throw new BadRequestException('bbox и polygon нельзя передавать одновременно');
+    }
     const bbox = query.bbox ? parseBboxOrThrow(query.bbox) : undefined;
+    const polygon = query.polygon ? parsePolygonOrThrow(query.polygon) : undefined;
 
     const sort = query.sort ?? 'newest';
     const cursor = query.cursor ? decodePublicCatalogCursor(query.cursor, sort) : undefined;
@@ -39,6 +48,7 @@ export class PublicController {
       limit: query.limit + 1,
       city: query.city,
       bbox,
+      polygon,
       sort,
     });
     const hasMore = page.items.length > query.limit;

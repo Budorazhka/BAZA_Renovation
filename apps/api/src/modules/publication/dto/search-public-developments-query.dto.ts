@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
 import { IsBboxConstraint } from './is-bbox.constraint';
+import { IsPolygonConstraint } from './is-polygon.constraint';
 
 // Синхронизировано с docs/api/v1-first-vertical-slice.yaml Limit-параметром
 // (default:20, maximum:100) — не менять по отдельности.
@@ -41,4 +42,11 @@ export class SearchPublicDevelopmentsQueryDto {
   @IsOptional()
   @Validate(IsBboxConstraint)
   bbox?: string;
+
+  // SEARCH-001: см. комментарий у одноимённого поля в
+  // SearchPublicListingsQueryDto — независимая от bbox geo-фильтрация,
+  // конфликт между ними проверяется в контроллере.
+  @IsOptional()
+  @Validate(IsPolygonConstraint)
+  polygon?: string;
 }
