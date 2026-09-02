@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import {
   TaskDocument,
+  UNFINISHED_TASK_STATUSES,
   type TaskStatus,
   type TaskPriority,
   type TaskCategory,
@@ -244,7 +245,7 @@ export class TaskRepository {
 
   async countOpenForLead(organizationId: Types.ObjectId, leadId: Types.ObjectId): Promise<number> {
     return this.model
-      .countDocuments({ organizationId, leadId, status: 'open' })
+      .countDocuments({ organizationId, leadId, status: { $in: UNFINISHED_TASK_STATUSES } })
       .exec();
   }
 
@@ -260,7 +261,7 @@ export class TaskRepository {
    * CRM-003 hasOpenNextAction для GET /leads (список) — тот же принцип
    * батчинга, что ContactRepository.findByIdsForOrganization: ОДИН запрос
    * на всю страницу лидов вместо N countOpenForLead (N+1 query). Возвращает
-   * множество leadId, у которых есть хотя бы одна open-задача — caller
+   * множество leadId, у которых есть хотя бы одна незавершённая задача — caller
    * (CrmService.listLeads) проверяет через Set.has(), не считает точное
    * количество (странице всё равно нужен только boolean-флаг).
    */
@@ -269,6 +270,12 @@ export class TaskRepository {
     leadIds: Types.ObjectId[],
   ): Promise<Types.ObjectId[]> {
     if (leadIds.length === 0) return [];
-    return this.model.distinct('leadId', { organizationId, leadId: { $in: leadIds }, status: 'open' }).exec();
+    return this.model
+      .distinct('leadId', {
+        organizationId,
+        leadId: { $in: leadIds },
+        status: { $in: UNFINISHED_TASK_STATUSES },
+      })
+      .exec();
   }
 }

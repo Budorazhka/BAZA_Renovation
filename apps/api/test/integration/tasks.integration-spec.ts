@@ -430,6 +430,61 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       expect(audit?.after?.status).toBe('cancelled');
     });
 
+    it('переводит задачу в in_progress — статус, который экран показывает как «В работе»', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { title: 'Позвонить клиенту', assignedPositionId: positionId });
+
+      const patchRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 0, status: 'in_progress' },
+      });
+
+      expect(patchRes.statusCode).toBe(200);
+      expect(JSON.parse(patchRes.body).status).toBe('in_progress');
+    });
+
+    it('взятая в работу задача завершается штатной командой complete', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { title: 'Подготовить договор', assignedPositionId: positionId });
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 0, status: 'in_progress' },
+      });
+
+      const completeRes = await app.inject({
+        method: 'POST',
+        url: `/api/v1/tasks/${taskId.toString()}/complete`,
+        headers: { cookie },
+        payload: { expectedVersion: 1 },
+      });
+
+      expect(completeRes.statusCode).toBe(200);
+      const body = JSON.parse(completeRes.body);
+      expect(body.status).toBe('completed');
+      expect(body.completedAt).not.toBeNull();
+    });
+
+    it('PATCH не завершает задачу: completed ставит только команда complete', async () => {
+      const { cookie, organizationId, positionId } = await seedOwnerSession();
+      const taskId = await seedTask(organizationId, { title: 'Отправить подборку', assignedPositionId: positionId });
+
+      // Второй путь завершения не писал бы ни completedAt, ни
+      // completedByPositionId, ни событие TaskCompleted — поэтому его нет.
+      const patchRes = await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/tasks/${taskId.toString()}`,
+        headers: { cookie },
+        payload: { expectedVersion: 0, status: 'completed' },
+      });
+
+      expect(patchRes.statusCode).toBe(400);
+    });
+
     it('completes task via POST /tasks/:taskId/complete and sets completedBy and timestamp', async () => {
       const { organizationId } = await seedOwnerSession();
       const manager = await seedManagerSession(organizationId);
@@ -646,6 +701,35 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const res = await app.inject({ method: 'GET', url: `/api/v1/leads/${leadId.toString()}`, headers: { cookie } });
       expect(res.statusCode).toBe(200);
       expect(JSON.parse(res.body).hasOpenNextAction).toBe(false);
+    });
+
+    it('задача, взятая в работу, остаётся следующим действием лида', async () => {
+      // Иначе признак гас бы ровно в тот момент, когда за задачу взялись:
+      // «следующее действие есть» превращалось бы в «его нет».
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadId = await seedLead(organizationId, contactId);
+      await seedTask(organizationId, { leadId, status: 'in_progress' });
+
+      const res = await app.inject({ method: 'GET', url: `/api/v1/leads/${leadId.toString()}`, headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).hasOpenNextAction).toBe(true);
+    });
+
+    it('в списке лидов задача в работе тоже считается следующим действием', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const contactId = await seedContact(organizationId);
+      const leadInProgress = await seedLead(organizationId, contactId);
+      const leadCompleted = await seedLead(organizationId, contactId);
+      await seedTask(organizationId, { leadId: leadInProgress, status: 'in_progress' });
+      await seedTask(organizationId, { leadId: leadCompleted, status: 'completed' });
+
+      const res = await app.inject({ method: 'GET', url: '/api/v1/leads', headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      const items = JSON.parse(res.body).items as Array<{ id: string; hasOpenNextAction: boolean }>;
+      const byId = new Map(items.map((item) => [item.id, item.hasOpenNextAction]));
+      expect(byId.get(leadInProgress.toString())).toBe(true);
+      expect(byId.get(leadCompleted.toString())).toBe(false);
     });
 
     it('GET /leads (список) отражает hasOpenNextAction по каждому лиду независимо, одним батч-запросом', async () => {

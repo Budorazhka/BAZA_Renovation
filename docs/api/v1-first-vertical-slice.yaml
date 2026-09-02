@@ -3647,7 +3647,11 @@ components:
         dueAt: {type: string, format: date-time, nullable: true}
         status:
           type: string
-          enum: [open, cancelled]
+          description: >
+            Завершение задачи сюда не входит: `completed` ставит только
+            POST /tasks/{taskId}/complete — он пишет completedAt,
+            completedByPositionId и событие TaskCompleted.
+          enum: [open, in_progress, cancelled]
 
     ReassignTaskRequest:
       type: object

@@ -1924,8 +1924,11 @@ export interface components {
             description?: string | null;
             /** Format: date-time */
             dueAt?: string | null;
-            /** @enum {string} */
-            status?: "open" | "cancelled";
+            /**
+             * @description Завершение задачи сюда не входит: `completed` ставит только POST /tasks/{taskId}/complete — он пишет completedAt, completedByPositionId и событие TaskCompleted.
+             * @enum {string}
+             */
+            status?: "open" | "in_progress" | "cancelled";
         };
         ReassignTaskRequest: {
             expectedVersion: number;
