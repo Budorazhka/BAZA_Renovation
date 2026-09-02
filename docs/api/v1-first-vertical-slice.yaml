@@ -2561,6 +2561,552 @@ paths:
           description: Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код)
           $ref: '#/components/responses/Error'
 
+  /marketplace/property-assets:
+    post:
+      operationId: marketplaceCreatePropertyAsset
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      summary: Создать PropertyAsset marketplace-аккаунта
+      tags: [marketplace-property-assets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePropertyAssetRequest'
+      responses:
+        '201':
+          description: PropertyAsset создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAsset'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: marketplaceListPropertyAssets
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Список PropertyAsset marketplace-аккаунта
+      tags: [marketplace-property-assets]
+      responses:
+        '200':
+          description: Список PropertyAsset
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PropertyAsset'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}:
+    get:
+      operationId: marketplaceGetPropertyAsset
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Получить PropertyAsset по ID
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: PropertyAsset найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAsset'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/media/upload-intent:
+    post:
+      operationId: marketplaceCreatePropertyAssetMediaUploadIntent
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Создать upload intent для загрузки фото объекта
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePropertyAssetMediaUploadIntentRequest'
+      responses:
+        '201':
+          description: Upload intent создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePropertyAssetMediaUploadIntentResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/media/{mediaAssetId}/confirm:
+    post:
+      operationId: marketplaceConfirmPropertyAssetMediaUpload
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Подтвердить загрузку и привязать фото к объекту
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmPropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Фото подтверждено и привязано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/media:
+    get:
+      operationId: marketplaceListPropertyAssetMedia
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Список медиа-файлов объекта
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список медиа
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/media/{mediaAssetId}:
+    patch:
+      operationId: marketplaceUpdatePropertyAssetMedia
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Обновить метаданные медиа-файла (cover, sortOrder, alt, isPrivate)
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Метаданные обновлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: marketplaceDeletePropertyAssetMedia
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Удалить медиа-файл из объекта
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/MediaAssetId'
+      responses:
+        '200':
+          description: Медиа удалено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeletePropertyAssetMediaResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/media/order:
+    put:
+      operationId: marketplaceReorderPropertyAssetMedia
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Изменить порядок отображения медиа-файлов
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderPropertyAssetMediaRequest'
+      responses:
+        '200':
+          description: Порядок обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PropertyAssetMediaListResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings:
+    post:
+      operationId: marketplaceCreateListing
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Создать Listing для PropertyAsset
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/AssetId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingRequest'
+      responses:
+        '201':
+          description: Listing создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: marketplaceListListings
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Список Listing для PropertyAsset
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список Listing
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Listing'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/activate:
+    patch:
+      operationId: marketplaceActivateListing
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Активировать Listing (draft -> active)
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Listing активирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Уже есть активный listing для этого dealType или статус не draft
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/actuality:
+    get:
+      operationId: marketplaceGetListingActuality
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Получить состояние актуальности Listing
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Состояние актуальности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingActuality'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/confirm-actuality:
+    patch:
+      operationId: marketplaceConfirmListingActuality
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Подтвердить актуальность Listing (сброс таймера)
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: Актуальность подтверждена, возвращает обновлённое состояние актуальности
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingActuality'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Version conflict / Listing is not active or expired
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/duplicate-candidates:
+    get:
+      operationId: marketplaceGetDuplicateCandidates
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Получить список кандидатов-дублей для PropertyAsset
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+      responses:
+        '200':
+          description: Список кандидатов-дублей
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DuplicateCandidate'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/duplicate-candidates/{duplicateCandidateId}/override:
+    post:
+      operationId: marketplaceOverrideDuplicateCandidate
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: Owner override дубль-блокировки (подтверждение «это не дубль»)
+      tags: [marketplace-property-assets]
+      parameters:
+        - name: duplicateCandidateId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '200':
+          description: Дубль снят (status override_not_duplicate)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [override_not_duplicate]}
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Duplicate candidate status is not 'detected'
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/publish:
+    post:
+      operationId: marketplacePublishListing
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: >
+        MKT-002: публикация Listing (active → publication_pending, синхронная
+        транзакция + асинхронная projection, ADR-005) — тот же паттерн, что
+        publishDevelopment. Listing.status не меняется этой командой (в
+        отличие от Development draft→active); повторный publish уже
+        published/publication_pending listing отклоняется 409 (не создаёт
+        дублирующую publication/version) — используйте unpublish, затем
+        publish заново.
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      responses:
+        '202':
+          description: Publication принята, статус publication_pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          description: Listing не найден / чужая организация (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >
+            Listing status не 'active' (draft/expired/archived) ИЛИ публикация
+            уже существует в статусе, отличном от unpublished/build_failed
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/unpublish:
+    post:
+      operationId: marketplaceUnpublishListing
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: >
+        MKT-002: owner снимает Listing с публичного каталога — синхронная
+        транзакция (тот же PublicationService.unpublish, что D-06 admin
+        unpublish использует, actorType:identity вместо admin_account)
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 10}
+      responses:
+        '201':
+          description: >
+            Публикация скрыта немедленно (синхронно) — 201, не 200 (Nest
+            default для POST без явного @HttpCode, задокументировано как
+            фактическое поведение, не переопределено этим проходом)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Publication уже не в статусе published
+          $ref: '#/components/responses/Error'
+
+  /marketplace/property-assets/{assetId}/listings/{listingId}/publication-status:
+    get:
+      operationId: marketplaceGetListingPublicationStatus
+      description: >-
+        Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+      summary: >
+        ERP polling после publish — читает РЕАЛЬНЫЙ статус MarketplacePublication,
+        не canonical Listing.status (тот же паттерн, что D-03
+        getPublicationStatus для Development)
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      responses:
+        '200':
+          description: Publication status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationStatus'
+        '404':
+          description: Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код)
+          $ref: '#/components/responses/Error'
+
   /public/listings:
     get:
       operationId: searchPublicListings

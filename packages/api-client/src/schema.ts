@@ -1188,6 +1188,338 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/marketplace/property-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список PropertyAsset marketplace-аккаунта
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceListPropertyAssets"];
+        put?: never;
+        /**
+         * Создать PropertyAsset marketplace-аккаунта
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceCreatePropertyAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Получить PropertyAsset по ID
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceGetPropertyAsset"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/media/upload-intent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Создать upload intent для загрузки фото объекта
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceCreatePropertyAssetMediaUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/media/{mediaAssetId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Подтвердить загрузку и привязать фото к объекту
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceConfirmPropertyAssetMediaUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список медиа-файлов объекта
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceListPropertyAssetMedia"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/media/{mediaAssetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Удалить медиа-файл из объекта
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        delete: operations["marketplaceDeletePropertyAssetMedia"];
+        options?: never;
+        head?: never;
+        /**
+         * Обновить метаданные медиа-файла (cover, sortOrder, alt, isPrivate)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        patch: operations["marketplaceUpdatePropertyAssetMedia"];
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/media/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Изменить порядок отображения медиа-файлов
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        put: operations["marketplaceReorderPropertyAssetMedia"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Список Listing для PropertyAsset
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceListListings"];
+        put?: never;
+        /**
+         * Создать Listing для PropertyAsset
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceCreateListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Активировать Listing (draft -> active)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        patch: operations["marketplaceActivateListing"];
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/actuality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Получить состояние актуальности Listing
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceGetListingActuality"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/confirm-actuality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Подтвердить актуальность Listing (сброс таймера)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        patch: operations["marketplaceConfirmListingActuality"];
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/duplicate-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Получить список кандидатов-дублей для PropertyAsset
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceGetDuplicateCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/duplicate-candidates/{duplicateCandidateId}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Owner override дубль-блокировки (подтверждение «это не дубль»)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceOverrideDuplicateCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * MKT-002: публикация Listing (active → publication_pending, синхронная транзакция + асинхронная projection, ADR-005) — тот же паттерн, что publishDevelopment. Listing.status не меняется этой командой (в отличие от Development draft→active); повторный publish уже published/publication_pending listing отклоняется 409 (не создаёт дублирующую publication/version) — используйте unpublish, затем publish заново.
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplacePublishListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * MKT-002: owner снимает Listing с публичного каталога — синхронная транзакция (тот же PublicationService.unpublish, что D-06 admin unpublish использует, actorType:identity вместо admin_account)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        post: operations["marketplaceUnpublishListing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}/publication-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * ERP polling после publish — читает РЕАЛЬНЫЙ статус MarketplacePublication, не canonical Listing.status (тот же паттерн, что D-03 getPublicationStatus для Development)
+         * @description Зеркало ERP-операции: та же предметная область и те же схемы, но граница авторизации другая — MarketplaceAccountGuard и совпадение identityId в publisherScope с сессией вместо PermissionGrant-матрицы организации.
+         */
+        get: operations["marketplaceGetListingPublicationStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/listings": {
         parameters: {
             query?: never;
@@ -4527,6 +4859,551 @@ export interface operations {
         };
     };
     getListingPublicationStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Publication status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            /** @description Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceListPropertyAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список PropertyAsset */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    marketplaceCreatePropertyAsset: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePropertyAssetRequest"];
+            };
+        };
+        responses: {
+            /** @description PropertyAsset создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    marketplaceGetPropertyAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PropertyAsset найден */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAsset"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceCreatePropertyAssetMediaUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePropertyAssetMediaUploadIntentRequest"];
+            };
+        };
+        responses: {
+            /** @description Upload intent создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatePropertyAssetMediaUploadIntentResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceConfirmPropertyAssetMediaUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Фото подтверждено и привязано */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceListPropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список медиа */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceDeletePropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Медиа удалено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletePropertyAssetMediaResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceUpdatePropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                mediaAssetId: components["parameters"]["MediaAssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Метаданные обновлены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceReorderPropertyAssetMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderPropertyAssetMediaRequest"];
+            };
+        };
+        responses: {
+            /** @description Порядок обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropertyAssetMediaListResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceListListings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список Listing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceCreateListing: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateListingRequest"];
+            };
+        };
+        responses: {
+            /** @description Listing создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceActivateListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Listing активирован */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Listing"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Уже есть активный listing для этого dealType или статус не draft */
+            409: components["responses"]["Error"];
+        };
+    };
+    marketplaceGetListingActuality: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние актуальности */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingActuality"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceConfirmListingActuality: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Актуальность подтверждена, возвращает обновлённое состояние актуальности */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingActuality"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Version conflict / Listing is not active or expired */
+            409: components["responses"]["Error"];
+        };
+    };
+    marketplaceGetDuplicateCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список кандидатов-дублей */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateCandidate"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    marketplaceOverrideDuplicateCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                duplicateCandidateId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Дубль снят (status override_not_duplicate) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id?: string;
+                        /** @enum {string} */
+                        status?: "override_not_duplicate";
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Duplicate candidate status is not 'detected' */
+            409: components["responses"]["Error"];
+        };
+    };
+    marketplacePublishListing: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Publication принята, статус publication_pending */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            /** @description Listing не найден / чужая организация (единый non-disclosure код) */
+            404: components["responses"]["Error"];
+            /** @description Listing status не 'active' (draft/expired/archived) ИЛИ публикация уже существует в статусе, отличном от unpublished/build_failed */
+            409: components["responses"]["Error"];
+        };
+    };
+    marketplaceUnpublishListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Публикация скрыта немедленно (синхронно) — 201, не 200 (Nest default для POST без явного @HttpCode, задокументировано как фактическое поведение, не переопределено этим проходом) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationStatus"];
+                };
+            };
+            404: components["responses"]["Error"];
+            /** @description Publication уже не в статусе published */
+            409: components["responses"]["Error"];
+        };
+    };
+    marketplaceGetListingPublicationStatus: {
         parameters: {
             query?: never;
             header?: never;

@@ -82,46 +82,6 @@ const CONTRACT_GAPS: Record<string, string> = {
   'ПРОБЕЛ: PATCH /leads/{leadId}/stage':
     'карточка лида и смена стадии — список лидов в спеке есть, эти два маршрута нет',
 
-  // marketplace-property-assets.controller.ts
-  'ПРОБЕЛ: DELETE /marketplace/property-assets/{assetId}/media/{mediaAssetId}':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/duplicate-candidates':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings/{listingId}/actuality':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/listings/{listingId}/publication-status':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: GET /marketplace/property-assets/{assetId}/media':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/listings/{listingId}/activate':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/listings/{listingId}/confirm-actuality':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: PATCH /marketplace/property-assets/{assetId}/media/{mediaAssetId}':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/duplicate-candidates/{duplicateCandidateId}/override':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings/{listingId}/publish':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/listings/{listingId}/unpublish':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/media/upload-intent':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: POST /marketplace/property-assets/{assetId}/media/{mediaAssetId}/confirm':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-  'ПРОБЕЛ: PUT /marketplace/property-assets/{assetId}/media/order':
-    'рабочий контур объектов и листингов ERP: спека описывает публичный marketplace и D-07, но не экраны агентства',
-
   // media.controller.ts
   'ПРОБЕЛ: POST /media/upload-intent':
     'загрузка медиа вне property-asset (план этажа, аватар, документ агентства)',
@@ -255,6 +215,6 @@ describe('Соответствие OpenAPI-контракта фактическ
   it('размер долга зафиксирован числом и молча вырасти не может', () => {
     // Число живёт здесь, а не выводится из длины реестра: иначе оно росло бы
     // вместе с ним и ничего не сторожило.
-    expect(Object.keys(CONTRACT_GAPS)).toHaveLength(49);
+    expect(Object.keys(CONTRACT_GAPS)).toHaveLength(30);
   });
 });
