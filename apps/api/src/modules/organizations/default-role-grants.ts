@@ -98,6 +98,16 @@ export interface DefaultGrant {
  * возможностей — он разблокирует остальные назначения. administrator и
  * marketer не получают: у них нет ни property_asset.edit, ни
  * development.edit, с медиа объектов они не работают.
+ *
+ * `import.run` (03.09.2026, POST /leads/import) — по прямой аналогии с
+ * `export.run`: право "импортировать вообще", не право заводить лиды само
+ * по себе (LeadImportService дополнительно проверяет lead.create на каждую
+ * строку, тот же принцип "две ступени", что у export.run/<entity>.read).
+ * Выдано всем ролям, у которых уже есть `lead.create`
+ * (owner/director/rop/manager/administrator/developer) — импорт не
+ * расширяет ничьих реальных возможностей, лишь даёт завести много лидов
+ * за один запрос вместо ручной формы по одному. `marketer` не получает —
+ * у него нет lead.create.
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -140,6 +150,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'finance', action: 'read', scope: 'organization' },
     { resource: 'manual_ledger', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
+    { resource: 'import', action: 'run', scope: 'organization' },
   ],
   director: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -181,6 +192,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'personal_access', action: 'grant', scope: 'position' },
     { resource: 'finance', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
+    { resource: 'import', action: 'run', scope: 'organization' },
   ],
   rop: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -223,11 +235,19 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'booking', action: 'cancel', scope: 'organization' },
     { resource: 'booking', action: 'extend', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
+    { resource: 'import', action: 'run', scope: 'organization' },
   ],
   manager: [
     { resource: 'position', action: 'read', scope: 'organization' },
     { resource: 'lead', action: 'read', scope: 'own' },
     { resource: 'lead', action: 'create', scope: 'organization' },
+    // import.run (03.09.2026, POST /leads/import) — manager не имеет
+    // export.run (нет доступа к bulk-выгрузке чужих данных organization-wide
+    // через файл), но lead.create у него уже есть, а import — ровно тот же
+    // способ завести лид, что и ручная форма, просто много строк за один
+    // запрос. LeadImportService дополнительно требует lead.create на каждую
+    // строку — этот грант сам по себе доступа не расширяет.
+    { resource: 'import', action: 'run', scope: 'organization' },
     // D-05B: manager ведёт своих лидов по воронке — очевидная возможность,
     // scope 'own' сужает до лидов, где ownerPositionId === своя Position
     // (ownerFilterForAction в LeadController, не автоматически — deny-by-
@@ -266,6 +286,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
+    { resource: 'import', action: 'run', scope: 'organization' },
   ],
   marketer: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -316,5 +337,6 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'personal_access', action: 'grant', scope: 'position' },
     { resource: 'finance', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
+    { resource: 'import', action: 'run', scope: 'organization' },
   ],
 };
