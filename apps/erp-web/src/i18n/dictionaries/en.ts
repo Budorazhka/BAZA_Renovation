@@ -4800,6 +4800,7 @@ export const en: TranslationSchema<typeof ru> = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "No urgent action",
+        "просроченные_задачи_": "Overdue tasks failed to load - the list may be incomplete",
         "следующие_действия": "Next steps"
       },
       widgetObjectQuality: {
@@ -8336,12 +8337,12 @@ export const en: TranslationSchema<typeof ru> = {
   tasks: {
     createTaskModal: {
       "новая_задача": "New task",
-      "заполните_поля_и_сох": "Fill out the fields and save - the task will appear in the list (for now the data is only in the browser session).",
+      "заполните_поля_и_сох": "Fill out the fields and save - the task will appear in the list.",
+      "задача_сохранится_бе": "The task will be saved without a lead link: leads still live in the old CRM, while tasks are already in the new API.",
       "заголовок": "Heading",
       "поиск_лида": "Lead search",
       "сбросить": "Reset",
       "исполнитель": "Executor",
-      "при_выборе_лида_испо": "When a lead is selected, the performer is automatically assigned as the responsible card manager.",
       "описание": "Description",
       "срочность_и_важность": "Urgency and importance",
       "квадрант_эйзенхауэра": "Eisenhower Quadrant:",
@@ -8368,6 +8369,12 @@ export const en: TranslationSchema<typeof ru> = {
       "личный_и_командный_т": "Personal and team task tracker",
       "новая_задача": "New task",
       "задач_не_найдено": "No tasks found",
+      "показаны_не_все_зада": "Not all tasks are shown: the registry is too large to read at once",
+      "взять_в_работу": "Start working",
+      "вернуть_в_новые": "Move back to new",
+      "загружаю_задачи": "Loading tasks…",
+      "повторить": "Retry",
+      "состав_команды_не_за": "The team roster failed to load: assignee and creator are shown as a dash, and there is nobody to pick as the assignee of a new task.",
       "личная": "Personal",
       "начало": "Start:",
       "до": "To:",

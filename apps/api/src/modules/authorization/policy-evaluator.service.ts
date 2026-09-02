@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { ClientSession, Types } from 'mongoose';
 import { PermissionGrantRepository } from './repository/permission-grant.repository';
 import type { PermissionGrantDocument, PermissionScope, PermissionSubjectType } from './schemas/permission-grant.schema';
 
@@ -202,8 +202,9 @@ export class PolicyEvaluatorService {
       scope: PermissionScope;
       scopeValue?: string;
     }>,
+    session?: ClientSession,
   ): Promise<void> {
-    await this.permissionGrantRepository.createMany(items);
+    await this.permissionGrantRepository.createMany(items, session);
   }
 
   /**

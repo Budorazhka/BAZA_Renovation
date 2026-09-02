@@ -22,6 +22,14 @@ export const TASK_STATUSES: readonly TaskStatus[] = [
   'cancelled',
 ] as const;
 
+/**
+ * Незавершённые статусы — то, что для лида означает «следующее действие ещё
+ * не сделано». Именно этот набор, а не один `open`: задача, взятая в работу,
+ * остаётся следующим действием, и считать иначе значило бы гасить признак
+ * ровно в тот момент, когда за задачу взялись.
+ */
+export const UNFINISHED_TASK_STATUSES: readonly TaskStatus[] = ['open', 'in_progress'] as const;
+
 /** Приоритет задачи — «Не срочно / Важно / Срочно / Срочно и важно» на экране. */
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 

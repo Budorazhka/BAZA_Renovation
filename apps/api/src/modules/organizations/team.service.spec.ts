@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import { TeamService } from './team.service';
 import type { PositionRepository } from './repository/position.repository';
 import type { PositionAssignmentRepository } from './repository/position-assignment.repository';
@@ -26,6 +26,23 @@ function makePosition(overrides: Partial<{
   };
 }
 
+/**
+ * Соединение, у которого транзакция просто выполняет работу. Настоящую
+ * атомарность проверяет интеграционный тест на живом Mongo
+ * (team-user-atomicity.integration-spec.ts) — здесь важно лишь то, что шаги
+ * идут внутри одной сессии и получают её.
+ */
+function fakeConnection() {
+  const session = { id: 'fake-session' } as unknown as ClientSession;
+  return {
+    startSession: jest.fn().mockResolvedValue({
+      withTransaction: async (work: () => Promise<unknown>) => work(),
+      endSession: jest.fn().mockResolvedValue(undefined),
+    }),
+    __session: session,
+  } as unknown as Connection;
+}
+
 describe('TeamService.listForOrganization', () => {
   it('занятая позиция обогащается Identity.normalizedLogin занимающего', async () => {
     const organizationId = new Types.ObjectId();
@@ -40,6 +57,9 @@ describe('TeamService.listForOrganization', () => {
       { findByIds: jest.fn().mockResolvedValue([{ id: identityId, normalizedLogin: 'ivan@example.com', status: 'active' }]) } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -68,6 +88,9 @@ describe('TeamService.listForOrganization', () => {
       { findByIds: findByIdsSpy } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -96,6 +119,9 @@ describe('TeamService.listForOrganization', () => {
       { findByIds: jest.fn().mockResolvedValue([{ id: identityId, normalizedLogin: 'x@example.com', status: 'deactivated' }]) } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -115,6 +141,9 @@ describe('TeamService.listForOrganization', () => {
       { findByIds: jest.fn() } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -137,6 +166,9 @@ describe('TeamService.ensureSelf', () => {
       { findByIds: jest.fn() } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const result = await service.ensureSelf(organizationId, targetPosition._id);
@@ -154,6 +186,9 @@ describe('TeamService.ensureSelf', () => {
       { findByIds: jest.fn() } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const result = await service.ensureSelf(organizationId, new Types.ObjectId());
@@ -185,6 +220,9 @@ describe('TeamService.setPositionOccupantStatus', () => {
       } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await service.setPositionOccupantStatus(position._id, organizationId, 'blocked');
@@ -214,6 +252,9 @@ describe('TeamService.setPositionOccupantStatus', () => {
       } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await service.setPositionOccupantStatus(position._id, organizationId, 'active');
@@ -229,6 +270,9 @@ describe('TeamService.setPositionOccupantStatus', () => {
       {} as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -247,6 +291,9 @@ describe('TeamService.setPositionOccupantStatus', () => {
       { deactivateIdentity: deactivateSpy } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -264,6 +311,9 @@ describe('TeamService.setPositionOccupantStatus', () => {
       {} as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -294,6 +344,9 @@ describe('TeamService.listForOrganization avatarUrl resolution', () => {
         getVariantUrl: getVariantUrlSpy,
       } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -314,6 +367,9 @@ describe('TeamService.listForOrganization avatarUrl resolution', () => {
       { findByIds: jest.fn().mockResolvedValue([]) } as unknown as AuthService,
       { getAssetForOwnerScope: getAssetForOwnerScopeSpy } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -336,6 +392,9 @@ describe('TeamService.listForOrganization avatarUrl resolution', () => {
         getAssetForOwnerScope: jest.fn().mockResolvedValue({ status: 'pending', variants: [], bucket: 'public' }),
       } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const [view] = await service.listForOrganization(organizationId);
@@ -365,6 +424,9 @@ describe('TeamService.setPositionAvatar', () => {
         getAssetForOwnerScope: jest.fn().mockResolvedValue({ status: 'verified', variants: [], bucket: 'public' }),
       } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const result = await service.setPositionAvatar(positionId, organizationId, assetId);
@@ -385,6 +447,9 @@ describe('TeamService.setPositionAvatar', () => {
       {} as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -408,6 +473,9 @@ describe('TeamService.setPositionAvatar', () => {
       {} as unknown as AuthService,
       { getAssetForOwnerScope: jest.fn().mockResolvedValue(null) } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -433,6 +501,9 @@ describe('TeamService.setPositionAvatar', () => {
         getAssetForOwnerScope: jest.fn().mockResolvedValue({ status: 'pending', variants: [], bucket: 'public' }),
       } as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(
@@ -454,6 +525,7 @@ describe('TeamService.createOccupiedPosition', () => {
     const createVacantPositionSpy = jest.fn().mockResolvedValue(positionId);
     const assignOccupantSpy = jest.fn().mockResolvedValue(new Types.ObjectId());
     const profileCreateSpy = jest.fn().mockResolvedValue(undefined);
+    const grantErpAccessSpy = jest.fn().mockResolvedValue(undefined);
 
     const service = new TeamService(
       {
@@ -465,12 +537,17 @@ describe('TeamService.createOccupiedPosition', () => {
         findByPositionIds: jest.fn().mockResolvedValue([]),
         create: profileCreateSpy,
       } as unknown as PositionProfileRepository,
-      { registerIdentity: registerIdentitySpy, findByIds: jest.fn().mockResolvedValue([]) } as unknown as AuthService,
+      {
+        registerIdentity: registerIdentitySpy,
+        grantErpAccess: grantErpAccessSpy,
+        findByIds: jest.fn().mockResolvedValue([]),
+      } as unknown as AuthService,
       {} as unknown as MediaService,
       {
         createVacantPosition: createVacantPositionSpy,
         assignOccupant: assignOccupantSpy,
       } as unknown as OrganizationsService,
+      fakeConnection(),
     );
 
     await service.createOccupiedPosition({
@@ -486,18 +563,26 @@ describe('TeamService.createOccupiedPosition', () => {
     });
 
     expect(registerIdentitySpy).toHaveBeenCalledWith({ login: 'new-manager@example.com', password: 'password12345' });
-    expect(createVacantPositionSpy).toHaveBeenCalledWith({
-      organizationId,
-      fixedRole: 'manager',
-      parentPositionId: managerId,
-    });
+    expect(createVacantPositionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, fixedRole: 'manager', parentPositionId: managerId }),
+    );
+    // Все три шага org-стороны получили одну и ту же сессию — иначе
+    // «транзакция» распалась бы на независимые куски.
+    const usedSession = createVacantPositionSpy.mock.calls[0][0].session;
+    expect(usedSession).toBeDefined();
+    expect(assignOccupantSpy.mock.calls[0][0].session).toBe(usedSession);
+    expect(profileCreateSpy.mock.calls[0][3]).toBe(usedSession);
+    // ProductAccess — коллекция чужого модуля, выдаётся после коммита.
+    expect(grantErpAccessSpy).toHaveBeenCalledWith(identityId);
     expect(assignOccupantSpy).toHaveBeenCalledWith(
       expect.objectContaining({ positionId, identityId, occupantDisplayName: 'New Manager', actorIdentityId }),
     );
-    expect(profileCreateSpy).toHaveBeenCalledWith(positionId, organizationId, {
-      phone: '+79990000000',
-      skills: ['sales'],
-    });
+    expect(profileCreateSpy).toHaveBeenCalledWith(
+      positionId,
+      organizationId,
+      { phone: '+79990000000', skills: ['sales'] },
+      expect.anything(),
+    );
   });
 
   it('managerId:null (top-level позиция) — parentPositionId не передаётся в createVacantPosition', async () => {
@@ -512,6 +597,7 @@ describe('TeamService.createOccupiedPosition', () => {
       { findByPositionIds: jest.fn().mockResolvedValue([]), create: jest.fn() } as unknown as PositionProfileRepository,
       {
         registerIdentity: jest.fn().mockResolvedValue(identityId),
+        grantErpAccess: jest.fn().mockResolvedValue(undefined),
         findByIds: jest.fn().mockResolvedValue([]),
       } as unknown as AuthService,
       {} as unknown as MediaService,
@@ -519,6 +605,7 @@ describe('TeamService.createOccupiedPosition', () => {
         createVacantPosition: createVacantPositionSpy,
         assignOccupant: jest.fn().mockResolvedValue(new Types.ObjectId()),
       } as unknown as OrganizationsService,
+      fakeConnection(),
     );
 
     await service.createOccupiedPosition({
@@ -533,11 +620,9 @@ describe('TeamService.createOccupiedPosition', () => {
       profile: {},
     });
 
-    expect(createVacantPositionSpy).toHaveBeenCalledWith({
-      organizationId,
-      fixedRole: 'owner',
-      parentPositionId: undefined,
-    });
+    expect(createVacantPositionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ organizationId, fixedRole: 'owner', parentPositionId: undefined }),
+    );
   });
 });
 
@@ -561,6 +646,9 @@ describe('TeamService.updateProfile', () => {
       { findByIds: jest.fn().mockResolvedValue([]) } as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     const result = await service.updateProfile(positionId, organizationId, { city: 'Batumi' });
@@ -578,6 +666,9 @@ describe('TeamService.updateProfile', () => {
       {} as unknown as AuthService,
       {} as unknown as MediaService,
       {} as unknown as OrganizationsService,
+      // Connection нужен createOccupiedPosition для транзакции; в этих тестах
+      // проверяются чтения, транзакция не открывается.
+      {} as unknown as Connection,
     );
 
     await expect(

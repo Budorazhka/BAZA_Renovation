@@ -161,6 +161,11 @@ export class TaskController {
       description: dto.description,
       dueAt: dto.dueAt !== undefined ? (dto.dueAt ? new Date(dto.dueAt) : null) : undefined,
       status: dto.status,
+      subtasks: dto.subtasks?.map((subtask) => ({
+        id: subtask.id,
+        title: subtask.title,
+        done: Boolean(subtask.done),
+      })),
       correlationId: req.correlationId,
     });
   }

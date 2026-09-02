@@ -96,10 +96,11 @@ export class PermissionGrantRepository {
       scope: string;
       scopeValue?: string;
     }>,
+    session?: ClientSession,
   ): Promise<void> {
     if (items.length === 0) {
       return;
     }
-    await this.model.insertMany(items);
+    await this.model.insertMany(items, { session });
   }
 }

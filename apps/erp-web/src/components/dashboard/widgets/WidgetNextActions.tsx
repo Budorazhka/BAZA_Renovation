@@ -1,7 +1,10 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Zap, Phone, MessageSquare, AlertTriangle } from 'lucide-react'
 import { DeskShell, DeskHeader } from '../desk-shared'
-import { TASKS_MOCK } from '@/data/tasks-mock'
+import { useAuth } from '@/context/AuthContext'
+import { isDisplayableTaskV2, splitIsoToLocalParts } from '@/lib/map-task-v2'
+import { tasksApiV2 } from '@/services/tasksApiV2'
+import type { TaskV2 } from '@/types/tasksV2'
 import type { Lead } from '@/types/leads'
 import type { WidgetSlot } from '@/config/widgets-config'
 import { cn } from '@/lib/utils'
@@ -14,22 +17,56 @@ type ActionItem = {
   sub: string
 }
 
-function isOverdue(t: { status: string; dueDate: string }, todayIso: string) {
-  if (t.status === 'done') return false
-  return t.dueDate < todayIso
-}
+/**
+ * Виджет показывает вершину списка, но выбирать просроченные обязан из всего
+ * реестра: просроченная задача — по определению старая, а старые лежат на
+ * последних страницах. Первая страница дала бы обратный отбор — самые свежие.
+ */
+const MAX_TASK_PAGES = 20
 
+/**
+ * `currentUserId` больше не принимается: он был id человека из старой CRM и
+ * использовался только для отбора задач. Задачи теперь приходят с сервера и
+ * отбираются по позиции (`positionId`) из серверной сессии.
+ */
 export function WidgetNextActions({
   leads,
-  currentUserId,
   slot,
 }: {
   leads: Lead[]
-  currentUserId: string | null
   slot: WidgetSlot
 }) {
     const { t } = useI18n();
-  const todayIso = new Date().toISOString().split('T')[0]
+  const { currentUser } = useAuth()
+  const myPositionId = currentUser?.positionId ?? null
+  const [overdueTasks, setOverdueTasks] = useState<TaskV2[]>([])
+  const [tasksUnavailable, setTasksUnavailable] = useState(false)
+
+  /**
+   * Просроченные задачи берутся с сервера, а не из `TASKS_MOCK`: виджет
+   * называется «следующие действия», и выдуманные действия рядом с настоящими
+   * лидами неотличимы от настоящих. Просрочку определяет сервер (`isOverdue`).
+   */
+  useEffect(() => {
+    let cancelled = false
+    tasksApiV2
+      .listAll(undefined, MAX_TASK_PAGES)
+      .then(response => {
+        if (cancelled) return
+        setOverdueTasks(response.items.filter(task => isDisplayableTaskV2(task) && task.isOverdue))
+        setTasksUnavailable(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        // Пустой список вместо мока: «задач нет» здесь не утверждается —
+        // об отказе виджет говорит отдельной строкой.
+        setOverdueTasks([])
+        setTasksUnavailable(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const actions = useMemo((): ActionItem[] => {
     const items: ActionItem[] = []
@@ -45,18 +82,21 @@ export function WidgetNextActions({
     for (const l of leads.filter((x) => x.status === 'no_answer').slice(0, 2)) {
       items.push({ id: `write-${l.id}`, type: 'write', label: l.name ?? l.id, sub: 'Недозвон — написать в мессенджер' })
     }
-    // Overdue tasks
-    const overdueTasks = TASKS_MOCK.filter(
-      (t) =>
-        t.status !== 'done' &&
-        isOverdue(t, todayIso) &&
-        (!currentUserId || t.assignedToId === currentUserId || !t.assignedToId),
-    ).slice(0, 3)
-    for (const t of overdueTasks) {
-      items.push({ id: `task-${t.id}`, type: 'task', label: t.title, sub: `Просрочено · ${t.dueDate}` })
+    // Просроченные задачи: свои и ничьи. Задача чужой позиции — не моё
+    // следующее действие.
+    const mine = overdueTasks
+      .filter(task => !task.assignedPositionId || !myPositionId || task.assignedPositionId === myPositionId)
+      .slice(0, 3)
+    for (const task of mine) {
+      items.push({
+        id: `task-${task.id}`,
+        type: 'task',
+        label: task.title,
+        sub: `Просрочено · ${splitIsoToLocalParts(task.dueAt).date}`,
+      })
     }
     return items
-  }, [leads, currentUserId, todayIso])
+  }, [leads, myPositionId, overdueTasks])
 
   const preview = actions.slice(0, slot === 'big' ? 14 : slot === 'med' ? 8 : 5)
 
@@ -77,6 +117,10 @@ export function WidgetNextActions({
         accentColor="#f87171"
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
+        {tasksUnavailable && (
+          <p className="pb-2 text-base text-[color:var(--workspace-text)]/80">
+            {t('dashboard.widgets.widgetNextActions.просроченные_задачи_')}</p>
+        )}
         {preview.length === 0 ? (
           <p className="py-4 text-center text-[13px] text-[color:var(--workspace-text-muted)]">{t('dashboard.widgets.widgetNextActions.срочных_действий_нет')}</p>
         ) : (

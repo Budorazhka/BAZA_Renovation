@@ -4797,6 +4797,7 @@ export const tr = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "Acil eylem yok",
+        "просроченные_задачи_": "Gecikmiş görevler yüklenemedi - liste eksik olabilir",
         "следующие_действия": "Sonraki adımlar"
       },
       widgetObjectQuality: {
@@ -8333,12 +8334,12 @@ export const tr = {
   tasks: {
     createTaskModal: {
       "новая_задача": "Yeni görev",
-      "заполните_поля_и_сох": "Alanları doldurun ve kaydedin - görev listede görünecektir (şimdilik veriler yalnızca tarayıcı oturumundadır).",
+      "заполните_поля_и_сох": "Alanları doldurun ve kaydedin - görev listede görünecektir.",
+      "задача_сохранится_бе": "Görev, müşteri adayı bağlantısı olmadan kaydedilecek: müşteri adayları hâlâ eski CRM'de, görevler ise yeni API'de.",
       "заголовок": "Başlık",
       "поиск_лида": "Potansiyel müşteri arama",
       "сбросить": "Sıfırla",
       "исполнитель": "İcracı",
-      "при_выборе_лида_испо": "Bir müşteri adayı seçildiğinde, icracı otomatik olarak sorumlu kart yöneticisi olarak atanır.",
       "описание": "Tanım",
       "срочность_и_важность": "Aciliyet ve önem",
       "квадрант_эйзенхауэра": "Eisenhower Çeyreği:",
@@ -8365,6 +8366,12 @@ export const tr = {
       "личный_и_командный_т": "Kişisel ve ekip görev izleyicisi",
       "новая_задача": "Yeni görev",
       "задач_не_найдено": "Hiçbir görev bulunamadı",
+      "показаны_не_все_зада": "Tüm görevler gösterilmiyor: kayıt tek seferde okunamayacak kadar büyük",
+      "взять_в_работу": "Çalışmaya başla",
+      "вернуть_в_новые": "Yenilere geri al",
+      "загружаю_задачи": "Görevler yükleniyor…",
+      "повторить": "Yeniden dene",
+      "состав_команды_не_за": "Ekip listesi yüklenemedi: atanan ve oluşturan tire ile gösteriliyor, yeni göreve atanacak kimse yok.",
       "личная": "Kişisel",
       "начало": "Başlangıç:",
       "до": "İle:",

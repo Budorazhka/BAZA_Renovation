@@ -69,6 +69,9 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [crm-contacts-read-path.md](operations/crm-contacts-read-path.md) — чтение контактов, tenant- и own-скоуп.
 - [crm-tasks-next-action.md](operations/crm-tasks-next-action.md) — задачи и индикатор следующего действия.
 - [crm-task-events.md](operations/crm-task-events.md) — outbox-события жизненного цикла задачи.
+- [erp-tasks-live-api.md](operations/erp-tasks-live-api.md) — реестр задач ERP снят с мока: чтение, завершение и создание через Platform API.
+- [erp-tasks-mock-debt-closed.md](operations/erp-tasks-mock-debt-closed.md) — статус «В работе» стал достижим, виджет дашборда снят с мока, `hasOpenNextAction` перестал гаснуть при взятии задачи в работу.
+- [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
 - [crm-pipeline-activity-timeline.md](operations/crm-pipeline-activity-timeline.md) — таймлайн активности, детект залипших лидов.
 - [crm-deal-core.md](operations/crm-deal-core.md) — ядро сделок, оптимистическая блокировка.
 - [deal-client-reassign.md](operations/deal-client-reassign.md) — передача сделки, включение гранта `client.reassign`.
@@ -98,6 +101,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [admin-control-plane.md](operations/admin-control-plane.md) — панель: аккаунты, гранты, аудит.
 - [admin-duplicate-candidates-review.md](operations/admin-duplicate-candidates-review.md) — очередь модерации дублей.
 - [first-super-admin-bootstrap.md](operations/first-super-admin-bootstrap.md) — создание первого супер-админа.
+- [team-user-atomicity.md](operations/team-user-atomicity.md) — создание сотрудника: позиция, гранты, назначение и профиль одной транзакцией.
 
 ### ЖК и шахматка
 
@@ -110,6 +114,8 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [runtime-release-gate.md](operations/runtime-release-gate.md) — воспроизводимый релизный гейт.
 - [d07-runtime-e2e-gate.md](operations/d07-runtime-e2e-gate.md) — Playwright против живых HTTP-процессов.
 - [nest11-fastify5-migration.md](operations/nest11-fastify5-migration.md) — миграция Nest 10→11 и Fastify 4→5, уязвимости 19 → 0.
+- [openapi-route-coverage.md](operations/openapi-route-coverage.md) — страж соответствия контракта маршрутам: 132 маршрута против 81 пути в спеке, 49 пробелов измерены и закреплены.
+- [marketplace-contract-gap-closed.md](operations/marketplace-contract-gap-closed.md) — marketplace-контур объектов описан зеркалом ERP-контура: пробелов 49 → 30.
 
 ### Асинхронный контур
 
@@ -118,6 +124,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 ### Сверки состояния
 
 - [current-state-reconciliation-2026-08-31.md](operations/current-state-reconciliation-2026-08-31.md) — что реально реализовано в CRM на 31.08.
+- [current-state-reconciliation-2026-09-02.md](operations/current-state-reconciliation-2026-09-02.md) — сверка на конец 02.09: стражей 4 → 7, пробелов контракта 49 → 30, задачи ERP без мока.
 - [consolidation-2026-08-31.md](operations/consolidation-2026-08-31.md) — сведение веток в `codex/integration`.
 
 ## Прочее

@@ -4797,6 +4797,7 @@ export const es = {
       },
       widgetNextActions: {
         "срочных_действий_нет": "Ninguna acción urgente",
+        "просроченные_задачи_": "No se pudieron cargar las tareas vencidas: la lista puede estar incompleta",
         "следующие_действия": "Próximos pasos"
       },
       widgetObjectQuality: {
@@ -8333,12 +8334,12 @@ export const es = {
   tasks: {
     createTaskModal: {
       "новая_задача": "Nueva tarea",
-      "заполните_поля_и_сох": "Complete los campos y guarde: la tarea aparecerá en la lista (por ahora los datos solo están en la sesión del navegador).",
+      "заполните_поля_и_сох": "Complete los campos y guarde: la tarea aparecerá en la lista.",
+      "задача_сохранится_бе": "La tarea se guardará sin vínculo con el cliente potencial: los clientes potenciales siguen en el CRM antiguo, mientras que las tareas ya están en la nueva API.",
       "заголовок": "Título",
       "поиск_лида": "Búsqueda de clientes potenciales",
       "сбросить": "Reiniciar",
       "исполнитель": "Ejecutor",
-      "при_выборе_лида_испо": "Cuando se selecciona un cliente potencial, el artista se asigna automáticamente como administrador de tarjetas responsable.",
       "описание": "Descripción",
       "срочность_и_важность": "Urgencia e importancia",
       "квадрант_эйзенхауэра": "Cuadrante de Eisenhower:",
@@ -8365,6 +8366,12 @@ export const es = {
       "личный_и_командный_т": "Rastreador de tareas personales y de equipo",
       "новая_задача": "Nueva tarea",
       "задач_не_найдено": "No se encontraron tareas",
+      "показаны_не_все_зада": "No se muestran todas las tareas: el registro es demasiado grande para leerlo de una vez",
+      "взять_в_работу": "Empezar a trabajar",
+      "вернуть_в_новые": "Devolver a nuevas",
+      "загружаю_задачи": "Cargando tareas…",
+      "повторить": "Reintentar",
+      "состав_команды_не_за": "No se pudo cargar el equipo: el responsable y el creador se muestran con un guion y no hay a quién asignar una tarea nueva.",
       "личная": "Personal",
       "начало": "Comenzar:",
       "до": "A:",

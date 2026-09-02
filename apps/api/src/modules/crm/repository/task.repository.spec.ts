@@ -208,7 +208,7 @@ describe('TaskRepository', () => {
   });
 
   describe('countOpenForLead', () => {
-    it('counts open tasks for given lead in organization', async () => {
+    it('считает незавершённые задачи лида: и открытые, и взятые в работу', async () => {
       const organizationId = new Types.ObjectId();
       const leadId = new Types.ObjectId();
 
@@ -218,7 +218,13 @@ describe('TaskRepository', () => {
 
       const count = await repository.countOpenForLead(organizationId, leadId);
 
-      expect(countDocumentsSpy).toHaveBeenCalledWith({ organizationId, leadId, status: 'open' });
+      // Именно оба статуса: задача, за которую взялись, остаётся следующим
+      // действием лида — иначе признак гас бы при начале работы над ней.
+      expect(countDocumentsSpy).toHaveBeenCalledWith({
+        organizationId,
+        leadId,
+        status: { $in: ['open', 'in_progress'] },
+      });
       expect(count).toBe(2);
     });
   });
@@ -235,7 +241,7 @@ describe('TaskRepository', () => {
       expect(distinctSpy).not.toHaveBeenCalled();
     });
 
-    it('фильтр включает organizationId, leadId:{$in}, status:open', async () => {
+    it('фильтр включает organizationId, leadId:{$in} и оба незавершённых статуса', async () => {
       const organizationId = new Types.ObjectId();
       const leadIds = [new Types.ObjectId(), new Types.ObjectId()];
       const execSpy = jest.fn().mockResolvedValue([leadIds[0]]);
@@ -247,7 +253,7 @@ describe('TaskRepository', () => {
       expect(distinctSpy).toHaveBeenCalledWith('leadId', {
         organizationId,
         leadId: { $in: leadIds },
-        status: 'open',
+        status: { $in: ['open', 'in_progress'] },
       });
       expect(result).toEqual([leadIds[0]]);
     });
