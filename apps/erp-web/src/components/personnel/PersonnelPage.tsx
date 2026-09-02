@@ -5,7 +5,7 @@ import {
   ROLE_LABELS,
   type Employee,
   type EmployeeRole,
-} from '@/data/personnel-mock'
+} from '@/types/personnel'
 import { teamApi, teamUserToEmployee } from '@/services/teamApi'
 import {
   PERMISSIONS,
@@ -2134,9 +2134,9 @@ export function PersonnelPage() {
       } catch {
         /* ensure-self недоступен на бэкенде — не блокируем загрузку списка команды */
       }
-      // Реальный teamId приходит из AuthContext (ensureTeam → companyId). Пока его
-      // нет (не владелец / бэк не задеплоен), teamApi.list отдаёт мок как раньше.
-      const items = await teamApi.list(currentUser?.companyId)
+      // organizationId сервер выводит из TenantContext сессии (ADR-002), не из
+      // аргумента — teamApi.list() ничего не принимает.
+      const items = await teamApi.list()
       const mapped = items.map(teamUserToEmployee)
       setEmployees(mapped)
       // Локальный кэш правок прав сбрасываем — итог считается из записи (профиль позиции + дельта).
@@ -2453,10 +2453,10 @@ export function PersonnelPage() {
   }
 
   // Реальная сессия (не демо): jwt_token всегда ставится реальным логином и
-  // удаляется мок-логином (см. AuthContext.login / teamApi.isDemoSession).
+  // удаляется мок-логином (см. AuthContext.login).
   const isRealSession = typeof window !== 'undefined' && !!window.localStorage.getItem('jwt_token')
   // Не владелец и не занимает позицию ни в одной команде (roster из БД пуст) —
-  // раздел «Команда» закрыт. Мок-данные реальным пользователям не показываем.
+  // раздел «Команда» закрыт.
   const teamAccessDenied =
     isRealSession && !loadingTeam && !teamError && employees.length === 0 && currentUser?.isOwner !== true
 

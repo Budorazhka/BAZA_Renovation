@@ -1,3 +1,12 @@
+/**
+ * KPI и отчёты по позиции/человеку — ОСОЗНАННО не переведены на Platform API
+ * (TEAM-001, 03.09.2026). Backend их не реализует: см.
+ * docs/progress-report-2026-09-01.md, «Нет: KPI и отчёты по позиции и
+ * человеку» — это отдельная задача этапа 6 мастер-плана, не honest gap этого
+ * прохода. Экран продолжает читать `@/data/team-kpi-mock` и
+ * `lib/bi/manager-analytics-adapter` (который сам читает `personnel-mock`).
+ * Не подключать сюда несуществующий backend-эндпоинт.
+ */
 import { useMemo, useState } from "react";
 import { Activity, AlertTriangle, Filter, RotateCcw, Search, Target, TrendingUp, Users } from "lucide-react";
 import { useI18n } from "@/i18n";

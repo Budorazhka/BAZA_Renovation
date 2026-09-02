@@ -74,6 +74,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
 - [task-model-audit-followup.md](operations/task-model-audit-followup.md) — три вердикта аудита применены: приоритет парой признаков, связь без дубля, провенанс только от сервера.
 - [task-attachments-media-assets.md](operations/task-attachments-media-assets.md) — вложения задачи стали файлами: ссылки на подтверждённые `MediaAsset` вместо имён без файлов.
+- [erp-team-mock-debt-closed.md](operations/erp-team-mock-debt-closed.md) — реестр команды (TEAM-001) снят с мока: write-операции чинят битый маршрут на CRM-backend, localStorage и мок-массив убраны, KPI-контур и лиды осознанно оставлены как есть.
 - [crm-pipeline-activity-timeline.md](operations/crm-pipeline-activity-timeline.md) — таймлайн активности, детект залипших лидов.
 - [crm-deal-core.md](operations/crm-deal-core.md) — ядро сделок, оптимистическая блокировка.
 - [deal-client-reassign.md](operations/deal-client-reassign.md) — передача сделки, включение гранта `client.reassign`.
