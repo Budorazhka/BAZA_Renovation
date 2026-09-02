@@ -100,6 +100,21 @@ export function TasksPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const createSuccessRef = useRef(false)
+  /**
+   * Ключ идемпотентности незавершённой отправки формы.
+   *
+   * Генерировать его на каждый сабмит нельзя: если сервер задачу создал, а
+   * ответ потерялся, модалка покажет отказ, человек нажмёт «отправить» ещё
+   * раз — и с новым ключом получит вторую задачу. Ровно то, ради чего ключ и
+   * заведён, обошли бы сами.
+   *
+   * Ключ переживает неудачные попытки и сбрасывается в двух случаях: успех
+   * (следующая задача — другая команда) и изменение содержимого формы. Второе
+   * обязательно: сервер сверяет тело запроса с сохранённым и на тот же ключ с
+   * другим телом отвечает IDEMPOTENCY_KEY_CONFLICT — исправленная форма
+   * упёрлась бы в 409.
+   */
+  const pendingCreateRef = useRef<{ signature: string; key: string } | null>(null)
   const { currentUser } = useAuth()
   const [filter, setFilter] = useState<Filter>('my')
   const [serverTasks, setServerTasks] = useState<TaskV2[]>([])
@@ -562,7 +577,6 @@ export function TasksPage() {
           {/* Right: details */}
           <TaskDetailsPanel
             task={selectedTask}
-            today={today}
             total={filtered.length}
             assignees={team}
             onSetInProgress={setInProgress}
@@ -588,17 +602,23 @@ export function TasksPage() {
         }}
         assignees={team}
         onCreate={async task => {
-          // Ключ идемпотентности один на попытку отправки: повтор после
-          // обрыва не создаст вторую задачу (conventions.md §8).
+          const payload = buildCreateTaskPayload(task, {
+            assignedPositionId: task.assignedToId || undefined,
+          })
+          const signature = JSON.stringify(payload)
+          if (pendingCreateRef.current?.signature !== signature) {
+            pendingCreateRef.current = { signature, key: newIdempotencyKey() }
+          }
+
           let created
           try {
-            created = await tasksApiV2.create(
-              buildCreateTaskPayload(task, { assignedPositionId: task.assignedToId || undefined }),
-              newIdempotencyKey(),
-            )
+            created = await tasksApiV2.create(payload, pendingCreateRef.current.key)
           } catch (error) {
+            // Ключ намеренно остаётся: следующая попытка с тем же содержимым
+            // должна попасть в ту же команду, а не создать вторую задачу.
             throw new Error(describeCreateError(error))
           }
+          pendingCreateRef.current = null
           createSuccessRef.current = true
           setServerTasks(prev => [created, ...prev])
           navigate('/dashboard/tasks/my', { replace: true })
@@ -620,7 +640,11 @@ function TaskRow({
   onOpen?: () => void
 }) {
     const { t } = useI18n();
-  const isOverdue = task.status === 'overdue' || (task.dueDate < new Date().toISOString().split('T')[0] && task.status !== 'done')
+  // Просрочку определяет сервер. Сравнение дат здесь давало ложную
+  // просрочку задаче без срока: `dueDate` у неё пустая строка, а
+  // `'' < '2026-09-02'` истинно — карточка рисовалась красной рамкой и
+  // предупреждением при `isOverdue: false` с сервера.
+  const isOverdue = task.status === 'overdue'
   const accentColor = task.colorHex && task.colorHex.length >= 4 ? task.colorHex : PRIORITY_COLORS[task.priority]
   const priorityColor = PRIORITY_COLORS[task.priority]
 
@@ -794,7 +818,6 @@ function MatrixCard({
 
 function TaskDetailsPanel({
   task,
-  today,
   total,
   assignees,
   onSetInProgress,
@@ -802,7 +825,6 @@ function TaskDetailsPanel({
   onReassign,
 }: {
   task: Task | null
-  today: string
   total: number
   assignees: TaskAssigneeOption[]
   onSetInProgress: (taskId: string, inProgress: boolean) => void
@@ -817,7 +839,9 @@ function TaskDetailsPanel({
     )
   }
 
-  const isOverdue = task.status === 'overdue' || (task.dueDate < today && task.status !== 'done')
+  // Тот же случай, что в TaskRow: задача без срока не просрочена, как бы
+  // пустая строка ни сравнивалась с сегодняшней датой.
+  const isOverdue = task.status === 'overdue'
   return (
     <div style={{ minWidth: 0, border: '1px solid rgba(110,231,183,0.22)', borderRadius: 10, background: 'linear-gradient(180deg, rgba(13,51,39,0.98) 0%, rgba(7,28,22,0.98) 100%)', padding: 14, display: 'flex', flexDirection: 'column', gap: 10, maxHeight: '72vh', overflowY: 'auto', boxShadow: '0 14px 34px rgba(0,0,0,0.22)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
