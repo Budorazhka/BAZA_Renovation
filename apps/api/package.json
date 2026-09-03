@@ -12,7 +12,8 @@
     "test:integration": "jest --config jest.integration.config.js",
     "clean": "rm -rf dist",
     "actuality:expire-overdue": "ts-node src/jobs/actuality-expire.command.ts",
-    "migrate:legacy-leads": "ts-node src/jobs/migrate-legacy-leads.command.ts"
+    "migrate:legacy-leads": "ts-node src/jobs/migrate-legacy-leads.command.ts",
+    "export:legacy-leads": "ts-node src/jobs/export-legacy-leads.script.ts"
   },
   "dependencies": {
     "@baza/config": "workspace:*",
