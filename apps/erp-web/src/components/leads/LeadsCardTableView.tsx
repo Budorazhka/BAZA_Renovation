@@ -43,8 +43,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import LeadViewModal from "@/features/crm/components/crm/LeadViewModal"
-import { apiService } from "@/features/crm/services/api/service"
 import { LeadStage, ProductType, type Lead as CrmLead } from "@/features/crm/services/api/types"
+import { leadsApiV2 } from "@/services/leadsApiV2"
 import { mapPokerIdToCrmStage, POKER_SOURCE_TO_CRM_PRODUCT } from "@/lib/crm-poker-adapter"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { cn } from "@/lib/utils"
@@ -329,28 +329,22 @@ export function LeadsCardTableView({
   const [leadDetailsUnavailable, setLeadDetailsUnavailable] = useState(false)
 
   /**
-   * После перевода этого экрана на новый backend (apps/api, /leads/*)
-   * LeadViewModal остаётся на легаси apiService.getLead (см. план: он
-   * мигрирует отдельной фазой, слишком глубоко завязан на легаси-CRUD
-   * файлов/чек-листов/звонков). Id лида на этом экране теперь — id из
-   * НОВОГО backend, которого в легаси api-crm.baza.sale нет ни для одного
-   * лида — apiService.getLead(id) отвечает 404 всегда. Вместо необработанного
-   * краша/бесконечного лоадера внутри модалки — проверяем существование
-   * лида в легаси backend ДО открытия и показываем понятное сообщение.
-   * Честный пробел переходного периода, задокументирован тем же способом,
-   * что accessProfile в CreateTeamAccountSlotDto прошлых фаз.
+   * LeadViewModal переведён на новый backend (apps/api, /leads/*, см. план
+   * фазы 3) — id лида на этом экране это id из НОВОГО backend, поэтому
+   * пробный getById здесь проверяет то же самое, что откроет модалка, не
+   * легаси-совместимость. 404 теперь означает "лид реально не существует"
+   * (удалён/чужая организация), а не "ещё не мигрировал" — честная ошибка,
+   * не переходный пробел.
    */
   const openLeadDetails = async (leadId: string, tab: LeadViewInitialTab) => {
     setSelectedLeadId(leadId)
     setLeadViewInitialTab(tab)
     try {
-      const resp = await apiService.getLead(leadId)
-      if (resp.success && resp.data) {
-        setHistoryOpen(true)
-        return
-      }
+      await leadsApiV2.getById(leadId)
+      setHistoryOpen(true)
+      return
     } catch {
-      // падает 404 для любого лида новой системы — ожидаемо, см. комментарий выше
+      // лид не найден на новом backend — см. докстринг выше
     }
     setLeadDetailsUnavailable(true)
   }
@@ -1272,7 +1266,7 @@ export function LeadsCardTableView({
         initialTab={leadViewInitialTab}
       />
 
-      {/* Детали лида недоступны — лид существует только в новой системе (см. openLeadDetails) */}
+      {/* Лид не найден на backend (удалён/чужая организация) — см. openLeadDetails */}
       <Dialog open={leadDetailsUnavailable} onOpenChange={(open) => { if (!open) setLeadDetailsUnavailable(false) }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
@@ -1280,7 +1274,7 @@ export function LeadsCardTableView({
             <DialogDescription>
               {t(
                 'crmPoker.leadDetailsUnavailableBody',
-                'Детали пока недоступны для лидов новой системы. Эта карточка поддерживается частично — переход выполняется отдельным этапом.',
+                'Не удалось загрузить карточку лида. Возможно, лид был удалён.',
               )}
             </DialogDescription>
           </DialogHeader>

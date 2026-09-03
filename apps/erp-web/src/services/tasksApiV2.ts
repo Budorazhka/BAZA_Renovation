@@ -138,6 +138,17 @@ export const tasksApiV2 = {
   },
 
   /**
+   * Смена срока — PATCH (UpdateTaskDto.dueAt на бэкенде уже принимает это
+   * поле, отдельного эндпоинта под него нет и не нужно — тот же принцип, что
+   * setStatus/setSubtasks: разные тонкие обёртки над одним PATCH ради
+   * называемых по смыслу вызовов на стороне экрана).
+   */
+  async setDueAt(taskId: string, expectedVersion: number, dueAt: string | undefined): Promise<TaskV2> {
+    const { data } = await api.patch<TaskV2>(`/api/v1/tasks/${taskId}`, { expectedVersion, dueAt })
+    return data
+  },
+
+  /**
    * Подзадачи заменяются целиком: сервер принимает полный список, а не
    * поштучные операции. Экран всегда держит их все, поэтому отправлять
    * различия было бы сложнее, чем отправить список.

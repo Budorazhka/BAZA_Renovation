@@ -26,6 +26,13 @@ import {
 import { NotesEditor } from './NotesEditor';
 import { parseDateFromAPI } from '../../utils/dateUtils';
 import { useI18n } from '@/i18n';
+import { leadsApiV2 } from '@/services/leadsApiV2';
+import type { LeadEventV2 } from '@/types/leadsV2';
+import { tasksApiV2 } from '@/services/tasksApiV2';
+import { mediaApiV2 } from '@/services/mediaApiV2';
+import { mapLeadV2ToCrmLead, mapLeadEventsV2ToLegacyHistory, buildStageCommentsMap } from '@/lib/lead-v2-legacy-adapter';
+import { mapTaskV2ToCrmTask } from '@/lib/task-v2-legacy-adapter';
+import { isDisplayableTaskV2 } from '@/lib/map-task-v2';
 
 const normalizeFavoriteLabel = (value?: string): string | undefined => {
   if (!value) return undefined;
@@ -60,6 +67,17 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
   const isInitializedRef = useRef(false);
   const autoRefreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const previousLeadIdRef = useRef<string | undefined>(lead?._id);
+  /**
+   * `[phase 3]` version лида на новом backend (apps/api) — обязателен как
+   * expectedVersion в PATCH .../stage (CAS, см. leadsApiV2.changeStage
+   * докстринг). Тот же паттерн кэширования, что LeadsContext.leadVersions:
+   * читается при каждом getById и после каждого успешного changeStage.
+   */
+  const leadVersionRef = useRef<number | undefined>(undefined);
+  /** `[phase 3]` Последний прочитанный список событий (переходов стадии) — источник и для leadHistory, и для stageCommentsMap, без двойного запроса. */
+  const leadEventsRef = useRef<LeadEventV2[]>([]);
+  /** `[phase 3]` version задач лида на новом backend — expectedVersion для complete/setStatus/setDueAt (CAS). */
+  const taskVersionsRef = useRef<Map<string, number>>(new Map());
 
   // Локальное состояние для lead, чтобы обновлять его после изменений
   const [localLead, setLocalLead] = useState<Lead | null>(lead);
@@ -307,11 +325,13 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     if (!displayLead?._id) return;
 
     try {
-      const response = await apiService.getLead(displayLead._id);
-      if (response.success && response.data) {
+      const leadV2 = await leadsApiV2.getById(displayLead._id);
+      leadVersionRef.current = leadV2.version;
+      const mappedLead = mapLeadV2ToCrmLead(leadV2);
+      {
         const manager = syncManagerRef.current;
         // Используем syncFromBackend для безопасного обновления (блокировка на 3 секунды после ручного изменения)
-        const { data: synced, hasChanges } = manager.syncFromBackend([response.data], 3000, 30000);
+        const { data: synced, hasChanges } = manager.syncFromBackend([mappedLead], 3000, 30000);
         if (hasChanges && synced.length > 0) {
           const updatedLead = synced[0];
           // Обновляем состояние только если данные действительно изменились
@@ -460,33 +480,38 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
   }, [displayLead?.email, isOpen, selectedTab]);
 
   // Функции для работы с файлами лида
+  // `filename` в этом состоянии — assetId файла на новом backend (см.
+  // leadsApiV2.listFiles/CrmLeadFileReadModel докстринг: сервер не хранит
+  // клиентское имя файла отдельно от assetId), не storage key, как было в
+  // легаси. Используется как есть везде, где раньше был storage key
+  // (скачивание/удаление по нему) — вёрстка не меняется.
   const loadLeadFiles = useCallback(async () => {
     if (!displayLead?._id) {
       setFiles([]);
       return;
     }
-    
+
     try {
-      const response = await apiService.getLeadFiles(displayLead._id);
-      if (response.success && response.data) {
-        setFiles(response.data.files);
-      }
+      const leadFiles = await leadsApiV2.listFiles(displayLead._id);
+      setFiles(leadFiles.map((file) => ({
+        filename: file.assetId,
+        originalName: file.fileName,
+        mimeType: file.mimeType ?? '',
+        size: file.sizeBytes,
+        url: file.url ?? '',
+      })));
     } catch (error) {
       console.error('Failed to load lead files:', error);
       setFiles([]);
     }
   }, [displayLead?._id]);
 
-  const handleDeleteFile = useCallback(async (filename: string) => {
+  const handleDeleteFile = useCallback(async (assetId: string) => {
     if (!displayLead?._id) return;
-    
+
     try {
-      const response = await apiService.deleteLeadFileByName(displayLead._id, filename);
-      if (response.success) {
-        await loadLeadFiles();
-      } else {
-        setUploadError(t('leadViewModal.failedToDeleteFileTryAgain'));
-      }
+      await leadsApiV2.removeFile(displayLead._id, assetId);
+      await loadLeadFiles();
     } catch (error: any) {
       console.error('Failed to delete file:', error);
       setUploadError(error.response?.data?.message || t('leadViewModal.errorDeletingFile'));
@@ -547,48 +572,45 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     });
   }, []);
 
-  // Функция загрузки истории лида (без установки loading)
+  /**
+   * `[phase 3]` Легаси getLeadHistory/getStageComments → одна загрузка
+   * GET /leads/:id/events (переходы стадии, каждый уже несёт свой comment,
+   * см. lead.controller.ts докстринг ChangeLeadStageDto.comment). События
+   * приходят от сервера отсортированными по убыванию времени — тот же
+   * порядок, что легаси-сортировка ниже. Результат кэшируется в
+   * leadEventsRef, чтобы loadStageComments не делал второй запрос.
+   *
+   * Честный пробел: этот эндпоинт ведёт ТОЛЬКО историю переходов стадии —
+   * записи о создании/завершении/удалении задач (легаси addLeadHistoryEntry
+   * из handleTaskStatusChange/handleDeleteTask и колбэков TaskViewModal)
+   * сервер не хранит вовсе. Не восстановлено даже локально: эти записи уже
+   * были невидимы в этой вкладке ДО миграции (см. фильтр isTask ниже —
+   * сообщения, начинающиеся с "Задача", исключались из leadHistory ещё в
+   * легаси-версии), поэтому их отсутствие не меняет то, что видит пользователь.
+   */
   const loadLeadHistoryData = useCallback(async () => {
     if (!displayLead?._id) {
+      leadEventsRef.current = [];
       return [];
     }
-    
+
     try {
-      const response = await apiService.getLeadHistory(displayLead._id);
-      if (response.success && response.data) {
-        // Сортируем по дате (сначала новые)
-        const sortedHistory = [...response.data].sort((a, b) => {
-          const dateA = 'changedAt' in a ? new Date(a.changedAt).getTime() : new Date(a.createdAt).getTime();
-          const dateB = 'changedAt' in b ? new Date(b.changedAt).getTime() : new Date(b.createdAt).getTime();
-          return dateB - dateA; // Сначала новые
-        });
-        return dedupeHistoryItems(sortedHistory);
-      }
-      return [];
+      const response = await leadsApiV2.listEvents(displayLead._id, { limit: 100 });
+      leadEventsRef.current = response.items;
+      return dedupeHistoryItems(mapLeadEventsV2ToLegacyHistory(response.items));
     } catch (error) {
       console.error('Failed to load lead history:', error);
+      leadEventsRef.current = [];
       return [];
     }
   }, [displayLead?._id, dedupeHistoryItems]);
 
-  // Функция загрузки комментариев к этапам
+  // Комментарии к этапам — построены из уже загруженных событий (см. loadLeadHistoryData), без отдельного запроса.
   const loadStageComments = useCallback(async () => {
     if (!displayLead?._id) {
       return;
     }
-    
-    try {
-      const response = await apiService.getStageComments(displayLead._id);
-      if (response.success && response.data) {
-        const commentsMap = new Map<LeadStage, string>();
-        response.data.forEach((item) => {
-          commentsMap.set(item.stage, item.comment);
-        });
-        setStageCommentsMap(commentsMap);
-      }
-    } catch (error) {
-      console.error('Failed to load stage comments:', error);
-    }
+    setStageCommentsMap(buildStageCommentsMap(leadEventsRef.current));
   }, [displayLead?._id]);
 
   // Функция загрузки истории лида с комментариями
@@ -702,39 +724,29 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     };
   }, [leadHistory, displayLead?._id, getCheckedItemsCount, selectedTab]);
 
-  // Функция загрузки задач (без установки loading для автообновления)
+  /**
+   * `[phase 3]` GET /tasks?leadId=... уже фильтрует на сервере — легаси
+   * client-side разбор трёх форм `task.leadId` (строка/объект/id) больше не
+   * нужен. Отменённые задачи (см. handleDeleteTask/onDeleteTask ниже —
+   * "удаление" задачи теперь = отмена, DELETE /tasks/:id не существует)
+   * исключаются тем же принципом, что `isDisplayableTaskV2` на экране
+   * /dashboard/tasks: для этого экрана отменённая задача обязана выглядеть
+   * как удалённая, а не воскресать при следующем автообновлении.
+   */
   const loadTasksData = useCallback(async (): Promise<Task[]> => {
     if (!displayLead?._id) {
+      taskVersionsRef.current = new Map();
       return [];
     }
-    
-    try {
-      const response = await apiService.getTasks({
-        page: 1,
-        limit: 50,
-        leadId: displayLead._id,
-      });
 
-      if (response.success && response.data) {
-        const tasks = response.data.items || [];
-        const filteredTasks = tasks.filter(task => {
-          let taskLeadId: string | undefined;
-          if (typeof task.leadId === 'string') {
-            taskLeadId = task.leadId;
-          } else if (task.leadId && typeof task.leadId === 'object') {
-            const leadIdObj = task.leadId as any;
-            if (leadIdObj._id !== undefined && leadIdObj._id !== null) {
-              taskLeadId = String(leadIdObj._id);
-            } else if (leadIdObj.id !== undefined && leadIdObj.id !== null) {
-              taskLeadId = String(leadIdObj.id);
-            }
-          }
-          return taskLeadId && String(taskLeadId) === String(displayLead._id);
-        });
-        
-        return filteredTasks;
+    try {
+      const { items, complete } = await tasksApiV2.listAll({ leadId: displayLead._id });
+      if (!complete) {
+        console.warn('[LeadViewModal] Показаны не все задачи лида — упёрлись в предел страниц (tasksApiV2.listAll)');
       }
-      return [];
+      const visible = items.filter(isDisplayableTaskV2);
+      taskVersionsRef.current = new Map(visible.map((task) => [task.id, task.version]));
+      return visible.map(mapTaskV2ToCrmTask);
     } catch (error) {
       console.error('[LeadViewModal] Failed to load tasks:', error);
       return [];
@@ -933,32 +945,23 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
       setTaskChecked(newChecked);
 
       try {
-        // Получаем задачу перед обновлением, чтобы узнать её название
-        const task = leadTasks.find(t => t._id === taskId);
-        const taskTitle = task?.title || '';
-        
-        await apiService.updateTask(taskId, {
-          status: checked ? TaskStatus.COMPLETED : TaskStatus.IN_PROGRESS
-        });
-        
+        // `[phase 3]` Завершение задачи — отдельная команда complete (не
+        // просто смена статуса, см. tasksApiV2.complete докстринг), обратный
+        // переход — setStatus('in_progress'). Запись в историю лида про это
+        // действие больше не пишется: GET /leads/:id/events её не хранит, и
+        // эти сообщения ("Задача ... выполнена/переведена в работу") уже были
+        // невидимы в этой вкладке до миграции (см. loadLeadHistoryData
+        // докстринг) — честный, не влияющий на UI пробел.
+        const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+        const updated = checked
+          ? await tasksApiV2.complete(taskId, expectedVersion)
+          : await tasksApiV2.setStatus(taskId, expectedVersion, 'in_progress');
+        taskVersionsRef.current.set(taskId, updated.version);
+
         // Обновляем локальное состояние задачи
-        setLeadTasks(prev => prev.map(task => 
-          task._id === taskId 
-            ? { ...task, status: checked ? TaskStatus.COMPLETED : TaskStatus.IN_PROGRESS }
-            : task
+        setLeadTasks(prev => prev.map(task =>
+          task._id === taskId ? mapTaskV2ToCrmTask(updated) : task
         ));
-        
-        // Добавляем запись в историю активности лида сразу
-        if (displayLead?._id && taskTitle) {
-          const statusText = checked ? [t('leadViewModal.completed')]: t('leadViewModal.transferredToWork');
-          try {
-            await apiService.addLeadHistoryEntry(displayLead._id, {
-              message: `Задача "${taskTitle}" ${statusText}`,
-            });
-          } catch (error) {
-            console.error('Failed to add history entry:', error);
-          }
-        }
       } catch (error) {
         console.error('Failed to update task status:', error);
         // Откатываем изменение при ошибке
@@ -970,11 +973,13 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
   // Обработчик удаления задачи
   const handleDeleteTask = useCallback(async (taskId: string) => {
     try {
-      // Получаем задачу перед удалением, чтобы узнать её название
-      const task = leadTasks.find(t => t._id === taskId);
-      const taskTitle = task?.title || '';
-      
-      await apiService.deleteTask(taskId);
+      // `[phase 3]` DELETE /tasks/:id не существует на новом backend —
+      // ближайший эквивалент, отмена (status:'cancelled'); loadTasksData уже
+      // отфильтровывает отменённые задачи (isDisplayableTaskV2), поэтому для
+      // этого экрана выглядит как настоящее удаление.
+      const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+      await tasksApiV2.setStatus(taskId, expectedVersion, 'cancelled');
+      taskVersionsRef.current.delete(taskId);
       setLeadTasks(prev => prev.filter(task => task._id !== taskId));
       setTaskChecked(prev => {
         const newChecked = [...prev];
@@ -984,17 +989,6 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
         }
         return newChecked;
       });
-      
-      // Добавляем запись в историю активности лида сразу
-      if (displayLead?._id && taskTitle) {
-        try {
-          await apiService.addLeadHistoryEntry(displayLead._id, {
-            message: `Задача "${taskTitle}" удалена`,
-          });
-        } catch (error) {
-          console.error('Failed to add history entry:', error);
-        }
-      }
     } catch (error) {
       console.error('Failed to delete task:', error);
     }
@@ -1432,15 +1426,15 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
       await flushLeadHistory(displayLead._id);
       
       const leadId = displayLead._id;
-      const response = await apiService.deleteLead(leadId);
-      if (response.success && response.data?.deleted) {
+      const result = await leadsApiV2.remove(leadId);
+      if (result.deleted) {
         // Закрываем модалку и вызываем колбэк с ID удаленного лида
         onClose();
         if (onLeadDeleted) {
           onLeadDeleted(leadId);
         }
       } else {
-        alert(response.message || (displayLead?.productType === ProductType.NETWORK ? [t('leadCard.failedDeleteReferral')]: t('leadCard.failedDeleteLead')));
+        alert(displayLead?.productType === ProductType.NETWORK ? [t('leadCard.failedDeleteReferral')]: t('leadCard.failedDeleteLead'));
       }
     } catch (error: any) {
       console.error('Failed to delete lead:', error);
@@ -1518,14 +1512,14 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     // Дебаунсинг: сохраняем через 500ms после последнего изменения
     realtorStageChangeTimeoutRef.current = setTimeout(async () => {
       try {
-        const response = await apiService.updateLeadStage(displayLead._id, {
-          realtorStage: newStage,
-        });
-
-        if (response.success && response.data) {
-          setLocalLead(response.data);
-          lastRealtorStageRef.current = response.data.realtorStage;
-        }
+        // `[phase 3]` realtorStage — сопутствующее поле (PATCH /leads/:id),
+        // не смена `stage` — CAS/changeStage её не касается (см.
+        // lead.controller.ts докстринг UpdateLeadDto).
+        const updated = await leadsApiV2.update(displayLead._id, { realtorStage: newStage });
+        const mapped = mapLeadV2ToCrmLead(updated);
+        leadVersionRef.current = updated.version;
+        setLocalLead(mapped);
+        lastRealtorStageRef.current = mapped.realtorStage;
       } catch (error) {
         console.error('Failed to update realtor stage:', error);
         alert(t('leadCard.failedUpdateRealtor'));
@@ -1560,14 +1554,12 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     // Дебаунсинг: сохраняем через 500ms после последнего изменения
     curatorStageChangeTimeoutRef.current = setTimeout(async () => {
       try {
-        const response = await apiService.updateLeadStage(displayLead._id, {
-          curatorStage: newStage,
-        });
-
-        if (response.success && response.data) {
-          setLocalLead(response.data);
-          lastCuratorStageRef.current = response.data.curatorStage;
-        }
+        // `[phase 3]` curatorStage — то же сопутствующее поле, что realtorStage выше.
+        const updated = await leadsApiV2.update(displayLead._id, { curatorStage: newStage });
+        const mapped = mapLeadV2ToCrmLead(updated);
+        leadVersionRef.current = updated.version;
+        setLocalLead(mapped);
+        lastCuratorStageRef.current = mapped.curatorStage;
       } catch (error) {
         console.error('Failed to update curator stage:', error);
         alert(t('leadCard.failedUpdateCurator'));
@@ -1590,16 +1582,25 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     }
 
     try {
-      const response = await apiService.updateLeadStage(displayLead._id, {
-        stage: newStage,
-      });
-
-      if (response.success && response.data) {
-        setLocalLead(response.data);
+      // `[phase 3]` Это реальная смена `stage` (не сопутствующее поле) —
+      // CAS через expectedVersion (см. leadsApiV2.changeStage докстринг).
+      const expectedVersion = leadVersionRef.current ?? 0;
+      const result = await leadsApiV2.changeStage(displayLead._id, newStage, expectedVersion);
+      if (typeof result.version === 'number') {
+        leadVersionRef.current = result.version;
       }
-    } catch (error) {
+      // changeStage не отдаёт полную read-модель (см. LeadStageChangeResult
+      // докстринг) — перечитываем лид, чтобы localLead отражал актуальные
+      // version/stage/сопутствующие поля, тот же принцип, что LeadsContext.
+      await loadLeadFromAPI();
+    } catch (error: any) {
       console.error('Failed to update network stage:', error);
-      alert(t('leadCard.failedUpdateStage'));
+      if (error?.response?.status === 409) {
+        alert(t('leadCard.failedUpdateStage'));
+        await loadLeadFromAPI();
+      } else {
+        alert(t('leadCard.failedUpdateStage'));
+      }
     }
   };
 
@@ -1899,7 +1900,7 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                     onClick={(e) => {
                       e.stopPropagation();
                       if (displayLead?._id) {
-                        apiService.recordLeadContactAction(displayLead._id, 'call').catch(() => {});
+                        leadsApiV2.recordContactAction(displayLead._id, 'call').catch(() => {});
                       }
                       toggleCallMenu(callButtonRef.current);
                     }}
@@ -1971,7 +1972,7 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                     onClick={(e) => {
                       e.stopPropagation();
                       if (displayLead?._id) {
-                        apiService.recordLeadContactAction(displayLead._id, 'chat').catch(() => {});
+                        leadsApiV2.recordContactAction(displayLead._id, 'chat').catch(() => {});
                       }
                       toggleWriteMenu(writeButtonRef.current);
                     }}
@@ -3234,15 +3235,12 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                             if (!displayLead?._id) return;
                             setIsSavingDescription(true);
                             try {
-                              const response = await apiService.updateLead(displayLead._id, {
+                              const updated = await leadsApiV2.update(displayLead._id, {
                                 notes: descriptionText.trim() || undefined
                               });
-                              if (response.success && response.data) {
-                                setLocalLead(response.data);
-                                setIsEditingDescription(false);
-                              } else {
-                                console.error('Failed to update description:', response.message);
-                              }
+                              leadVersionRef.current = updated.version;
+                              setLocalLead(mapLeadV2ToCrmLead(updated));
+                              setIsEditingDescription(false);
                             } catch (error) {
                               console.error('Error updating description:', error);
                             } finally {
@@ -3347,7 +3345,8 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                           const filesArray = Array.from(selectedFiles);
                           
                           // Константы валидации
-                          const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+                          // `[phase 3]` 20MB — реальный лимит нового backend (media.constants.ts::MAX_UPLOAD_SIZE_BYTES), не 100MB, как было в легаси.
+                          const MAX_FILE_SIZE = 20 * 1024 * 1024;
                           const MAX_FILES_PER_LEAD = 10;
                           const MAX_FILES_PER_UPLOAD = 10;
                           
@@ -3380,18 +3379,12 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                           
                           for (const file of filesArray) {
                             try {
-                              const response = await apiService.uploadAndRegisterFile(
-                                file,
-                                'lead',
-                                displayLead._id,
-                                'leads'
-                              );
-                              if (response.success) {
-                                successCount++;
-                              } else {
-                                failedFiles.push(file.name);
-                                console.error(`Failed to upload file "${file.name}":`, response.message);
-                              }
+                              // `[phase 3]` Двухфазная загрузка (upload-intent → PUT в хранилище →
+                              // confirm), тот же паттерн, что аватар сотрудника (teamApi.uploadAvatar)
+                              // и вложения задач — переиспользован mediaApiV2.uploadFile, не продублирован.
+                              const { assetId } = await mediaApiV2.uploadFile(file, 'lead_attachment');
+                              await leadsApiV2.attachFile(displayLead._id, assetId);
+                              successCount++;
                             } catch (fileError: any) {
                               failedFiles.push(file.name);
                               
@@ -3844,23 +3837,25 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
           }}
           onUpdateTaskStatus={async (taskId, status) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              await apiService.updateTask(taskId, { status });
-              setLeadTasks(prev => prev.map(task => 
-                task._id === taskId ? { ...task, status } : task
+              // `[phase 3]` `status` здесь — легаси TaskStatus; COMPLETED — отдельная
+              // команда complete (см. handleTaskStatusChange докстринг выше), остальные
+              // значения — setStatus. Запись в историю лида не пишется (тот же честный
+              // пробел, что в handleTaskStatusChange/handleDeleteTask).
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              const updated = status === TaskStatus.COMPLETED
+                ? await tasksApiV2.complete(taskId, expectedVersion)
+                : await tasksApiV2.setStatus(
+                    taskId,
+                    expectedVersion,
+                    status === TaskStatus.CANCELLED ? 'cancelled' : status === TaskStatus.IN_PROGRESS ? 'in_progress' : 'open',
+                  );
+              taskVersionsRef.current.set(taskId, updated.version);
+              const mappedTask = mapTaskV2ToCrmTask(updated);
+              setLeadTasks(prev => prev.map(task =>
+                task._id === taskId ? mappedTask : task
               ));
               if (selectedTaskForView === taskId) {
-                setCurrentTaskForModal(prev => prev ? { ...prev, status } : undefined);
-              }
-              if (displayLead?._id && taskTitle) {
-                try {
-                  await apiService.addLeadHistoryEntry(displayLead._id, {
-                    message: `Задача "${taskTitle}" изменена`,
-                  });
-                } catch (error) {
-                  console.error('Failed to add history entry:', error);
-                }
+                setCurrentTaskForModal(mappedTask);
               }
             } catch (error) {
               console.error('Failed to update task status:', error);
@@ -3868,52 +3863,28 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
           }}
           onDeleteTask={async (taskId) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              await apiService.deleteTask(taskId);
+              // `[phase 3]` DELETE /tasks/:id не существует — см. handleDeleteTask докстринг выше.
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              await tasksApiV2.setStatus(taskId, expectedVersion, 'cancelled');
+              taskVersionsRef.current.delete(taskId);
               setLeadTasks(prev => prev.filter(task => task._id !== taskId));
               handleCloseTaskView();
-              if (displayLead?._id && taskTitle) {
-                try {
-                  await apiService.addLeadHistoryEntry(displayLead._id, {
-                    message: `Задача "${taskTitle}" удалена`,
-                  });
-                } catch (error) {
-                  console.error('Failed to add history entry:', error);
-                }
-              }
             } catch (error) {
               console.error('Failed to delete task:', error);
             }
           }}
           onUpdateTaskEndDate={async (taskId, endDate) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              const updateData: { endDate?: string } = {};
-              if (endDate) {
-                updateData.endDate = endDate;
-              }
-              const response = await apiService.updateTask(taskId, updateData);
-              if (response.success && response.data) {
-                const updatedTask = response.data;
-                setLeadTasks(prev => prev.map(task => 
-                  task._id === taskId ? updatedTask : task
-                ));
-                if (selectedTaskForView === taskId) {
-                  setCurrentTaskForModal(updatedTask);
-                }
-                if (displayLead?._id && taskTitle) {
-                  try {
-                    await apiService.addLeadHistoryEntry(displayLead._id, {
-                      message: `Задача "${taskTitle}" изменена`,
-                    });
-                  } catch (error) {
-                    console.error('Failed to add history entry:', error);
-                  }
-                }
-              } else {
-                throw new Error(response.message || t('leadViewModal.failedToUpdateEndDate'));
+              if (!endDate) return;
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              const updated = await tasksApiV2.setDueAt(taskId, expectedVersion, endDate);
+              taskVersionsRef.current.set(taskId, updated.version);
+              const mappedTask = mapTaskV2ToCrmTask(updated);
+              setLeadTasks(prev => prev.map(task =>
+                task._id === taskId ? mappedTask : task
+              ));
+              if (selectedTaskForView === taskId) {
+                setCurrentTaskForModal(mappedTask);
               }
             } catch (error) {
               console.error('Failed to update task end date:', error);
