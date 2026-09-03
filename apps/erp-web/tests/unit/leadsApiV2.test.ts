@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const getMock = vi.fn()
 const patchMock = vi.fn()
 const postMock = vi.fn()
+const deleteMock = vi.fn()
 let axiosCreateConfig: Record<string, unknown> | undefined
 
 vi.mock('axios', () => ({
   default: {
     create: (config: Record<string, unknown>) => {
       axiosCreateConfig = config
-      return { get: getMock, patch: patchMock, post: postMock }
+      return { get: getMock, patch: patchMock, post: postMock, delete: deleteMock }
     },
   },
 }))
@@ -19,6 +20,7 @@ describe('leadsApiV2 service client', () => {
     getMock.mockReset()
     patchMock.mockReset()
     postMock.mockReset()
+    deleteMock.mockReset()
     vi.resetModules()
   })
 
@@ -220,5 +222,90 @@ describe('leadsApiV2 service client', () => {
 
     const { leadsApiV2 } = await import('@/services/leadsApiV2')
     await expect(leadsApiV2.list()).rejects.toThrow('Network error')
+  })
+
+  it('changeStage() с comment отправляет его в теле PATCH .../stage', async () => {
+    patchMock.mockResolvedValueOnce({ data: { id: 'lead-1', stage: 'converted', version: 3 } })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    await leadsApiV2.changeStage('lead-1', 'converted', 2, 'key-1', 'Клиент подтвердил сделку')
+
+    expect(patchMock).toHaveBeenCalledWith(
+      '/api/v1/leads/lead-1/stage',
+      { stage: 'converted', expectedVersion: 2, comment: 'Клиент подтвердил сделку' },
+      { headers: { 'Idempotency-Key': 'key-1' } },
+    )
+  })
+
+  it('update() вызывает PATCH /api/v1/leads/:id с сопутствующими полями, без stage', async () => {
+    const updatedLead = { id: 'lead-1', organizationId: 'org-1', stage: 'new', notes: 'звонить после обеда', version: 1 }
+    patchMock.mockResolvedValueOnce({ data: updatedLead })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.update('lead-1', { notes: 'звонить после обеда' })
+
+    expect(patchMock).toHaveBeenCalledTimes(1)
+    expect(patchMock).toHaveBeenCalledWith('/api/v1/leads/lead-1', { notes: 'звонить после обеда' })
+    expect(result).toEqual(updatedLead)
+  })
+
+  it('remove() вызывает DELETE /api/v1/leads/:id и возвращает {deleted:true}', async () => {
+    deleteMock.mockResolvedValueOnce({ data: { deleted: true } })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.remove('lead-1')
+
+    expect(deleteMock).toHaveBeenCalledWith('/api/v1/leads/lead-1')
+    expect(result).toEqual({ deleted: true })
+  })
+
+  it('listFiles() вызывает GET /api/v1/leads/:id/files', async () => {
+    const files = [{ assetId: 'asset-1', fileName: 'contract.pdf', mimeType: 'application/pdf', sizeBytes: 1024, url: null, createdAt: '2026-09-01T00:00:00Z' }]
+    getMock.mockResolvedValueOnce({ data: files })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.listFiles('lead-1')
+
+    expect(getMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/files')
+    expect(result).toEqual(files)
+  })
+
+  it('attachFile() вызывает POST /api/v1/leads/:id/files с {assetId}', async () => {
+    postMock.mockResolvedValueOnce({ data: [] })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    await leadsApiV2.attachFile('lead-1', 'asset-1')
+
+    expect(postMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/files', { assetId: 'asset-1' })
+  })
+
+  it('removeFile() вызывает DELETE /api/v1/leads/:id/files/:assetId', async () => {
+    deleteMock.mockResolvedValueOnce({ data: [] })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    await leadsApiV2.removeFile('lead-1', 'asset-1')
+
+    expect(deleteMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/files/asset-1')
+  })
+
+  it('recordContactAction() вызывает POST /api/v1/leads/:id/contact-actions с {contactType}', async () => {
+    postMock.mockResolvedValueOnce({ data: { recorded: true } })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.recordContactAction('lead-1', 'call')
+
+    expect(postMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/contact-actions', { contactType: 'call' })
+    expect(result).toEqual({ recorded: true })
+  })
+
+  it('listEvents() вызывает GET /api/v1/leads/:id/events с параметрами cursor/limit', async () => {
+    const events = { items: [{ id: 'evt-1', leadId: 'lead-1', stage: 'contacted', changedBy: { type: 'position', positionId: 'pos-1' }, changedAt: '2026-09-01T00:00:00Z', comment: null }], nextCursor: null }
+    getMock.mockResolvedValueOnce({ data: events })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.listEvents('lead-1', { limit: 50 })
+
+    expect(getMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/events', { params: { limit: 50 } })
+    expect(result).toEqual(events)
   })
 })

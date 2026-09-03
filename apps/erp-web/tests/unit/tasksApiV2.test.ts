@@ -88,6 +88,18 @@ describe('tasksApiV2', () => {
     })
   })
 
+  it('setDueAt() — тонкая обёртка над тем же PATCH, что setStatus/setSubtasks', async () => {
+    const { tasksApiV2 } = await import('@/services/tasksApiV2')
+    patchMock.mockResolvedValue({ data: { id: 'task-1' } })
+
+    await tasksApiV2.setDueAt('task-1', 4, '2026-09-10T12:00:00.000Z')
+
+    expect(patchMock).toHaveBeenCalledWith('/api/v1/tasks/task-1', {
+      expectedVersion: 4,
+      dueAt: '2026-09-10T12:00:00.000Z',
+    })
+  })
+
   it('reassign() идёт на свой эндпоинт: у смены исполнителя своё право', async () => {
     const { tasksApiV2 } = await import('@/services/tasksApiV2')
     patchMock.mockResolvedValue({ data: { id: 'task-1' } })
