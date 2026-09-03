@@ -1,15 +1,27 @@
-import { useEffect, useState, useCallback } from 'react';
-import { apiService, TaskPriority, TaskStatus } from '../../../services/api';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { TaskPriority, TaskStatus } from '../../../services/api';
 import type { Task, Lead } from '../../../services/api';
 import { useTaskSync } from '../../../hooks/useTaskSync';
 import { useLeadSync } from '../../../hooks/useLeadSync';
 import { useTaskRealtimeSync } from '../../../hooks/useTaskRealtimeSync';
 import { useLeadRealtimeSync } from '../../../hooks/useLeadRealtimeSync';
+import { leadsApiV2 } from '@/services/leadsApiV2';
+import { tasksApiV2 } from '@/services/tasksApiV2';
+import type { TaskV2 } from '@/types/tasksV2';
+import { mapLeadV2ToCrmLead } from '@/lib/lead-v2-legacy-adapter';
+import { mapTaskV2ToCrmTask } from '@/lib/task-v2-legacy-adapter';
+import { isDisplayableTaskV2 } from '@/lib/map-task-v2';
 
 export interface UseCrmDataParams {
   isAuthenticated: boolean;
 }
 
+/**
+ * `[phase 4]` Лиды и задачи классической CRM переведены на новый Platform API
+ * (leadsApiV2/tasksApiV2, apps/api) — легаси api-crm.baza.sale (apiService)
+ * здесь больше не читается. Тот же принцип и те же адаптеры, что уже
+ * применены к карточному столу (LeadsContext) и LeadViewModal.tsx.
+ */
 export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
   const taskSync = useTaskSync();
   const leadSync = useLeadSync();
@@ -22,12 +34,33 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
   const [taskCategoriesMap, setTaskCategoriesMap] = useState<Map<number, string>>(new Map());
   const [, setLeadsMap] = useState<Map<string, Lead>>(new Map());
 
+  /**
+   * `[phase 4]` version задачи на новом backend — expectedVersion для
+   * complete/setStatus/setDueAt (CAS, тот же паттерн, что
+   * LeadViewModal.taskVersionsRef). Задачи легаси-типа (`Task`), которыми
+   * оперирует остальной экран, version не несут — кэш живёт отдельно.
+   */
+  const taskVersionsRef = useRef<Map<string, number>>(new Map());
+
   const loadTasks = useCallback(async (leadId?: string) => {
     try {
-      const response = await apiService.getTasks({ page: 1, limit: 50, leadId });
-      if (response.success && response.data) {
-        taskSync.syncWithBackend(response.data.items);
+      let items: TaskV2[];
+      if (leadId) {
+        const response = await tasksApiV2.list({ leadId, limit: 100 });
+        if (response.nextCursor) {
+          console.warn('[useCrmData] Показаны не все задачи лида — упёрлись в лимит одной страницы (tasksApiV2.list)', leadId);
+        }
+        items = response.items;
+      } else {
+        const { items: allItems, complete } = await tasksApiV2.listAll();
+        if (!complete) {
+          console.warn('[useCrmData] Показаны не все задачи — упёрлись в предел страниц (tasksApiV2.listAll)');
+        }
+        items = allItems;
       }
+      const visible = items.filter(isDisplayableTaskV2);
+      visible.forEach((task) => taskVersionsRef.current.set(task.id, task.version));
+      taskSync.syncWithBackend(visible.map(mapTaskV2ToCrmTask));
     } catch {
       // ignore
     }
@@ -35,10 +68,11 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
 
   const loadLeads = useCallback(async () => {
     try {
-      const response = await apiService.getLeads({ page: 1, limit: 1000 });
-      if (response.success && response.data) {
-        leadSync.syncWithBackend(response.data.items);
+      const { items, complete } = await leadsApiV2.listAll();
+      if (!complete) {
+        console.warn('[useCrmData] Показаны не все лиды — упёрлись в предел страниц (leadsApiV2.listAll)');
       }
+      leadSync.syncWithBackend(items.map(mapLeadV2ToCrmLead));
     } catch {
       // ignore
     }
@@ -50,31 +84,30 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
       return;
     }
     let cancelled = false;
+    /**
+     * `[phase 4]` Легаси getTaskCategories/getOrCreateTaskCategory позволяли
+     * произвольные именованные категории (в т.ч. 4 "быстрых" — "Задача дня",
+     * "Срочные", "Личные дела", "Спорт"), которых создавала эта функция при
+     * отсутствии. Новый backend хранит `taskCategory` как фиксированный enum
+     * `'work'|'personal'` (apps/api/.../schemas/task.schema.ts) — ни списка
+     * категорий, ни создания новых на лету у него нет и не будет (это была
+     * бы отдельная, не запрошенная фича). Честный пробел: карта сведена к
+     * двум существующим значениям без сетевого вызова; произвольные
+     * "быстрые" категории для задач нового backend недоступны.
+     */
     const loadTaskCategories = async (): Promise<Map<number, string>> => {
-      const response = await apiService.getTaskCategories();
-      if (!response.success || !response.data) return new Map();
-      const map = new Map<number, string>();
-      response.data.forEach((cat: { id: number; name: string }) => map.set(cat.id, cat.name));
-      const quickCategories = ['Задача дня', 'Срочные', 'Личные дела', 'Спорт'];
-      for (const categoryName of quickCategories) {
-        if (!Array.from(map.values()).includes(categoryName)) {
-          try {
-            const createResponse = await apiService.getOrCreateTaskCategory(categoryName);
-            if (createResponse.success && createResponse.data) {
-              map.set(createResponse.data.id, createResponse.data.name);
-            }
-          } catch (error) {
-            console.error(`Ошибка создания категории ${categoryName}:`, error);
-          }
-        }
-      }
-      return map;
+      return new Map<number, string>([
+        [1, 'Работа'],
+        [2, 'Личное'],
+      ]);
     };
     const loadLeadsMap = async (): Promise<Map<string, Lead>> => {
-      const leadsResponse = await apiService.getLeads({ page: 1, limit: 1000 });
-      if (!leadsResponse.success || !leadsResponse.data) return new Map();
+      const { items, complete } = await leadsApiV2.listAll();
+      if (!complete) {
+        console.warn('[useCrmData] Показаны не все лиды — упёрлись в предел страниц (leadsApiV2.listAll)');
+      }
       const map = new Map<string, Lead>();
-      leadsResponse.data.items.forEach((lead: Lead) => map.set(lead._id, lead));
+      items.forEach((lead) => map.set(lead.id, mapLeadV2ToCrmLead(lead)));
       return map;
     };
     (async () => {
@@ -98,65 +131,31 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
+  /**
+   * `[phase 4]` DELETE /tasks/:id не существует на новом backend — ближайший
+   * эквивалент, отмена (status:'cancelled'); loadTasks уже отфильтровывает
+   * отменённые задачи (isDisplayableTaskV2), поэтому для этого экрана
+   * выглядит как настоящее удаление. `addLeadHistoryEntry` про удаление
+   * задачи больше не пишется — GET /leads/:id/events хранит только переходы
+   * стадии лида, эти записи уже были невидимы в истории лида до миграции
+   * (тот же честный пробел, что задокументирован в LeadViewModal.tsx).
+   */
   const handleDeleteTask = useCallback(async (taskId: string) => {
     if (!taskId) throw new Error('Task ID is required');
-    let taskTitle = '';
-    let taskLeadId: string | undefined;
-    try {
-      const taskResponse = await apiService.getTask(taskId);
-      if (taskResponse.success && taskResponse.data) {
-        taskTitle = taskResponse.data.title;
-        const leadId = taskResponse.data.leadId;
-        if (typeof leadId === 'string') taskLeadId = leadId;
-        else if (leadId && typeof leadId === 'object') taskLeadId = (leadId as { _id?: string; id?: string })._id || (leadId as { _id?: string; id?: string }).id;
-      }
-    } catch (error) {
-      console.error('Failed to get task before deletion:', error);
-    }
     taskSync.removeTask(taskId);
     try {
-      const response = await apiService.deleteTask(taskId);
-      if (response.success && taskLeadId && taskTitle) {
-        try {
-          await apiService.addLeadHistoryEntry(taskLeadId, { message: `Задача "${taskTitle}" удалена` });
-        } catch (error) {
-          console.error('Failed to add history entry:', error);
-        }
-      } else if (!response.success) {
-        const loadTasksResponse = await apiService.getTasks({ page: 1, limit: 50 });
-        if (loadTasksResponse.success && loadTasksResponse.data) {
-          taskSync.syncWithBackend(loadTasksResponse.data.items);
-        }
-        throw new Error(response.message || 'Не удалось удалить задачу на сервере');
-      }
+      const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+      await tasksApiV2.setStatus(taskId, expectedVersion, 'cancelled');
+      taskVersionsRef.current.delete(taskId);
     } catch (error) {
-      try {
-        const loadTasksResponse = await apiService.getTasks({ page: 1, limit: 50 });
-        if (loadTasksResponse.success && loadTasksResponse.data) {
-          taskSync.syncWithBackend(loadTasksResponse.data.items);
-        }
-      } catch {
-        // ignore
-      }
+      await loadTasks();
       throw error;
     }
-  }, [taskSync]);
+  }, [taskSync, loadTasks]);
 
+  /** `[phase 4]` addLeadHistoryEntry про изменение задачи убран — тот же честный пробел, что в handleDeleteTask выше. */
   const handleTaskUpdate = useCallback(async (updatedTask: Task) => {
     taskSync.updateTaskAfterSync(updatedTask._id, updatedTask);
-    let taskLeadId: string | undefined;
-    if (typeof updatedTask.leadId === 'string') taskLeadId = updatedTask.leadId;
-    else if (updatedTask.leadId && typeof updatedTask.leadId === 'object') {
-      const o = updatedTask.leadId as { _id?: string; id?: string };
-      taskLeadId = o._id || o.id;
-    } else taskLeadId = undefined;
-    if (taskLeadId && updatedTask.title) {
-      try {
-        await apiService.addLeadHistoryEntry(taskLeadId, { message: `Задача "${updatedTask.title}" изменена` });
-      } catch (error) {
-        console.error('Failed to add history entry:', error);
-      }
-    }
   }, [taskSync]);
 
   const handleTaskRestored = useCallback(async (restoredTask: Task) => {
@@ -187,16 +186,20 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
   const refreshData = useCallback(async (showLoader = false) => {
     if (showLoader) setIsDataLoading(true);
     try {
-      const [tasksResponse, leadsResponse] = await Promise.all([
-        apiService.getTasks({ page: 1, limit: 50 }),
-        apiService.getLeads({ page: 1, limit: 1000 }),
+      const [tasksResult, leadsResult] = await Promise.all([
+        tasksApiV2.listAll(),
+        leadsApiV2.listAll(),
       ]);
-      if (tasksResponse.success && tasksResponse.data) {
-        taskSync.syncWithBackend(tasksResponse.data.items || []);
+      if (!tasksResult.complete) {
+        console.warn('[useCrmData] Показаны не все задачи — упёрлись в предел страниц (tasksApiV2.listAll)');
       }
-      if (leadsResponse.success && leadsResponse.data) {
-        leadSync.syncWithBackend(leadsResponse.data.items || []);
+      if (!leadsResult.complete) {
+        console.warn('[useCrmData] Показаны не все лиды — упёрлись в предел страниц (leadsApiV2.listAll)');
       }
+      const visibleTasks = tasksResult.items.filter(isDisplayableTaskV2);
+      visibleTasks.forEach((task) => taskVersionsRef.current.set(task.id, task.version));
+      taskSync.syncWithBackend(visibleTasks.map(mapTaskV2ToCrmTask));
+      leadSync.syncWithBackend(leadsResult.items.map(mapLeadV2ToCrmLead));
       setLastUpdateTime(new Date());
     } catch {
       // ignore
@@ -236,59 +239,53 @@ export function useCrmData({ isAuthenticated }: UseCrmDataParams) {
     fallbackInterval: 5000,
   });
 
+  /**
+   * `[phase 4]` COMPLETED — отдельная команда `complete` (не просто смена
+   * статуса, см. tasksApiV2.complete докстринг), обратный переход и прочие
+   * статусы — `setStatus`. Тот же маппинг, что onUpdateTaskStatus в
+   * LeadViewModal.tsx. `addLeadHistoryEntry` про изменение статуса не
+   * пишется — честный пробел, см. handleDeleteTask докстринг выше.
+   */
   const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus) => {
     taskSync.updateTask(taskId, { status } as Partial<Task>, ['status']);
     try {
-      const response = await apiService.updateTask(taskId, { status });
-      if (response.success && response.data) {
-        taskSync.updateTaskAfterSync(taskId, response.data);
-        const updatedTask = response.data;
-        let taskLeadId: string | undefined;
-        if (typeof updatedTask.leadId === 'string') taskLeadId = updatedTask.leadId;
-        else if (updatedTask.leadId && typeof updatedTask.leadId === 'object') {
-          const o = updatedTask.leadId as { _id?: string; id?: string };
-          taskLeadId = o._id || o.id;
-        } else taskLeadId = undefined;
-        if (taskLeadId && updatedTask.title) {
-          try {
-            await apiService.addLeadHistoryEntry(taskLeadId, { message: `Задача "${updatedTask.title}" изменена` });
-          } catch (error) {
-            console.error('Failed to add history entry:', error);
-          }
-        }
-      } else {
-        await loadTasks();
-      }
+      const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+      const updated = status === TaskStatus.COMPLETED
+        ? await tasksApiV2.complete(taskId, expectedVersion)
+        : await tasksApiV2.setStatus(
+            taskId,
+            expectedVersion,
+            status === TaskStatus.CANCELLED ? 'cancelled' : status === TaskStatus.IN_PROGRESS ? 'in_progress' : 'open',
+          );
+      taskVersionsRef.current.set(taskId, updated.version);
+      taskSync.updateTaskAfterSync(taskId, mapTaskV2ToCrmTask(updated));
     } catch {
       await loadTasks();
     }
   }, [taskSync, loadTasks]);
 
+  /**
+   * `[phase 4]` Честный пробел: PATCH /tasks/:id (UpdateTaskDto) не
+   * принимает `isUrgent`/`isImportant` существующей задачи — эти признаки
+   * задаются только при создании (apps/api/.../dto/update-task.dto.ts,
+   * `task.controller.ts::updateTask`). Смена приоритета уже созданной задачи
+   * (например, перетаскиванием карточки в другой квадрант матрицы
+   * Эйзенхауэра) на новом backend не поддерживается — не выдумываем
+   * серверную поддержку, локальное состояние обновляется оптимистично, но
+   * откатится при следующей синхронизации с сервером.
+   */
   const updateTaskPriority = useCallback(async (taskId: string, priority: TaskPriority) => {
     taskSync.updateTask(taskId, { priority } as Partial<Task>, ['priority']);
-    try {
-      const response = await apiService.updateTask(taskId, { priority });
-      if (response.success && response.data) {
-        taskSync.updateTaskAfterSync(taskId, response.data);
-      } else {
-        await loadTasks();
-      }
-    } catch {
-      await loadTasks();
-    }
-  }, [taskSync, loadTasks]);
+    console.warn('[useCrmData] Смена приоритета существующей задачи не поддерживается новым backend — изменение не сохранено на сервере', taskId);
+  }, [taskSync]);
 
   const updateTaskEndDate = useCallback(async (taskId: string, endDate: string | undefined) => {
     taskSync.updateTask(taskId, { endDate } as Partial<Task>, ['endDate']);
     try {
-      const updateData: { endDate?: string } = {};
-      if (endDate) updateData.endDate = endDate;
-      const response = await apiService.updateTask(taskId, updateData);
-      if (response.success && response.data) {
-        taskSync.updateTaskAfterSync(taskId, response.data);
-      } else {
-        await loadTasks();
-      }
+      const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+      const updated = await tasksApiV2.setDueAt(taskId, expectedVersion, endDate || undefined);
+      taskVersionsRef.current.set(taskId, updated.version);
+      taskSync.updateTaskAfterSync(taskId, mapTaskV2ToCrmTask(updated));
     } catch {
       await loadTasks();
     }
