@@ -1,24 +1,26 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Plus, Briefcase, AlertTriangle, ChevronRight } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { DEALS_MOCK } from '@/data/deals-mock'
 import { formatUsdMillions } from '@/lib/format-currency'
 import { STAGE_LABELS, STAGE_ORDER, type Deal, type DealStage } from '@/types/deals'
 import { useLeads } from '@/context/LeadsContext'
+import { useDeals } from '@/context/DealsContext'
+import { leadsApiV2 } from '@/services/leadsApiV2'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { LEAD_STAGE_COLUMN, LEAD_STAGES } from '@/data/leads-mock'
 import type { Lead } from '@/types/leads'
 import { useI18n } from "@/i18n";
 
 const STAGE_COLORS: Record<DealStage, string> = {
-  showing:   '#60a5fa',
-  deposit:   '#f87171',
-  deal:      '#c9a84c',
-  golden:    '#d3bd75',
-  check_in:  '#fbbf24',
-  referral:  '#f59e0b',
-  new_deals: '#34d399',
+  showing:     '#60a5fa',
+  deposit:     '#f87171',
+  deal:        '#c9a84c',
+  golden:      '#d3bd75',
+  check_in:    '#fbbf24',
+  referral:    '#f59e0b',
+  closed_lost: '#64748b',
 }
 
 const C = {
@@ -27,102 +29,6 @@ const C = {
   textSubtle: 'var(--app-text-subtle)',
   border: 'var(--green-border)',
   card: 'var(--green-card)',
-}
-
-const DEALS_STORAGE_KEY = 'agency-new.deals.kanban'
-const DEAL_STAGE_SET = new Set<DealStage>(STAGE_ORDER)
-
-function safeDate(value?: string) {
-  if (!value) return new Date().toISOString().split('T')[0]
-  return value.split('T')[0]
-}
-
-function readDealsFromStorage(): Deal[] {
-  if (typeof window === 'undefined') return DEALS_MOCK
-  try {
-    const raw = window.localStorage.getItem(DEALS_STORAGE_KEY)
-    if (!raw) return DEALS_MOCK
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return DEALS_MOCK
-    return parsed as Deal[]
-  } catch {
-    return DEALS_MOCK
-  }
-}
-
-function stageFromLead(stageId: string): DealStage {
-  if (DEAL_STAGE_SET.has(stageId as DealStage)) return stageId as DealStage
-  return 'showing'
-}
-
-function checklistForStage(stage: DealStage, leadId: string) {
-  const prefix = `lead-${leadId}`
-
-  switch (stage) {
-    case 'deal':
-      return [
-        { id: `${prefix}-deal-1`, label: 'Договор заключен и зафиксирован в CRM', done: true, required: true },
-        { id: `${prefix}-deal-2`, label: 'Комиссия агентства подтверждена', done: false, required: true },
-        { id: `${prefix}-deal-3`, label: 'Поставлен post-sale follow-up', done: false, required: false },
-      ]
-    case 'golden':
-      return [
-        { id: `${prefix}-golden-1`, label: 'Клиент переведен в золотой фонд', done: true, required: true },
-        { id: `${prefix}-golden-2`, label: 'Назначено постпродажное касание', done: false, required: true },
-      ]
-    case 'check_in':
-      return [
-        { id: `${prefix}-check-1`, label: 'Уточнить, как прошла адаптация после сделки', done: false, required: true },
-        { id: `${prefix}-check-2`, label: 'Зафиксировать NPS / обратную связь', done: false, required: false },
-      ]
-    case 'referral':
-      return [
-        { id: `${prefix}-ref-1`, label: 'Запросить рекомендацию у довольного клиента', done: false, required: true },
-        { id: `${prefix}-ref-2`, label: 'Зафиксировать рекомендателя и контакт', done: false, required: false },
-      ]
-    case 'new_deals':
-      return [
-        { id: `${prefix}-new-1`, label: 'Выявить потребность в новой сделке', done: false, required: true },
-        { id: `${prefix}-new-2`, label: 'Создать следующий лид или подборку', done: false, required: false },
-      ]
-    default:
-      return [
-        { id: `${prefix}-c1`, label: 'Лид переведен в этап сделки', done: true, required: true },
-        { id: `${prefix}-c2`, label: 'Уточнить объект и финальные условия', done: false, required: true },
-      ]
-  }
-}
-
-function createDealFromLead(lead: Lead, agentName?: string): Deal {
-  const stage = stageFromLead(lead.stageId)
-  const commission = Math.max(120000, Math.round((lead.commissionUsd ?? 1500) * 80))
-  const price = Math.max(5500000, Math.round(commission / 0.02))
-  const createdAt = safeDate(lead.createdAt)
-  const updatedAt = safeDate(lead.updatedAt ?? lead.createdAt)
-  const sourceLabel = lead.source === 'primary' ? 'Первичка' : lead.source === 'secondary' ? 'Вторичка' : lead.source === 'rent' ? 'Аренда' : 'Реклама'
-
-  return {
-    id: `deal-lead-${lead.id}`,
-    sourceLeadId: lead.id,
-    type: lead.source === 'secondary' ? 'secondary' : 'primary',
-    stage,
-    clientId: lead.id,
-    clientName: lead.name ?? `Лид ${lead.id}`,
-    propertyAddress: 'Адрес уточняется',
-    propertyType: `${sourceLabel} · объект подбирается`,
-    agentId: lead.managerId ?? 'unassigned',
-    agentName: agentName ?? 'Не назначен',
-    participants: [
-      { role: 'agent', name: agentName ?? 'Не назначен', userId: lead.managerId ?? undefined },
-      { role: 'buyer', name: lead.name ?? `Лид ${lead.id}` },
-    ],
-    price,
-    commission,
-    createdAt,
-    updatedAt,
-    checklist: checklistForStage(stage, lead.id),
-    notes: `Сделка создана из CRM-лида (${sourceLabel}).`,
-  }
 }
 
 function formatPrice(n: number) {
@@ -136,23 +42,13 @@ export function DealsKanbanPage() {
   const { canEdit: canEditModule } = useModulePermissions()
   const canEditDeals = canEditModule('deals')
   const { state, leadManagers } = useLeads()
-  const [deals, setDeals] = useState<Deal[]>(readDealsFromStorage)
+  const { deals, changeStage, createDeal } = useDeals()
   const [isLeadPickerOpen, setIsLeadPickerOpen] = useState(false)
-
-  const managerNameById = useMemo(() => {
-    const map = new Map<string, string>()
-    leadManagers.forEach(m => map.set(m.id, m.name))
-    return map
-  }, [leadManagers])
+  const [isCreatingFromLead, setIsCreatingFromLead] = useState(false)
 
   const salesFunnelLeads = useMemo(
     () => state.leadPool.filter(lead => LEAD_STAGE_COLUMN[lead.stageId] !== 'rejection'),
     [state.leadPool],
-  )
-
-  const dealStageLeads = useMemo(
-    () => salesFunnelLeads.filter(lead => DEAL_STAGE_SET.has(lead.stageId as DealStage)),
-    [salesFunnelLeads],
   )
 
   const linkedLeadIds = useMemo(() => new Set(deals.map(d => d.sourceLeadId).filter(Boolean)), [deals])
@@ -161,49 +57,47 @@ export function DealsKanbanPage() {
     [salesFunnelLeads, linkedLeadIds],
   )
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(DEALS_STORAGE_KEY, JSON.stringify(deals))
-  }, [deals])
-
-  useEffect(() => {
-    setDeals(prev => {
-      const knownLeadIds = new Set(prev.map(d => d.sourceLeadId).filter(Boolean))
-      const autoDeals = dealStageLeads
-        .filter(lead => !knownLeadIds.has(lead.id))
-        .map(lead => createDealFromLead(lead, lead.managerId ? managerNameById.get(lead.managerId) : undefined))
-      if (autoDeals.length === 0) return prev
-      return [...prev, ...autoDeals]
-    })
-  }, [dealStageLeads, managerNameById])
-
   const dealsByStage = STAGE_ORDER.reduce<Record<DealStage, Deal[]>>((acc, stage) => {
     acc[stage] = deals.filter(d => d.stage === stage)
     return acc
   }, {} as Record<DealStage, Deal[]>)
 
-  function advanceStage(dealId: string) {
-    setDeals(prev => prev.map(d => {
-      if (d.id !== dealId) return d
-      const idx = STAGE_ORDER.indexOf(d.stage)
-      if (idx < 0 || idx >= STAGE_ORDER.length - 1) return d
-      const nextStage = STAGE_ORDER[idx + 1]
-      // При переходе на deposit (выход на задаток) — автоматически создаём задачу юристу
-      const lawyerTaskCreated = nextStage === 'deposit' ? true : d.lawyerTaskCreated
-      if (nextStage === 'deposit' && !d.lawyerTaskCreated) {
-        // В реальной системе — event trigger. Здесь: уведомление
-        setTimeout(() => alert(`✅ Автозадача создана: Юрист — "Подготовить договор задатка" для ${d.clientName}`), 50)
-      }
-      return { ...d, stage: nextStage, lawyerTaskCreated, updatedAt: new Date().toISOString().split('T')[0] }
-    }))
+  async function advanceStage(deal: Deal) {
+    const idx = STAGE_ORDER.indexOf(deal.stage)
+    if (idx < 0 || idx >= STAGE_ORDER.length - 1) return
+    const nextStage = STAGE_ORDER[idx + 1]
+    await changeStage(deal.id, nextStage)
   }
 
-  function createDealFromSelectedLead(lead: Lead) {
-    const exists = deals.some(d => d.sourceLeadId === lead.id)
-    if (exists) return
-    const created = createDealFromLead(lead, lead.managerId ? managerNameById.get(lead.managerId) : undefined)
-    setDeals(prev => [created, ...prev])
-    setIsLeadPickerOpen(false)
+  /**
+   * Создание сделки из лида воронки продаж. POST /deals требует `contactId`
+   * (id Contact, не Lead) — лид из пула LeadsContext (мапленный
+   * mapLeadV2ToPoker) его не несёт, поэтому дочитываем полную запись лида
+   * через leadsApiV2.getById непосредственно перед созданием, а не храним
+   * лишний запрос на каждую карточку пула.
+   */
+  async function createDealFromSelectedLead(lead: Lead) {
+    if (deals.some(d => d.sourceLeadId === lead.id) || isCreatingFromLead) return
+    setIsCreatingFromLead(true)
+    try {
+      const fullLead = await leadsApiV2.getById(lead.id)
+      if (!fullLead.contact) {
+        toast.error('У лида нет привязанного контакта — нельзя создать сделку')
+        return
+      }
+      const created = await createDeal({
+        contactId: fullLead.contact.id,
+        leadId: lead.id,
+        title: lead.name ? `Сделка: ${lead.name}` : `Сделка по лиду ${lead.id}`,
+        ownerPositionId: lead.managerId ?? undefined,
+      })
+      if (created) {
+        setIsLeadPickerOpen(false)
+        navigate(`/dashboard/deals/${created.id}`)
+      }
+    } finally {
+      setIsCreatingFromLead(false)
+    }
   }
 
   return (
@@ -270,9 +164,13 @@ export function DealsKanbanPage() {
                 )}
                 {selectableLeads.map(lead => {
                   const stageName = LEAD_STAGES.find(s => s.id === lead.stageId)?.name ?? lead.stageId
+                  const managerName = lead.managerId
+                    ? leadManagers.find(m => m.id === lead.managerId)?.name ?? 'Не назначен'
+                    : 'Не назначен'
                   return (
                     <button
                       key={lead.id}
+                      disabled={isCreatingFromLead}
                       onClick={() => createDealFromSelectedLead(lead)}
                       style={{
                         width: '100%',
@@ -281,13 +179,14 @@ export function DealsKanbanPage() {
                         border: 'none',
                         borderBottom: `1px solid ${C.border}`,
                         padding: '10px 12px',
-                        cursor: 'pointer',
+                        cursor: isCreatingFromLead ? 'default' : 'pointer',
                         color: C.text,
+                        opacity: isCreatingFromLead ? 0.6 : 1,
                       }}
                     >
                       <div style={{ fontSize: 12, fontWeight: 400 }}>{lead.name ?? `Лид ${lead.id}`}</div>
                       <div style={{ fontSize: 11, color: C.textSubtle, marginTop: 3 }}>
-                        {t('deals.dealsKanbanPage.этап')}{stageName} {t('deals.dealsKanbanPage.менеджер')}{lead.managerId ? managerNameById.get(lead.managerId) ?? 'Не назначен' : 'Не назначен'}
+                        {t('deals.dealsKanbanPage.этап')}{stageName} {t('deals.dealsKanbanPage.менеджер')}{managerName}
                       </div>
                     </button>
                   )
@@ -375,7 +274,7 @@ export function DealsKanbanPage() {
                       key={deal.id}
                       deal={deal}
                       stageColor={stageColor}
-                      onAdvance={() => advanceStage(deal.id)}
+                      onAdvance={() => advanceStage(deal)}
                       onClick={() => navigate(`/dashboard/deals/${deal.id}`)}
                     />
                   ))}
