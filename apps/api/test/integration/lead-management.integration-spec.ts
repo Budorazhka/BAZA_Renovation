@@ -104,7 +104,10 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     return positionId;
   }
 
-  async function seedLead(organizationId: Types.ObjectId, overrides?: { stage?: string; ownerPositionId?: Types.ObjectId }): Promise<Types.ObjectId> {
+  async function seedLead(
+    organizationId: Types.ObjectId,
+    overrides?: { stage?: string; ownerPositionId?: Types.ObjectId; productType?: 'sales' | 'network' | 'owner' | 'agent' },
+  ): Promise<Types.ObjectId> {
     const contactId = new Types.ObjectId();
     await connection.collection('contacts').insertOne({
       _id: contactId,
@@ -120,6 +123,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       organizationId,
       contactId,
       ownerPositionId: overrides?.ownerPositionId,
+      productType: overrides?.productType,
       stage: overrides?.stage ?? 'new',
       // Прямая запись через native driver (не Mongoose) — schema default:0
       // не применяется автоматически, нужно явно (changeStageWithVersionCheck
@@ -622,6 +626,126 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
 
       expect(await connection.collection('leads').countDocuments({ organizationId })).toBe(0);
+    });
+  });
+
+  describe('createLead — productType (03.09.2026, owner decision "продуктовые воронки лида")', () => {
+    it('с productType:network — создаёт лид сразу в первой стадии воронки network, не в generic new', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const actorPositionId = await seedVacantPosition(organizationId);
+
+      const result = await crmService.createLead({
+        organizationId,
+        requesterName: 'Продуктовый лид',
+        requesterPhone: '+995500000050',
+        productType: 'network',
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      expect(result.productType).toBe('network');
+      expect(result.stage).toBe('network_rejected_defective');
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: new Types.ObjectId(result.id) });
+      expect(leadDoc).toMatchObject({ productType: 'network', stage: 'network_rejected_defective' });
+
+      const eventDoc = await connection.collection('lead_events').findOne({ leadId: leadDoc?._id });
+      expect(eventDoc).toMatchObject({ stage: 'network_rejected_defective' });
+    });
+
+    it('без productType — поведение как раньше: stage:new, productType не сохраняется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const actorPositionId = await seedVacantPosition(organizationId);
+
+      const result = await crmService.createLead({
+        organizationId,
+        requesterName: 'Generic лид',
+        requesterPhone: '+995500000051',
+        actorPositionId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      expect(result.productType).toBeNull();
+      expect(result.stage).toBe('new');
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: new Types.ObjectId(result.id) });
+      expect(leadDoc?.productType).toBeFalsy();
+      expect(leadDoc?.stage).toBe('new');
+    });
+  });
+
+  describe('changeLeadStage — productType (03.09.2026, owner decision "продуктовые воронки лида")', () => {
+    it('лид с productType:network — переход в network-стадию проходит', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
+
+      const result = await crmService.changeLeadStage({
+        leadId,
+        newStage: 'network_work_started',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      expect(result.stage).toBe('network_work_started');
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.stage).toBe('network_work_started');
+    });
+
+    it('лид с productType:network — переход в sales-стадию отклоняется VALIDATION_FAILED, stage не меняется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
+
+      await expect(
+        crmService.changeLeadStage({
+          leadId,
+          newStage: 'contacted',
+          expectedVersion: 0,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedOrganizationId: organizationId,
+          correlationId: 'integration-test-correlation-id',
+          idempotencyKey: new Types.ObjectId().toString(),
+          idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.stage).toBe('network_new_lead');
+    });
+
+    it('лид БЕЗ productType — переход между generic-стадиями продолжает работать как раньше (regression guard)', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'new' });
+
+      const result = await crmService.changeLeadStage({
+        leadId,
+        newStage: 'contacted',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      expect(result.stage).toBe('contacted');
     });
   });
 

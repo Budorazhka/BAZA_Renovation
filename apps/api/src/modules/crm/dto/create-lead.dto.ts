@@ -1,4 +1,6 @@
-import { IsMongoId, IsOptional, IsString, Length } from 'class-validator';
+import { IsIn, IsMongoId, IsOptional, IsString, Length } from 'class-validator';
+import { PRODUCT_TYPES } from '../lead-stage-definitions';
+import type { LeadProductType } from '../schemas/lead.schema';
 
 /**
  * Ровно один способ указать контакт лида: либо уже существующий
@@ -24,4 +26,14 @@ export class CreateLeadDto {
   @IsString()
   @Length(1, 30)
   requesterPhone?: string;
+
+  /**
+   * Опционально (owner decision, продуктовые воронки лида) — когда задан,
+   * лид создаётся сразу в первой стадии воронки этого продукта (см.
+   * CrmService.createLead/lead-stage-definitions.ts), а не в generic 'new'.
+   * Не задан — поведение как раньше.
+   */
+  @IsOptional()
+  @IsIn(PRODUCT_TYPES)
+  productType?: LeadProductType;
 }

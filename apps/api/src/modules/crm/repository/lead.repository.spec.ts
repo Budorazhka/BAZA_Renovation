@@ -147,7 +147,7 @@ describe('LeadRepository', () => {
   });
 
   describe('create', () => {
-    it('всегда инициализирует stage:new вне зависимости от переданных params', async () => {
+    it('без явного stage — инициализирует stage:new (generic-путь по умолчанию)', async () => {
       const createSpy = jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]);
       const repository = new LeadRepository({ create: createSpy } as never);
 
@@ -158,6 +158,24 @@ describe('LeadRepository', () => {
       });
 
       expect(createSpy).toHaveBeenCalledWith([expect.objectContaining({ stage: 'new' })], { session: undefined });
+    });
+
+    it('с явным stage/productType — сохраняет ровно то, что передал вызывающий (продуктовые воронки лида)', async () => {
+      const createSpy = jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]);
+      const repository = new LeadRepository({ create: createSpy } as never);
+
+      await repository.create({
+        organizationId: new Types.ObjectId(),
+        contactId: new Types.ObjectId(),
+        source: { route: 'manual' },
+        productType: 'network',
+        stage: 'network_rejected_defective',
+      });
+
+      expect(createSpy).toHaveBeenCalledWith(
+        [expect.objectContaining({ productType: 'network', stage: 'network_rejected_defective' })],
+        { session: undefined },
+      );
     });
   });
 });

@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, PipelineStage, Types } from 'mongoose';
-import { LeadDocument, LeadSource, LeadStage } from '../schemas/lead.schema';
+import { LeadDocument, LeadSource, LeadStage, LeadProductType } from '../schemas/lead.schema';
 
 export interface LeadWithStalled {
   _id: Types.ObjectId;
   organizationId: Types.ObjectId;
   contactId: Types.ObjectId;
   ownerPositionId?: Types.ObjectId;
+  productType?: LeadProductType;
   stage: LeadStage;
   version: number;
   source: LeadSource;
@@ -22,11 +23,23 @@ export interface LeadWithStalled {
 export class LeadRepository {
   constructor(@InjectModel(LeadDocument.name) private readonly model: Model<LeadDocument>) {}
 
+  /**
+   * `stage` — опционален, по умолчанию 'new' (generic-путь, как раньше).
+   * Продуктовые воронки лида: вызывающий (CrmService.createLead) явно
+   * передаёт первую стадию продукта, когда задан `productType` — этот
+   * метод её не вычисляет, только сохраняет то, что пришло.
+   */
   async create(
-    params: { organizationId: Types.ObjectId; contactId: Types.ObjectId; source: LeadSource },
+    params: {
+      organizationId: Types.ObjectId;
+      contactId: Types.ObjectId;
+      source: LeadSource;
+      productType?: LeadProductType;
+      stage?: LeadStage;
+    },
     session?: ClientSession,
   ): Promise<LeadDocument> {
-    const [doc] = await this.model.create([{ ...params, stage: 'new' }], { session });
+    const [doc] = await this.model.create([{ ...params, stage: params.stage ?? 'new' }], { session });
     return doc!;
   }
 

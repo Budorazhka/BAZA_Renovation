@@ -50,6 +50,8 @@ const INTENTIONALLY_UNAUTHORIZED: Record<string, string> = {
   'POST /public/developments/:slug/reveal-contact': 'публичное раскрытие контакта: анонимный посетитель по определению; защищено rate-limit и своей идемпотентностью',
   'POST /public/listings/:slug/reveal-contact': 'то же для листинга: анонимное раскрытие контакта, rate-limit и собственная запись идемпотентности',
   'POST /public/listings/:slug/complaints': 'ADMIN-OPS-001: подача жалобы анонимным посетителем по определению (жалоба сама по себе не даёт прав ни над чем); защищено IpRateLimitGuard',
+
+  'GET /leads/stage-definitions': 'справочник стадий воронки по продуктам — статичные метаданные, не данные лидов; под TenantGuard, требует только валидную tenant-сессию, без специального права',
 };
 
 function listControllers(dir: string): string[] {

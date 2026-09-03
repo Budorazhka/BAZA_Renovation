@@ -29,6 +29,7 @@ import { DealEventRepository } from './repository/deal-event.repository';
 import { CrmService } from './crm.service';
 import { CrmController } from './crm.controller';
 import { ListingCrmController } from './listing-crm.controller';
+import { LeadStageDefinitionsController } from './lead-stage-definitions.controller';
 import { LeadController } from './lead.controller';
 import { ContactController } from './contact.controller';
 import { TaskController } from './task.controller';
@@ -72,6 +73,9 @@ import { OutboxModule } from '../outbox/outbox.module';
   controllers: [
     CrmController,
     ListingCrmController,
+    // ПЕРЕД LeadController: `GET /leads/stage-definitions` обязан матчиться
+    // раньше `GET /leads/:leadId` — см. LeadStageDefinitionsController докстринг.
+    LeadStageDefinitionsController,
     LeadController,
     ContactController,
     TaskController,
