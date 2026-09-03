@@ -2636,38 +2636,25 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
             source: t('leadsBlock.manualAdd'),
           };
 
-          const tryAttachDuplicateLead = async () => {
-            const resolution = await resolveDuplicateLeadForUser(
-              { phone: createLeadDto.phone },
-              currentUserId
-            );
-            if (resolution.assignedToCurrentUser) {
-              alert(resolution.message || t('leadsBlock.leadAssignedToYou'));
-              setIsAddLeadModalOpen(false);
-              await onLoadLeads();
-              return true;
-            }
-            return false;
-          };
-
           try {
-            const response = await apiService.createLead(createLeadDto);
-
-            if (response.success) {
-              setIsAddLeadModalOpen(false);
-              await onLoadLeads();
-            } else {
-              console.error('Failed to create lead:', response.message);
-              let errorMessage = response.message || t('leadsBlock.unknownError');
-              // Улучшенное сообщение для ошибки дубликата
-              if (errorMessage.includes(t('leadsBlock.alreadyExists'))) {
-                if (await tryAttachDuplicateLead()) {
-                  return;
-                }
-                errorMessage = t('leadsBlock.leadExistsError');
-              }
-              alert(t('leadsBlock.createLeadError') + errorMessage);
+            // `[phase 4]` POST /leads принимает только
+            // requesterName/requesterPhone/productType (см. CreateLeadV2Payload
+            // докстринг) — email/source в тело создания не входят, честный
+            // пробел. assignedTo применяется отдельным вызовом assign после
+            // создания (тот же приём, что LeadsContext.ADD_LEAD).
+            const created = await leadsApiV2.create(
+              {
+                requesterName: createLeadDto.name,
+                requesterPhone: createLeadDto.phone,
+                productType: mapProductTypeCrmToV2(createLeadDto.productType),
+              },
+              newIdempotencyKey(),
+            );
+            if (createLeadDto.assignedTo) {
+              await leadsApiV2.assign(created.id, createLeadDto.assignedTo);
             }
+            setIsAddLeadModalOpen(false);
+            await onLoadLeads();
           } catch (error: any) {
             console.error('Error creating lead:', error);
             console.error('Error response:', error.response?.data);
