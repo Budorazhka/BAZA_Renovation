@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { TenantGuard } from '../../shared/tenant/tenant.guard';
@@ -9,6 +9,7 @@ import { CrmService } from './crm.service';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
+import { UpdateLeadDto } from './dto/update-lead.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { ListLeadEventsDto } from './dto/list-lead-events.dto';
 import { ListTimelineDto } from './dto/list-timeline.dto';
@@ -126,6 +127,67 @@ export class LeadController {
       leadId,
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+    });
+  }
+
+  /**
+   * PATCH /leads/:leadId — сопутствующие поля лида (см. UpdateLeadDto/
+   * CrmService.updateLead докстринги). НЕ трогает `stage` — тот путь
+   * остаётся под PATCH /leads/:leadId/stage (не дублируется здесь).
+   * `lead.update` — новый грант (D-05B прецедент lead.changeStage): та же
+   * scope-модель, own для manager/organization для owner/director/rop.
+   */
+  @Patch(':leadId')
+  @HttpCode(200)
+  @RequirePermission('lead', 'update')
+  async updateLead(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Body() dto: UpdateLeadDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.updateLead({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'update'),
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+      city: dto.city,
+      notes: dto.notes,
+      tags: dto.tags,
+      dealValue: dto.dealValue,
+      budgetValue: dto.budgetValue,
+      budgetCurrency: dto.budgetCurrency,
+      expectedCloseDate: dto.expectedCloseDate,
+      rejectionReason: dto.rejectionReason,
+      rejectionComment: dto.rejectionComment,
+      telegram: dto.telegram,
+      country: dto.country,
+      realtorStage: dto.realtorStage,
+      curatorStage: dto.curatorStage,
+    });
+  }
+
+  /**
+   * DELETE /leads/:leadId — soft delete (см. CrmService.deleteLead
+   * докстринг). Отдельный грант `lead.delete`, не переиспользует
+   * `lead.update` — удаление разрушительнее сопутствующей правки полей,
+   * тот же круг ролей, что `lead.assign` (owner/director/rop/developer,
+   * organization-wide, БЕЗ manager).
+   */
+  @Delete(':leadId')
+  @HttpCode(200)
+  @RequirePermission('lead', 'delete')
+  async deleteLead(@Req() req: FastifyRequest, @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.deleteLead({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'delete'),
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
     });
   }
 

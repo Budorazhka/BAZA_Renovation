@@ -108,6 +108,20 @@ export interface DefaultGrant {
  * расширяет ничьих реальных возможностей, лишь даёт завести много лидов
  * за один запрос вместо ручной формы по одному. `marketer` не получает —
  * у него нет lead.create.
+ *
+ * `lead.update`/`lead.delete` (`[phase 3 — 03.09.2026]`, детальная карточка
+ * лида, backend-часть) — тот же прецедент, что `lead.changeStage` (D-05B):
+ * PATCH /leads/:leadId (сопутствующие поля — city/notes/tags/dealValue/
+ * budgetValue/budgetCurrency/expectedCloseDate/rejectionReason/
+ * rejectionComment/telegram/country/realtorStage/curatorStage, никогда
+ * `stage`) и POST /leads/:leadId/files, DELETE /leads/:leadId/files/:assetId,
+ * POST /leads/:leadId/contact-actions переиспользуют `lead.update`.
+ * `lead.update` — та же scope-модель, что `lead.changeStage`: `own` у
+ * manager (ведёт сопутствующие поля СВОИХ лидов), `organization` у
+ * owner/director/rop/developer. `lead.delete` — отдельный грант (удаление
+ * разрушительнее правки полей), тот же круг ролей, что `lead.assign`
+ * (owner/director/rop/developer, organization-wide, БЕЗ manager — менеджер
+ * не должен мочь удалить лид из воронки, только вести его).
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -116,6 +130,8 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
     { resource: 'lead', action: 'changeStage', scope: 'organization' },
+    { resource: 'lead', action: 'update', scope: 'organization' },
+    { resource: 'lead', action: 'delete', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'create', scope: 'organization' },
@@ -158,6 +174,8 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
     { resource: 'lead', action: 'changeStage', scope: 'organization' },
+    { resource: 'lead', action: 'update', scope: 'organization' },
+    { resource: 'lead', action: 'delete', scope: 'organization' },
     { resource: 'lead', action: 'reassign', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'read', scope: 'organization' },
@@ -200,6 +218,8 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
     { resource: 'lead', action: 'changeStage', scope: 'organization' },
+    { resource: 'lead', action: 'update', scope: 'organization' },
+    { resource: 'lead', action: 'delete', scope: 'organization' },
     { resource: 'lead', action: 'reassign', scope: 'team' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'read', scope: 'organization' },
@@ -253,6 +273,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     // (ownerFilterForAction в LeadController, не автоматически — deny-by-
     // default guard проверяет только наличие гранта, не scope).
     { resource: 'lead', action: 'changeStage', scope: 'own' },
+    // `[phase 3]` lead.update — та же own-scope сужение до "своих" лидов
+    // (ownerPositionId === своя Position), что lead.changeStage. Manager
+    // НЕ получает lead.delete — удаление остаётся организационным правом.
+    { resource: 'lead', action: 'update', scope: 'own' },
     { resource: 'contact', action: 'read', scope: 'own' },
     { resource: 'task', action: 'read', scope: 'own' },
     { resource: 'task', action: 'create', scope: 'organization' },
@@ -305,6 +329,8 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'lead', action: 'create', scope: 'organization' },
     { resource: 'lead', action: 'assign', scope: 'organization' },
     { resource: 'lead', action: 'changeStage', scope: 'organization' },
+    { resource: 'lead', action: 'update', scope: 'organization' },
+    { resource: 'lead', action: 'delete', scope: 'organization' },
     { resource: 'contact', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'read', scope: 'organization' },
     { resource: 'task', action: 'create', scope: 'organization' },

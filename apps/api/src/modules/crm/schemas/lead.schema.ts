@@ -131,6 +131,100 @@ export class LeadDocument extends Document {
   @Prop({ required: true, default: 0 })
   version!: number;
 
+  /**
+   * `[phase 3 — 03.09.2026]`, детальная карточка лида (LeadViewModal.tsx):
+   * поля, которые легаси `PATCH /crm/leads/:id` (api-crm.baza.sale) уже
+   * принимает и которые новый backend до этого прохода не имел вовсе (см.
+   * apps/erp-web/src/features/crm/services/api/leads.ts::updateLead
+   * `allowed` список — источник этого набора полей, ничего не добавлено
+   * сверх него). Все опциональны — сопутствующие атрибуты лида, НЕ его
+   * воронку (`stage` остаётся под отдельным версионированным
+   * PATCH /leads/:id/stage, этот блок его не трогает).
+   */
+  @Prop({ required: false })
+  city?: string;
+
+  @Prop({ required: false })
+  notes?: string;
+
+  @Prop({ type: [String], required: false })
+  tags?: string[];
+
+  @Prop({ required: false })
+  dealValue?: number;
+
+  @Prop({ required: false })
+  budgetValue?: number;
+
+  @Prop({ required: false })
+  budgetCurrency?: string;
+
+  @Prop({ required: false })
+  expectedCloseDate?: string;
+
+  @Prop({ required: false })
+  rejectionReason?: string;
+
+  @Prop({ required: false })
+  rejectionComment?: string;
+
+  @Prop({ required: false })
+  telegram?: string;
+
+  @Prop({ required: false })
+  country?: string;
+
+  /**
+   * `realtorStage`/`curatorStage` — НЕ дубли `stage`. Найдено чтением
+   * apps/erp-web/src/features/crm/components/crm/LeadViewModal.tsx
+   * (handleRealtorStageChange/handleCuratorStageChange, отдельные
+   * debounce-таймеры от смены `stage`) и types.ts::LeadStage enum: это два
+   * НЕЗАВИСИМЫХ 6-шаговых указателя прогресса ('realtor_1'..'realtor_6',
+   * 'curator_1'..'curator_6') — СОБСТВЕННАЯ таксономия, отдельная от
+   * network-стадий (`network_*`, 17 значений) и от generic-пятёрки, только
+   * условно применимая к лидам productType:'network' (UI показывает эти
+   * слайдеры при `productType===NETWORK`). Эти конкретные realtor_N/
+   * curator_N значения НЕ входят ни в `LEAD_STAGES`, ни в
+   * `LEAD_STAGE_DEFINITIONS` нового backend — задача этого прохода прямо
+   * требует валидировать их тем же справочником, что основной `stage`
+   * (stageIdsForProduct(productType) либо generic-пятёрка), поэтому здесь
+   * они хранятся как `LeadStage` (тот же тип/enum, что stage), а не как
+   * отдельная realtor_N/curator_N номенклатура — это осознанное расхождение
+   * с легаси-фронтендом, не перенесённое сюда 1:1, задокументированное, а
+   * не тихо потерянное (см. отчёт прохода).
+   */
+  @Prop({ enum: ALL_LEAD_STAGE_VALUES, required: false })
+  realtorStage?: LeadStage;
+
+  @Prop({ enum: ALL_LEAD_STAGE_VALUES, required: false })
+  curatorStage?: LeadStage;
+
+  /**
+   * Файлы лида (легаси getLeadFiles/uploadAndRegisterFile/deleteLeadFileByName)
+   * — переиспользует MediaModule (ADR-008), тот же паттерн, что
+   * PositionDocument.avatarAssetId, только массив (лид может иметь
+   * несколько вложений, позиция — один аватар). MediaAsset остаётся
+   * единственным источником истины для содержимого/MIME/размера файла —
+   * здесь только ссылки, порядок = порядок прикрепления.
+   */
+  @Prop({ type: [Types.ObjectId], default: [] })
+  attachedAssetIds!: Types.ObjectId[];
+
+  /**
+   * Soft delete (D-канал доступа этого прохода) — тот же принцип, что
+   * PositionDocument.status:'closed': лид с историей (LeadEvent/audit/
+   * задачи/сделки) не может быть физически удалён без разрушения этой
+   * истории, поэтому DELETE /leads/:leadId помечает `status:'deleted'`
+   * вместо удаления документа. `findByIdForOrganization`/
+   * `listForOrganization` исключают `deleted` лиды тем же `$ne` паттерном,
+   * что PositionRepository.findAllByOrganization исключает `closed`.
+   */
+  @Prop({ required: true, enum: ['active', 'deleted'], default: 'active' })
+  status!: 'active' | 'deleted';
+
+  @Prop({ required: false })
+  deletedAt?: Date;
+
   declare createdAt: Date;
 }
 

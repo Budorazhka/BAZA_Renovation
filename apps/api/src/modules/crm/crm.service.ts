@@ -58,6 +58,21 @@ export interface CrmLeadReadModel {
    * их не касается, не значит "есть next action").
    */
   hasOpenNextAction: boolean;
+  /** `[phase 3]` PATCH /leads/:leadId сопутствующие поля — см. LeadDocument докстринг. */
+  city: string | null;
+  notes: string | null;
+  tags: string[];
+  dealValue: number | null;
+  budgetValue: number | null;
+  budgetCurrency: string | null;
+  expectedCloseDate: string | null;
+  rejectionReason: string | null;
+  rejectionComment: string | null;
+  telegram: string | null;
+  country: string | null;
+  /** См. LeadDocument.realtorStage/curatorStage докстринг — независимые указатели, не дубли `stage`. */
+  realtorStage: LeadStage | null;
+  curatorStage: LeadStage | null;
 }
 
 export interface CrmDealParticipantReadModel {
@@ -1721,6 +1736,219 @@ export class CrmService {
   }
 
   /**
+   * PATCH /leads/:leadId — общее обновление сопутствующих полей лида (см.
+   * UpdateLeadDto докстринг: НИКОГДА `stage` — тот путь остаётся только за
+   * changeLeadStage/PATCH /leads/:leadId/stage). Только явно переданные в
+   * запросе поля попадают в $set (params.<field> === undefined значит "поле
+   * отсутствовало в теле запроса", не "клиент явно снёс значение" — тот же
+   * partial-PATCH принцип, что updateTask).
+   *
+   * `realtorStage`/`curatorStage` валидируются тем же справочником, что
+   * основной `stage` (см. LeadDocument докстринг): productType лида задан
+   * → stageIdsForProduct(productType), не задан → generic-пятёрка
+   * (LEAD_STAGE_TRANSITIONS ключи, без матрицы переходов — здесь просто
+   * "это известное значение", не порядок прохождения).
+   */
+  async updateLead(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    requiredOwnerPositionId?: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+    city?: string;
+    notes?: string;
+    tags?: string[];
+    dealValue?: number;
+    budgetValue?: number;
+    budgetCurrency?: string;
+    expectedCloseDate?: string;
+    rejectionReason?: string;
+    rejectionComment?: string;
+    telegram?: string;
+    country?: string;
+    realtorStage?: LeadStage;
+    curatorStage?: LeadStage;
+  }): Promise<CrmLeadReadModel> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.requiredOwnerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const allowedStages: readonly string[] = lead.productType
+      ? stageIdsForProduct(lead.productType)
+      : Object.keys(LEAD_STAGE_TRANSITIONS);
+    for (const [field, value] of [
+      ['realtorStage', params.realtorStage],
+      ['curatorStage', params.curatorStage],
+    ] as const) {
+      if (value !== undefined && !allowedStages.includes(value)) {
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          `${field} "${value}" is not a valid stage${lead.productType ? ` for product "${lead.productType}"` : ''}`,
+          { field, value, productType: lead.productType ?? null },
+        );
+      }
+    }
+
+    const editableFields: Array<
+      keyof Pick<
+        typeof params,
+        | 'city'
+        | 'notes'
+        | 'tags'
+        | 'dealValue'
+        | 'budgetValue'
+        | 'budgetCurrency'
+        | 'expectedCloseDate'
+        | 'rejectionReason'
+        | 'rejectionComment'
+        | 'telegram'
+        | 'country'
+        | 'realtorStage'
+        | 'curatorStage'
+      >
+    > = [
+      'city',
+      'notes',
+      'tags',
+      'dealValue',
+      'budgetValue',
+      'budgetCurrency',
+      'expectedCloseDate',
+      'rejectionReason',
+      'rejectionComment',
+      'telegram',
+      'country',
+      'realtorStage',
+      'curatorStage',
+    ];
+
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    const setFields: Record<string, unknown> = {};
+    for (const field of editableFields) {
+      const value = params[field];
+      if (value === undefined) continue;
+      before[field] = (lead as unknown as Record<string, unknown>)[field] ?? null;
+      after[field] = value;
+      setFields[field] = value;
+    }
+
+    if (Object.keys(setFields).length === 0) {
+      // Ничего не передано для изменения — не открываем транзакцию впустую,
+      // тот же short-circuit принцип, что reassignTask на no-op reassign.
+      const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
+      const openTaskCount = isActiveLeadStage(lead.stage)
+        ? await this.taskRepository.countOpenForLead(params.organizationId, lead._id)
+        : 0;
+      return toLeadReadModel(lead, contact, {
+        stalled: isActiveLeadStage(lead.stage) && openTaskCount === 0,
+        hasOpenNextAction: openTaskCount > 0,
+      });
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.leadRepository.updateFields(
+        params.leadId,
+        params.organizationId,
+        setFields,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Lead not found');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before,
+          after,
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      const updated = await this.leadRepository.findByIdForOrganization(
+        params.leadId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+      const contact = await this.contactRepository.findByIdForOrganization(updated!.contactId, params.organizationId);
+      const openTaskCount = isActiveLeadStage(updated!.stage)
+        ? await this.taskRepository.countOpenForLead(params.organizationId, updated!._id)
+        : 0;
+
+      return toLeadReadModel(updated!, contact, {
+        stalled: isActiveLeadStage(updated!.stage) && openTaskCount === 0,
+        hasOpenNextAction: openTaskCount > 0,
+      });
+    });
+  }
+
+  /**
+   * DELETE /leads/:leadId — soft delete (см. LeadDocument.status докстринг):
+   * лид с историей (LeadEvent/audit/Task/Deal) не может быть физически
+   * удалён без потери этой истории. После удаления лид перестаёт
+   * отдаваться в GET /leads и GET /leads/:leadId (LeadRepository фильтрует
+   * `status:{$ne:'deleted'}` — тот же non-disclosure NotFoundException,
+   * что и для чужого лида), но документ и вся его история остаются в базе.
+   */
+  async deleteLead(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    requiredOwnerPositionId?: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ deleted: true }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.requiredOwnerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const deletedAt = new Date();
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.leadRepository.softDelete(
+        params.leadId,
+        params.organizationId,
+        deletedAt,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Lead not found');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.delete',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before: { status: 'active' },
+          after: { status: 'deleted', deletedAt: deletedAt.toISOString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return { deleted: true as const };
+    });
+  }
+
+  /**
    * Общая идемпотентность-обвязка для revealContact/revealListingContact —
    * обе команды 404/резолюцию slug делают по-разному (development vs
    * listing), но сам Lead-create-транзакционный-flow идентичен, различается
@@ -2839,6 +3067,19 @@ function toLeadReadModel(
     source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
     createdAt: Date;
     stalled?: boolean;
+    city?: string;
+    notes?: string;
+    tags?: string[];
+    dealValue?: number;
+    budgetValue?: number;
+    budgetCurrency?: string;
+    expectedCloseDate?: string;
+    rejectionReason?: string;
+    rejectionComment?: string;
+    telegram?: string;
+    country?: string;
+    realtorStage?: LeadStage;
+    curatorStage?: LeadStage;
   },
   contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
   state: { stalled?: boolean; hasOpenNextAction?: boolean } = {},
@@ -2857,6 +3098,19 @@ function toLeadReadModel(
       ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
       : null,
     hasOpenNextAction: state.hasOpenNextAction ?? false,
+    city: lead.city ?? null,
+    notes: lead.notes ?? null,
+    tags: lead.tags ?? [],
+    dealValue: lead.dealValue ?? null,
+    budgetValue: lead.budgetValue ?? null,
+    budgetCurrency: lead.budgetCurrency ?? null,
+    expectedCloseDate: lead.expectedCloseDate ?? null,
+    rejectionReason: lead.rejectionReason ?? null,
+    rejectionComment: lead.rejectionComment ?? null,
+    telegram: lead.telegram ?? null,
+    country: lead.country ?? null,
+    realtorStage: lead.realtorStage ?? null,
+    curatorStage: lead.curatorStage ?? null,
   };
 }
 

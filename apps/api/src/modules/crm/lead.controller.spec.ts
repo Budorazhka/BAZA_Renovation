@@ -274,6 +274,88 @@ describe('LeadController — read scope', () => {
   });
 });
 
+describe('LeadController.updateLead', () => {
+  it('own-scope: сужает requiredOwnerPositionId до своей Position и пробрасывает поля', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const updateLead = jest.fn().mockResolvedValue({ id: leadId.toString() });
+    const controller = new LeadController(
+      { updateLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.updateLead(req as never, leadId, { city: 'Тбилиси', tags: ['vip'] });
+
+    expect(updateLead).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      requiredOwnerPositionId: positionId,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+      city: 'Тбилиси',
+      notes: undefined,
+      tags: ['vip'],
+      dealValue: undefined,
+      budgetValue: undefined,
+      budgetCurrency: undefined,
+      expectedCloseDate: undefined,
+      rejectionReason: undefined,
+      rejectionComment: undefined,
+      telegram: undefined,
+      country: undefined,
+      realtorStage: undefined,
+      curatorStage: undefined,
+    });
+  });
+
+  it('organization-scope: requiredOwnerPositionId не сужается (undefined)', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const updateLead = jest.fn().mockResolvedValue({ id: leadId.toString() });
+    const controller = new LeadController(
+      { updateLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+
+    await controller.updateLead(makeRequest(organizationId, positionId) as never, leadId, {});
+
+    expect(updateLead).toHaveBeenCalledWith(expect.objectContaining({ requiredOwnerPositionId: undefined }));
+  });
+});
+
+describe('LeadController.deleteLead', () => {
+  it('пробрасывает leadId/actor/organization в CrmService.deleteLead', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const deleteLead = jest.fn().mockResolvedValue({ deleted: true });
+    const controller = new LeadController(
+      { deleteLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    const result = await controller.deleteLead(req as never, leadId);
+
+    expect(deleteLead).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      requiredOwnerPositionId: undefined,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+    expect(result).toEqual({ deleted: true });
+  });
+});
+
 describe('LeadController — GET /leads/:leadId/events', () => {
   it('передаёт leadId/organizationId/ownerPositionId/cursor/limit в CrmService.listLeadEvents', async () => {
     const organizationId = new Types.ObjectId();

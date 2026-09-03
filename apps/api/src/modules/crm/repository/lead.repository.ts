@@ -14,6 +14,20 @@ export interface LeadWithStalled {
   source: LeadSource;
   createdAt: Date;
   stalled: boolean;
+  city?: string;
+  notes?: string;
+  tags?: string[];
+  dealValue?: number;
+  budgetValue?: number;
+  budgetCurrency?: string;
+  expectedCloseDate?: string;
+  rejectionReason?: string;
+  rejectionComment?: string;
+  telegram?: string;
+  country?: string;
+  realtorStage?: LeadStage;
+  curatorStage?: LeadStage;
+  attachedAssetIds?: Types.ObjectId[];
 }
 
 /**
@@ -43,12 +57,34 @@ export class LeadRepository {
     return doc!;
   }
 
+  /**
+   * `status: {$ne: 'deleted'}` — тот же exclusion-паттерн, что
+   * PositionRepository.findAllByOrganization исключает `status:'closed'`:
+   * soft-deleted лид не должен быть виден ни по прямому id, ни в списке,
+   * ни как "свой" own-scope лид. Существующие лиды без поля `status`
+   * (созданы до этого прохода) проходят фильтр как обычно — `$ne` не
+   * матчит отсутствующее поле как 'deleted', то есть они остаются видимы
+   * (тот же backward-compatibility принцип, что version:{$exists:false}
+   * в changeStageWithVersionCheck).
+   */
   async findByIdForOrganization(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
     ownerPositionId?: Types.ObjectId,
+    session?: ClientSession,
   ): Promise<LeadDocument | null> {
-    return this.model.findOne({ _id: id, organizationId, ...(ownerPositionId ? { ownerPositionId } : {}) }).exec();
+    return this.model
+      .findOne(
+        {
+          _id: id,
+          organizationId,
+          status: { $ne: 'deleted' },
+          ...(ownerPositionId ? { ownerPositionId } : {}),
+        },
+        null,
+        { session },
+      )
+      .exec();
   }
 
   /**
@@ -76,6 +112,7 @@ export class LeadRepository {
   ): Promise<LeadWithStalled[]> {
     const matchStage: Record<string, unknown> = {
       organizationId,
+      status: { $ne: 'deleted' },
       ...(params.ownerPositionId ? { ownerPositionId: params.ownerPositionId } : {}),
       ...(params.stage ? { stage: params.stage } : {}),
     };
@@ -241,6 +278,86 @@ export class LeadRepository {
       .updateOne(
         { _id: id, organizationId, ...versionFilter, stage: { $in: allowedFromStages } },
         { $set: { stage }, $inc: { version: 1 } },
+        { session },
+      )
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /**
+   * PATCH /leads/:leadId — общее обновление сопутствующих полей лида
+   * (city/notes/tags/dealValue/budgetValue/budgetCurrency/expectedCloseDate/
+   * rejectionReason/rejectionComment/telegram/country/realtorStage/
+   * curatorStage). НИКОГДА `stage` — тот путь остаётся только за
+   * changeStageWithVersionCheck (CAS/idempotency, не дублируется здесь).
+   * Не версионировано — тот же сознательный выбор, что assignOwner/
+   * unassignOwner (D-01 optimistic concurrency здесь не перенесён, это
+   * сопутствующие поля, не критичная для отчётности воронка).
+   */
+  async updateFields(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    fields: Record<string, unknown>,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne({ _id: id, organizationId, status: { $ne: 'deleted' } }, { $set: fields }, { session })
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /**
+   * Soft delete (см. LeadDocument.status докстринг) — лид с историей
+   * (LeadEvent/audit/Task/Deal) не может быть физически удалён без потери
+   * этой истории. Идемпотентно на "уже удалён": вызывающий код
+   * (CrmService.deleteLead) сам решает, звать ли повторно — здесь просто
+   * атомарная запись статуса, тот же паттерн, что PositionRepository.
+   * closeVacantPosition фильтрует по текущему статусу в самом фильтре.
+   */
+  async softDelete(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    deletedAt: Date,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        { _id: id, organizationId, status: { $ne: 'deleted' } },
+        { $set: { status: 'deleted', deletedAt } },
+        { session },
+      )
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /** GET /leads/:leadId/files, POST .../files — добавляет assetId в конец attachedAssetIds (порядок = порядок прикрепления). */
+  async addAttachedAsset(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    assetId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        { _id: id, organizationId, status: { $ne: 'deleted' } },
+        { $addToSet: { attachedAssetIds: assetId } },
+        { session },
+      )
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /** DELETE /leads/:leadId/files/:assetId — убирает assetId из attachedAssetIds. */
+  async removeAttachedAsset(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    assetId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        { _id: id, organizationId, status: { $ne: 'deleted' } },
+        { $pull: { attachedAssetIds: assetId } },
         { session },
       )
       .exec();
