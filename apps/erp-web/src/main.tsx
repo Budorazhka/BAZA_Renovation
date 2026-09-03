@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter, Routes, Route, Navigate, Outlet, useParams } from 'react-router-dom'
 import { DashboardProvider } from '@/context/DashboardContext'
 import { LeadsProvider } from '@/context/LeadsContext'
+import { DealsProvider } from '@/context/DealsContext'
 import { PlansProvider } from '@/context/PlansContext'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { NewsFeedProvider } from '@/context/NewsFeedContext'
@@ -244,6 +245,7 @@ createRoot(document.getElementById('root')!).render(
                   <LanguageProvider>
                     <DashboardProvider>
                       <LeadsProvider>
+                      <DealsProvider>
                       <PlansProvider>
                         <Routes>
                         {/* Публичные маршруты */}
@@ -595,6 +597,7 @@ createRoot(document.getElementById('root')!).render(
                         <Route path="*" element={<Navigate to="/" replace />} />
                         </Routes>
                       </PlansProvider>
+                      </DealsProvider>
                       </LeadsProvider>
                     </DashboardProvider>
                   </LanguageProvider>

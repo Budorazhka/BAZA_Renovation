@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { DEALS_MOCK } from '@/data/deals-mock'
+import { useDeals } from '@/context/DealsContext'
 import { formatUsdMillions, formatUsdThousands } from '@/lib/format-currency'
-import { STAGE_LABELS, STAGE_ORDER, SUCCESS_DEAL_STAGE_SET, type Deal, type DealStage, type DealType } from '@/types/deals'
+import { STAGE_LABELS, STAGE_ORDER, SUCCESS_DEAL_STAGE_SET, type DealStage, type DealType } from '@/types/deals'
 import { useI18n } from "@/i18n";
 
 const C = {
@@ -14,20 +14,6 @@ const C = {
   border: 'var(--green-border)',
   card: 'var(--green-card)',
   green: '#4ade80',
-}
-
-const DEALS_STORAGE_KEY = 'agency-new.deals.kanban'
-
-function readDealsSnapshot(): Deal[] {
-  if (typeof window === 'undefined') return DEALS_MOCK
-  try {
-    const raw = window.localStorage.getItem(DEALS_STORAGE_KEY)
-    if (!raw) return DEALS_MOCK
-    const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? (parsed as Deal[]) : DEALS_MOCK
-  } catch {
-    return DEALS_MOCK
-  }
 }
 
 function daysSinceUpdate(iso: string) {
@@ -42,7 +28,7 @@ const TYPE_LABEL: Record<DealType, string> = {
 export function DealsReportPage() {
     const { t } = useI18n();
   const navigate = useNavigate()
-  const deals = useMemo(() => readDealsSnapshot(), [])
+  const { deals } = useDeals()
   const [stage, setStage] = useState<'all' | DealStage>('all')
   const [type, setType] = useState<'all' | DealType>('all')
   const [agent, setAgent] = useState<string>('all')
