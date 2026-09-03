@@ -18,7 +18,6 @@ function addRecentLeadTag(tag: string): void {
   localStorage.setItem(LEAD_TAGS_RECENT_KEY, JSON.stringify(next));
 }
 import { LeadStage, ProductType } from '../../services/api';
-import { apiService } from '../../services/api';
 import { resolveDuplicateLeadForUser } from '../../utils/leadDuplicateHelper';
 import { leadsApiV2, newIdempotencyKey } from '@/services/leadsApiV2';
 import { mapLeadV2ToCrmLead, mapProductTypeCrmToV2 } from '@/lib/lead-v2-legacy-adapter';
