@@ -92,7 +92,7 @@ describe('leadsApiV2 service client', () => {
     expect(result).toEqual(mockLead)
   })
 
-  it('changeStage() вызывает PATCH /api/v1/leads/:id/stage с телом { stage, expectedVersion }', async () => {
+  it('changeStage() вызывает PATCH /api/v1/leads/:id/stage с телом { stage, expectedVersion } и заголовком Idempotency-Key', async () => {
     const updatedLead = {
       id: 'lead-1',
       organizationId: 'org-1',
@@ -105,11 +105,30 @@ describe('leadsApiV2 service client', () => {
     patchMock.mockResolvedValueOnce({ data: updatedLead })
 
     const { leadsApiV2 } = await import('@/services/leadsApiV2')
-    const result = await leadsApiV2.changeStage('lead-1', 'converted', 2)
+    const result = await leadsApiV2.changeStage('lead-1', 'converted', 2, 'key-42')
 
     expect(patchMock).toHaveBeenCalledTimes(1)
-    expect(patchMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/stage', { stage: 'converted', expectedVersion: 2 })
+    expect(patchMock).toHaveBeenCalledWith(
+      '/api/v1/leads/lead-1/stage',
+      { stage: 'converted', expectedVersion: 2 },
+      { headers: { 'Idempotency-Key': 'key-42' } },
+    )
     expect(result).toEqual(updatedLead)
+  })
+
+  it('changeStage() без явного ключа генерирует свой Idempotency-Key (не пустой, не константа)', async () => {
+    patchMock.mockResolvedValue({ data: {} })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    await leadsApiV2.changeStage('lead-1', 'new', 0)
+    await leadsApiV2.changeStage('lead-1', 'new', 0)
+
+    const [, , firstOptions] = patchMock.mock.calls[0]!
+    const [, , secondOptions] = patchMock.mock.calls[1]!
+    const firstKey = (firstOptions as { headers: Record<string, string> }).headers['Idempotency-Key']
+    const secondKey = (secondOptions as { headers: Record<string, string> }).headers['Idempotency-Key']
+    expect(firstKey).toBeTruthy()
+    expect(firstKey).not.toBe(secondKey)
   })
 
   it('assign() вызывает POST /api/v1/leads/:id/assign с телом { assigneePositionId }', async () => {
@@ -129,6 +148,71 @@ describe('leadsApiV2 service client', () => {
     expect(postMock).toHaveBeenCalledTimes(1)
     expect(postMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/assign', { assigneePositionId: 'pos-2' })
     expect(result).toEqual(assignedLead)
+  })
+
+  it('unassign() вызывает POST /api/v1/leads/:id/unassign без тела', async () => {
+    const unassignedLead = {
+      id: 'lead-1',
+      organizationId: 'org-1',
+      contactId: 'c-1',
+      ownerPositionId: null,
+      stage: 'qualified',
+      source: { route: 'web_form' },
+    }
+    postMock.mockResolvedValueOnce({ data: unassignedLead })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.unassign('lead-1')
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock).toHaveBeenCalledWith('/api/v1/leads/lead-1/unassign')
+    expect(result).toEqual(unassignedLead)
+  })
+
+  it('create() отправляет Idempotency-Key — иначе повтор создал бы второй лид', async () => {
+    const createdLead = { id: 'lead-new', organizationId: 'org-1', stage: 'new', source: { route: 'manual' } }
+    postMock.mockResolvedValueOnce({ data: createdLead })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.create({ requesterName: 'Иван', requesterPhone: '+79990000000', productType: 'sales' }, 'key-1')
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    expect(postMock).toHaveBeenCalledWith(
+      '/api/v1/leads',
+      { requesterName: 'Иван', requesterPhone: '+79990000000', productType: 'sales' },
+      { headers: { 'Idempotency-Key': 'key-1' } },
+    )
+    expect(result).toEqual(createdLead)
+  })
+
+  it('listAll() читает все страницы, пока есть nextCursor, и объединяет items', async () => {
+    getMock
+      .mockResolvedValueOnce({ data: { items: [{ id: 'lead-1' }], nextCursor: 'cursor-1' } })
+      .mockResolvedValueOnce({ data: { items: [{ id: 'lead-2' }], nextCursor: null } })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.listAll()
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(getMock).toHaveBeenNthCalledWith(1, '/api/v1/leads', { params: { limit: 100, cursor: undefined } })
+    expect(getMock).toHaveBeenNthCalledWith(2, '/api/v1/leads', { params: { limit: 100, cursor: 'cursor-1' } })
+    expect(result).toEqual({ items: [{ id: 'lead-1' }, { id: 'lead-2' }], complete: true })
+  })
+
+  it('listAll() останавливается на maxPages и сообщает complete:false, если лиды не кончились', async () => {
+    getMock.mockResolvedValue({ data: { items: [{ id: 'lead-x' }], nextCursor: 'cursor-more' } })
+
+    const { leadsApiV2 } = await import('@/services/leadsApiV2')
+    const result = await leadsApiV2.listAll(undefined, 2)
+
+    expect(getMock).toHaveBeenCalledTimes(2)
+    expect(result.complete).toBe(false)
+    expect(result.items).toHaveLength(2)
+  })
+
+  it('newIdempotencyKey() возвращает разные значения на разные вызовы', async () => {
+    const { newIdempotencyKey } = await import('@/services/leadsApiV2')
+    expect(newIdempotencyKey()).not.toBe(newIdempotencyKey())
   })
 
   it('пробрасывает ошибки бэкенда/сети при сбое запроса', async () => {

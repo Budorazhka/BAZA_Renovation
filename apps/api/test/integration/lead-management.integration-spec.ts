@@ -285,6 +285,78 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     });
   });
 
+  describe('unassignLead — tenant isolation, LeadEvent/Audit, stage не меняется', () => {
+    it('чужая организация — unassign отклоняется NotFoundException, ownerPositionId не меняется', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const ownerPositionId = await seedVacantPosition(orgA);
+      const leadId = await seedLead(orgA, { ownerPositionId });
+
+      await expect(
+        crmService.unassignLead({
+          leadId,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedOrganizationId: orgB,
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.ownerPositionId?.toString()).toBe(ownerPositionId.toString());
+    });
+
+    it('несуществующий лид — unassign отклоняется NotFoundException', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+
+      await expect(
+        crmService.unassignLead({
+          leadId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedOrganizationId: organizationId,
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('успешный unassign — LeadEvent+Audit записаны реальной транзакцией, ownerPositionId очищен, stage не меняется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const ownerPositionId = await seedVacantPosition(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'qualified', ownerPositionId });
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const result = await crmService.unassignLead({
+        leadId,
+        actorPositionId,
+        actorIdentityId,
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+      });
+
+      expect(result.ownerPositionId).toBeNull();
+      expect(result.stage).toBe('qualified');
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.ownerPositionId).toBeFalsy();
+      expect(leadDoc?.stage).toBe('qualified');
+
+      const eventDocs = await connection.collection('lead_events').find({ leadId }).toArray();
+      expect(eventDocs).toHaveLength(1);
+      expect(eventDocs[0]?.stage).toBe('qualified');
+      expect(eventDocs[0]?.changedBy).toMatchObject({ type: 'position', positionId: actorPositionId });
+
+      const auditDocs = await connection.collection('audit_events').find({ resourceId: leadId }).toArray();
+      expect(auditDocs).toHaveLength(1);
+      expect(auditDocs[0]?.action).toBe('lead.unassign');
+    });
+  });
+
   describe('changeLeadStage — transition-матрица (D-05B)', () => {
     it('запрещённый переход (converted→contacted) — AppException VALIDATION_FAILED, stage не меняется', async () => {
       const organizationId = new Types.ObjectId();

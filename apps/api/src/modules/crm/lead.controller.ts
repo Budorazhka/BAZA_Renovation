@@ -186,6 +186,25 @@ export class LeadController {
   }
 
   /**
+   * unassignLead — обратное действие assignLead, тот же грант `lead.assign`
+   * (см. CrmService.unassignLead докстринг: снять назначение доступно тому
+   * же кругу ролей, что и назначить, отдельный grant не нужен).
+   */
+  @Post(':leadId/unassign')
+  @HttpCode(200)
+  @RequirePermission('lead', 'assign')
+  async unassignLead(@Req() req: FastifyRequest, @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.unassignLead({
+      leadId,
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      expectedOrganizationId: new Types.ObjectId(tenantContext.organizationId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  /**
    * НЕ в узкой OpenAPI-спеке — см. CrmService.changeLeadStage комментарий.
    * D-05B: отдельный grant `lead.changeStage` (не переиспользует
    * `lead.assign`) — подтверждено владельцем: manager должен мочь менять

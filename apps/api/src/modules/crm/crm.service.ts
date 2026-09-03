@@ -1477,6 +1477,74 @@ export class CrmService {
   }
 
   /**
+   * unassignLead — обратное действие assignLead, тот же грант `lead.assign`
+   * (owner decision D-05B "assign — организационный уровень": снять
+   * назначение доступно тому же кругу ролей, что и назначить, отдельный
+   * grant не нужен, тот же принцип, что lead.reassign признан избыточным
+   * поверх lead.assign — см. INTENTIONALLY_UNIMPLEMENTED в
+   * permission-grants.test.ts). Не меняет stage (симметрично assignLead) —
+   * LeadEvent пишется с ТЕКУЩИМ stage лида, changedBy:{type:'position'}.
+   *
+   * NotFoundException — единый код для "лид не существует" и "существует в
+   * чужой организации", тот же принцип, что assignLead.
+   */
+  async unassignLead(params: {
+    leadId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    expectedOrganizationId: Types.ObjectId;
+    correlationId: string;
+  }) {
+    const lead = await this.leadRepository.findByIdForOrganization(params.leadId, params.expectedOrganizationId);
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.leadRepository.unassignOwner(
+        params.leadId,
+        params.expectedOrganizationId,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Lead not found');
+      }
+
+      await this.leadEventRepository.append(
+        {
+          leadId: params.leadId,
+          organizationId: params.expectedOrganizationId,
+          stage: lead.stage,
+          changedBy: { type: 'position', positionId: params.actorPositionId },
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.unassign',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before: { ownerPositionId: lead.ownerPositionId?.toString() ?? null },
+          after: { ownerPositionId: null },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return {
+        id: lead._id.toString(),
+        organizationId: lead.organizationId.toString(),
+        contactId: lead.contactId.toString(),
+        ownerPositionId: null as string | null,
+        stage: lead.stage,
+        source: lead.source,
+      };
+    });
+  }
+
+  /**
    * НЕ в узкой OpenAPI-спеке (v1-first-vertical-slice.yaml специфицирует
    * только assignLead) — тот же паттерн, что unit.price.update/status.update
    * в D-01: реализовано, потому что уже часть command-модели domain-model.md

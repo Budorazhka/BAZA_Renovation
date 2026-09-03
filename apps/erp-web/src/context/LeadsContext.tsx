@@ -1,9 +1,15 @@
 import { createContext, useContext, useReducer, type ReactNode, useEffect, useCallback, useState } from 'react'
+import { toast } from 'sonner'
 import { apiService } from '@/features/crm/services/api/service'
-import { ProductType, TaskPriority } from '@/features/crm/services/api/types'
-import { mapCrmLeadToPoker, mapCrmHistoryToPokerEvent, POKER_SOURCE_TO_CRM_PRODUCT, mapPokerIdToCrmStage } from '@/lib/crm-poker-adapter'
+import { TaskPriority } from '@/features/crm/services/api/types'
+import { leadsApiV2, newIdempotencyKey } from '@/services/leadsApiV2'
+import { teamApi } from '@/services/teamApi'
+import {
+  mapLeadV2ToPoker,
+  mapPokerIdToLeadStageV2,
+  POKER_SOURCE_TO_PRODUCT_V2,
+} from '@/lib/lead-v2-poker-adapter'
 import { useAuth } from '@/context/AuthContext'
-import { onPush, offPush } from '@/features/crm/services/socket'
 import type {
   BuyerRegistration,
   DistributionRule,
@@ -70,6 +76,15 @@ export interface LeadsState {
   leadHistory: Record<string, LeadEvent[]>
   /** Регистрации покупателей по лидам: leadId → регистрации */
   leadRegistrations: Record<string, BuyerRegistration[]>
+  /**
+   * version лида на новом backend (apps/api), leadId → version. Не часть
+   * публичного контракта Lead/PokerLead (types/leads.ts намеренно не несёт
+   * version — см. lib/lead-v2-poker-adapter.ts) — служебный кэш только для
+   * optimistic concurrency при PATCH .../stage (CAS, см. dispatchWithSync
+   * ниже). Заполняется при каждом чтении лида с backend (список/get/
+   * changeStage-ответ), не выставляется наружу через LeadsContextValue.
+   */
+  leadVersions: Record<string, number>
 }
 
 export type LeadsAction =
@@ -94,6 +109,7 @@ export type LeadsAction =
   | { type: 'SET_LEADS'; leads: Lead[] }
   | { type: 'SET_LEAD_HISTORY'; historyMap: Record<string, LeadEvent[]> }
   | { type: 'SET_MANAGERS'; managers: LeadManager[] }
+  | { type: 'SET_LEAD_VERSIONS'; versions: Record<string, number> }
 
 function leadsReducer(state: LeadsState, action: LeadsAction): LeadsState {
   switch (action.type) {
@@ -103,6 +119,8 @@ function leadsReducer(state: LeadsState, action: LeadsAction): LeadsState {
       return { ...state, leadHistory: { ...state.leadHistory, ...action.historyMap } }
     case 'SET_LEADS':
       return { ...state, leadPool: action.leads }
+    case 'SET_LEAD_VERSIONS':
+      return { ...state, leadVersions: { ...state.leadVersions, ...action.versions } }
     case 'ADD_LEAD': {
       const lead = action.lead
       let managerId: string | null = lead.managerId ?? null
@@ -264,6 +282,7 @@ const initialState: LeadsState = {
   leadPartners: [],
   leadHistory: {},
   leadRegistrations: {},
+  leadVersions: {},
 }
 
 type LeadsContextValue = {
@@ -287,111 +306,75 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const { currentUser } = useAuth()
 
-  // Синхронизация с реальным CRM API
+  /**
+   * Синхронизация с новым backend (apps/api, /api/v1/leads) — лиды
+   * карточного стола больше НЕ читаются с легаси api-crm.baza.sale (было до
+   * 03.09.2026, см. историю файла). Настройки распределения
+   * (getDistributionSettings) и bulk-reassign остаются на легаси backend
+   * намеренно: у нового backend нет эквивалента (CrmService докстринг:
+   * авто-раздача — "не является стартовым поведением", серверного
+   * bulk-reassign нет и не планируется этой фазой) — не пробел, а
+   * сознательное разделение источников данных на переходный период.
+   */
   const fetchLeads = useCallback(async () => {
     setIsLoading(true)
     try {
-      const [leadsRes, settingsRes, tasksRes] = await Promise.all([
-        apiService.getLeads({ page: 1, limit: 1000 }),
+      const [leadsResult, positions, settingsRes] = await Promise.all([
+        leadsApiV2.listAll(),
+        teamApi.list().catch(() => []),
         apiService.getDistributionSettings(),
-        apiService.getTasks({ page: 1, limit: 1000 })
       ])
 
-      if (leadsRes.success && leadsRes.data) {
-        const historyMap: Record<string, LeadEvent[]> = {}
-        const managersMap = new Map<string, LeadManager>()
-        
-        const tasksByLeadId = new Map<string, any[]>()
-        if (tasksRes.success && tasksRes.data) {
-          tasksRes.data.items.forEach(t => {
-            const lid = typeof t.leadId === 'string' ? t.leadId : (t.leadId as any)?._id
-            if (lid) {
-              const existing = tasksByLeadId.get(lid) || []
-              tasksByLeadId.set(lid, [...existing, t])
-            }
-          })
-        }
-
-        const pokerLeads = leadsRes.data.items.map(crmLead => {
-          const pokerLead = mapCrmLeadToPoker(crmLead)
-          const leadTasks = tasksByLeadId.get(crmLead._id) || []
-          const now = new Date()
-
-          // Если бэкенд не прислал флаги (false), считаем сами на основе подгруженных задач
-          if (!pokerLead.hasTask) {
-            pokerLead.hasTask = leadTasks.length > 0
-          }
-          if (!pokerLead.taskOverdue) {
-            pokerLead.taskOverdue = leadTasks.some(t => {
-              if (t.status === 'completed') return false
-              return t.endDate && new Date(t.endDate) < now
-            })
-          }
-
-          if (crmLead.history) {
-            historyMap[crmLead._id] = crmLead.history.map((h, i) => mapCrmHistoryToPokerEvent(h, i))
-          }
-          
-          const assigned = crmLead.assignedTo
-          if (assigned && typeof assigned === 'object' && '_id' in assigned) {
-            const assignedObj = assigned as { _id: string; name?: string; email?: string }
-            managersMap.set(assignedObj._id, {
-              id: assignedObj._id,
-              name: assignedObj.name || 'Без имени',
-              login: assignedObj.email || '',
-              sourceTypes: ['primary', 'secondary', 'rent', 'ad_campaigns']
-            })
-          }
-          return pokerLead
-        })
-
-        dispatch({ type: 'SET_LEADS', leads: pokerLeads })
-        dispatch({ type: 'SET_LEAD_HISTORY', historyMap })
-        
-        const managers = Array.from(managersMap.values())
-        if (managers.length > 0) {
-          dispatch({ type: 'SET_MANAGERS', managers })
-        }
+      if (!leadsResult.complete) {
+        console.warn('[LeadsContext] Показаны не все лиды — упёрлись в предел страниц (leadsApiV2.listAll)')
       }
+
+      const pokerLeads = leadsResult.items.map(mapLeadV2ToPoker)
+      dispatch({ type: 'SET_LEADS', leads: pokerLeads })
+      dispatch({
+        type: 'SET_LEAD_VERSIONS',
+        versions: Object.fromEntries(leadsResult.items.map((l) => [l.id, l.version])),
+      })
+
+      // Ростер менеджеров теперь строится из реестра команды (positionId,
+      // teamApi.list()), а не из assignedTo, встроенного в лид: LeadV2 не
+      // раскрывает имя/почту владельца, только ownerPositionId (opaque id).
+      // sourceTypes — честный дефолт "видит все очереди": маршрутизация
+      // очередей (первичка/вторичка/аренда/реклама) per-позиция не
+      // моделирована на новом backend, тот же дефолт использовался и в
+      // легаси-фоллбэке до этой фазы.
+      const managers: LeadManager[] = positions
+        .filter((p) => !p.vacant)
+        .map((p) => ({
+          id: p.positionId ?? p.id,
+          login: p.email || p.loginEmail || '',
+          name: p.name || p.position || 'Без имени',
+          sourceTypes: ['primary', 'secondary', 'rent', 'ad_campaigns'],
+        }))
+      dispatch({ type: 'SET_MANAGERS', managers })
 
       if (settingsRes.success && settingsRes.data) {
         dispatch({ type: 'SET_DISTRIBUTION_RULE', rule: { type: settingsRes.data.type } })
         dispatch({ type: 'SET_MANUAL_DISTRIBUTOR', managerId: settingsRes.data.manualDistributorId })
       }
     } catch (err) {
-      console.error('[LeadsContext] Failed to fetch leads from CRM:', err)
+      console.error('[LeadsContext] Failed to fetch leads:', err)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Real-time Sync via WebSockets
-  useEffect(() => {
-    const handleLeadPush = (env: any) => {
-      const crmLead = env.data
-      if (crmLead && crmLead._id) {
-        const pokerLead = mapCrmLeadToPoker(crmLead)
-        dispatch({ type: 'SET_LEADS', leads: state.leadPool.map(l => l.id === pokerLead.id ? pokerLead : l) })
-      }
-    }
-
-    const handleTaskPush = () => {
-      fetchLeads()
-    }
-
-    const sub1 = onPush('lead:updated', handleLeadPush)
-    const sub2 = onPush('lead:created', handleLeadPush)
-    const sub3 = onPush('task:updated', handleTaskPush)
-    const sub4 = onPush('task:created', handleTaskPush)
-
-    return () => {
-      offPush('lead:updated', sub1)
-      offPush('lead:created', sub2)
-      offPush('task:updated', sub3)
-      offPush('task:created', sub4)
-    }
-  }, [state.leadPool, fetchLeads])
-
+  // Realtime: новый backend (apps/api) не поднимает WebSocketGateway/
+  // socket.io — проверено по исходникам (нет ни одного файла с
+  // WebSocketGateway во всём apps/api/src). Легаси-сокет
+  // (features/crm/services/socket.ts, api-crm.baza.sale) отправлял события
+  // lead:updated/lead:created/task:updated/task:created для ЛЕГАСИ лидов,
+  // которых на этом экране больше нет — подписки на них сняты вместе с
+  // переходом источника данных. Честный пробел переходного периода (тот же
+  // класс, что commissionUsd/taskOverdue в lib/lead-v2-poker-adapter.ts):
+  // обновление карточек после этой фазы — по действию пользователя
+  // (assign/unassign/changeStage перечитывают свой лид при конфликте) либо
+  // по следующему вызову fetchLeads() (маунт экрана / смена пользователя).
   useEffect(() => {
     if (localStorage.getItem('jwt_token') || currentUser) {
       fetchLeads()
@@ -404,50 +387,87 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
     dispatch(action)
 
     try {
-      // 1. Смена стадии
+      // 1. Смена стадии — CAS через expectedVersion (leadVersions cache).
       if (action.type === 'UPDATE_LEAD_STAGE') {
         const lead = state.leadPool.find((l) => l.id === action.leadId)
-        const productType = lead ? POKER_SOURCE_TO_CRM_PRODUCT[lead.source] : ProductType.SALES
-        const crmStage = mapPokerIdToCrmStage(action.stageId, productType)
-        if (crmStage) {
-          await apiService.updateLeadStage(action.leadId, { stage: crmStage })
+        const productType = lead ? POKER_SOURCE_TO_PRODUCT_V2[lead.source] : undefined
+        const backendStage = productType ? mapPokerIdToLeadStageV2(action.stageId, productType) : null
+        if (backendStage) {
+          const expectedVersion = state.leadVersions[action.leadId] ?? 0
+          try {
+            const result = await leadsApiV2.changeStage(action.leadId, backendStage, expectedVersion)
+            if (typeof result.version === 'number') {
+              dispatch({ type: 'SET_LEAD_VERSIONS', versions: { [action.leadId]: result.version } })
+            }
+          } catch (err) {
+            const status = (err as { response?: { status?: number } })?.response?.status
+            if (status === 409) {
+              // Optimistic concurrency: лид изменился с момента, когда клиент
+              // прочитал version — оптимистичное изменение стадии выше
+              // не подтверждено сервером. Тот же паттерн, что TasksPage:
+              // сообщаем пользователю и перечитываем реестр целиком вместо
+              // того, чтобы настаивать на своей версии.
+              toast.error('Стадию лида изменил кто-то ещё. Карточка обновлена.')
+              void fetchLeads()
+            }
+            throw err
+          }
         }
       }
 
-      // 2. Назначение менеджера
+      // 2. Назначение менеджера — managerId это positionId (см.
+      // lib/lead-v2-poker-adapter.ts::mapLeadV2ToPoker).
       if (action.type === 'ASSIGN_LEAD') {
-        await apiService.updateLead(action.leadId, { assignedTo: action.managerId })
+        await leadsApiV2.assign(action.leadId, action.managerId)
       }
 
-      // 3. Создание лида
+      // 3. Снятие назначения.
+      if (action.type === 'UNASSIGN_LEAD') {
+        await leadsApiV2.unassign(action.leadId)
+      }
+
+      // 4. Создание лида.
       if (action.type === 'ADD_LEAD') {
         const { lead } = action
-        await apiService.createLead({
-          name: lead.name || 'Новый лид',
-          phone: lead.phone || '',
-          productType: POKER_SOURCE_TO_CRM_PRODUCT[lead.source] || ProductType.SALES,
-          assignedTo: lead.managerId || '',
-          source: lead.channel || 'other',
-        })
+        const productType = POKER_SOURCE_TO_PRODUCT_V2[lead.source]
+        const created = await leadsApiV2.create(
+          {
+            requesterName: lead.name,
+            requesterPhone: lead.phone,
+            productType,
+          },
+          newIdempotencyKey(),
+        )
+        const mapped = mapLeadV2ToPoker(created)
+        dispatch({ type: 'SET_LEADS', leads: state.leadPool.map((l) => (l.id === lead.id ? mapped : l)) })
+        dispatch({ type: 'SET_LEAD_VERSIONS', versions: { [mapped.id]: created.version } })
       }
 
-      // 4. Настройки распределения
+      // 5. Настройки распределения — легаси backend, нет эквивалента на новом (см. докстринг fetchLeads).
       if (action.type === 'SET_DISTRIBUTION_RULE' || action.type === 'SET_MANUAL_DISTRIBUTOR') {
         const currentType = action.type === 'SET_DISTRIBUTION_RULE' ? action.rule.type : state.distributionRule.type
         const currentManualId = action.type === 'SET_MANUAL_DISTRIBUTOR' ? action.managerId : state.manualDistributorId
-        
+
         await apiService.updateDistributionSettings({
           type: currentType as any,
           manualDistributorId: currentManualId
         })
       }
 
-      // 5. Массовая передача
+      // 6. Массовая передача — серверного bulk-reassign на новом backend
+      // нет (см. докстринг fetchLeads), composed из отдельных assign.
       if (action.type === 'BULK_REASSIGN_LEADS') {
-        await apiService.bulkReassignLeads(action.fromManagerId, action.toManagerId)
+        const affected = state.leadPool.filter((l) => l.managerId === action.fromManagerId)
+        await Promise.all(affected.map((l) => leadsApiV2.assign(l.id, action.toManagerId)))
       }
 
-      // 6. Создание задач через события истории
+      // 7. Создание задач через события истории — ОСТАЁТСЯ на легаси Task
+      // API (apiService.createTask). Известный пробел переходного периода:
+      // leadId, который получает legacy Task, — id лида из НОВОГО backend
+      // (Lead теперь живёт в apps/api, не в api-crm.baza.sale), поэтому
+      // связь задача↔лид в легаси хранилище не резолвится ни в одну
+      // реальную легаси-запись. Полная миграция задач — вне scope этой
+      // фазы (см. план: LeadViewModal и task-флоу мигрируют отдельно).
       if (action.type === 'ADD_LEAD_EVENT') {
         const { event, leadId } = action
         if (event.type === 'task_created' && event.payload.taskName) {
@@ -475,7 +495,7 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error(`[LeadsContext] Sync failed for ${action.type}:`, err)
     }
-  }, [state.distributionRule.type, state.manualDistributorId])
+  }, [state.leadPool, state.leadVersions, state.distributionRule.type, state.manualDistributorId, fetchLeads, currentUser])
 
   const leadsBySource = (source: LeadSource) =>
     state.leadPool.filter((l) => l.source === source)

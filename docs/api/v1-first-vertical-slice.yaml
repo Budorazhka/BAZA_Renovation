@@ -1560,6 +1560,33 @@ paths:
           description: FORBIDDEN — нет lead.assign.organization
           $ref: '#/components/responses/Error'
 
+  /leads/{leadId}/unassign:
+    post:
+      operationId: unassignLead
+      summary: >
+        Снять назначение лида (обратное действие POST /leads/{leadId}/assign,
+        тот же грант lead.assign.organization — отдельного grant нет). Не
+        меняет stage. ownerPositionId становится null.
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Назначение снято
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Lead'
+        '403':
+          description: FORBIDDEN — нет lead.assign.organization
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне организации
+          $ref: '#/components/responses/Error'
+
   /leads/{leadId}:
     get:
       operationId: getLead

@@ -43,6 +43,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import LeadViewModal from "@/features/crm/components/crm/LeadViewModal"
+import { apiService } from "@/features/crm/services/api/service"
 import { LeadStage, ProductType, type Lead as CrmLead } from "@/features/crm/services/api/types"
 import { mapPokerIdToCrmStage, POKER_SOURCE_TO_CRM_PRODUCT } from "@/lib/crm-poker-adapter"
 import { useNavigate, useSearchParams } from "react-router-dom"
@@ -325,6 +326,34 @@ export function LeadsCardTableView({
   const [dateTo, setDateTo] = useState<string>("")
   const [historyOpen, setHistoryOpen] = useState(false)
   const [leadViewInitialTab, setLeadViewInitialTab] = useState<LeadViewInitialTab>("history")
+  const [leadDetailsUnavailable, setLeadDetailsUnavailable] = useState(false)
+
+  /**
+   * После перевода этого экрана на новый backend (apps/api, /leads/*)
+   * LeadViewModal остаётся на легаси apiService.getLead (см. план: он
+   * мигрирует отдельной фазой, слишком глубоко завязан на легаси-CRUD
+   * файлов/чек-листов/звонков). Id лида на этом экране теперь — id из
+   * НОВОГО backend, которого в легаси api-crm.baza.sale нет ни для одного
+   * лида — apiService.getLead(id) отвечает 404 всегда. Вместо необработанного
+   * краша/бесконечного лоадера внутри модалки — проверяем существование
+   * лида в легаси backend ДО открытия и показываем понятное сообщение.
+   * Честный пробел переходного периода, задокументирован тем же способом,
+   * что accessProfile в CreateTeamAccountSlotDto прошлых фаз.
+   */
+  const openLeadDetails = async (leadId: string, tab: LeadViewInitialTab) => {
+    setSelectedLeadId(leadId)
+    setLeadViewInitialTab(tab)
+    try {
+      const resp = await apiService.getLead(leadId)
+      if (resp.success && resp.data) {
+        setHistoryOpen(true)
+        return
+      }
+    } catch {
+      // падает 404 для любого лида новой системы — ожидаемо, см. комментарий выше
+    }
+    setLeadDetailsUnavailable(true)
+  }
   const [transferConfirm, setTransferConfirm] = useState<{ newManagerId: string | null; newManagerName: string } | null>(null)
   const [dealSession, setDealSession] = useState(0)
   const [draggingLead, setDraggingLead] = useState<Lead | null>(null)
@@ -863,7 +892,7 @@ export function LeadsCardTableView({
                       return (
                         <tr
                           key={lead.id}
-                          onClick={() => { setSelectedLeadId(lead.id); setLeadViewInitialTab("history"); setHistoryOpen(true) }}
+                          onClick={() => void openLeadDetails(lead.id, "history")}
                           className={cn(
                             "cursor-pointer transition-colors",
                             isActive
@@ -989,7 +1018,7 @@ export function LeadsCardTableView({
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setLeadViewInitialTab("history"); setHistoryOpen(true) }}
+                    onClick={() => activeLead && void openLeadDetails(activeLead.id, "history")}
                     className="h-6 px-3 text-[10px] font-normal tracking-wide rounded-full border border-[var(--hub-card-border)] bg-[var(--green-card)] text-[var(--app-text)] hover:bg-[var(--green-card-hover)] hover:text-[var(--app-text)] shadow-none"
                   >
                     {t('crmPoker.history')}
@@ -1021,7 +1050,7 @@ export function LeadsCardTableView({
                       <span className="text-[8px] uppercase tracking-widest font-normal">{t('crmPoker.contact')}</span>
                     </button>
                     <button
-                      onClick={() => { setLeadViewInitialTab("tasks"); setHistoryOpen(true) }}
+                      onClick={() => activeLead && void openLeadDetails(activeLead.id, "tasks")}
                       className="flex flex-col items-center gap-1 px-4 py-1.5 rounded-xl border border-[rgba(243,209,139,0.3)] bg-[rgba(18,45,36,0.7)] text-[rgba(243,225,188,0.85)] hover:bg-[rgba(18,65,46,0.9)] hover:border-[rgba(243,225,188,0.5)] transition-colors"
                     >
                       <ListTodo className="size-4" />
@@ -1242,6 +1271,26 @@ export function LeadsCardTableView({
         lead={activeCrmLead}
         initialTab={leadViewInitialTab}
       />
+
+      {/* Детали лида недоступны — лид существует только в новой системе (см. openLeadDetails) */}
+      <Dialog open={leadDetailsUnavailable} onOpenChange={(open) => { if (!open) setLeadDetailsUnavailable(false) }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('crmPoker.leadDetailsUnavailableTitle', 'Детали недоступны')}</DialogTitle>
+            <DialogDescription>
+              {t(
+                'crmPoker.leadDetailsUnavailableBody',
+                'Детали пока недоступны для лидов новой системы. Эта карточка поддерживается частично — переход выполняется отдельным этапом.',
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end pt-2">
+            <Button variant="outline" onClick={() => setLeadDetailsUnavailable(false)}>
+              {t('common.close', 'Закрыть')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Подтверждение передачи лида */}
       <Dialog open={!!transferConfirm} onOpenChange={(open) => { if (!open) setTransferConfirm(null) }}>
