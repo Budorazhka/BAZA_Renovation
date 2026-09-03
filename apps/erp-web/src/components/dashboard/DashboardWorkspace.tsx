@@ -36,10 +36,10 @@ import {
   isDashboardPathAllowedForRole,
 } from '@/config/dashboard-rail'
 import { useLeads } from '@/context/LeadsContext'
+import { useDeals } from '@/context/DealsContext'
 import { cn } from '@/lib/utils'
 import { useCrmSync } from '@/features/crm/context/CrmSyncContext'
 import { type NewsArticle, type Reminder } from '@/data/info-mock'
-import { DEALS_MOCK } from '@/data/deals-mock'
 import {
   HOME_PROGRESS_MOCK,
 } from '@/data/home-workspace-mock'
@@ -339,6 +339,7 @@ export function DashboardWorkspace() {
   const { currentUser } = useAuth()
   const { activeScreen } = useWorkspaceDeskScreen()
   const { state } = useLeads()
+  const { deals } = useDeals()
   const navigate = useNavigate()
 
   /* ── CRM DATA (from Sync Context) ── */
@@ -1257,7 +1258,7 @@ export function DashboardWorkspace() {
             accountType={currentUser?.accountType}
             leads={pool}
             allLeads={state.leadPool}
-            deals={DEALS_MOCK}
+            deals={deals}
             progress={progress}
           />
         </div>

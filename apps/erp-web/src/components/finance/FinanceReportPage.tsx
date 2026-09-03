@@ -1,29 +1,15 @@
 import { useMemo, useState } from 'react'
 import { BarChart3, Briefcase, Filter, TrendingUp } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
-import { DEALS_MOCK } from '@/data/deals-mock'
+import { useDeals } from '@/context/DealsContext'
 import { STAGE_LABELS, STAGE_ORDER, SUCCESS_DEAL_STAGE_SET, type Deal, type DealStage, type DealType } from '@/types/deals'
 import { useI18n } from "@/i18n";
-
-const DEALS_STORAGE_KEY = 'agency-new.deals.kanban'
 
 const money = new Intl.NumberFormat('ru-RU')
 
 const TYPE_LABEL: Record<DealType, string> = {
   primary: 'Первичка',
   secondary: 'Вторичка',
-}
-
-function readDealsSnapshot(): Deal[] {
-  if (typeof window === 'undefined') return DEALS_MOCK
-  try {
-    const raw = window.localStorage.getItem(DEALS_STORAGE_KEY)
-    if (!raw) return DEALS_MOCK
-    const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? (parsed as Deal[]) : DEALS_MOCK
-  } catch {
-    return DEALS_MOCK
-  }
 }
 
 function isInsidePeriod(deal: Deal, period: '30d' | '90d' | 'all') {
@@ -36,7 +22,7 @@ function isInsidePeriod(deal: Deal, period: '30d' | '90d' | 'all') {
 
 export default function FinanceReportPage() {
     const { t } = useI18n();
-  const deals = useMemo(() => readDealsSnapshot(), [])
+  const { deals } = useDeals()
   const [period, setPeriod] = useState<'30d' | '90d' | 'all'>('90d')
   const [stage, setStage] = useState<'all' | DealStage>('all')
   const [agent, setAgent] = useState<'all' | string>('all')
