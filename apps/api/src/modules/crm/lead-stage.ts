@@ -42,3 +42,29 @@ export const ALL_LEAD_STAGE_VALUES: readonly string[] = [
   ...LEAD_STAGES,
   ...Object.values(LEAD_STAGE_DEFINITIONS).flatMap((stages) => stages.map((stage) => stage.id)),
 ];
+
+/**
+ * `[owner decision — 04.09.2026]`: `realtorStage`/`curatorStage` сохраняют
+ * ровно легаси-таксономию — два независимых 6-шаговых указателя прогресса,
+ * СВОЯ собственная номенклатура, не входящая ни в `LEAD_STAGES`, ни в
+ * `LEAD_STAGE_DEFINITIONS` (см. `lead.schema.ts` докстринг у этих полей).
+ * До этого решения оба поля временно валидировались общим справочником
+ * стадии продукта — временное расхождение снято этим коммитом.
+ */
+export const REALTOR_STAGE_VALUES = [
+  'realtor_1',
+  'realtor_2',
+  'realtor_3',
+  'realtor_4',
+  'realtor_5',
+  'realtor_6',
+] as const;
+
+export const CURATOR_STAGE_VALUES = [
+  'curator_1',
+  'curator_2',
+  'curator_3',
+  'curator_4',
+  'curator_5',
+  'curator_6',
+] as const;

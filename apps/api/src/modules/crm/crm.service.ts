@@ -23,8 +23,9 @@ import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
-import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType } from './schemas/lead.schema';
+import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType, RealtorStage, CuratorStage } from './schemas/lead.schema';
 import { firstStageIdForProduct, stageIdsForProduct, LEAD_STAGE_DEFINITIONS } from './lead-stage-definitions';
+import { REALTOR_STAGE_VALUES, CURATOR_STAGE_VALUES } from './lead-stage';
 import {
   priorityFromFlags,
   type TaskDocument,
@@ -72,8 +73,8 @@ export interface CrmLeadReadModel {
   telegram: string | null;
   country: string | null;
   /** См. LeadDocument.realtorStage/curatorStage докстринг — независимые указатели, не дубли `stage`. */
-  realtorStage: LeadStage | null;
-  curatorStage: LeadStage | null;
+  realtorStage: RealtorStage | null;
+  curatorStage: CuratorStage | null;
 }
 
 export interface CrmDealParticipantReadModel {
@@ -1776,11 +1777,11 @@ export class CrmService {
    * отсутствовало в теле запроса", не "клиент явно снёс значение" — тот же
    * partial-PATCH принцип, что updateTask).
    *
-   * `realtorStage`/`curatorStage` валидируются тем же справочником, что
-   * основной `stage` (см. LeadDocument докстринг): productType лида задан
-   * → stageIdsForProduct(productType), не задан → generic-пятёрка
-   * (LEAD_STAGE_TRANSITIONS ключи, без матрицы переходов — здесь просто
-   * "это известное значение", не порядок прохождения).
+   * `[owner decision — 04.09.2026]`: `realtorStage`/`curatorStage`
+   * валидируются СВОИМИ списками (`REALTOR_STAGE_VALUES`/
+   * `CURATOR_STAGE_VALUES`, `lead-stage.ts`) — независимо от `productType`
+   * лида, не общим справочником стадии продукта (временное решение,
+   * снятое этим коммитом, см. LeadDocument докстринг у этих полей).
    */
   async updateLead(params: {
     leadId: Types.ObjectId;
@@ -1800,8 +1801,8 @@ export class CrmService {
     rejectionComment?: string;
     telegram?: string;
     country?: string;
-    realtorStage?: LeadStage;
-    curatorStage?: LeadStage;
+    realtorStage?: RealtorStage;
+    curatorStage?: CuratorStage;
   }): Promise<CrmLeadReadModel> {
     const lead = await this.leadRepository.findByIdForOrganization(
       params.leadId,
@@ -1812,20 +1813,19 @@ export class CrmService {
       throw new NotFoundException('Lead not found');
     }
 
-    const allowedStages: readonly string[] = lead.productType
-      ? stageIdsForProduct(lead.productType)
-      : Object.keys(LEAD_STAGE_TRANSITIONS);
-    for (const [field, value] of [
-      ['realtorStage', params.realtorStage],
-      ['curatorStage', params.curatorStage],
-    ] as const) {
-      if (value !== undefined && !allowedStages.includes(value)) {
-        throw new AppException(
-          ErrorCode.VALIDATION_FAILED,
-          `${field} "${value}" is not a valid stage${lead.productType ? ` for product "${lead.productType}"` : ''}`,
-          { field, value, productType: lead.productType ?? null },
-        );
-      }
+    if (params.realtorStage !== undefined && !REALTOR_STAGE_VALUES.includes(params.realtorStage)) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `realtorStage "${params.realtorStage}" is not a valid realtor stage`,
+        { field: 'realtorStage', value: params.realtorStage },
+      );
+    }
+    if (params.curatorStage !== undefined && !CURATOR_STAGE_VALUES.includes(params.curatorStage)) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        `curatorStage "${params.curatorStage}" is not a valid curator stage`,
+        { field: 'curatorStage', value: params.curatorStage },
+      );
     }
 
     const editableFields: Array<
@@ -3276,8 +3276,8 @@ function toLeadReadModel(
     rejectionComment?: string;
     telegram?: string;
     country?: string;
-    realtorStage?: LeadStage;
-    curatorStage?: LeadStage;
+    realtorStage?: RealtorStage;
+    curatorStage?: CuratorStage;
   },
   contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
   state: { stalled?: boolean; hasOpenNextAction?: boolean } = {},

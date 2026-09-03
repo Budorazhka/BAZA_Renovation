@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
-import { ALL_LEAD_STAGE_VALUES } from '../lead-stage';
+import { ALL_LEAD_STAGE_VALUES, REALTOR_STAGE_VALUES, CURATOR_STAGE_VALUES } from '../lead-stage';
 import { PRODUCT_TYPES } from '../lead-stage-definitions';
 
 /**
@@ -45,6 +45,10 @@ export type ProductLeadStage =
 
 /** Значение lead.stage — либо одна из 5 generic-стадий (productType не задан), либо одна из per-product стадий (productType задан). */
 export type LeadStage = GenericLeadStage | ProductLeadStage;
+
+/** `realtorStage`/`curatorStage` — своя 6-шаговая номенклатура, см. докстринг у @Prop ниже. Локальный литерал по той же причине, что LeadStage (emitDecoratorMetadata). */
+export type RealtorStage = 'realtor_1' | 'realtor_2' | 'realtor_3' | 'realtor_4' | 'realtor_5' | 'realtor_6';
+export type CuratorStage = 'curator_1' | 'curator_2' | 'curator_3' | 'curator_4' | 'curator_5' | 'curator_6';
 
 /**
  * Тот же буквальный union literal приём, что LeadStage выше — НЕ
@@ -175,7 +179,8 @@ export class LeadDocument extends Document {
   country?: string;
 
   /**
-   * `realtorStage`/`curatorStage` — НЕ дубли `stage`. Найдено чтением
+   * `[owner decision — 04.09.2026]`: `realtorStage`/`curatorStage` — НЕ
+   * дубли `stage`. Найдено чтением
    * apps/erp-web/src/features/crm/components/crm/LeadViewModal.tsx
    * (handleRealtorStageChange/handleCuratorStageChange, отдельные
    * debounce-таймеры от смены `stage`) и types.ts::LeadStage enum: это два
@@ -183,21 +188,19 @@ export class LeadDocument extends Document {
    * 'curator_1'..'curator_6') — СОБСТВЕННАЯ таксономия, отдельная от
    * network-стадий (`network_*`, 17 значений) и от generic-пятёрки, только
    * условно применимая к лидам productType:'network' (UI показывает эти
-   * слайдеры при `productType===NETWORK`). Эти конкретные realtor_N/
-   * curator_N значения НЕ входят ни в `LEAD_STAGES`, ни в
-   * `LEAD_STAGE_DEFINITIONS` нового backend — задача этого прохода прямо
-   * требует валидировать их тем же справочником, что основной `stage`
-   * (stageIdsForProduct(productType) либо generic-пятёрка), поэтому здесь
-   * они хранятся как `LeadStage` (тот же тип/enum, что stage), а не как
-   * отдельная realtor_N/curator_N номенклатура — это осознанное расхождение
-   * с легаси-фронтендом, не перенесённое сюда 1:1, задокументированное, а
-   * не тихо потерянное (см. отчёт прохода).
+   * слайдеры при `productType===NETWORK`, backend это не форсирует —
+   * гейтинг по продукту остаётся зоной UI, тем же принципом, что и раньше).
+   * Владелец подтвердил 04.09.2026: сохранить ровно легаси-таксономию, не
+   * упрощать. Хранятся как отдельный литеральный тип (не `LeadStage`),
+   * валидируются `REALTOR_STAGE_VALUES`/`CURATOR_STAGE_VALUES`
+   * (`lead-stage.ts`) — своим списком из 6 значений каждый, не общим
+   * справочником стадии продукта (временное решение до этого коммита).
    */
-  @Prop({ enum: ALL_LEAD_STAGE_VALUES, required: false })
-  realtorStage?: LeadStage;
+  @Prop({ enum: REALTOR_STAGE_VALUES, required: false })
+  realtorStage?: RealtorStage;
 
-  @Prop({ enum: ALL_LEAD_STAGE_VALUES, required: false })
-  curatorStage?: LeadStage;
+  @Prop({ enum: CURATOR_STAGE_VALUES, required: false })
+  curatorStage?: CuratorStage;
 
   /**
    * Файлы лида (легаси getLeadFiles/uploadAndRegisterFile/deleteLeadFileByName)

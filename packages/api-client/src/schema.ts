@@ -809,7 +809,7 @@ export interface paths {
         delete: operations["deleteLead"];
         options?: never;
         head?: never;
-        /** `[phase 3]` Сопутствующие поля лида (lead.update — own у manager, organization у owner/director/rop/developer, тот же прецедент, что lead.changeStage). НИКОГДА не меняет stage — тот путь остаётся под PATCH /leads/{leadId}/stage. realtorStage/curatorStage валидируются тем же справочником, что основной stage (productType лида → GET /leads/stage-definitions, не задан — generic-пятёрка). Только явно переданные поля изменяются (частичный PATCH). */
+        /** `[phase 3]` Сопутствующие поля лида (lead.update — own у manager, organization у owner/director/rop/developer, тот же прецедент, что lead.changeStage). НИКОГДА не меняет stage — тот путь остаётся под PATCH /leads/{leadId}/stage. `[owner decision — 04.09.2026]` realtorStage/curatorStage — собственная 6-шаговая номенклатура каждый (`realtor_1..realtor_6`/`curator_1..curator_6`), независимо от productType лида, не общий справочник стадии продукта. Только явно переданные поля изменяются (частичный PATCH). */
         patch: operations["updateLead"];
         trace?: never;
     };
@@ -2592,10 +2592,16 @@ export interface components {
             rejectionComment?: string | null;
             telegram?: string | null;
             country?: string | null;
-            /** @description `[phase 3]` НЕ дубль stage — независимый указатель прогресса риэлтора (см. CrmService.CrmLeadReadModel докстринг). Легаси фронтенд использует отдельную таксономию realtor_1..realtor_6, не входящую в GET /leads/stage-definitions — этот backend валидирует значение тем же справочником, что stage (productType лида → его стадии, иначе generic-пятёрка), это задокументированное расхождение с легаси, не перенесённое 1:1. */
-            realtorStage?: string | null;
-            /** @description Симметрично realtorStage — независимый указатель прогресса куратора. */
-            curatorStage?: string | null;
+            /**
+             * @description `[owner decision — 04.09.2026]` НЕ дубль stage — независимый указатель прогресса риэлтора, собственная 6-шаговая номенклатура (не входит в GET /leads/stage-definitions), независимо от productType лида.
+             * @enum {string|null}
+             */
+            realtorStage?: "realtor_1" | "realtor_2" | "realtor_3" | "realtor_4" | "realtor_5" | "realtor_6" | null;
+            /**
+             * @description Симметрично realtorStage — независимый указатель прогресса куратора, своя 6-шаговая номенклатура.
+             * @enum {string|null}
+             */
+            curatorStage?: "curator_1" | "curator_2" | "curator_3" | "curator_4" | "curator_5" | "curator_6" | null;
         };
         /** @description `[phase 3]` PATCH /leads/{leadId} — только сопутствующие поля лида, НИКОГДА stage (тот путь — PATCH /leads/{leadId}/stage). Все поля опциональны, изменяются только явно переданные. */
         UpdateLeadRequest: {
@@ -2610,8 +2616,10 @@ export interface components {
             rejectionComment?: string;
             telegram?: string;
             country?: string;
-            realtorStage?: string;
-            curatorStage?: string;
+            /** @enum {string} */
+            realtorStage?: "realtor_1" | "realtor_2" | "realtor_3" | "realtor_4" | "realtor_5" | "realtor_6";
+            /** @enum {string} */
+            curatorStage?: "curator_1" | "curator_2" | "curator_3" | "curator_4" | "curator_5" | "curator_6";
         };
         /** @description `[phase 3]` GET/POST/DELETE /leads/{leadId}/files item shape. fileName выводится из MediaAsset storage key (originalPath), не клиентское имя файла — MediaAssetDocument его не хранит. */
         LeadFile: {
@@ -5015,7 +5023,7 @@ export interface operations {
                     "application/json": components["schemas"]["LeadListItem"];
                 };
             };
-            /** @description VALIDATION_FAILED — невалидное значение поля (например realtorStage/curatorStage вне справочника productType лида) */
+            /** @description VALIDATION_FAILED — невалидное значение поля (например realtorStage вне realtor_1..realtor_6, curatorStage вне curator_1..curator_6) */
             400: components["responses"]["Error"];
             /** @description FORBIDDEN — нет lead.update */
             403: components["responses"]["Error"];

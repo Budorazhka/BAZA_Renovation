@@ -1031,7 +1031,11 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       expect(auditDoc).toMatchObject({ after: { city: 'Тбилиси', tags: ['vip', 'hot'], dealValue: 15000 } });
     });
 
-    it('realtorStage невалидная для productType лида — VALIDATION_FAILED, поле не сохраняется', async () => {
+    it('realtorStage вне собственного 6-шагового списка — VALIDATION_FAILED, поле не сохраняется', async () => {
+      // [owner decision — 04.09.2026]: realtorStage/curatorStage — своя
+      // номенклатура (realtor_1..6/curator_1..6), не общий справочник
+      // стадии продукта. Продуктовая стадия вроде 'network_offer_given' —
+      // валидная стадия ЛИДА, но невалидная realtorStage.
       const organizationId = new Types.ObjectId();
       await seedOrganization(organizationId);
       const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
@@ -1043,7 +1047,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
           actorPositionId: new Types.ObjectId(),
           actorIdentityId: new Types.ObjectId(),
           correlationId: 'integration-test-correlation-id',
-          realtorStage: 'contacted',
+          realtorStage: 'network_offer_given' as never,
         }),
       ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
 
@@ -1051,10 +1055,12 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       expect(leadDoc?.realtorStage).toBeFalsy();
     });
 
-    it('realtorStage валидная для productType лида — сохраняется', async () => {
+    it('realtorStage/curatorStage из собственного 6-шагового списка — сохраняются независимо друг от друга и от productType', async () => {
       const organizationId = new Types.ObjectId();
       await seedOrganization(organizationId);
-      const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
+      // Лид БЕЗ productType — realtorStage/curatorStage не завязаны на
+      // продукт, работают одинаково для любого лида.
+      const leadId = await seedLead(organizationId);
 
       const result = await crmService.updateLead({
         leadId,
@@ -1062,12 +1068,31 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
         actorPositionId: new Types.ObjectId(),
         actorIdentityId: new Types.ObjectId(),
         correlationId: 'integration-test-correlation-id',
-        realtorStage: 'network_offer_given',
+        realtorStage: 'realtor_4',
+        curatorStage: 'curator_2',
       });
 
-      expect(result.realtorStage).toBe('network_offer_given');
+      expect(result.realtorStage).toBe('realtor_4');
+      expect(result.curatorStage).toBe('curator_2');
       const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
-      expect(leadDoc?.realtorStage).toBe('network_offer_given');
+      expect(leadDoc).toMatchObject({ realtorStage: 'realtor_4', curatorStage: 'curator_2' });
+    });
+
+    it('curatorStage со значением из чужого списка (realtor_N) — VALIDATION_FAILED', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+
+      await expect(
+        crmService.updateLead({
+          leadId,
+          organizationId,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+          curatorStage: 'realtor_1' as never,
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
     });
 
     it('чужая организация — NotFoundException, ничего не меняется', async () => {

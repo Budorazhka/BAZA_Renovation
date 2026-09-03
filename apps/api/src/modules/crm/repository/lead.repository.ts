@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, Model, PipelineStage, Types } from 'mongoose';
-import { LeadDocument, LeadSource, LeadStage, LeadProductType } from '../schemas/lead.schema';
+import { LeadDocument, LeadSource, LeadStage, LeadProductType, RealtorStage, CuratorStage } from '../schemas/lead.schema';
 
 export interface LeadWithStalled {
   _id: Types.ObjectId;
@@ -25,8 +25,8 @@ export interface LeadWithStalled {
   rejectionComment?: string;
   telegram?: string;
   country?: string;
-  realtorStage?: LeadStage;
-  curatorStage?: LeadStage;
+  realtorStage?: RealtorStage;
+  curatorStage?: CuratorStage;
   attachedAssetIds?: Types.ObjectId[];
 }
 

@@ -1,6 +1,6 @@
 import { ArrayMaxSize, IsArray, IsIn, IsNumber, IsOptional, IsString, Length, Min } from 'class-validator';
-import { ALL_LEAD_STAGE_VALUES } from '../lead-stage';
-import type { LeadStage } from '../schemas/lead.schema';
+import { REALTOR_STAGE_VALUES, CURATOR_STAGE_VALUES } from '../lead-stage';
+import type { RealtorStage, CuratorStage } from '../schemas/lead.schema';
 
 /**
  * PATCH /leads/:leadId — сопутствующие поля лида (см. lead.schema.ts
@@ -8,11 +8,10 @@ import type { LeadStage } from '../schemas/lead.schema';
  * стадии остаётся только за `PATCH /leads/:leadId/stage`
  * (CAS/idempotency), этот DTO её не принимает вовсе.
  *
- * `realtorStage`/`curatorStage` — `@IsIn(ALL_LEAD_STAGE_VALUES)` та же
- * coarse-проверка, что `ChangeLeadStageDto.stage` ("это вообще известная
- * стадия хоть какого-то продукта"). Точная проверка "стадия принадлежит
- * productType этого лида" — CrmService.updateLead, ей недоступен
- * productType лида на уровне DTO.
+ * `[owner decision — 04.09.2026]`: `realtorStage`/`curatorStage` — своя
+ * 6-шаговая номенклатура каждый, `@IsIn(REALTOR_STAGE_VALUES)`/
+ * `@IsIn(CURATOR_STAGE_VALUES)`, независимо от `productType` лида (см.
+ * lead.schema.ts докстринг у этих полей).
  */
 export class UpdateLeadDto {
   @IsOptional()
@@ -72,12 +71,12 @@ export class UpdateLeadDto {
   country?: string;
 
   @IsOptional()
-  @IsIn(ALL_LEAD_STAGE_VALUES)
-  realtorStage?: LeadStage;
+  @IsIn(REALTOR_STAGE_VALUES)
+  realtorStage?: RealtorStage;
 
   @IsOptional()
-  @IsIn(ALL_LEAD_STAGE_VALUES)
-  curatorStage?: LeadStage;
+  @IsIn(CURATOR_STAGE_VALUES)
+  curatorStage?: CuratorStage;
 
   // `expectedVersion`/`stage` намеренно нет в этом DTO: сопутствующие поля
   // не версионированы (см. LeadRepository.updateFields докстринг) — только
