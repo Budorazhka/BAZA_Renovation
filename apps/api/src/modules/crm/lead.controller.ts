@@ -355,6 +355,10 @@ export class LeadController {
       leadId: leadId.toString(),
       stage: dto.stage,
       expectedVersion: dto.expectedVersion,
+      // Не `?? null` намеренно (тот же принцип, что createLead::productType):
+      // undefined опускается при сериализации хеша, сохраняя хеш существующих
+      // клиентов без comment байт-в-байт идентичным.
+      comment: dto.comment,
     };
 
     const replay = await this.idempotencyService.checkReplay({
@@ -375,6 +379,7 @@ export class LeadController {
       actorIdentityId,
       expectedOrganizationId: new Types.ObjectId(tenantContext.organizationId),
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'changeStage'),
+      comment: dto.comment,
       correlationId: req.correlationId,
       idempotencyKey,
       idempotencyRequestBody,

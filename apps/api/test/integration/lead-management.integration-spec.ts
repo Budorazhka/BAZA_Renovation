@@ -478,6 +478,55 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     });
   });
 
+  describe('changeLeadStage — comment (phase 3, легаси createStageComment/getStageComments)', () => {
+    it('comment сохраняется на LeadEvent этого перехода и отдаётся в GET /leads/:id/events', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'new' });
+
+      await crmService.changeLeadStage({
+        leadId,
+        newStage: 'contacted',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+        comment: 'Клиент попросил перезвонить завтра',
+      });
+
+      const { items } = await crmService.listLeadEvents({ leadId, organizationId, limit: 20 });
+      const event = items.find((e) => e.stage === 'contacted');
+      expect(event?.comment).toBe('Клиент попросил перезвонить завтра');
+
+      const eventDoc = await connection.collection('lead_events').findOne({ leadId, stage: 'contacted' });
+      expect(eventDoc?.comment).toBe('Клиент попросил перезвонить завтра');
+    });
+
+    it('без comment — поле остаётся null (не задан), не ломает существующий переход', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'new' });
+
+      await crmService.changeLeadStage({
+        leadId,
+        newStage: 'contacted',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      const { items } = await crmService.listLeadEvents({ leadId, organizationId, limit: 20 });
+      expect(items[0]?.comment).toBeNull();
+    });
+  });
+
   describe('changeLeadStage — transition-матрица (D-05B)', () => {
     it('запрещённый переход (converted→contacted) — AppException VALIDATION_FAILED, stage не меняется', async () => {
       const organizationId = new Types.ObjectId();

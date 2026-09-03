@@ -127,6 +127,8 @@ export interface CrmLeadEventReadModel {
   stage: LeadStage;
   changedBy: { type: 'position' | 'system'; positionId?: string };
   changedAt: string;
+  /** `[phase 3]` См. LeadEventDocument.comment докстринг — легаси stage-comment, привязанный к этому переходу. */
+  comment: string | null;
 }
 
 /**
@@ -1614,6 +1616,8 @@ export class CrmService {
     idempotencyKey: string;
     /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
     idempotencyRequestBody: Record<string, unknown>;
+    /** `[phase 3]` См. LeadEventDocument.comment докстринг — легаси stage-comment для ЭТОГО перехода. */
+    comment?: string;
   }) {
     const lead = await this.leadRepository.findByIdForOrganization(
       params.leadId,
@@ -1711,6 +1715,7 @@ export class CrmService {
           organizationId: params.expectedOrganizationId,
           stage: params.newStage,
           changedBy: { type: 'position', positionId: params.actorPositionId },
+          comment: params.comment,
         },
         session,
       );
@@ -3283,6 +3288,7 @@ function toLeadEventReadModel(event: {
   stage: LeadStage;
   changedBy: { type: 'position' | 'system'; positionId?: Types.ObjectId };
   changedAt: Date;
+  comment?: string;
 }): CrmLeadEventReadModel {
   return {
     id: event._id.toString(),
@@ -3293,6 +3299,7 @@ function toLeadEventReadModel(event: {
       positionId: event.changedBy.positionId?.toString(),
     },
     changedAt: event.changedAt.toISOString(),
+    comment: event.comment ?? null,
   };
 }
 

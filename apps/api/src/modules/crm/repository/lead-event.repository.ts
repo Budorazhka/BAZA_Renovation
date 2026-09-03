@@ -21,6 +21,7 @@ export class LeadEventRepository {
       organizationId: Types.ObjectId;
       stage: LeadStage;
       changedBy: LeadEventChangedBy;
+      comment?: string;
     },
     session?: ClientSession,
   ): Promise<void> {

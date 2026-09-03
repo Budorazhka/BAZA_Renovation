@@ -2031,6 +2031,7 @@ describe('CrmService.listLeadEvents', () => {
         stage: 'contacted',
         changedBy: { type: 'position', positionId: positionId.toString() },
         changedAt: '2026-08-27T09:00:00.000Z',
+        comment: null,
       },
     ]);
     expect(result.nextCursor).toBe(eventIds[0]!.toString());

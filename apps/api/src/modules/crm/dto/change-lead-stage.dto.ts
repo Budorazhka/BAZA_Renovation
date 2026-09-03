@@ -1,4 +1,4 @@
-import { IsIn, IsInt, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Length, Min } from 'class-validator';
 import { ALL_LEAD_STAGE_VALUES } from '../lead-stage';
 import type { LeadStage } from '../schemas/lead.schema';
 
@@ -21,4 +21,14 @@ export class ChangeLeadStageDto {
 
   @IsIn(ALL_LEAD_STAGE_VALUES)
   stage!: LeadStage;
+
+  /**
+   * `[phase 3]` Легаси createStageComment/getStageComments — комментарий,
+   * привязанный к ЭТОМУ переходу (см. LeadEventDocument.comment
+   * докстринг). Опционален — не каждый переход комментируется.
+   */
+  @IsOptional()
+  @IsString()
+  @Length(1, 2000)
+  comment?: string;
 }

@@ -158,6 +158,30 @@ describe('LeadController.changeStage', () => {
       },
     });
   });
+
+  it('пробрасывает comment в CrmService.changeLeadStage и в idempotencyRequestBody (phase 3)', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const changeLeadStage = jest.fn().mockResolvedValue({ id: leadId.toString(), stage: 'contacted', version: 1 });
+    const controller = new LeadController(
+      { changeLeadStage } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      { checkReplay: jest.fn().mockResolvedValue(null) } as unknown as IdempotencyService,
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.changeStage(
+      req as never,
+      leadId,
+      { stage: 'contacted', expectedVersion: 0, comment: 'Клиент попросил перезвонить завтра' },
+      'key-1',
+    );
+
+    expect(changeLeadStage).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: 'Клиент попросил перезвонить завтра' }),
+    );
+  });
 });
 
 describe('LeadController — read scope', () => {
