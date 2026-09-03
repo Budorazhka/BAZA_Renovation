@@ -7,6 +7,7 @@ import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository, type DevelopmentContact } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MediaService } from '../media/media.service';
+import type { MediaVariant } from '@baza/media-storage';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -126,6 +127,29 @@ export interface CrmLeadEventReadModel {
   stage: LeadStage;
   changedBy: { type: 'position' | 'system'; positionId?: string };
   changedAt: string;
+}
+
+/**
+ * GET /leads/:leadId/files — легаси `getLeadFiles` (apps/erp-web/src/
+ * features/crm/services/api/leads.ts). `fileName` — НЕ клиентское имя
+ * файла (MediaAssetDocument его не хранит вовсе, только `originalPath`
+ * storage key и MIME/размер) — выводится из originalPath (тот же
+ * технический компромисс, что TaskDocument.attachments требует явный
+ * fileName от клиента при создании: здесь источника для него нет, потому
+ * что attachedAssetIds хранит только Types.ObjectId[], не пары
+ * {assetId,fileName}, по прямому требованию задачи). `url` — резолвится
+ * ТОЛЬКО из variant'ов (тот же принцип, что TeamService.resolveAvatarUrl/
+ * property-assets публичные проекции — originalPath никогда не отдаётся
+ * напрямую клиенту), поэтому null, пока worker не построил 'card' variant
+ * (или для не-изображений, для которых variant'ы не строятся вовсе).
+ */
+export interface CrmLeadFileReadModel {
+  assetId: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  url: string | null;
+  createdAt: string;
 }
 
 export interface CrmContactReadModel {
@@ -1949,6 +1973,133 @@ export class CrmService {
   }
 
   /**
+   * GET /leads/:leadId/files — легаси getLeadFiles. Резолвит
+   * attachedAssetIds через MediaService (ADR-001: другие модули только
+   * через сервис, не репозиторий) — тот же ownerScope, что upload-intent/
+   * confirm/task-attachments (`{type:'organization', organizationId}`).
+   */
+  async listLeadFiles(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+    const assetIds = lead.attachedAssetIds ?? [];
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const assets = await this.mediaService.getAssetsForOwnerScope(assetIds, {
+      type: 'organization',
+      organizationId: params.organizationId,
+    });
+    // Порядок = порядок прикрепления (attachedAssetIds), не порядок Mongo
+    // $in-выборки (не гарантирован) — та же дисциплина, что TaskDocument.
+    // attachments уже сохраняет свой собственный порядок массива.
+    return assetIds
+      .map((assetId) => ({ assetId, asset: assets.get(assetId.toString()) }))
+      .filter((entry): entry is { assetId: Types.ObjectId; asset: NonNullable<typeof entry.asset> } => entry.asset !== undefined)
+      .map((entry) => toLeadFileReadModel(entry.assetId, entry.asset, this.mediaService));
+  }
+
+  /**
+   * POST /leads/:leadId/files — легаси uploadAndRegisterFile (в новом
+   * backend файл сначала грузится через POST /media/upload-intent +
+   * POST /media/:assetId/confirm, сюда приходит только ссылка на уже
+   * подтверждённый asset — тот же двухшаговый паттерн, что CreateTaskDto.
+   * attachments).
+   */
+  async attachLeadFile(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    assetId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const asset = (
+      await this.mediaService.getAssetsForOwnerScope([params.assetId], {
+        type: 'organization',
+        organizationId: params.organizationId,
+      })
+    ).get(params.assetId.toString());
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+    if (asset.status !== 'verified') {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'Media asset is not verified yet');
+    }
+
+    await runInTransaction(this.connection, async (session) => {
+      await this.leadRepository.addAttachedAsset(params.leadId, params.organizationId, params.assetId, session);
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          after: { attachedAssetId: params.assetId.toString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+    });
+
+    return this.listLeadFiles({ leadId: params.leadId, organizationId: params.organizationId });
+  }
+
+  /** DELETE /leads/:leadId/files/:assetId — легаси deleteLeadFileByName (по assetId, не по имени — тот же обмен, что registerLeadFile/attachedAssetIds не хранит имён). */
+  async detachLeadFile(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    assetId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    await runInTransaction(this.connection, async (session) => {
+      await this.leadRepository.removeAttachedAsset(params.leadId, params.organizationId, params.assetId, session);
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before: { attachedAssetId: params.assetId.toString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+    });
+
+    return this.listLeadFiles({ leadId: params.leadId, organizationId: params.organizationId });
+  }
+
+  /**
    * Общая идемпотентность-обвязка для revealContact/revealListingContact —
    * обе команды 404/резолюцию slug делают по-разному (development vs
    * listing), но сам Lead-create-транзакционный-flow идентичен, различается
@@ -3160,6 +3311,35 @@ function toContactReadModel(contact: {
     phone: contact.phone,
     email: contact.email ?? null,
     createdAt: contact.createdAt.toISOString(),
+  };
+}
+
+/**
+ * См. CrmLeadFileReadModel докстринг — fileName выводится из originalPath
+ * (последний сегмент storage key, например `original.jpg`), url резолвится
+ * только из 'card' variant (тот же принцип, что TeamService.resolveAvatarUrl).
+ */
+function toLeadFileReadModel(
+  assetId: Types.ObjectId,
+  asset: {
+    status: 'pending' | 'verified' | 'rejected';
+    variants: MediaVariant[];
+    declaredMimeType: string;
+    verifiedMimeType?: string;
+    sizeBytes: number;
+    createdAt: Date;
+    originalPath: string;
+  },
+  mediaService: MediaService,
+): CrmLeadFileReadModel {
+  const cardVariant = asset.variants.find((v) => v.type === 'card');
+  return {
+    assetId: assetId.toString(),
+    fileName: asset.originalPath.split('/').pop() ?? asset.originalPath,
+    mimeType: asset.verifiedMimeType ?? asset.declaredMimeType ?? null,
+    sizeBytes: asset.sizeBytes,
+    url: asset.status === 'verified' && cardVariant ? mediaService.getVariantUrl(cardVariant) : null,
+    createdAt: asset.createdAt.toISOString(),
   };
 }
 

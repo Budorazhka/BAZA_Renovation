@@ -284,9 +284,9 @@ export class MediaService {
   async getAssetsForOwnerScope(
     assetIds: Types.ObjectId[],
     expectedOwnerScope: OwnerScope,
-  ): Promise<Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date }>> {
+  ): Promise<Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date; originalPath: string }>> {
     const assets = await this.mediaAssetRepository.findByIds(assetIds);
-    const result = new Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date }>();
+    const result = new Map<string, { status: 'pending' | 'verified' | 'rejected'; variants: MediaVariant[]; bucket: MediaBucket; declaredMimeType: string; verifiedMimeType?: string; sizeBytes: number; createdAt: Date; originalPath: string }>();
     for (const asset of assets) {
       if (ownerScopesEqual(asset.ownerScope, expectedOwnerScope)) {
         result.set(asset._id.toString(), {
@@ -297,6 +297,7 @@ export class MediaService {
           verifiedMimeType: asset.verifiedMimeType,
           sizeBytes: asset.sizeBytes,
           createdAt: asset.createdAt,
+          originalPath: asset.originalPath,
         });
       }
     }

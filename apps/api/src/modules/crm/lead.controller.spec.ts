@@ -356,6 +356,74 @@ describe('LeadController.deleteLead', () => {
   });
 });
 
+describe('LeadController — файлы лида (phase 3)', () => {
+  it('GET /leads/:leadId/files — read-scope сужение, пробрасывает leadId/organizationId', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const listLeadFiles = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { listLeadFiles } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+
+    await controller.listLeadFiles(makeRequest(organizationId, positionId) as never, leadId);
+
+    expect(listLeadFiles).toHaveBeenCalledWith({ leadId, organizationId, ownerPositionId: positionId });
+  });
+
+  it('POST /leads/:leadId/files — пробрасывает assetId/actor, использует update-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const attachLeadFile = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { attachLeadFile } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.attachLeadFile(req as never, leadId, { assetId: assetId.toString() });
+
+    expect(attachLeadFile).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: undefined,
+      assetId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+  });
+
+  it('DELETE /leads/:leadId/files/:assetId — пробрасывает assetId из пути', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const detachLeadFile = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { detachLeadFile } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.detachLeadFile(req as never, leadId, assetId);
+
+    expect(detachLeadFile).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: positionId,
+      assetId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+  });
+});
+
 describe('LeadController — GET /leads/:leadId/events', () => {
   it('передаёт leadId/organizationId/ownerPositionId/cursor/limit в CrmService.listLeadEvents', async () => {
     const organizationId = new Types.ObjectId();

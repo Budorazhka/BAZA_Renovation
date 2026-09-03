@@ -10,6 +10,7 @@ import { CreateLeadDto } from './dto/create-lead.dto';
 import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
+import { AttachLeadFileDto } from './dto/attach-lead-file.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { ListLeadEventsDto } from './dto/list-lead-events.dto';
 import { ListTimelineDto } from './dto/list-timeline.dto';
@@ -186,6 +187,58 @@ export class LeadController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       requiredOwnerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'delete'),
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  /** GET /leads/:leadId/files — легаси getLeadFiles. Read-grant, тот же own/organization scope, что GET /leads/:leadId. */
+  @Get(':leadId/files')
+  @RequirePermission('lead', 'read')
+  async listLeadFiles(@Req() req: FastifyRequest, @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.listLeadFiles({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+    });
+  }
+
+  /** POST /leads/:leadId/files — легаси uploadAndRegisterFile. Переиспользует lead.update (мутация лида). */
+  @Post(':leadId/files')
+  @HttpCode(201)
+  @RequirePermission('lead', 'update')
+  async attachLeadFile(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Body() dto: AttachLeadFileDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.attachLeadFile({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'update'),
+      assetId: new Types.ObjectId(dto.assetId),
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  /** DELETE /leads/:leadId/files/:assetId — легаси deleteLeadFileByName (по assetId, см. CrmService.detachLeadFile). */
+  @Delete(':leadId/files/:assetId')
+  @HttpCode(200)
+  @RequirePermission('lead', 'update')
+  async detachLeadFile(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Param('assetId', ParseObjectIdPipe) assetId: Types.ObjectId,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.detachLeadFile({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'update'),
+      assetId,
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,
     });

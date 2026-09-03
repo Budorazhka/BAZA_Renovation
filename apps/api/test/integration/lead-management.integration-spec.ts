@@ -10,6 +10,7 @@ import { OrganizationsModule } from '../../src/modules/organizations/organizatio
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
 import { ErrorCode } from '../../src/shared/errors/error-codes';
 import { IdempotencyService } from '../../src/shared/idempotency/idempotency.service';
+import { MediaAssetRepository } from '@baza/media-storage';
 
 /**
  * D-05B: GET/POST/PATCH /leads/* — самостоятельная integration-проверка
@@ -25,6 +26,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
   let crmService: CrmService;
   let organizationsService: OrganizationsService;
   let idempotencyService: IdempotencyService;
+  let mediaAssetRepository: MediaAssetRepository;
   let moduleRef: TestingModule;
 
   beforeAll(async () => {
@@ -62,6 +64,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     crmService = moduleRef.get(CrmService);
     organizationsService = moduleRef.get(OrganizationsService);
     idempotencyService = moduleRef.get(IdempotencyService);
+    mediaAssetRepository = moduleRef.get(MediaAssetRepository);
   }, 120_000);
 
   afterAll(async () => {
@@ -82,6 +85,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     await connection.collection('audit_events').deleteMany({});
     await connection.collection('permission_grants').deleteMany({});
     await connection.collection('idempotency_records').deleteMany({});
+    await connection.collection('media_assets').deleteMany({});
   });
 
   async function seedOrganization(organizationId: Types.ObjectId): Promise<void> {
@@ -134,6 +138,123 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     });
     return leadId;
   }
+
+  async function seedVerifiedMediaAsset(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
+    const assetId = new Types.ObjectId();
+    await mediaAssetRepository.create({
+      _id: assetId,
+      ownerScope: { type: 'organization', organizationId },
+      declaredMimeType: 'image/jpeg',
+      sizeBytes: 1024,
+      bucket: 'public',
+      originalPath: `${assetId.toString()}/original.jpg`,
+      purpose: 'lead_attachment',
+    });
+    // markVerified требует session изнутри транзакции confirmUpload
+    // (ADR-006) — здесь просто фикстура для теста CRM-стороны (upload/
+    // confirm уже покрыты media-confirm-upload.integration-spec.ts),
+    // прямая запись через native driver быстрее и не тянет транзакцию.
+    await connection
+      .collection('media_assets')
+      .updateOne({ _id: assetId }, { $set: { status: 'verified', verifiedMimeType: 'image/jpeg', checksum: 'test-checksum' } });
+    return assetId;
+  }
+
+  describe('lead files — upload-confirm-attach-list-delete цикл (phase 3)', () => {
+    it('attachLeadFile → listLeadFiles → detachLeadFile → listLeadFiles: полный цикл', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const assetId = await seedVerifiedMediaAsset(organizationId);
+      const actorIdentityId = new Types.ObjectId();
+
+      const afterAttach = await crmService.attachLeadFile({
+        leadId,
+        organizationId,
+        assetId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id-attach',
+      });
+      expect(afterAttach).toEqual([
+        expect.objectContaining({ assetId: assetId.toString(), fileName: 'original.jpg', mimeType: 'image/jpeg' }),
+      ]);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.attachedAssetIds?.map((id: Types.ObjectId) => id.toString())).toEqual([assetId.toString()]);
+
+      const files = await crmService.listLeadFiles({ leadId, organizationId });
+      expect(files).toHaveLength(1);
+
+      const auditAttach = await connection.collection('audit_events').findOne({
+        action: 'lead.update',
+        'after.attachedAssetId': assetId.toString(),
+      });
+      expect(auditAttach).toBeTruthy();
+
+      const afterDetach = await crmService.detachLeadFile({
+        leadId,
+        organizationId,
+        assetId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id-detach',
+      });
+      expect(afterDetach).toEqual([]);
+
+      const leadDocAfterDetach = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDocAfterDetach?.attachedAssetIds ?? []).toEqual([]);
+
+      const filesAfterDetach = await crmService.listLeadFiles({ leadId, organizationId });
+      expect(filesAfterDetach).toEqual([]);
+    });
+
+    it('attachLeadFile: не-verified asset — VALIDATION_FAILED, лид не изменяется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const assetId = new Types.ObjectId();
+      await mediaAssetRepository.create({
+        _id: assetId,
+        ownerScope: { type: 'organization', organizationId },
+        declaredMimeType: 'image/jpeg',
+        sizeBytes: 1024,
+        bucket: 'public',
+        originalPath: `${assetId.toString()}/original.jpg`,
+        purpose: 'lead_attachment',
+      });
+
+      await expect(
+        crmService.attachLeadFile({
+          leadId,
+          organizationId,
+          assetId,
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.attachedAssetIds ?? []).toEqual([]);
+    });
+
+    it('attachLeadFile: asset чужой организации — NotFoundException', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+      const foreignAssetId = await seedVerifiedMediaAsset(orgB);
+
+      await expect(
+        crmService.attachLeadFile({
+          leadId,
+          organizationId: orgA,
+          assetId: foreignAssetId,
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 
   describe('assignLead — tenant isolation и Position boundary (D-05B security fix)', () => {
     it('чужая организация — assign отклоняется NotFoundException, ownerPositionId не меняется', async () => {
