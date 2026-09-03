@@ -3837,23 +3837,25 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
           }}
           onUpdateTaskStatus={async (taskId, status) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              await apiService.updateTask(taskId, { status });
-              setLeadTasks(prev => prev.map(task => 
-                task._id === taskId ? { ...task, status } : task
+              // `[phase 3]` `status` здесь — легаси TaskStatus; COMPLETED — отдельная
+              // команда complete (см. handleTaskStatusChange докстринг выше), остальные
+              // значения — setStatus. Запись в историю лида не пишется (тот же честный
+              // пробел, что в handleTaskStatusChange/handleDeleteTask).
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              const updated = status === TaskStatus.COMPLETED
+                ? await tasksApiV2.complete(taskId, expectedVersion)
+                : await tasksApiV2.setStatus(
+                    taskId,
+                    expectedVersion,
+                    status === TaskStatus.CANCELLED ? 'cancelled' : status === TaskStatus.IN_PROGRESS ? 'in_progress' : 'open',
+                  );
+              taskVersionsRef.current.set(taskId, updated.version);
+              const mappedTask = mapTaskV2ToCrmTask(updated);
+              setLeadTasks(prev => prev.map(task =>
+                task._id === taskId ? mappedTask : task
               ));
               if (selectedTaskForView === taskId) {
-                setCurrentTaskForModal(prev => prev ? { ...prev, status } : undefined);
-              }
-              if (displayLead?._id && taskTitle) {
-                try {
-                  await apiService.addLeadHistoryEntry(displayLead._id, {
-                    message: `Задача "${taskTitle}" изменена`,
-                  });
-                } catch (error) {
-                  console.error('Failed to add history entry:', error);
-                }
+                setCurrentTaskForModal(mappedTask);
               }
             } catch (error) {
               console.error('Failed to update task status:', error);
@@ -3861,52 +3863,28 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
           }}
           onDeleteTask={async (taskId) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              await apiService.deleteTask(taskId);
+              // `[phase 3]` DELETE /tasks/:id не существует — см. handleDeleteTask докстринг выше.
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              await tasksApiV2.setStatus(taskId, expectedVersion, 'cancelled');
+              taskVersionsRef.current.delete(taskId);
               setLeadTasks(prev => prev.filter(task => task._id !== taskId));
               handleCloseTaskView();
-              if (displayLead?._id && taskTitle) {
-                try {
-                  await apiService.addLeadHistoryEntry(displayLead._id, {
-                    message: `Задача "${taskTitle}" удалена`,
-                  });
-                } catch (error) {
-                  console.error('Failed to add history entry:', error);
-                }
-              }
             } catch (error) {
               console.error('Failed to delete task:', error);
             }
           }}
           onUpdateTaskEndDate={async (taskId, endDate) => {
             try {
-              const task = leadTasks.find(t => t._id === taskId);
-              const taskTitle = task?.title || '';
-              const updateData: { endDate?: string } = {};
-              if (endDate) {
-                updateData.endDate = endDate;
-              }
-              const response = await apiService.updateTask(taskId, updateData);
-              if (response.success && response.data) {
-                const updatedTask = response.data;
-                setLeadTasks(prev => prev.map(task => 
-                  task._id === taskId ? updatedTask : task
-                ));
-                if (selectedTaskForView === taskId) {
-                  setCurrentTaskForModal(updatedTask);
-                }
-                if (displayLead?._id && taskTitle) {
-                  try {
-                    await apiService.addLeadHistoryEntry(displayLead._id, {
-                      message: `Задача "${taskTitle}" изменена`,
-                    });
-                  } catch (error) {
-                    console.error('Failed to add history entry:', error);
-                  }
-                }
-              } else {
-                throw new Error(response.message || t('leadViewModal.failedToUpdateEndDate'));
+              if (!endDate) return;
+              const expectedVersion = taskVersionsRef.current.get(taskId) ?? 0;
+              const updated = await tasksApiV2.setDueAt(taskId, expectedVersion, endDate);
+              taskVersionsRef.current.set(taskId, updated.version);
+              const mappedTask = mapTaskV2ToCrmTask(updated);
+              setLeadTasks(prev => prev.map(task =>
+                task._id === taskId ? mappedTask : task
+              ));
+              if (selectedTaskForView === taskId) {
+                setCurrentTaskForModal(mappedTask);
               }
             } catch (error) {
               console.error('Failed to update task end date:', error);
