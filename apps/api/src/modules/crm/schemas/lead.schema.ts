@@ -228,6 +228,19 @@ export class LeadDocument extends Document {
   @Prop({ required: false })
   deletedAt?: Date;
 
+  /**
+   * `[lead-legacy-migration-tool]`: id лида в легаси-backend (api-crm.baza.sale)
+   * — единственный ключ идемпотентности инструмента переноса
+   * (LeadMigrationService.importLegacyLeads). Опционален и sparse — только у
+   * мигрированных лидов оно есть, обычные лиды (marketplace reveal, ручная
+   * форма, CSV-импорт) его никогда не заполняют. Unique в пределах
+   * организации: повторный прогон миграции с тем же файлом обязан находить
+   * уже созданный лид по (organizationId, legacyId) и обновлять его, а не
+   * создавать дубль.
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
@@ -236,3 +249,4 @@ export const LeadSchema = SchemaFactory.createForClass(LeadDocument);
 LeadSchema.index({ organizationId: 1, ownerPositionId: 1, stage: 1 });
 LeadSchema.index({ contactId: 1 });
 LeadSchema.index({ 'source.publicationId': 1 });
+LeadSchema.index({ organizationId: 1, legacyId: 1 }, { unique: true, sparse: true });

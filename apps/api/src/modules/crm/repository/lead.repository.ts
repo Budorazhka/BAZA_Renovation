@@ -377,4 +377,57 @@ export class LeadRepository {
       .exec();
     return { modifiedCount: result.modifiedCount };
   }
+
+  /**
+   * `[lead-legacy-migration-tool]`: единственная точка поиска уже
+   * мигрированного лида — тот же (organizationId, legacyId), что unique
+   * sparse индекс на схеме. Идемпотентность importLegacyLeads целиком
+   * опирается на этот метод: найден → updateFields, не найден → createFromMigration.
+   */
+  async findByLegacyId(
+    organizationId: Types.ObjectId,
+    legacyId: string,
+    session?: ClientSession,
+  ): Promise<LeadDocument | null> {
+    return this.model.findOne({ organizationId, legacyId }, null, { session }).exec();
+  }
+
+  /**
+   * `[lead-legacy-migration-tool]`: отдельный от `create()` метод — тот не
+   * принимает явный `createdAt`/сопутствующие поля лида и используется всеми
+   * остальными HTTP-путями (reveal-contact, ручная форма, CSV-импорт), где
+   * `createdAt` обязан быть моментом реального вызова. Миграция переносит
+   * НАСТОЯЩУЮ историческую дату создания легаси-лида — явно передаёт её сюда.
+   * Mongoose timestamps-плагин НЕ перезаписывает уже установленное значение
+   * `createdAt` на новом документе (см. LeadMigrationService докстринг и
+   * lead-migration-timestamps.integration-spec.ts — экспериментально
+   * подтверждено, не предположение).
+   */
+  async createFromMigration(
+    params: {
+      organizationId: Types.ObjectId;
+      contactId: Types.ObjectId;
+      legacyId: string;
+      source: LeadSource;
+      productType?: LeadProductType;
+      stage: LeadStage;
+      realtorStage?: RealtorStage;
+      curatorStage?: CuratorStage;
+      ownerPositionId?: Types.ObjectId;
+      city?: string;
+      notes?: string;
+      tags?: string[];
+      dealValue?: number;
+      budgetValue?: number;
+      budgetCurrency?: string;
+      expectedCloseDate?: string;
+      rejectionReason?: string;
+      rejectionComment?: string;
+      createdAt: Date;
+    },
+    session?: ClientSession,
+  ): Promise<LeadDocument> {
+    const [doc] = await this.model.create([{ ...params }], { session });
+    return doc!;
+  }
 }

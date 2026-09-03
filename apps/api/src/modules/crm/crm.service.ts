@@ -126,7 +126,12 @@ export interface CrmLeadEventReadModel {
   id: string;
   leadId: string;
   stage: LeadStage;
-  changedBy: { type: 'position' | 'system'; positionId?: string };
+  /**
+   * `type:'identity'` — `[lead-legacy-migration-tool]` системный актор
+   * переноса (см. LeadEventChangedByType докстринг), `id` заполнен только
+   * для этого типа.
+   */
+  changedBy: { type: 'position' | 'system' | 'identity'; positionId?: string; id?: string };
   changedAt: string;
   /** `[phase 3]` См. LeadEventDocument.comment докстринг — легаси stage-comment, привязанный к этому переходу. */
   comment: string | null;
@@ -3335,7 +3340,7 @@ function toLeadEventReadModel(event: {
   _id: Types.ObjectId;
   leadId: Types.ObjectId;
   stage: LeadStage;
-  changedBy: { type: 'position' | 'system'; positionId?: Types.ObjectId };
+  changedBy: { type: 'position' | 'system' | 'identity'; positionId?: Types.ObjectId; id?: Types.ObjectId };
   changedAt: Date;
   comment?: string;
 }): CrmLeadEventReadModel {
@@ -3346,6 +3351,7 @@ function toLeadEventReadModel(event: {
     changedBy: {
       type: event.changedBy.type,
       positionId: event.changedBy.positionId?.toString(),
+      id: event.changedBy.id?.toString(),
     },
     changedAt: event.changedAt.toISOString(),
     comment: event.comment ?? null,

@@ -22,6 +22,15 @@ export class LeadEventRepository {
       stage: LeadStage;
       changedBy: LeadEventChangedBy;
       comment?: string;
+      /**
+       * `[lead-legacy-migration-tool]`: явная историческая дата перехода —
+       * опционально, только для миграции (обычные HTTP-переходы стадии не
+       * знают "прошлой" даты, changedAt для них всегда текущий момент через
+       * timestamps-плагин). Тот же подтверждённый механизм, что
+       * LeadRepository.createFromMigration: mongoose не перезаписывает уже
+       * установленное значение.
+       */
+      changedAt?: Date,
     },
     session?: ClientSession,
   ): Promise<void> {
