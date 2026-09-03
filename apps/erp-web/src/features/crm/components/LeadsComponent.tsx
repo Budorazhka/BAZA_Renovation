@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import Markdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import {
-  apiService,
   LeadStage,
   ProductType,
   RejectionReason
@@ -16,6 +15,8 @@ import type {
 } from '../services/api';
 import { PhoneInput } from './common/PhoneInput';
 import { useI18n } from "@/i18n";
+import { leadsApiV2, newIdempotencyKey } from '@/services/leadsApiV2';
+import { mapLeadV2ToCrmLead, mapProductTypeCrmToV2 } from '@/lib/lead-v2-legacy-adapter';
 
 interface LeadsComponentProps {
   onLeadSelect?: (lead: Lead) => void;
@@ -186,14 +187,11 @@ export const LeadsComponent = ({ onLeadSelect, selectedLead }: LeadsComponentPro
   const loadLeads = async () => {
     try {
       setLoading(true);
-      const response = await apiService.getLeads({
-        page: 1,
-        limit: 100,
-      });
-
-      if (response.success && response.data) {
-        setLeads(response.data.items);
+      const { items, complete } = await leadsApiV2.listAll();
+      if (!complete) {
+        console.warn('[LeadsComponent] Показаны не все лиды — упёрлись в предел страниц (leadsApiV2.listAll)');
       }
+      setLeads(items.map(mapLeadV2ToCrmLead));
     } catch (error) {
       console.error('Failed to load leads:', error);
     } finally {
@@ -233,33 +231,41 @@ export const LeadsComponent = ({ onLeadSelect, selectedLead }: LeadsComponentPro
       return false;
     };
     try {
-      const response = await apiService.createLead(formData);
-
-      if (response.success) {
-        setShowCreateModal(false);
-        setFormData({
-          name: '',
-          phone: '',
-          email: '',
-          productType: ProductType.SALES,
-          assignedTo: '690ca643abbceba815ba7090',
-          source: '',
-          notes: '',
-          dealValue: 0,
-          expectedCloseDate: '',
-        });
-        loadLeads();
-      } else {
-        // Обработка ошибки 409 Conflict (дубликат лида)
-        let errorMessage = response.message || 'Ошибка при создании лида';
-        if (errorMessage.includes('уже существует')) {
-          if (await tryAttachDuplicateLead()) {
-            return;
-          }
-          errorMessage = 'Лид с таким номером телефона или email уже существует. Пожалуйста, проверьте данные или измените телефон/email.';
-        }
-        alert(errorMessage);
+      // `[phase 4]` POST /leads принимает только
+      // requesterName/requesterPhone/productType (см. CreateLeadV2Payload
+      // докстринг) — сопутствующие поля добираются отдельным PATCH, а
+      // назначение — отдельным assign, тот же приём, что уже применён в
+      // LeadsContext.ADD_LEAD и LeadsBlock.tsx. email/source в PATCH не
+      // входят — честный пробел (см. UpdateLeadV2Payload).
+      const created = await leadsApiV2.create(
+        {
+          requesterName: formData.name,
+          requesterPhone: formData.phone,
+          productType: mapProductTypeCrmToV2(formData.productType),
+        },
+        newIdempotencyKey(),
+      );
+      await leadsApiV2.update(created.id, {
+        notes: formData.notes,
+        dealValue: formData.dealValue,
+        expectedCloseDate: formData.expectedCloseDate || undefined,
+      });
+      if (formData.assignedTo) {
+        await leadsApiV2.assign(created.id, formData.assignedTo);
       }
+      setShowCreateModal(false);
+      setFormData({
+        name: '',
+        phone: '',
+        email: '',
+        productType: ProductType.SALES,
+        assignedTo: '690ca643abbceba815ba7090',
+        source: '',
+        notes: '',
+        dealValue: 0,
+        expectedCloseDate: '',
+      });
+      loadLeads();
     } catch (error: any) {
       console.error('Failed to create lead:', error);
       let errorMessage = error.response?.data?.message || error.message || 'Ошибка при создании лида';
@@ -275,42 +281,62 @@ export const LeadsComponent = ({ onLeadSelect, selectedLead }: LeadsComponentPro
 
   const handleUpdateLead = async (leadId: string, updates: UpdateLeadDto) => {
     try {
-      const response = await apiService.updateLead(leadId, updates);
-
-      if (response.success) {
-        loadLeads();
-      } else {
-        // Обработка ошибки 409 Conflict (дубликат лида)
-        let errorMessage = response.message || 'Ошибка при обновлении лида';
-        if (errorMessage.includes('уже существует')) {
-          errorMessage = 'Лид с таким номером телефона или email уже существует. Пожалуйста, проверьте данные или измените телефон/email.';
-        }
-        alert(errorMessage);
+      // `[phase 4]` PATCH /leads/:id (UpdateLeadV2Payload) не принимает
+      // name/phone/email/productType/source — честный пробел, эти поля формы
+      // редактирования не сохраняются (см. UpdateLeadV2Payload докстринг).
+      // stage — отдельный эндпоинт changeStage, здесь не задействован, эта
+      // форма его не меняет. assignedTo — отдельный вызов assign.
+      const { city, notes, dealValue, expectedCloseDate, budgetValue, budgetCurrency, tags, rejectionReason, rejectionComment, realtorStage, curatorStage, assignedTo } = updates;
+      await leadsApiV2.update(leadId, {
+        city,
+        notes,
+        dealValue,
+        expectedCloseDate,
+        budgetValue,
+        budgetCurrency,
+        tags,
+        rejectionReason,
+        rejectionComment,
+        realtorStage,
+        curatorStage,
+      });
+      if (assignedTo) {
+        await leadsApiV2.assign(leadId, assignedTo);
       }
+      loadLeads();
     } catch (error: any) {
       console.error('Failed to update lead:', error);
-      let errorMessage = error.response?.data?.message || error.message || 'Ошибка при обновлении лида';
-      if (errorMessage.includes('уже существует') || error.response?.status === 409) {
-        errorMessage = 'Лид с таким номером телефона или email уже существует. Пожалуйста, проверьте данные или измените телефон/email.';
-      }
+      const errorMessage = error.response?.data?.message || error.message || 'Ошибка при обновлении лида';
       alert(errorMessage);
     }
   };
 
   const handleUpdateStage = async () => {
-    if (!stageUpdateLead) return;
+    if (!stageUpdateLead || !stageFormData.stage) return;
 
     try {
-      const response = await apiService.updateLeadStage(stageUpdateLead._id, stageFormData);
-
-      if (response.success) {
-        setStageUpdateLead(null);
-        setStageFormData({
-          stage: LeadStage.FIRST_CONTACT,
-          comment: '',
-        });
-        loadLeads();
+      // `[phase 4]` CAS через expectedVersion — тот же паттерн, что
+      // LeadsBlock.updateLeadStage. `(stageUpdateLead as any).version` —
+      // расширение mapLeadV2ToCrmLead под CAS (см. lead-v2-legacy-adapter.ts).
+      // rejectionReason — сопутствующее поле (PATCH), не входит в changeStage,
+      // применяется отдельным update, если задано.
+      const expectedVersion = (stageUpdateLead as any).version ?? 0;
+      await leadsApiV2.changeStage(
+        stageUpdateLead._id,
+        stageFormData.stage,
+        expectedVersion,
+        newIdempotencyKey(),
+        stageFormData.comment,
+      );
+      if (stageFormData.rejectionReason) {
+        await leadsApiV2.update(stageUpdateLead._id, { rejectionReason: stageFormData.rejectionReason });
       }
+      setStageUpdateLead(null);
+      setStageFormData({
+        stage: LeadStage.FIRST_CONTACT,
+        comment: '',
+      });
+      loadLeads();
     } catch (error) {
       console.error('Failed to update lead stage:', error);
     }
@@ -319,11 +345,8 @@ export const LeadsComponent = ({ onLeadSelect, selectedLead }: LeadsComponentPro
   const handleDeleteLead = async (leadId: string) => {
     if (confirm('Вы уверены, что хотите удалить этого лид?')) {
       try {
-        const response = await apiService.deleteLead(leadId);
-
-        if (response.success) {
-          loadLeads();
-        }
+        await leadsApiV2.remove(leadId);
+        loadLeads();
       } catch (error) {
         console.error('Failed to delete lead:', error);
       }
