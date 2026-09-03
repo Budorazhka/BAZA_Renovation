@@ -1,3 +1,5 @@
+import { LEAD_STAGE_DEFINITIONS } from './lead-stage-definitions';
+
 /**
  * `[technical decision — 25.08.2026]`, НЕ owner decision: domain-model.md
  * не специфицирует конкретный enum значений stage для Lead (в отличие от
@@ -23,3 +25,20 @@
  * см. их комментарии), не гипотетически.
  */
 export const LEAD_STAGES = ['new', 'contacted', 'qualified', 'converted', 'lost'] as const;
+
+/**
+ * `[technical decision — 03.09.2026]`, продуктовые воронки лида: полный
+ * runtime-список валидных значений `stage` — generic 5 (LEAD_STAGES) плюс
+ * ВСЕ per-product стадии из `lead-stage-definitions.ts` (sales/network/
+ * owner/agent). Используется как coarse-грaница ("это вообще известная
+ * стадия хоть какого-то продукта, не опечатка") в @Prop({enum:...}) обеих
+ * схем (LeadDocument/LeadEventDocument) и в ChangeLeadStageDto — точная
+ * проверка "эта стадия принадлежит ИМЕННО productType этого лида" остаётся
+ * бизнес-логикой CrmService.changeLeadStage/createLead, не может быть
+ * статическим enum'ом: допустимое множество зависит от значения соседнего
+ * поля productType, а не фиксировано для всех лидов сразу.
+ */
+export const ALL_LEAD_STAGE_VALUES: readonly string[] = [
+  ...LEAD_STAGES,
+  ...Object.values(LEAD_STAGE_DEFINITIONS).flatMap((stages) => stages.map((stage) => stage.id)),
+];

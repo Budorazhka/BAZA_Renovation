@@ -1,5 +1,5 @@
 import { IsIn, IsInt, Min } from 'class-validator';
-import { LEAD_STAGES } from '../lead-stage';
+import { ALL_LEAD_STAGE_VALUES } from '../lead-stage';
 import type { LeadStage } from '../schemas/lead.schema';
 
 /**
@@ -7,12 +7,18 @@ import type { LeadStage } from '../schemas/lead.schema';
  * UpdateUnitStatusDto (developments-модуль): клиент присылает version,
  * прочитанную с последним GET /leads/:id, сервер атомарно проверяет её
  * актуальность в одном Mongo-фильтре (LeadRepository.changeStageWithVersionCheck).
+ *
+ * `@IsIn(ALL_LEAD_STAGE_VALUES)` — только coarse-проверка "это вообще
+ * известная стадия хоть какого-то продукта" (ловит опечатки). Точная
+ * проверка "stage принадлежит productType ЭТОГО лида" (или generic-пятёрке,
+ * если у лида productType не задан) — CrmService.changeLeadStage, ей
+ * недоступен productType лида на уровне DTO.
  */
 export class ChangeLeadStageDto {
   @IsInt()
   @Min(0)
   expectedVersion!: number;
 
-  @IsIn(LEAD_STAGES)
+  @IsIn(ALL_LEAD_STAGE_VALUES)
   stage!: LeadStage;
 }

@@ -22,7 +22,8 @@ import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
-import type { LeadDocument, LeadStage } from './schemas/lead.schema';
+import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType } from './schemas/lead.schema';
+import { firstStageIdForProduct, stageIdsForProduct } from './lead-stage-definitions';
 import {
   priorityFromFlags,
   type TaskDocument,
@@ -41,6 +42,7 @@ export interface CrmLeadReadModel {
   id: string;
   organizationId: string;
   ownerPositionId: string | null;
+  productType: LeadProductType | null;
   stage: LeadStage;
   version: number;
   source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
@@ -173,7 +175,7 @@ export interface CrmTaskReadModel {
  * закрыта, lost — лид выпал из активной воронки (LEAD_STAGE_TRANSITIONS
  * выше), ни тот ни другой не нуждается в "следующем действии".
  */
-const ACTIVE_LEAD_STAGES: readonly LeadStage[] = ['new', 'contacted', 'qualified'];
+const ACTIVE_LEAD_STAGES: readonly GenericLeadStage[] = ['new', 'contacted', 'qualified'];
 
 /**
  * D-05B: технически решение (не owner decision — тот же статус, что сам
@@ -194,8 +196,15 @@ const ACTIVE_LEAD_STAGES: readonly LeadStage[] = ['new', 'contacted', 'qualified
  * И version, И допустимость перехода в одном Mongo-фильтре, не read-then-
  * write (см. LeadRepository.changeStageWithVersionCheck). assignOwner
  * остаётся невersioned намеренно — вне scope этого фикса.
+ *
+ * Применяется ТОЛЬКО к лидам без productType (generic-путь). Продуктовые
+ * воронки лида (03.09.2026, owner decision): лид с заданным productType
+ * проверяется по-другому — новая стадия обязана входить в список стадий
+ * ИМЕННО этого продукта (lead-stage-definitions.ts), без матрицы порядка
+ * переходов — это осознанно НЕ перенесённое сюда ограничение (out of
+ * scope), а не забытое.
  */
-const LEAD_STAGE_TRANSITIONS: Record<LeadStage, readonly LeadStage[]> = {
+const LEAD_STAGE_TRANSITIONS: Record<GenericLeadStage, readonly GenericLeadStage[]> = {
   new: ['contacted', 'lost'],
   contacted: ['qualified', 'lost'],
   qualified: ['converted', 'lost'],
@@ -1521,14 +1530,29 @@ export class CrmService {
       throw new ConflictException('Lead was modified by another request — refresh and retry');
     }
 
-    const allowedFromStages = LEAD_STAGE_TRANSITIONS[previousStage];
+    // Продуктовые воронки лида (03.09.2026, owner decision): лид с
+    // productType проверяется по списку стадий ЭТОГО продукта — без
+    // матрицы порядка переходов (out of scope, см. LEAD_STAGE_TRANSITIONS
+    // докстринг). Лид без productType — прежнее поведение без изменений.
+    if (lead.productType) {
+      const allowedProductStages = stageIdsForProduct(lead.productType);
+      if (!allowedProductStages.includes(params.newStage)) {
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          `Stage "${params.newStage}" is not a valid stage for product "${lead.productType}"`,
+          { productType: lead.productType, stage: params.newStage },
+        );
+      }
+    } else {
+      const allowedFromStages = LEAD_STAGE_TRANSITIONS[previousStage as GenericLeadStage];
 
-    if (!allowedFromStages.includes(params.newStage)) {
-      throw new AppException(
-        ErrorCode.VALIDATION_FAILED,
-        `Cannot transition lead stage from "${previousStage}" to "${params.newStage}"`,
-        { from: previousStage, to: params.newStage },
-      );
+      if (!allowedFromStages.includes(params.newStage as GenericLeadStage)) {
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          `Cannot transition lead stage from "${previousStage}" to "${params.newStage}"`,
+          { from: previousStage, to: params.newStage },
+        );
+      }
     }
 
     return runInTransaction(this.connection, async (session) => {
@@ -1602,6 +1626,7 @@ export class CrmService {
         organizationId: lead.organizationId.toString(),
         contactId: lead.contactId.toString(),
         ownerPositionId: lead.ownerPositionId?.toString() ?? null,
+        productType: lead.productType ?? null,
         stage: params.newStage,
         version: params.expectedVersion + 1,
         source: lead.source,
@@ -1785,6 +1810,14 @@ export class CrmService {
     contactId?: Types.ObjectId;
     requesterName?: string;
     requesterPhone?: string;
+    /**
+     * Опционально (owner decision, продуктовые воронки лида) — когда
+     * задан, лид создаётся сразу в первой стадии воронки этого продукта
+     * (lead-stage-definitions.ts::firstStageIdForProduct), а не в generic
+     * 'new'. Не задан — поведение как раньше (marketplace reveal-contact,
+     * CSV/XLSX импорт, ручная форма без явного продукта).
+     */
+    productType?: LeadProductType;
     actorPositionId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
@@ -1809,11 +1842,17 @@ export class CrmService {
           })()
         : await this.resolveContact(params.organizationId, params, session);
 
+      const initialStage: LeadStage = params.productType
+        ? (firstStageIdForProduct(params.productType) as LeadStage)
+        : 'new';
+
       const lead = await this.leadRepository.create(
         {
           organizationId: params.organizationId,
           contactId: contact._id,
           source: { route: 'manual' },
+          productType: params.productType,
+          stage: initialStage,
         },
         session,
       );
@@ -1822,7 +1861,7 @@ export class CrmService {
         {
           leadId: lead._id,
           organizationId: params.organizationId,
-          stage: 'new' as LeadStage,
+          stage: initialStage,
           changedBy: { type: 'position', positionId: params.actorPositionId },
         },
         session,
@@ -2726,6 +2765,7 @@ function toLeadReadModel(
     organizationId: Types.ObjectId;
     contactId: Types.ObjectId;
     ownerPositionId?: Types.ObjectId | null;
+    productType?: LeadProductType | null;
     stage: LeadStage;
     version?: number;
     source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
@@ -2739,6 +2779,7 @@ function toLeadReadModel(
     id: lead._id.toString(),
     organizationId: lead.organizationId.toString(),
     ownerPositionId: lead.ownerPositionId ? lead.ownerPositionId.toString() : null,
+    productType: lead.productType ?? null,
     stage: lead.stage,
     version: lead.version ?? 0,
     source: lead.source,
@@ -2751,9 +2792,16 @@ function toLeadReadModel(
   };
 }
 
-/** CRM-003: см. ACTIVE_LEAD_STAGES докстринг — converted/lost исключены из "активный лид без next action". */
+/**
+ * CRM-003: см. ACTIVE_LEAD_STAGES докстринг — converted/lost исключены из
+ * "активный лид без next action". Продуктовая стадия (лид с productType)
+ * структурно не входит в ACTIVE_LEAD_STAGES (generic-подмножество) — cast
+ * безопасен: .includes() корректно возвращает false, "активный лид без
+ * next action" — правило только для generic-воронки, продуктовые лиды им
+ * намеренно не покрыты (out of scope этого прохода).
+ */
 function isActiveLeadStage(stage: LeadStage): boolean {
-  return ACTIVE_LEAD_STAGES.includes(stage);
+  return ACTIVE_LEAD_STAGES.includes(stage as GenericLeadStage);
 }
 
 function toLeadEventReadModel(event: {

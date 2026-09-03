@@ -457,4 +457,32 @@ describe('GET /leads, GET /leads/:leadId/events — HTTP integration (полны
       expect(response.statusCode).toBe(400);
     });
   });
+
+  describe('GET /leads/stage-definitions (03.09.2026, продуктовые воронки лида)', () => {
+    it('без cookie — 401 AUTH_NO_SESSION', async () => {
+      const response = await app.inject({ method: 'GET', url: '/api/v1/leads/stage-definitions' });
+      expect(response.statusCode).toBe(401);
+      expect(JSON.parse(response.body).error.code).toBe('AUTH_NO_SESSION');
+    });
+
+    it('с валидной сессией — все 4 продукта, независимо от permission-грантов на lead.read', async () => {
+      const { cookie } = await seedOwnerSession();
+
+      const response = await app.inject({ method: 'GET', url: '/api/v1/leads/stage-definitions', headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(Object.keys(body).sort()).toEqual(['agent', 'network', 'owner', 'sales']);
+      expect(body.sales).toHaveLength(22);
+      expect(body.network).toHaveLength(17);
+      expect(body.owner).toHaveLength(16);
+      expect(body.agent).toHaveLength(12);
+      expect(body.sales[0]).toMatchObject({ id: 'defective', name: 'Бракованный лид', order: 1, column: 'rejection' });
+    });
+
+    it('не матчится как GET /leads/:leadId — не падает 400 на невалидном ObjectId', async () => {
+      const { cookie } = await seedOwnerSession();
+      const response = await app.inject({ method: 'GET', url: '/api/v1/leads/stage-definitions', headers: { cookie } });
+      expect(response.statusCode).toBe(200);
+    });
+  });
 });

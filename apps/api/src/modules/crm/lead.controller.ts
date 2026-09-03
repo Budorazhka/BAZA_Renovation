@@ -67,6 +67,12 @@ export class LeadController {
       contactId: dto.contactId ?? null,
       requesterName: dto.requesterName ?? null,
       requesterPhone: dto.requesterPhone ?? null,
+      // Не `?? null` намеренно: undefined-значение опускается при
+      // сериализации хеша (тот же результат, что "поле вообще не
+      // передано"), сохраняя хеш существующих клиентов без productType
+      // байт-в-байт идентичным — только явно переданный productType
+      // меняет хеш (и, соответственно, стартовую стадию лида).
+      productType: dto.productType,
     };
 
     const replay = await this.idempotencyService.checkReplay({
@@ -84,6 +90,7 @@ export class LeadController {
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       requesterName: dto.requesterName,
       requesterPhone: dto.requesterPhone,
+      productType: dto.productType,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId,
       correlationId: req.correlationId,

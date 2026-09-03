@@ -645,12 +645,21 @@ describe('CrmService.revealListingContact (LEAD-001 / Secondary & Rent)', () => 
   });
 });
 
-function makeLead(overrides: Partial<{ organizationId: Types.ObjectId; stage: string; ownerPositionId: Types.ObjectId; version: number }> = {}) {
+function makeLead(
+  overrides: Partial<{
+    organizationId: Types.ObjectId;
+    stage: string;
+    ownerPositionId: Types.ObjectId;
+    version: number;
+    productType: 'sales' | 'network' | 'owner' | 'agent';
+  }> = {},
+) {
   return {
     _id: new Types.ObjectId(),
     organizationId: overrides.organizationId ?? new Types.ObjectId(),
     contactId: new Types.ObjectId(),
     ownerPositionId: overrides.ownerPositionId,
+    productType: overrides.productType,
     stage: overrides.stage ?? 'new',
     version: overrides.version ?? 0,
     source: { route: '/developments/x' },
@@ -964,6 +973,91 @@ describe('CrmService.createLead', () => {
     ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
     expect(createLeadSpy).not.toHaveBeenCalled();
   });
+
+  describe('продуктовые воронки лида (03.09.2026, owner decision)', () => {
+    it('с productType — создаёт лид сразу в первой стадии воронки этого продукта (order:1), не в generic new', async () => {
+      const organizationId = new Types.ObjectId();
+      const contact = makeContact();
+      const createLeadSpy = jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(),
+        organizationId,
+        contactId: contact._id,
+        productType: 'network',
+        stage: 'network_rejected_defective',
+        version: 0,
+        source: { route: 'manual' },
+        createdAt: new Date('2026-09-03T10:00:00.000Z'),
+      });
+      const appendEventSpy = jest.fn().mockResolvedValue(undefined);
+
+      const service = createTestCrmService({
+        contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(contact) },
+        leadRepository: { create: createLeadSpy },
+        leadEventRepository: { append: appendEventSpy },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      });
+
+      const result = await service.createLead({
+        organizationId,
+        contactId: contact._id,
+        productType: 'network',
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: { probe: 1 },
+      });
+
+      expect(createLeadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ productType: 'network', stage: 'network_rejected_defective' }),
+        expect.anything(),
+      );
+      expect(appendEventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 'network_rejected_defective' }),
+        expect.anything(),
+      );
+      expect(result.productType).toBe('network');
+      expect(result.stage).toBe('network_rejected_defective');
+    });
+
+    it('без productType — поведение как раньше: stage:new, productType:null', async () => {
+      const organizationId = new Types.ObjectId();
+      const contact = makeContact();
+      const createLeadSpy = jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(),
+        organizationId,
+        contactId: contact._id,
+        stage: 'new',
+        version: 0,
+        source: { route: 'manual' },
+        createdAt: new Date('2026-09-03T10:00:00.000Z'),
+      });
+
+      const service = createTestCrmService({
+        contactRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(contact) },
+        leadRepository: { create: createLeadSpy },
+        leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+        auditService: { append: jest.fn().mockResolvedValue(undefined) },
+      });
+
+      const result = await service.createLead({
+        organizationId,
+        contactId: contact._id,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: { probe: 1 },
+      });
+
+      expect(createLeadSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ productType: undefined, stage: 'new' }),
+        expect.anything(),
+      );
+      expect(result.productType).toBeNull();
+      expect(result.stage).toBe('new');
+    });
+  });
 });
 
 describe('CrmService.changeLeadStage', () => {
@@ -1264,6 +1358,104 @@ describe('CrmService.changeLeadStage', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
+
+  describe('продуктовые воронки лида (03.09.2026, owner decision)', () => {
+    it('лид с productType:network — переход в network-стадию проходит, без матрицы порядка переходов', async () => {
+      const organizationId = new Types.ObjectId();
+      const lead = makeLead({ organizationId, productType: 'network', stage: 'network_new_lead' });
+      const changeStageSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const service = makeChangeStageService(lead, changeStageSpy);
+
+      const result = await service.changeLeadStage({
+        leadId: lead._id,
+        newStage: 'network_work_started',
+        expectedVersion: lead.version,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: {},
+      });
+
+      expect(result.stage).toBe('network_work_started');
+      expect(changeStageSpy).toHaveBeenCalledWith(
+        lead._id,
+        organizationId,
+        lead.version,
+        'network_work_started',
+        ['network_new_lead'],
+        expect.anything(),
+      );
+    });
+
+    it('лид с productType:network — переход в sales-стадию отклоняется VALIDATION_FAILED', async () => {
+      const organizationId = new Types.ObjectId();
+      const lead = makeLead({ organizationId, productType: 'network', stage: 'network_new_lead' });
+      const changeStageSpy = jest.fn();
+      const service = makeChangeStageService(lead, changeStageSpy);
+
+      await expect(
+        service.changeLeadStage({
+          leadId: lead._id,
+          newStage: 'contacted',
+          expectedVersion: lead.version,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          expectedOrganizationId: organizationId,
+          correlationId: 'test-correlation-id',
+          idempotencyKey: 'test-key',
+          idempotencyRequestBody: {},
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+      expect(changeStageSpy).not.toHaveBeenCalled();
+    });
+
+    it('лид БЕЗ productType — переход в generic-стадию продолжает работать как раньше (не задет продуктовой веткой)', async () => {
+      const organizationId = new Types.ObjectId();
+      const lead = makeLead({ organizationId, stage: 'new' });
+      const changeStageSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const service = makeChangeStageService(lead, changeStageSpy);
+
+      const result = await service.changeLeadStage({
+        leadId: lead._id,
+        newStage: 'contacted',
+        expectedVersion: lead.version,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: {},
+      });
+
+      expect(result.stage).toBe('contacted');
+    });
+
+    it('лид с productType:sales — переход в sales-стадию любого порядка (без матрицы) проходит', async () => {
+      const organizationId = new Types.ObjectId();
+      const lead = makeLead({ organizationId, productType: 'sales', stage: 'defective' });
+      const changeStageSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+      const service = makeChangeStageService(lead, changeStageSpy);
+
+      // 'golden' обычная бизнес-цепочка достигает лишь после десятка шагов —
+      // здесь напрямую из 'defective' (rejection), подтверждая, что для
+      // продуктовых лидов порядок переходов НЕ ограничен (out of scope).
+      const result = await service.changeLeadStage({
+        leadId: lead._id,
+        newStage: 'golden',
+        expectedVersion: lead.version,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'test-correlation-id',
+        idempotencyKey: 'test-key',
+        idempotencyRequestBody: {},
+      });
+
+      expect(result.stage).toBe('golden');
+    });
+  });
 });
 
 describe('CrmService — read leads', () => {
@@ -1310,6 +1502,7 @@ describe('CrmService — read leads', () => {
           id: leadId.toString(),
           organizationId: organizationId.toString(),
           ownerPositionId: ownerPositionId.toString(),
+          productType: null,
           stage: 'new',
           version: 0,
           source: { route: '/developments/test' },
@@ -1422,6 +1615,7 @@ describe('CrmService — read leads', () => {
       id: leadId.toString(),
       organizationId: organizationId.toString(),
       ownerPositionId: null,
+      productType: null,
       stage: 'new',
       version: 0,
       source: { route: '/developments/test' },
