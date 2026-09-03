@@ -20,6 +20,8 @@ function addRecentLeadTag(tag: string): void {
 import { LeadStage, ProductType } from '../../services/api';
 import { apiService } from '../../services/api';
 import { resolveDuplicateLeadForUser } from '../../utils/leadDuplicateHelper';
+import { leadsApiV2, newIdempotencyKey } from '@/services/leadsApiV2';
+import { mapLeadV2ToCrmLead, mapProductTypeCrmToV2 } from '@/lib/lead-v2-legacy-adapter';
 import FilterDropdown from './FilterDropdown';
 import AddLeadModal from './AddLeadModal';
 import CreateClientModal from './CreateClientModal';
@@ -729,15 +731,16 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
         // Лид не найден в загруженных данных, загружаем из API
         const loadLeadFromAPI = async () => {
           try {
-            const response = await apiService.getLead(leadIdParam);
-            if (response.success && response.data) {
+            const leadV2 = await leadsApiV2.getById(leadIdParam);
+            const mappedLead = mapLeadV2ToCrmLead(leadV2);
+            {
               // Устанавливаем глобальный флаг ДО открытия модалки, чтобы предотвратить двойное открытие
               const globalOpeningKey = `leadModalOpening_${leadIdParam}`;
               if (typeof window !== 'undefined') {
                 (window as any)[globalOpeningKey] = true;
               }
               lastOpenedLeadIdRef.current = leadIdParam;
-              setSelectedLead(response.data);
+              setSelectedLead(mappedLead);
               setIsLeadViewModalOpen(true);
               // Сбрасываем глобальный флаг после небольшой задержки
               setTimeout(() => {
@@ -759,15 +762,6 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
               }
               // Обновляем список лидов, чтобы новый лид появился в списке
               await onLoadLeads();
-            } else {
-              // Лид не найден, очищаем URL параметры
-              const newParams = new URLSearchParams(searchParams);
-              newParams.delete('modal');
-              newParams.delete('leadId');
-              newParams.delete('tab');
-              newParams.delete('editing');
-              setSearchParams(newParams, { replace: true });
-              lastOpenedLeadIdRef.current = null;
             }
           } catch (error) {
             console.error('Error loading lead from URL:', error);
@@ -876,35 +870,31 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
     }
 
     try {
-      const response = await apiService.updateLeadStage(leadId, { stage });
-      if (response.success && response.data) {
-        // Получаем актуальный этап из ответа сервера
-        const currentStage = response.data.stage;
-        const currentStageLabel = getStageLabel(currentStage, response.data.productType);
+      // `[phase 4]` CAS через expectedVersion — тот же паттерн, что
+      // LeadsContext/LeadViewModal (см. leadsApiV2.changeStage докстринг).
+      // `(lead as any).version` — расширение mapLeadV2ToCrmLead под CAS в
+      // этом компоненте (см. lead-v2-legacy-adapter.ts докстринг поля).
+      const expectedVersion = (lead as any).version ?? 0;
+      await leadsApiV2.changeStage(leadId, stage, expectedVersion, newIdempotencyKey());
 
+      // changeStage не отдаёт полную read-модель лида (см. её докстринг) —
+      // перечитываем лид, чтобы получить актуальные name/productType/version
+      // для onLeadStageChange/onUpdateLeadAfterSync (тот же приём, что
+      // LeadViewModal.handleNetworkStageChange).
+      const leadV2 = await leadsApiV2.getById(leadId);
+      const mappedLead = mapLeadV2ToCrmLead(leadV2);
+      const currentStage = mappedLead.stage;
+      const currentStageLabel = getStageLabel(currentStage, mappedLead.productType);
 
-        // Уведомляем родительский компонент о изменении этапа для отображения overlay
-        if (onLeadStageChange) {
-          onLeadStageChange(response.data._id, response.data.name, currentStageLabel, currentStage, response.data.productType);
-        }
+      // Уведомляем родительский компонент о изменении этапа для отображения overlay
+      if (onLeadStageChange) {
+        onLeadStageChange(mappedLead._id, mappedLead.name, currentStageLabel, currentStage, mappedLead.productType);
+      }
 
-        // Обновляем данные лида с сервера после успешной синхронизации
-        // Блокировка на 3 секунды сохраняется, чтобы предотвратить перезапись автообновлением
-        if (onUpdateLeadAfterSync) {
-          onUpdateLeadAfterSync(leadId, response.data);
-        }
-      } else {
-        console.error('Failed to update lead stage on server:', {
-          message: response.message,
-          success: response.success,
-          data: response.data,
-          fullResponse: response
-        });
-        // Если API не поддерживает новый стейдж, показываем предупреждение
-        if (response.message?.includes('stage') || response.message?.includes('invalid')) {
-          console.warn('API may not support this stage:', stage);
-        }
-        await onLoadLeads();
+      // Обновляем данные лида с сервера после успешной синхронизации
+      // Блокировка на 3 секунды сохраняется, чтобы предотвратить перезапись автообновлением
+      if (onUpdateLeadAfterSync) {
+        onUpdateLeadAfterSync(leadId, mappedLead);
       }
     } catch (error: any) {
       console.error('Error updating lead stage:', {
@@ -914,8 +904,9 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
         stage,
         leadId
       });
-      // Если ошибка связана с валидацией стейджа, показываем предупреждение
-      if (error?.response?.data?.message?.includes('stage') || error?.response?.status === 400) {
+      if (error?.response?.status === 409) {
+        console.warn('Стадию лида изменил кто-то ещё (VERSION_CONFLICT) — перечитываем данные:', leadId);
+      } else if (error?.response?.data?.message?.includes('stage') || error?.response?.status === 400) {
         console.warn('API rejected the stage update. The backend may not support this stage:', stage);
       }
       await onLoadLeads();
@@ -2794,7 +2785,7 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
                 className="flex items-center cursor-pointer"
                 onClick={async (e) => {
                   e.stopPropagation();
-                  apiService.recordLeadContactAction(recordId, 'call').catch(() => {});
+                  leadsApiV2.recordContactAction(recordId, 'call').catch(() => {});
                   if (backendLead.phone) {
                     try {
                       // Используем Clipboard API, если доступен
@@ -2841,7 +2832,7 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
               className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer w-full bg-[var(--secondary)] text-[var(--accent)] shadow-[inset_0_0_0_1px_rgba(201,168,76,0.15)] hover:bg-[color-mix(in_srgb,var(--primary)_12%,var(--secondary))]"
               onClick={(e) => {
                 e.stopPropagation();
-                apiService.recordLeadContactAction(recordId, 'chat').catch(() => {});
+                leadsApiV2.recordContactAction(recordId, 'chat').catch(() => {});
                 setOpenContactMenu(null);
                 setContactMenuPosition(null);
               }}
@@ -2860,7 +2851,7 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
               className="flex items-center gap-2 px-3 py-2 bg-[color-mix(in_srgb,var(--primary)_18%,var(--secondary))] text-[var(--accent)] rounded-lg cursor-pointer w-full shadow-[inset_0_0_0_1px_rgba(201,168,76,0.12)] hover:bg-[color-mix(in_srgb,var(--primary)_26%,var(--secondary))]"
               onClick={(e) => {
                 e.stopPropagation();
-                apiService.recordLeadContactAction(recordId, 'chat').catch(() => {});
+                leadsApiV2.recordContactAction(recordId, 'chat').catch(() => {});
                 setOpenContactMenu(null);
                 setContactMenuPosition(null);
               }}
@@ -2886,7 +2877,7 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer w-full bg-[var(--secondary)] text-[var(--accent)] shadow-[inset_0_0_0_1px_rgba(201,168,76,0.15)] hover:bg-[color-mix(in_srgb,var(--primary)_12%,var(--secondary))]"
                 onClick={(e) => {
                   e.stopPropagation();
-                  apiService.recordLeadContactAction(recordId, 'chat').catch(() => {});
+                  leadsApiV2.recordContactAction(recordId, 'chat').catch(() => {});
                   setOpenContactMenu(null);
                   setContactMenuPosition(null);
                 }}
@@ -2937,8 +2928,8 @@ const LeadsBlock: React.FC<LeadsBlockProps> = ({ backendLeads, onUpdateLeads, on
             newTags = next.filter(Boolean).slice(0, 2);
           }
           try {
-            const res = await apiService.updateLead(leadId, { tags: newTags });
-            const updatedTags = res.data?.tags ?? newTags;
+            const updated = await leadsApiV2.update(leadId, { tags: newTags });
+            const updatedTags = updated.tags ?? newTags;
             if (onUpdateLead) onUpdateLead(leadId, { tags: updatedTags }, ['tags']);
             if (trimmed) addRecentLeadTag(trimmed);
           } catch (_) {}
