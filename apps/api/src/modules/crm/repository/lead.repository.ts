@@ -381,7 +381,7 @@ export class LeadRepository {
   /**
    * `[lead-legacy-migration-tool]`: единственная точка поиска уже
    * мигрированного лида — тот же (organizationId, legacyId), что unique
-   * sparse индекс на схеме. Идемпотентность importLegacyLeads целиком
+   * partial-индекс на схеме. Идемпотентность importLegacyLeads целиком
    * опирается на этот метод: найден → updateFields, не найден → createFromMigration.
    */
   async findByLegacyId(

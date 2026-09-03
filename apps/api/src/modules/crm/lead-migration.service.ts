@@ -74,8 +74,10 @@ type ImportOutcome = 'created' | 'updated';
  * `Model.create()` — LeadRepository.createFromMigration/LeadEventRepository.
  * append(changedAt) передают его напрямую, без пост-создания `updateOne`.
  *
- * ИДЕМПОТЕНТНОСТЬ: `LeadDocument.legacyId` (unique sparse на
- * `{organizationId, legacyId}`) — повторный прогон на том же файле находит
+ * ИДЕМПОТЕНТНОСТЬ: `LeadDocument.legacyId` (unique partial-индекс на
+ * `{organizationId, legacyId}`, только для документов с установленным
+ * `legacyId` — см. схему за причиной, почему не `sparse`) — повторный
+ * прогон на том же файле находит
  * уже созданный лид по этому ключу и обновляет сопутствующие поля
  * (`updateFields`, тот же путь, что PATCH /leads/:leadId), не создаёт
  * дубль. История (`LeadEvent`) пишется ТОЛЬКО при первом создании лида —
