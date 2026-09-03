@@ -38,6 +38,7 @@ import { ExportController } from './export.controller';
 import { ExportService } from './export.service';
 import { LeadImportController } from './lead-import.controller';
 import { LeadImportService } from './lead-import.service';
+import { LeadMigrationService } from './lead-migration.service';
 import { AuditModule } from '../audit/audit.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OrganizationsModule } from '../organizations/organizations.module';
@@ -97,6 +98,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     CrmService,
     ExportService,
     LeadImportService,
+    LeadMigrationService,
   ],
   exports: [TaskRepository, DealRepository, CrmService],
 })

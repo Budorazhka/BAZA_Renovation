@@ -34,21 +34,27 @@ export type LeadStage =
   | 'agent_new_agent' | 'agent_call_later' | 'agent_company_presented' | 'agent_format'
   | 'agent_objections' | 'agent_agreed' | 'agent_active';
 
-export type LeadEventChangedByType = 'position' | 'system';
+export type LeadEventChangedByType = 'position' | 'system' | 'identity';
 
 /**
  * Дискриминированный union — тот же паттерн, что AuditEvent.actor (Module
  * 3): positionId (ручное изменение стадии сотрудником) | 'system'
- * (автоматический переход, например будущий "lead expired без активности").
- * Явная вложенная схема, не inline plain-object — поле `type` внутри
- * объекта конфликтует с зарезервированным SchemaTypeOptions.type при
- * inline-объявлении (та же Mongoose-ловушка, что AuditActorSchema/
- * OwnerScopeSchema/GeoPointSchema — см. их комментарии).
+ * (автоматический переход, например будущий "lead expired без активности")
+ * | 'identity' (`[lead-legacy-migration-tool]` — системный актор миграции,
+ * когда легаси `changedBy` не резолвится ни в одну Position через
+ * `managerMapping`; сама identity не обязана быть сотрудником организации,
+ * это техническая учётная запись прохода переноса, тот же смысл, что
+ * `AuditActorSchema` уже вкладывает в `actor.type:'identity'`). Явная
+ * вложенная схема, не inline plain-object — поле `type` внутри объекта
+ * конфликтует с зарезервированным SchemaTypeOptions.type при inline-
+ * объявлении (та же Mongoose-ловушка, что AuditActorSchema/OwnerScopeSchema/
+ * GeoPointSchema — см. их комментарии).
  */
 const ChangedBySchema = new MongooseSchema(
   {
-    type: { type: String, enum: ['position', 'system'], required: true },
+    type: { type: String, enum: ['position', 'system', 'identity'], required: true },
     positionId: { type: MongooseSchema.Types.ObjectId, required: false },
+    id: { type: MongooseSchema.Types.ObjectId, required: false },
   },
   { _id: false },
 );
@@ -56,6 +62,8 @@ const ChangedBySchema = new MongooseSchema(
 export interface LeadEventChangedBy {
   type: LeadEventChangedByType;
   positionId?: Types.ObjectId;
+  /** Заполнено только для `type:'identity'` — id identity-актора (см. докстринг типа выше). */
+  id?: Types.ObjectId;
 }
 
 /**

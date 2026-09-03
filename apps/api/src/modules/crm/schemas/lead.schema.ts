@@ -228,6 +228,32 @@ export class LeadDocument extends Document {
   @Prop({ required: false })
   deletedAt?: Date;
 
+  /**
+   * `[lead-legacy-migration-tool]`: id лида в легаси-backend (api-crm.baza.sale)
+   * — единственный ключ идемпотентности инструмента переноса
+   * (LeadMigrationService.importLegacyLeads). Опционально — только у
+   * мигрированных лидов оно есть, обычные лиды (marketplace reveal, ручная
+   * форма, CSV-импорт) его никогда не заполняют. Unique в пределах
+   * организации: повторный прогон миграции с тем же файлом обязан находить
+   * уже созданный лид по (organizationId, legacyId) и обновлять его, а не
+   * создавать дубль.
+   *
+   * Индекс ниже — `partialFilterExpression`, НЕ `sparse:true` — найдено
+   * реальным прогоном `test:integration` (не гипотетически): у составного
+   * `sparse` индекса MongoDB документ включается в индекс, если ХОТЯ БЫ
+   * ОДНО из полей присутствует — `organizationId` есть всегда у любого
+   * лида, поэтому `sparse` на паре `{organizationId, legacyId}` НЕ
+   * пропускал обычные (немигрированные) лиды: все они индексировались с
+   * `legacyId: null`, и второй такой лид в организации падал на
+   * `E11000 duplicate key` (сломало `lead-import.integration-spec.ts`,
+   * `crm-deals`/`lead-management` и другие HTTP-пути создания лида).
+   * `partialFilterExpression: {legacyId: {$exists: true}}` индексирует
+   * ТОЛЬКО документы, где поле реально установлено — ровно то поведение,
+   * которое имелось в виду.
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
@@ -236,3 +262,7 @@ export const LeadSchema = SchemaFactory.createForClass(LeadDocument);
 LeadSchema.index({ organizationId: 1, ownerPositionId: 1, stage: 1 });
 LeadSchema.index({ contactId: 1 });
 LeadSchema.index({ 'source.publicationId': 1 });
+LeadSchema.index(
+  { organizationId: 1, legacyId: 1 },
+  { unique: true, partialFilterExpression: { legacyId: { $exists: true } } },
+);
