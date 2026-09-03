@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { CheckSquare, Square, AlertTriangle, User, Building2, Bookmark, Contact, ArrowRight } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
@@ -20,21 +20,21 @@ import {
 } from '@/components/ui/select'
 import { useAuth } from '@/context/AuthContext'
 import { useLeads } from '@/context/LeadsContext'
+import { useDeals } from '@/context/DealsContext'
 import { useRolePermissions } from '@/hooks/useRolePermissions'
-import { DEALS_MOCK } from '@/data/deals-mock'
 import { FMT_USD, formatUsdMillions, formatUsdThousands } from '@/lib/format-currency'
 import { CLIENTS_MOCK } from '@/data/clients-mock'
-import { STAGE_LABELS, STAGE_ORDER, type Deal, type DealStage, type PaymentStatus } from '@/types/deals'
+import { STAGE_LABELS, STAGE_ORDER, type DealStage, type PaymentStatus } from '@/types/deals'
 import { useI18n } from "@/i18n";
 
 const STAGE_COLORS: Record<DealStage, string> = {
-  showing:   '#60a5fa',
-  deposit:   '#f87171',
-  deal:      '#c9a84c',
-  golden:    '#d3bd75',
-  check_in:  '#fbbf24',
-  referral:  '#f59e0b',
-  new_deals: '#34d399',
+  showing:     '#60a5fa',
+  deposit:     '#f87171',
+  deal:        '#c9a84c',
+  golden:      '#d3bd75',
+  check_in:    '#fbbf24',
+  referral:    '#f59e0b',
+  closed_lost: '#64748b',
 }
 
 const C = {
@@ -60,19 +60,6 @@ const SETTLEMENT_ROLE_LABEL: Record<string, string> = {
 }
 
 type Tab = 'checklist' | 'participants' | 'finances' | 'history'
-const DEALS_STORAGE_KEY = 'agency-new.deals.kanban'
-
-function readDealsSnapshot(): Deal[] {
-  if (typeof window === 'undefined') return DEALS_MOCK
-  try {
-    const raw = window.localStorage.getItem(DEALS_STORAGE_KEY)
-    if (!raw) return DEALS_MOCK
-    const parsed = JSON.parse(raw) as unknown
-    return Array.isArray(parsed) ? (parsed as Deal[]) : DEALS_MOCK
-  } catch {
-    return DEALS_MOCK
-  }
-}
 
 export function DealCardPage() {
     const { t } = useI18n();
@@ -81,8 +68,8 @@ export function DealCardPage() {
   const { currentUser } = useAuth()
   const { isManager } = useRolePermissions()
   const { getLeadWithHistory, state: leadsState, dispatch, leadManagers } = useLeads()
+  const { deals, updateChecklist } = useDeals()
   const [tab, setTab] = useState<Tab>('checklist')
-  const [deals, setDeals] = useState<Deal[]>(readDealsSnapshot)
   const [transferConfirm, setTransferConfirm] = useState<{
     newManagerId: string | null
     newManagerName: string
@@ -106,15 +93,6 @@ export function DealCardPage() {
     ? `/dashboard/leads/poker?lead=${encodeURIComponent(linkedLeadId)}`
     : null
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try {
-      window.localStorage.setItem(DEALS_STORAGE_KEY, JSON.stringify(deals))
-    } catch {
-      /* ignore */
-    }
-  }, [deals])
-
   if (!deal) {
     return (
       <DashboardShell>
@@ -126,14 +104,15 @@ export function DealCardPage() {
   const stageColor = STAGE_COLORS[deal.stage] || C.gold
   const stageIdx = STAGE_ORDER.indexOf(deal.stage)
 
+  /** CAS через DealsContext.updateChecklist — сервер сам проставляет completedAt/completedByPositionId по флагу done (см. CrmService.updateDealChecklist). */
   function toggleChecklistItem(itemId: string) {
-    setDeals(prev => prev.map(d => {
-      if (d.id !== dealId) return d
-      return {
-        ...d,
-        checklist: d.checklist.map(c => c.id === itemId ? { ...c, done: !c.done } : c),
-      }
+    if (!deal) return
+    const items = deal.checklist.map(c => ({
+      id: c.id,
+      label: c.label,
+      done: c.id === itemId ? !c.done : c.done,
     }))
+    void updateChecklist(deal.id, items)
   }
 
   const TABS: { key: Tab; label: string }[] = [
@@ -197,11 +176,6 @@ export function DealCardPage() {
               <div style={{ fontSize: 11, color: C.whiteLow, marginTop: 4 }}>{t('deals.dealCardPage.агент')}{deal.agentName}</div>
             </div>
           </div>
-
-          <p style={{ fontSize: 12, color: C.whiteLow, marginBottom: 12, lineHeight: 1.45 }}>
-            {t('deals.dealCardPage.редактировать_чеклис')}{' '}
-            <code style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>src/data/deals-mock.ts</code>.
-          </p>
 
           {/* Cross-module actions → CRM */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' as const, alignItems: 'center' }}>
@@ -358,9 +332,9 @@ export function DealCardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '20px 24px' }}>
               {[
-                { label: 'Стоимость объекта', value: formatUsdMillions(deal.price, 2), color: C.white },
+                { label: 'Стоимость объекта', value: deal.price > 0 ? formatUsdMillions(deal.price, 2) : '—', color: C.white },
                 { label: 'Комиссия агентства', value: FMT_USD.format(deal.commission), color: C.gold },
-                { label: 'Ставка комиссии', value: `${((deal.commission / deal.price) * 100).toFixed(1)}%`, color: C.gold },
+                { label: 'Ставка комиссии', value: deal.price > 0 ? `${((deal.commission / deal.price) * 100).toFixed(1)}%` : '—', color: C.gold },
               ].map((row, i) => (
                 <div key={i} style={{
                   display: 'flex',
