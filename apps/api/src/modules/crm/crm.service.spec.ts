@@ -19,6 +19,7 @@ import type { TaskRepository } from './repository/task.repository';
 import type { DealRepository } from './repository/deal.repository';
 import type { DealEventRepository } from './repository/deal-event.repository';
 import type { OutboxService } from '../outbox/outbox.service';
+import type { CalendarEventRepository } from './repository/calendar-event.repository';
 
 function makeMockConnection() {
   return {
@@ -47,6 +48,7 @@ function createTestCrmService(overrides: {
   dealEventRepository?: unknown;
   outboxService?: unknown;
   mediaService?: unknown;
+  calendarEventRepository?: unknown;
 } = {}) {
   return new CrmService(
     (overrides.connection ?? makeMockConnection()) as never,
@@ -79,6 +81,7 @@ function createTestCrmService(overrides: {
     (overrides.mediaService ?? {
       getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()),
     }) as unknown as MediaService,
+    (overrides.calendarEventRepository ?? {}) as unknown as CalendarEventRepository,
   );
 }
 
