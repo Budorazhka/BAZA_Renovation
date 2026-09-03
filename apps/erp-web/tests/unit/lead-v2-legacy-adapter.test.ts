@@ -10,6 +10,7 @@ import {
   buildStageCommentsMap,
   mapLeadEventsV2ToLegacyHistory,
   mapLeadV2ToCrmLead,
+  mapProductTypeCrmToV2,
   mapProductTypeV2ToCrm,
 } from '@/lib/lead-v2-legacy-adapter'
 import type { LeadEventV2, LeadV2 } from '@/types/leadsV2'
@@ -81,6 +82,21 @@ describe('lead-v2-legacy-adapter', () => {
     expect(crmLead.dealValue).toBe(0)
     expect(crmLead.createdBy).toBe('')
     expect(crmLead.updatedAt).toBe(crmLead.createdAt)
+  })
+
+  it('mapLeadV2ToCrmLead — прокидывает version (не в легаси-интерфейсе Lead) для CAS в LeadsBlock/LeadsComponent', () => {
+    const crmLead = mapLeadV2ToCrmLead(makeLead({ version: 7 }))
+    expect((crmLead as any).version).toBe(7)
+  })
+
+  it('mapProductTypeCrmToV2 — обратное к mapProductTypeV2ToCrm', () => {
+    expect(mapProductTypeCrmToV2(ProductType.SALES)).toBe('sales')
+    expect(mapProductTypeCrmToV2(ProductType.NETWORK)).toBe('network')
+    expect(mapProductTypeCrmToV2(ProductType.OWNER)).toBe('owner')
+    expect(mapProductTypeCrmToV2(ProductType.AGENT)).toBe('agent')
+    for (const v2 of ['sales', 'network', 'owner', 'agent'] as const) {
+      expect(mapProductTypeCrmToV2(mapProductTypeV2ToCrm(v2))).toBe(v2)
+    }
   })
 
   it('mapLeadEventsV2ToLegacyHistory — восстанавливает fromStage как stage предыдущего (более раннего) события', () => {
