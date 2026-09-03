@@ -807,7 +807,10 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Смена стадии лида (lead.changeStage — отдельный grant от lead.assign, manager может менять стадию ТОЛЬКО своих (own-scope) лидов). Optimistic concurrency: expectedVersion должен совпадать с текущим Lead.version. Переход между стадиями ограничен явной матрицей — недопустимый переход при АКТУАЛЬНОЙ version отклоняется 400, устаревшая version — 409 (клиент должен обновить данные и повторить). */
+        /**
+         * Смена стадии лида (lead.changeStage — отдельный grant от lead.assign, manager может менять стадию ТОЛЬКО своих (own-scope) лидов). Optimistic concurrency: expectedVersion должен совпадать с текущим Lead.version.
+         *     Допустимые значения stage зависят от того, задан ли у лида productType (owner decision "продуктовые воронки лида" 03.09.2026): лид БЕЗ productType — stage обязан входить в generic-пятёрку (new/contacted/qualified/converted/lost), переход между стадиями ограничен явной матрицей, недопустимый переход при АКТУАЛЬНОЙ version отклоняется 400. Лид С productType — stage обязан входить в список стадий ИМЕННО этого продукта (см. GET /leads/stage-definitions), без матрицы порядка переходов — любая стадия своего продукта достижима из любой другой. Устаревшая version в обоих случаях — 409 (клиент должен обновить данные и повторить).
+         */
         patch: operations["changeLeadStage"];
         trace?: never;
     };
@@ -821,8 +824,28 @@ export interface paths {
         /** Список лидов текущей организации, newest-first, cursor-paginated. organization-scope (owner/director/rop/administrator) видит весь tenant; own-scope (manager) видит только лиды, где ownerPositionId совпадает с его собственной Position — сужение применяется на backend до чтения, не постфильтрацией. ownerPositionId в query — дополнительное клиентское сужение поверх уже резолвленного scope, никогда не расширяет его (own-scope с чужим ownerPositionId в query — 400, не 403 и не расширение видимости). */
         get: operations["listLeads"];
         put?: never;
-        /** Ручное создание лида в CRM (lead.create.organization) — security review 31.08.2026: грант был выдан всем ролям, но до этого прохода не существовало ни одного HTTP-пути завести лид вручную (единственный источник — публичный reveal-contact). Ровно один способ указать контакт: contactId (уже существующий) либо requesterPhone (find-or-create по телефону в этой организации, тот же tenant-local dedupe, что reveal-contact). ownerPositionId НЕ проставляется автоматически на создателя — лид стартует unassigned, как и лиды с сайта; назначение — отдельный вызов POST /leads/{leadId}/assign (owner decision: "Автоматическая раздача... не является стартовым поведением"). */
+        /**
+         * Ручное создание лида в CRM (lead.create.organization) — security review 31.08.2026: грант был выдан всем ролям, но до этого прохода не существовало ни одного HTTP-пути завести лид вручную (единственный источник — публичный reveal-contact). Ровно один способ указать контакт: contactId (уже существующий) либо requesterPhone (find-or-create по телефону в этой организации, тот же tenant-local dedupe, что reveal-contact). ownerPositionId НЕ проставляется автоматически на создателя — лид стартует unassigned, как и лиды с сайта; назначение — отдельный вызов POST /leads/{leadId}/assign (owner decision: "Автоматическая раздача... не является стартовым поведением").
+         *     productType (опционально, owner decision "продуктовые воронки лида" 03.09.2026): sales/network/owner/agent — legacy CRM знает 4 продукта, у каждого свой набор стадий воронки (см. GET /leads/stage-definitions). Если передан — лид создаётся сразу в первой стадии воронки ЭТОГО продукта, а не в generic 'new'. Не передан — поведение как раньше (marketplace reveal-contact, CSV/XLSX импорт и старые клиенты не знают о продуктах и продолжают работать без изменений).
+         */
         post: operations["createLead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/stage-definitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Справочник стадий воронки лида по продукту (owner decision "продуктовые воронки лида" 03.09.2026) — legacy CRM (api-crm.baza.sale) знает 4 продукта (sales/network/owner/agent), каждый со своим набором стадий; следующий этап миграции ERP-экранов лидов построит UI по этому справочнику вместо захардкоженного apps/erp-web/src/data/leads-mock.ts::LEAD_STAGES. Не требует специального права (не данные лидов, статичные метаданные) — достаточно валидной tenant-сессии. */
+        get: operations["getLeadStageDefinitions"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2448,6 +2471,12 @@ export interface components {
             organizationId?: string;
             contactId?: string;
             ownerPositionId?: string | null;
+            /**
+             * @description Не задан (null) — лид на generic-пятёрке стадий. Задан — stage принадлежит воронке этого продукта, см. GET /leads/stage-definitions.
+             * @enum {string|null}
+             */
+            productType?: "sales" | "network" | "owner" | "agent" | null;
+            /** @description generic-стадия (productType не задан) либо стадия productType этого лида — полный список см. GET /leads/stage-definitions. */
             stage?: string;
             source?: {
                 [key: string]: unknown;
@@ -2459,8 +2488,13 @@ export interface components {
             id: string;
             organizationId: string;
             ownerPositionId: string | null;
-            /** @enum {string} */
-            stage: "new" | "contacted" | "qualified" | "converted" | "lost";
+            /**
+             * @description Не задан (null) — лид на generic-пятёрке стадий. Задан — stage принадлежит воронке этого продукта, см. GET /leads/stage-definitions.
+             * @enum {string|null}
+             */
+            productType?: "sales" | "network" | "owner" | "agent" | null;
+            /** @description generic-стадия (new/contacted/qualified/converted/lost, если productType не задан) либо одна из стадий productType этого лида — полный список велик (до 22 значений на продукт), не перечислен здесь целиком, см. GET /leads/stage-definitions. */
+            stage: string;
             version: number;
             source: {
                 [key: string]: unknown;
@@ -2474,7 +2508,7 @@ export interface components {
                 phone?: string;
                 email?: string | null;
             } | null;
-            /** @description CRM-003 мягкое правило (read-only индикатор, НЕ блокирует запись): true, если stage∈{new,contacted,qualified} И у лида есть хотя бы одна открытая (status:open) CRM Task. Для converted/lost — всегда false, правило их не касается. */
+            /** @description CRM-003 мягкое правило (read-only индикатор, НЕ блокирует запись): true, если stage∈{new,contacted,qualified} И у лида есть хотя бы одна открытая (status:open) CRM Task. Для converted/lost — всегда false, правило их не касается. Для лидов С productType всегда false (правило покрывает только generic-воронку, out of scope этого прохода). */
             hasOpenNextAction: boolean;
         };
         LeadListResponse: {
@@ -2485,8 +2519,8 @@ export interface components {
         LeadEvent: {
             id?: string;
             leadId?: string;
-            /** @enum {string} */
-            stage?: "new" | "contacted" | "qualified" | "converted" | "lost";
+            /** @description generic-стадия либо стадия productType лида на момент перехода — см. Lead.stage/GET /leads/stage-definitions. */
+            stage?: string;
             changedBy?: {
                 /** @enum {string} */
                 type?: "position" | "system";
@@ -2494,6 +2528,27 @@ export interface components {
             };
             /** Format: date-time */
             changedAt?: string;
+        };
+        /** @description Одна стадия воронки одного продукта, в форме 1:1 с apps/erp-web/src/data/leads-mock.ts::LEAD_STAGES/LEAD_STAGE_COLUMN. */
+        LeadStageDefinition: {
+            /** @description Машинное значение — валидное значение Lead.stage для лида с этим productType */
+            id: string;
+            /** @description Человекочитаемое русское имя стадии */
+            name: string;
+            /** @description Порядок стадии в воронке продукта, начиная с 1 */
+            order: number;
+            /**
+             * @description Группировка стадии в одну из трёх колонок карточного стола
+             * @enum {string}
+             */
+            column: "rejection" | "in_progress" | "success";
+        };
+        /** @description GET /leads/stage-definitions — полный справочник стадий воронки по всем 4 продуктам. */
+        LeadStageDefinitionsResponse: {
+            sales: components["schemas"]["LeadStageDefinition"][];
+            network: components["schemas"]["LeadStageDefinition"][];
+            owner: components["schemas"]["LeadStageDefinition"][];
+            agent: components["schemas"]["LeadStageDefinition"][];
         };
         LeadEventListResponse: {
             items: components["schemas"]["LeadEvent"][];
@@ -4782,8 +4837,8 @@ export interface operations {
             content: {
                 "application/json": {
                     expectedVersion: number;
-                    /** @enum {string} */
-                    stage: "new" | "contacted" | "qualified" | "converted" | "lost";
+                    /** @description Одна из generic-стадий (лид без productType) либо одна из стадий productType этого лида (GET /leads/stage-definitions) — полный список велик (до 22 значений на продукт), enum здесь намеренно не перечислен целиком. */
+                    stage: string;
                 };
             };
         };
@@ -4797,7 +4852,7 @@ export interface operations {
                     "application/json": components["schemas"]["Lead"];
                 };
             };
-            /** @description VALIDATION_FAILED — переход между стадиями недопустим при актуальной version */
+            /** @description VALIDATION_FAILED — stage не входит в допустимый для этого лида список (generic-пятёрка либо стадии его productType), либо переход между generic-стадиями недопустим при актуальной version */
             400: components["responses"]["Error"];
             /** @description FORBIDDEN — нет lead.changeStage */
             403: components["responses"]["Error"];
@@ -4857,11 +4912,13 @@ export interface operations {
                     contactId?: string;
                     requesterName?: string;
                     requesterPhone?: string;
+                    /** @enum {string} */
+                    productType?: "sales" | "network" | "owner" | "agent";
                 };
             };
         };
         responses: {
-            /** @description Лид создан, stage=new, ownerPositionId=null */
+            /** @description Лид создан, ownerPositionId=null. stage — 'new' (productType не передан) либо первая стадия воронки productType (order:1 в GET /leads/stage-definitions). */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -4877,6 +4934,28 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description contactId указывает на несуществующий/чужой контакт */
             404: components["responses"]["Error"];
+        };
+    };
+    getLeadStageDefinitions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Все 4 продукта со своими стадиями, в порядке воронки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadStageDefinitionsResponse"];
+                };
+            };
+            /** @description AUTH_NO_SESSION — нет baza_session cookie */
+            401: components["responses"]["Error"];
         };
     };
     importLeads: {
