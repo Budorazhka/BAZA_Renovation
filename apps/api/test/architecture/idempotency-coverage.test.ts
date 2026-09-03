@@ -144,6 +144,16 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
     'НЕ клиентский Idempotency-Key: LeadImportService сам вычисляет детерминированный ключ на КАЖДУЮ строку файла (sha256 от organizationId+phone) и делает per-row checkReplay/record через тот же IdempotencyService, что и POST /leads — заголовок здесь бессмысленен (одна HTTP-команда = много логических createLead), защита от дублей есть, просто не на уровне заголовка запроса.',
   'POST /leads/:leadId/assign': 'условный update владельца',
   'POST /leads/:leadId/unassign': 'условный update владельца (обратное действие assign, тот же принцип)',
+  'PATCH /leads/:leadId':
+    '`[phase 3]` обновление сопутствующих полей по id, идемпотентно — повтор с тем же телом применяет тот же $set повторно, без побочного дублирования (stage сюда не входит, тот путь — PATCH /leads/:leadId/stage, уже в списке обязательных выше)',
+  'DELETE /leads/:leadId':
+    '`[phase 3]` soft delete по id идемпотентно — повторный вызов на уже удалённом лиде получает 404 (LeadRepository.softDelete фильтрует status:{$ne:\'deleted\'}), не второй side-effect',
+  'POST /leads/:leadId/files':
+    '`[phase 3]` LeadRepository.addAttachedAsset — $addToSet, повторное прикрепление ТОГО ЖЕ assetId не создаёт дубль ссылки',
+  'DELETE /leads/:leadId/files/:assetId':
+    '`[phase 3]` LeadRepository.removeAttachedAsset — $pull, удаление по id идемпотентно, повтор безвреден',
+  'POST /leads/:leadId/contact-actions':
+    '`[phase 3]` append-only лог факта звонка/чата (AuditService.append, без session/CAS) — повтор (клиентский таймаут+ретрай) создаёт вторую audit-запись lead.contact, искажая только вторичный счётчик обращений в аналитике (getContactActionsStats), не основную CRM-воронку/lead/deal/task отчётность — тот же класс приемлемого риска, что POST /public/listings/:slug/complaints ниже',
   'PATCH /deals/:dealId': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',

@@ -805,6 +805,60 @@ export interface paths {
         get: operations["getLead"];
         put?: never;
         post?: never;
+        /** `[phase 3]` Soft delete (lead.delete — organization-only, owner/director/rop/developer, БЕЗ manager). LeadDocument помечается status:'deleted'+deletedAt, документ и вся его история (LeadEvent/ audit/Task/Deal) остаются в базе — физического удаления нет. После удаления лид перестаёт отдаваться в GET /leads и GET /leads/{leadId} (единый 404, тот же non-disclosure принцип, что для чужого лида). */
+        delete: operations["deleteLead"];
+        options?: never;
+        head?: never;
+        /** `[phase 3]` Сопутствующие поля лида (lead.update — own у manager, organization у owner/director/rop/developer, тот же прецедент, что lead.changeStage). НИКОГДА не меняет stage — тот путь остаётся под PATCH /leads/{leadId}/stage. realtorStage/curatorStage валидируются тем же справочником, что основной stage (productType лида → GET /leads/stage-definitions, не задан — generic-пятёрка). Только явно переданные поля изменяются (частичный PATCH). */
+        patch: operations["updateLead"];
+        trace?: never;
+    };
+    "/leads/{leadId}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** `[phase 3]` Файлы лида (lead.read, тот же own/organization scope, что GET /leads/{leadId}). url резолвится ТОЛЬКО из подтверждённого 'card' variant (тот же принцип, что avatarUrl в GET /team-users) — null, пока worker не построил variant, либо для неизображений. */
+        get: operations["listLeadFiles"];
+        put?: never;
+        /** `[phase 3]` Прикрепить уже загруженный и подтверждённый (POST /media/upload-intent purpose:'lead_attachment' → POST /media/{assetId}/confirm) MediaAsset к лиду (lead.update). */
+        post: operations["attachLeadFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/files/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** `[phase 3]` Открепить файл от лида (lead.update) — MediaAsset не удаляется, только ссылка на лиде. */
+        delete: operations["detachLeadFile"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/leads/{leadId}/contact-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** `[phase 3]` Append-only лог факта обращения к лиду (звонок/чат) — lead.update. Записывается через AuditService (action:'lead.contact'), отдельной сущности нет. */
+        post: operations["recordLeadContactAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2527,6 +2581,48 @@ export interface components {
             } | null;
             /** @description CRM-003 мягкое правило (read-only индикатор, НЕ блокирует запись): true, если stage∈{new,contacted,qualified} И у лида есть хотя бы одна открытая (status:open) CRM Task. Для converted/lost — всегда false, правило их не касается. Для лидов С productType всегда false (правило покрывает только generic-воронку, out of scope этого прохода). */
             hasOpenNextAction: boolean;
+            city?: string | null;
+            notes?: string | null;
+            tags?: string[];
+            dealValue?: number | null;
+            budgetValue?: number | null;
+            budgetCurrency?: string | null;
+            expectedCloseDate?: string | null;
+            rejectionReason?: string | null;
+            rejectionComment?: string | null;
+            telegram?: string | null;
+            country?: string | null;
+            /** @description `[phase 3]` НЕ дубль stage — независимый указатель прогресса риэлтора (см. CrmService.CrmLeadReadModel докстринг). Легаси фронтенд использует отдельную таксономию realtor_1..realtor_6, не входящую в GET /leads/stage-definitions — этот backend валидирует значение тем же справочником, что stage (productType лида → его стадии, иначе generic-пятёрка), это задокументированное расхождение с легаси, не перенесённое 1:1. */
+            realtorStage?: string | null;
+            /** @description Симметрично realtorStage — независимый указатель прогресса куратора. */
+            curatorStage?: string | null;
+        };
+        /** @description `[phase 3]` PATCH /leads/{leadId} — только сопутствующие поля лида, НИКОГДА stage (тот путь — PATCH /leads/{leadId}/stage). Все поля опциональны, изменяются только явно переданные. */
+        UpdateLeadRequest: {
+            city?: string;
+            notes?: string;
+            tags?: string[];
+            dealValue?: number;
+            budgetValue?: number;
+            budgetCurrency?: string;
+            expectedCloseDate?: string;
+            rejectionReason?: string;
+            rejectionComment?: string;
+            telegram?: string;
+            country?: string;
+            realtorStage?: string;
+            curatorStage?: string;
+        };
+        /** @description `[phase 3]` GET/POST/DELETE /leads/{leadId}/files item shape. fileName выводится из MediaAsset storage key (originalPath), не клиентское имя файла — MediaAssetDocument его не хранит. */
+        LeadFile: {
+            assetId: string;
+            fileName: string;
+            mimeType: string | null;
+            sizeBytes: number;
+            /** @description Резолвится только из подтверждённого 'card' variant — null для pending/rejected asset'ов и для файлов без variant'а (например PDF). */
+            url: string | null;
+            /** Format: date-time */
+            createdAt: string;
         };
         LeadListResponse: {
             items: components["schemas"]["LeadListItem"][];
@@ -2545,6 +2641,8 @@ export interface components {
             };
             /** Format: date-time */
             changedAt?: string;
+            /** @description `[phase 3]` Опциональный комментарий, привязанный к этому переходу (легаси createStageComment/getStageComments). */
+            comment?: string | null;
         };
         /** @description Одна стадия воронки одного продукта, в форме 1:1 с apps/erp-web/src/data/leads-mock.ts::LEAD_STAGES/LEAD_STAGE_COLUMN. */
         LeadStageDefinition: {
@@ -4864,6 +4962,190 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    deleteLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лид удалён (soft delete) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        deleted: true;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет lead.delete */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует, вне permission scope или уже удалён */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLeadRequest"];
+            };
+        };
+        responses: {
+            /** @description Лид после обновления */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadListItem"];
+                };
+            };
+            /** @description VALIDATION_FAILED — невалидное значение поля (например realtorStage/curatorStage вне справочника productType лида) */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    listLeadFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список вложений лида (может быть пустым) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadFile"][];
+                };
+            };
+            /** @description FORBIDDEN — нет lead.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    attachLeadFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    assetId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Обновлённый список вложений лида */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadFile"][];
+                };
+            };
+            /** @description VALIDATION_FAILED — asset ещё не verified */
+            400: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет lead.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид или media asset не существует/вне организации */
+            404: components["responses"]["Error"];
+        };
+    };
+    detachLeadFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Обновлённый список вложений лида */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadFile"][];
+                };
+            };
+            /** @description FORBIDDEN — нет lead.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
+    recordLeadContactAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    contactType: "call" | "chat";
+                };
+            };
+        };
+        responses: {
+            /** @description Факт обращения записан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {boolean} */
+                        recorded: true;
+                    };
+                };
+            };
+            /** @description FORBIDDEN — нет lead.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне permission scope */
+            404: components["responses"]["Error"];
+        };
+    };
     changeLeadStage: {
         parameters: {
             query?: never;
@@ -4882,6 +5164,8 @@ export interface operations {
                     expectedVersion: number;
                     /** @description Одна из generic-стадий (лид без productType) либо одна из стадий productType этого лида (GET /leads/stage-definitions) — полный список велик (до 22 значений на продукт), enum здесь намеренно не перечислен целиком. */
                     stage: string;
+                    /** @description `[phase 3]` Опциональный комментарий, привязанный к ЭТОМУ переходу (легаси createStageComment) — сохраняется на LeadEvent, отдаётся в GET /leads/{leadId}/events. */
+                    comment?: string;
                 };
             };
         };
