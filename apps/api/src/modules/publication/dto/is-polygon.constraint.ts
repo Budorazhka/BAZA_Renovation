@@ -14,7 +14,11 @@ export class IsPolygonConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     if (typeof value !== 'string') return false;
     const parts = value.split(',');
-    if (parts.length < 6 || parts.length % 2 !== 0) return false;
+    // Верхняя граница (найдено 03.09.2026 внешним ревью): без нее полигон на
+    // тысячи точек грузит CPU MongoDB на $geoWithin практически неограниченно
+    // (algorithmic DoS через публичный, неавторизованный поиск). 400 точек —
+    // с большим запасом на любой реалистичный контур района/города.
+    if (parts.length < 6 || parts.length % 2 !== 0 || parts.length > 400) return false;
     // Пустой сегмент ("44,,45,42,46,43") должен провалиться явно — Number('') === 0,
     // без этой проверки такая точка тихо стала бы {lat: 0}.
     if (parts.some((part) => part.trim() === '')) return false;
@@ -32,6 +36,6 @@ export class IsPolygonConstraint implements ValidatorConstraintInterface {
   }
 
   defaultMessage(): string {
-    return 'polygon должен быть чётным списком чисел "lng1,lat1,...,lngN,latN", минимум 3 точки (6 чисел), longitude∈[-180,180], latitude∈[-90,90]';
+    return 'polygon должен быть чётным списком чисел "lng1,lat1,...,lngN,latN", от 3 до 200 точек (6..400 чисел), longitude∈[-180,180], latitude∈[-90,90]';
   }
 }

@@ -241,6 +241,15 @@ export class OrganizationsService {
    * (permission-matrix.md 1.4: position.create.organization — owner/director,
    * ⚙ administrator).
    */
+  /**
+   * `parentPositionId` обязан принадлежать той же организации, что и новая
+   * позиция — без этой проверки (найдено 03.09.2026 внешним ревью)
+   * аутентифицированный пользователь с правом `position.create` мог
+   * передать id позиции из ЧУЖОЙ организации, и она молча становилась
+   * родителем в дереве подчинённости своего тенанта — нарушение ADR-002
+   * (tenant-escape), тот же принцип, что уже применён к `expectedOrganizationId`
+   * в `grantPositionPermission` ниже.
+   */
   async createVacantPosition(params: {
     organizationId: Types.ObjectId;
     fixedRole: FixedRole;
@@ -248,6 +257,16 @@ export class OrganizationsService {
     /** Сессия внешней транзакции: позиция и её стартовые гранты обязаны появляться и исчезать вместе. */
     session?: ClientSession;
   }): Promise<Types.ObjectId> {
+    if (params.parentPositionId) {
+      const parent = await this.positionRepository.findByIdForOrganization(
+        params.parentPositionId,
+        params.organizationId,
+        params.session,
+      );
+      if (!parent) {
+        throw new NotFoundException('Parent position not found');
+      }
+    }
     const position = await this.positionRepository.create(params, params.session);
     await this.grantDefaultRolePermissions(position._id, params.fixedRole, params.session);
     return position._id;

@@ -30,7 +30,11 @@ export class PublicComplaintController {
   @RateLimit({ keyPrefix: 'complaint-submit', limit: 5, windowSeconds: 60 })
   async submit(@Param('slug') slug: string, @Body() dto: SubmitComplaintDto) {
     const publication = await this.publicationRepository.findBySlug(slug);
-    if (!publication || publication.sourceType !== 'listing') {
+    // status !== 'published' (найдено 03.09.2026 внешним ревью): без этой
+    // проверки жалобу можно было подать на черновик/снятый с публикации
+    // объект — сущность, на которую посетитель сайта физически не мог
+    // смотреть, а значит не мог и пожаловаться на неё легитимно.
+    if (!publication || publication.sourceType !== 'listing' || publication.status !== 'published') {
       throw new NotFoundException('Publication not found');
     }
 

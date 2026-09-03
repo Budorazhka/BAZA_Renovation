@@ -86,13 +86,27 @@ describe('lead-stage-definitions', () => {
   });
 
   describe('firstStageIdForProduct', () => {
+    // Первая стадия колонки `in_progress`, НЕ буквальный [0] массива — [0] у
+    // каждого продукта это стадия колонки `rejection` (порядок массива идёт
+    // rejection → in_progress → success, не по смыслу "с чего лид начинается").
+    // Раньше здесь ошибочно проверялся [0] — новый лид с productType заводился
+    // сразу как "Бракованный лид"/"Отказ" (найдено 03.09.2026 внешним ревью).
     it.each([
-      ['sales', 'defective'],
-      ['network', 'network_rejected_defective'],
-      ['owner', 'owner_rejected_defective'],
-      ['agent', 'agent_rejected_defective'],
-    ] as const)('%s — %s (order:1)', (product, expectedFirstId) => {
+      ['sales', 'new'],
+      ['network', 'network_new_lead'],
+      ['owner', 'owner_new_owner'],
+      ['agent', 'agent_new_agent'],
+    ] as const)('%s — %s (первая стадия колонки in_progress)', (product, expectedFirstId) => {
       expect(firstStageIdForProduct(product)).toBe(expectedFirstId);
     });
+
+    it.each(['sales', 'network', 'owner', 'agent'] as const)(
+      '%s — стартовая стадия всегда column:in_progress, никогда rejection/success',
+      (product) => {
+        const firstId = firstStageIdForProduct(product);
+        const definition = LEAD_STAGE_DEFINITIONS[product].find((s) => s.id === firstId);
+        expect(definition?.column).toBe('in_progress');
+      },
+    );
   });
 });

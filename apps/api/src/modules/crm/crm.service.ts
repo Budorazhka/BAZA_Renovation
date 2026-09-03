@@ -24,7 +24,7 @@ import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType } from './schemas/lead.schema';
-import { firstStageIdForProduct, stageIdsForProduct } from './lead-stage-definitions';
+import { firstStageIdForProduct, stageIdsForProduct, LEAD_STAGE_DEFINITIONS } from './lead-stage-definitions';
 import {
   priorityFromFlags,
   type TaskDocument,
@@ -345,7 +345,8 @@ export class CrmService {
     return {
       items: leads.map((lead) =>
         toLeadReadModel(lead, contactsById.get(lead.contactId.toString()), {
-          hasOpenNextAction: isActiveLeadStage(lead.stage) && leadIdsWithOpenTask.has(lead._id.toString()),
+          hasOpenNextAction:
+            isActiveLeadStage(lead.stage, lead.productType) && leadIdsWithOpenTask.has(lead._id.toString()),
         }),
       ),
       nextCursor,
@@ -405,11 +406,11 @@ export class CrmService {
       throw new NotFoundException('Lead not found');
     }
     const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
-    const openTaskCount = isActiveLeadStage(lead.stage)
+    const openTaskCount = isActiveLeadStage(lead.stage, lead.productType)
       ? await this.taskRepository.countOpenForLead(params.organizationId, lead._id)
       : 0;
     return toLeadReadModel(lead, contact, {
-      stalled: isActiveLeadStage(lead.stage) && openTaskCount === 0,
+      stalled: isActiveLeadStage(lead.stage, lead.productType) && openTaskCount === 0,
       hasOpenNextAction: openTaskCount > 0,
     });
   }
@@ -1542,12 +1543,15 @@ export class CrmService {
     }
 
     return runInTransaction(this.connection, async (session) => {
-      const { modifiedCount } = await this.leadRepository.unassignOwner(
+      const { matchedCount } = await this.leadRepository.unassignOwner(
         params.leadId,
         params.expectedOrganizationId,
         session,
       );
-      if (modifiedCount === 0) {
+      // matchedCount:0 — лид реально не найден/удалён/чужая организация.
+      // modifiedCount:0 при matchedCount:1 — лид уже был не назначен,
+      // повторный unassign — идемпотентный успех, не 404 (см. репозиторий).
+      if (matchedCount === 0) {
         throw new NotFoundException('Lead not found');
       }
 
@@ -1872,11 +1876,11 @@ export class CrmService {
       // Ничего не передано для изменения — не открываем транзакцию впустую,
       // тот же short-circuit принцип, что reassignTask на no-op reassign.
       const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
-      const openTaskCount = isActiveLeadStage(lead.stage)
+      const openTaskCount = isActiveLeadStage(lead.stage, lead.productType)
         ? await this.taskRepository.countOpenForLead(params.organizationId, lead._id)
         : 0;
       return toLeadReadModel(lead, contact, {
-        stalled: isActiveLeadStage(lead.stage) && openTaskCount === 0,
+        stalled: isActiveLeadStage(lead.stage, lead.productType) && openTaskCount === 0,
         hasOpenNextAction: openTaskCount > 0,
       });
     }
@@ -1912,12 +1916,12 @@ export class CrmService {
         session,
       );
       const contact = await this.contactRepository.findByIdForOrganization(updated!.contactId, params.organizationId);
-      const openTaskCount = isActiveLeadStage(updated!.stage)
+      const openTaskCount = isActiveLeadStage(updated!.stage, updated!.productType)
         ? await this.taskRepository.countOpenForLead(params.organizationId, updated!._id)
         : 0;
 
       return toLeadReadModel(updated!, contact, {
-        stalled: isActiveLeadStage(updated!.stage) && openTaskCount === 0,
+        stalled: isActiveLeadStage(updated!.stage, updated!.productType) && openTaskCount === 0,
         hasOpenNextAction: openTaskCount > 0,
       });
     });
@@ -3310,13 +3314,20 @@ function toLeadReadModel(
 
 /**
  * CRM-003: см. ACTIVE_LEAD_STAGES докстринг — converted/lost исключены из
- * "активный лид без next action". Продуктовая стадия (лид с productType)
- * структурно не входит в ACTIVE_LEAD_STAGES (generic-подмножество) — cast
- * безопасен: .includes() корректно возвращает false, "активный лид без
- * next action" — правило только для generic-воронки, продуктовые лиды им
- * намеренно не покрыты (out of scope этого прохода).
+ * "активный лид без next action". Если у лида задан productType — активность
+ * определяется тем же принципом через колонку продуктовой стадии
+ * (`in_progress` = активна, `rejection`/`success` = нет), а не через
+ * generic-подмножество: до этой правки продуктовые лиды здесь ВСЕГДА
+ * получали false — hasOpenNextAction/stalled никогда не подсвечивались на
+ * карточном столе (найдено 03.09.2026 внешним ревью, было задокументировано
+ * как сознательный пробел, но задача, которую он ломает — индикатор
+ * задачи на карточке — уже видна пользователю, поэтому закрыто сразу).
  */
-function isActiveLeadStage(stage: LeadStage): boolean {
+function isActiveLeadStage(stage: LeadStage, productType?: LeadProductType | null): boolean {
+  if (productType) {
+    const definition = LEAD_STAGE_DEFINITIONS[productType].find((s) => s.id === stage);
+    return definition?.column === 'in_progress';
+  }
   return ACTIVE_LEAD_STAGES.includes(stage as GenericLeadStage);
 }
 

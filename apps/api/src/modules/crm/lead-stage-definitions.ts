@@ -128,7 +128,16 @@ export function stageIdsForProduct(productType: ProductType): string[] {
   return LEAD_STAGE_DEFINITIONS[productType].map((stage) => stage.id);
 }
 
-/** Первая стадия воронки продукта (order:1) — стартовая stage для нового лида с этим productType. */
+/**
+ * Стартовая стадия нового лида с этим productType — первая стадия колонки
+ * `in_progress`, НЕ `[0]` массива. `[0]` в исходной легаси-таксономии — это
+ * стадии колонки `rejection` (`defective`/`refused` и их аналоги у трёх
+ * остальных продуктов, см. LEAD_STAGE_DEFINITIONS выше): порядок массива
+ * идёт rejection → in_progress → success, а не по смыслу "с чего лид
+ * начинается". Найдено 03.09.2026 при внешнем ревью — до этой правки
+ * POST /leads с productType заводил лид сразу как "Бракованный лид".
+ */
 export function firstStageIdForProduct(productType: ProductType): string {
-  return LEAD_STAGE_DEFINITIONS[productType][0]!.id;
+  const firstInProgress = LEAD_STAGE_DEFINITIONS[productType].find((stage) => stage.column === 'in_progress');
+  return (firstInProgress ?? LEAD_STAGE_DEFINITIONS[productType][0]!).id;
 }

@@ -793,7 +793,7 @@ describe('CrmService.unassignLead', () => {
     const lead = makeLead({ organizationId, stage: 'qualified', ownerPositionId });
     const actorPositionId = new Types.ObjectId();
     const actorIdentityId = new Types.ObjectId();
-    const unassignOwnerSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const unassignOwnerSpy = jest.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
     const appendEventSpy = jest.fn().mockResolvedValue(undefined);
     const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
 
@@ -851,10 +851,31 @@ describe('CrmService.unassignLead', () => {
     expect(unassignOwnerSpy).not.toHaveBeenCalled();
   });
 
-  it('modifiedCount:0 (лид исчез между read и write) — бросает NotFoundException', async () => {
+  it('matchedCount:1, modifiedCount:0 (лид уже был без owner) — идемпотентный успех, не NotFoundException', async () => {
     const organizationId = new Types.ObjectId();
     const lead = makeLead({ organizationId });
-    const unassignOwnerSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+    const unassignOwnerSpy = jest.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 0 });
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead), unassignOwner: unassignOwnerSpy },
+      leadEventRepository: { append: jest.fn().mockResolvedValue(undefined) },
+      auditService: { append: jest.fn().mockResolvedValue(undefined) },
+    });
+
+    const result = await service.unassignLead({
+      leadId: lead._id,
+      actorPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      expectedOrganizationId: organizationId,
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(result.ownerPositionId).toBeNull();
+  });
+
+  it('matchedCount:0 (лид реально исчез между read и write) — бросает NotFoundException', async () => {
+    const organizationId = new Types.ObjectId();
+    const lead = makeLead({ organizationId });
+    const unassignOwnerSpy = jest.fn().mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
     const service = createTestCrmService({
       leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead), unassignOwner: unassignOwnerSpy },
     });
@@ -1060,7 +1081,7 @@ describe('CrmService.createLead', () => {
   });
 
   describe('продуктовые воронки лида (03.09.2026, owner decision)', () => {
-    it('с productType — создаёт лид сразу в первой стадии воронки этого продукта (order:1), не в generic new', async () => {
+    it('с productType — создаёт лид сразу в первой стадии колонки in_progress этого продукта, не в generic new и не в rejection', async () => {
       const organizationId = new Types.ObjectId();
       const contact = makeContact();
       const createLeadSpy = jest.fn().mockResolvedValue({
@@ -1068,7 +1089,7 @@ describe('CrmService.createLead', () => {
         organizationId,
         contactId: contact._id,
         productType: 'network',
-        stage: 'network_rejected_defective',
+        stage: 'network_new_lead',
         version: 0,
         source: { route: 'manual' },
         createdAt: new Date('2026-09-03T10:00:00.000Z'),
@@ -1094,15 +1115,15 @@ describe('CrmService.createLead', () => {
       });
 
       expect(createLeadSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ productType: 'network', stage: 'network_rejected_defective' }),
+        expect.objectContaining({ productType: 'network', stage: 'network_new_lead' }),
         expect.anything(),
       );
       expect(appendEventSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ stage: 'network_rejected_defective' }),
+        expect.objectContaining({ stage: 'network_new_lead' }),
         expect.anything(),
       );
       expect(result.productType).toBe('network');
-      expect(result.stage).toBe('network_rejected_defective');
+      expect(result.stage).toBe('network_new_lead');
     });
 
     it('без productType — поведение как раньше: stage:new, productType:null', async () => {

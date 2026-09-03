@@ -965,13 +965,13 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       });
 
       expect(result.productType).toBe('network');
-      expect(result.stage).toBe('network_rejected_defective');
+      expect(result.stage).toBe('network_new_lead');
 
       const leadDoc = await connection.collection('leads').findOne({ _id: new Types.ObjectId(result.id) });
-      expect(leadDoc).toMatchObject({ productType: 'network', stage: 'network_rejected_defective' });
+      expect(leadDoc).toMatchObject({ productType: 'network', stage: 'network_new_lead' });
 
       const eventDoc = await connection.collection('lead_events').findOne({ leadId: leadDoc?._id });
-      expect(eventDoc).toMatchObject({ stage: 'network_rejected_defective' });
+      expect(eventDoc).toMatchObject({ stage: 'network_new_lead' });
     });
 
     it('без productType — поведение как раньше: stage:new, productType не сохраняется', async () => {

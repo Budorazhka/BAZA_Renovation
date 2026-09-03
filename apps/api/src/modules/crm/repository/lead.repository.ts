@@ -239,15 +239,29 @@ export class LeadRepository {
    * см. CrmService.unassignLead докстринг): очищает ownerPositionId, не
    * версионировано — тот же сознательный выбор, что и assignOwner выше.
    */
+  /**
+   * `matchedCount` и `modifiedCount` возвращаются раздельно намеренно
+   * (найдено 03.09.2026 внешним ревью): лид, уже снятый с назначения,
+   * даёт `matchedCount:1, modifiedCount:0` (Mongo не считает $unset
+   * несуществующего поля изменением) — вызывающий код обязан считать это
+   * идемпотентным успехом, а не "лид не найден". `matchedCount:0` — лид
+   * реально не существует или не в этой организации, единственный законный
+   * повод для NotFoundException. `status: {$ne:'deleted'}` — тот же фильтр,
+   * что уже стоит в updateFields ниже, здесь был пропущен.
+   */
   async unassignOwner(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
     session?: ClientSession,
-  ): Promise<{ modifiedCount: number }> {
+  ): Promise<{ matchedCount: number; modifiedCount: number }> {
     const result = await this.model
-      .updateOne({ _id: id, organizationId }, { $unset: { ownerPositionId: '' } }, { session })
+      .updateOne(
+        { _id: id, organizationId, status: { $ne: 'deleted' } },
+        { $unset: { ownerPositionId: '' } },
+        { session },
+      )
       .exec();
-    return { modifiedCount: result.modifiedCount };
+    return { matchedCount: result.matchedCount, modifiedCount: result.modifiedCount };
   }
 
   /**
