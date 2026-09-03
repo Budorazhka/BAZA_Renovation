@@ -33,6 +33,18 @@ export function mapProductTypeV2ToCrm(productType: LeadProductTypeV2 | null): Pr
   return productType ? PRODUCT_V2_TO_CRM[productType] : ProductType.SALES
 }
 
+const CRM_TO_PRODUCT_V2: Record<ProductType, LeadProductTypeV2> = {
+  [ProductType.SALES]: 'sales',
+  [ProductType.NETWORK]: 'network',
+  [ProductType.OWNER]: 'owner',
+  [ProductType.AGENT]: 'agent',
+}
+
+/** `[phase 4]` Обратное к mapProductTypeV2ToCrm — нужно там, где форма создания лида (LeadsBlock/LeadsComponent) отдаёт легаси ProductType, а POST /leads принимает LeadProductTypeV2. */
+export function mapProductTypeCrmToV2(productType: ProductType): LeadProductTypeV2 {
+  return CRM_TO_PRODUCT_V2[productType]
+}
+
 /**
  * Честные пробелы этого адаптера (тот же класс, что в lead-v2-poker-adapter.ts):
  *  - `createdBy` → '' — LeadV2 не отдаёт identity создателя, только
@@ -80,6 +92,11 @@ export function mapLeadV2ToCrmLead(lead: LeadV2): CrmLead {
     aiSummary: undefined,
     // Не в интерфейсе легаси Lead — LeadViewModal читает его через `(displayLead as any).telegram`.
     telegram: lead.telegram ?? undefined,
+    // `[phase 4]` Тоже не в интерфейсе легаси Lead — нужен LeadsBlock/LeadsComponent
+    // как expectedVersion для CAS в leadsApiV2.changeStage/update (лиды там
+    // читаются из общего списка, не из отдельного getById с явным version,
+    // как в LeadViewModal), читается через `(lead as any).version`.
+    version: lead.version,
   }
   return mapped as unknown as CrmLead
 }
