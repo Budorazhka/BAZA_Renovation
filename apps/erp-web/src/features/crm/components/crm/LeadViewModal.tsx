@@ -1426,15 +1426,15 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
       await flushLeadHistory(displayLead._id);
       
       const leadId = displayLead._id;
-      const response = await apiService.deleteLead(leadId);
-      if (response.success && response.data?.deleted) {
+      const result = await leadsApiV2.remove(leadId);
+      if (result.deleted) {
         // Закрываем модалку и вызываем колбэк с ID удаленного лида
         onClose();
         if (onLeadDeleted) {
           onLeadDeleted(leadId);
         }
       } else {
-        alert(response.message || (displayLead?.productType === ProductType.NETWORK ? [t('leadCard.failedDeleteReferral')]: t('leadCard.failedDeleteLead')));
+        alert(displayLead?.productType === ProductType.NETWORK ? [t('leadCard.failedDeleteReferral')]: t('leadCard.failedDeleteLead'));
       }
     } catch (error: any) {
       console.error('Failed to delete lead:', error);
@@ -1512,14 +1512,14 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     // Дебаунсинг: сохраняем через 500ms после последнего изменения
     realtorStageChangeTimeoutRef.current = setTimeout(async () => {
       try {
-        const response = await apiService.updateLeadStage(displayLead._id, {
-          realtorStage: newStage,
-        });
-
-        if (response.success && response.data) {
-          setLocalLead(response.data);
-          lastRealtorStageRef.current = response.data.realtorStage;
-        }
+        // `[phase 3]` realtorStage — сопутствующее поле (PATCH /leads/:id),
+        // не смена `stage` — CAS/changeStage её не касается (см.
+        // lead.controller.ts докстринг UpdateLeadDto).
+        const updated = await leadsApiV2.update(displayLead._id, { realtorStage: newStage });
+        const mapped = mapLeadV2ToCrmLead(updated);
+        leadVersionRef.current = updated.version;
+        setLocalLead(mapped);
+        lastRealtorStageRef.current = mapped.realtorStage;
       } catch (error) {
         console.error('Failed to update realtor stage:', error);
         alert(t('leadCard.failedUpdateRealtor'));
@@ -1554,14 +1554,12 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     // Дебаунсинг: сохраняем через 500ms после последнего изменения
     curatorStageChangeTimeoutRef.current = setTimeout(async () => {
       try {
-        const response = await apiService.updateLeadStage(displayLead._id, {
-          curatorStage: newStage,
-        });
-
-        if (response.success && response.data) {
-          setLocalLead(response.data);
-          lastCuratorStageRef.current = response.data.curatorStage;
-        }
+        // `[phase 3]` curatorStage — то же сопутствующее поле, что realtorStage выше.
+        const updated = await leadsApiV2.update(displayLead._id, { curatorStage: newStage });
+        const mapped = mapLeadV2ToCrmLead(updated);
+        leadVersionRef.current = updated.version;
+        setLocalLead(mapped);
+        lastCuratorStageRef.current = mapped.curatorStage;
       } catch (error) {
         console.error('Failed to update curator stage:', error);
         alert(t('leadCard.failedUpdateCurator'));
@@ -1584,16 +1582,25 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
     }
 
     try {
-      const response = await apiService.updateLeadStage(displayLead._id, {
-        stage: newStage,
-      });
-
-      if (response.success && response.data) {
-        setLocalLead(response.data);
+      // `[phase 3]` Это реальная смена `stage` (не сопутствующее поле) —
+      // CAS через expectedVersion (см. leadsApiV2.changeStage докстринг).
+      const expectedVersion = leadVersionRef.current ?? 0;
+      const result = await leadsApiV2.changeStage(displayLead._id, newStage, expectedVersion);
+      if (typeof result.version === 'number') {
+        leadVersionRef.current = result.version;
       }
-    } catch (error) {
+      // changeStage не отдаёт полную read-модель (см. LeadStageChangeResult
+      // докстринг) — перечитываем лид, чтобы localLead отражал актуальные
+      // version/stage/сопутствующие поля, тот же принцип, что LeadsContext.
+      await loadLeadFromAPI();
+    } catch (error: any) {
       console.error('Failed to update network stage:', error);
-      alert(t('leadCard.failedUpdateStage'));
+      if (error?.response?.status === 409) {
+        alert(t('leadCard.failedUpdateStage'));
+        await loadLeadFromAPI();
+      } else {
+        alert(t('leadCard.failedUpdateStage'));
+      }
     }
   };
 
@@ -1893,7 +1900,7 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                     onClick={(e) => {
                       e.stopPropagation();
                       if (displayLead?._id) {
-                        apiService.recordLeadContactAction(displayLead._id, 'call').catch(() => {});
+                        leadsApiV2.recordContactAction(displayLead._id, 'call').catch(() => {});
                       }
                       toggleCallMenu(callButtonRef.current);
                     }}
@@ -1965,7 +1972,7 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                     onClick={(e) => {
                       e.stopPropagation();
                       if (displayLead?._id) {
-                        apiService.recordLeadContactAction(displayLead._id, 'chat').catch(() => {});
+                        leadsApiV2.recordContactAction(displayLead._id, 'chat').catch(() => {});
                       }
                       toggleWriteMenu(writeButtonRef.current);
                     }}
@@ -3228,15 +3235,12 @@ const LeadViewModal: React.FC<LeadViewModalProps> = ({ isOpen, onClose, lead, on
                             if (!displayLead?._id) return;
                             setIsSavingDescription(true);
                             try {
-                              const response = await apiService.updateLead(displayLead._id, {
+                              const updated = await leadsApiV2.update(displayLead._id, {
                                 notes: descriptionText.trim() || undefined
                               });
-                              if (response.success && response.data) {
-                                setLocalLead(response.data);
-                                setIsEditingDescription(false);
-                              } else {
-                                console.error('Failed to update description:', response.message);
-                              }
+                              leadVersionRef.current = updated.version;
+                              setLocalLead(mapLeadV2ToCrmLead(updated));
+                              setIsEditingDescription(false);
                             } catch (error) {
                               console.error('Error updating description:', error);
                             } finally {
