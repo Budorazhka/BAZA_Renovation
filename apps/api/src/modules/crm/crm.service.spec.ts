@@ -1595,6 +1595,19 @@ describe('CrmService — read leads', () => {
           stalled: false,
           contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
           hasOpenNextAction: false,
+          city: null,
+          notes: null,
+          tags: [],
+          dealValue: null,
+          budgetValue: null,
+          budgetCurrency: null,
+          expectedCloseDate: null,
+          rejectionReason: null,
+          rejectionComment: null,
+          telegram: null,
+          country: null,
+          realtorStage: null,
+          curatorStage: null,
         },
       ],
       nextCursor: null,
@@ -1708,6 +1721,19 @@ describe('CrmService — read leads', () => {
       stalled: false,
       contact: { id: contactId.toString(), name: 'Иван', phone: '+995555000000', email: 'ivan@example.test' },
       hasOpenNextAction: true,
+      city: null,
+      notes: null,
+      tags: [],
+      dealValue: null,
+      budgetValue: null,
+      budgetCurrency: null,
+      expectedCloseDate: null,
+      rejectionReason: null,
+      rejectionComment: null,
+      telegram: null,
+      country: null,
+      realtorStage: null,
+      curatorStage: null,
     });
   });
 
@@ -1726,6 +1752,157 @@ describe('CrmService — read leads', () => {
 
     await expect(
       readService.getLead({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('CrmService.listLeadFiles/attachLeadFile/detachLeadFile (phase 3)', () => {
+  it('listLeadFiles: лид без attachedAssetIds — [], MediaService не вызывается', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const getAssetsForOwnerScope = jest.fn();
+    const service = createTestCrmService({
+      leadRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({
+          _id: leadId,
+          organizationId,
+          attachedAssetIds: [],
+        }),
+      },
+      mediaService: { getAssetsForOwnerScope },
+    });
+
+    const result = await service.listLeadFiles({ leadId, organizationId });
+
+    expect(result).toEqual([]);
+    expect(getAssetsForOwnerScope).not.toHaveBeenCalled();
+  });
+
+  it('listLeadFiles: резолвит assetId → fileName/url/mimeType, сохраняет порядок attachedAssetIds', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const assetId1 = new Types.ObjectId();
+    const assetId2 = new Types.ObjectId();
+    const createdAt = new Date('2026-09-01T10:00:00Z');
+    const assetsMap = new Map([
+      [
+        assetId1.toString(),
+        {
+          status: 'verified' as const,
+          variants: [{ type: 'card', assetPath: 'x/card/1.webp', exifStripped: true as const }],
+          bucket: 'public' as const,
+          declaredMimeType: 'image/jpeg',
+          verifiedMimeType: 'image/jpeg',
+          sizeBytes: 1024,
+          createdAt,
+          originalPath: `${assetId1.toString()}/original.jpg`,
+        },
+      ],
+      [
+        assetId2.toString(),
+        {
+          status: 'pending' as const,
+          variants: [],
+          bucket: 'public' as const,
+          declaredMimeType: 'application/pdf',
+          sizeBytes: 2048,
+          createdAt,
+          originalPath: `${assetId2.toString()}/original.pdf`,
+        },
+      ],
+    ]);
+    const getAssetsForOwnerScope = jest.fn().mockResolvedValue(assetsMap);
+    const getVariantUrl = jest.fn().mockReturnValue('https://cdn.example.com/x/card/1.webp');
+    const service = createTestCrmService({
+      leadRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({
+          _id: leadId,
+          organizationId,
+          attachedAssetIds: [assetId1, assetId2],
+        }),
+      },
+      mediaService: { getAssetsForOwnerScope, getVariantUrl },
+    });
+
+    const result = await service.listLeadFiles({ leadId, organizationId });
+
+    expect(result).toEqual([
+      {
+        assetId: assetId1.toString(),
+        fileName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1024,
+        url: 'https://cdn.example.com/x/card/1.webp',
+        createdAt: createdAt.toISOString(),
+      },
+      {
+        assetId: assetId2.toString(),
+        fileName: 'original.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: 2048,
+        url: null,
+        createdAt: createdAt.toISOString(),
+      },
+    ]);
+  });
+
+  it('listLeadFiles: чужая организация — NotFoundException', async () => {
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+    });
+
+    await expect(
+      service.listLeadFiles({ leadId: new Types.ObjectId(), organizationId: new Types.ObjectId() }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('attachLeadFile: asset не verified — VALIDATION_FAILED, не пишет в лид', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const addAttachedAsset = jest.fn();
+    const service = createTestCrmService({
+      leadRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: leadId, organizationId, attachedAssetIds: [] }),
+        addAttachedAsset,
+      },
+      mediaService: {
+        getAssetsForOwnerScope: jest.fn().mockResolvedValue(
+          new Map([[assetId.toString(), { status: 'pending', variants: [], declaredMimeType: 'image/jpeg', sizeBytes: 10, createdAt: new Date(), originalPath: 'x' }]]),
+        ),
+      },
+    });
+
+    await expect(
+      service.attachLeadFile({
+        leadId,
+        organizationId,
+        assetId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test',
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+    expect(addAttachedAsset).not.toHaveBeenCalled();
+  });
+
+  it('attachLeadFile: asset не найден в этой организации — NotFoundException', async () => {
+    const leadId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+    const service = createTestCrmService({
+      leadRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue({ _id: leadId, organizationId, attachedAssetIds: [] }),
+      },
+      mediaService: { getAssetsForOwnerScope: jest.fn().mockResolvedValue(new Map()) },
+    });
+
+    await expect(
+      service.attachLeadFile({
+        leadId,
+        organizationId,
+        assetId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'test',
+      }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -1854,6 +2031,7 @@ describe('CrmService.listLeadEvents', () => {
         stage: 'contacted',
         changedBy: { type: 'position', positionId: positionId.toString() },
         changedAt: '2026-08-27T09:00:00.000Z',
+        comment: null,
       },
     ]);
     expect(result.nextCursor).toBe(eventIds[0]!.toString());

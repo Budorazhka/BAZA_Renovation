@@ -1616,6 +1616,213 @@ paths:
         '404':
           description: NOT_FOUND — лид не существует или вне permission scope
           $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateLead
+      summary: >
+        `[phase 3]` Сопутствующие поля лида (lead.update — own у manager,
+        organization у owner/director/rop/developer, тот же прецедент, что
+        lead.changeStage). НИКОГДА не меняет stage — тот путь остаётся под
+        PATCH /leads/{leadId}/stage. realtorStage/curatorStage
+        валидируются тем же справочником, что основной stage (productType
+        лида → GET /leads/stage-definitions, не задан — generic-пятёрка).
+        Только явно переданные поля изменяются (частичный PATCH).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLeadRequest'
+      responses:
+        '200':
+          description: Лид после обновления
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadListItem'
+        '400':
+          description: VALIDATION_FAILED — невалидное значение поля (например realtorStage/curatorStage вне справочника productType лида)
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteLead
+      summary: >
+        `[phase 3]` Soft delete (lead.delete — organization-only,
+        owner/director/rop/developer, БЕЗ manager). LeadDocument помечается
+        status:'deleted'+deletedAt, документ и вся его история (LeadEvent/
+        audit/Task/Deal) остаются в базе — физического удаления нет. После
+        удаления лид перестаёт отдаваться в GET /leads и GET /leads/{leadId}
+        (единый 404, тот же non-disclosure принцип, что для чужого лида).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Лид удалён (soft delete)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: {type: boolean, enum: [true]}
+        '403':
+          description: FORBIDDEN — нет lead.delete
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует, вне permission scope или уже удалён
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/files:
+    get:
+      operationId: listLeadFiles
+      summary: >
+        `[phase 3]` Файлы лида (lead.read, тот же own/organization scope,
+        что GET /leads/{leadId}). url резолвится ТОЛЬКО из подтверждённого
+        'card' variant (тот же принцип, что avatarUrl в GET /team-users) —
+        null, пока worker не построил variant, либо для неизображений.
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Список вложений лида (может быть пустым)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeadFile'
+        '403':
+          description: FORBIDDEN — нет lead.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: attachLeadFile
+      summary: >
+        `[phase 3]` Прикрепить уже загруженный и подтверждённый (POST
+        /media/upload-intent purpose:'lead_attachment' → POST
+        /media/{assetId}/confirm) MediaAsset к лиду (lead.update).
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assetId]
+              properties:
+                assetId: {type: string}
+      responses:
+        '201':
+          description: Обновлённый список вложений лида
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeadFile'
+        '400':
+          description: VALIDATION_FAILED — asset ещё не verified
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет lead.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид или media asset не существует/вне организации
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/files/{assetId}:
+    delete:
+      operationId: detachLeadFile
+      summary: '`[phase 3]` Открепить файл от лида (lead.update) — MediaAsset не удаляется, только ссылка на лиде.'
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: assetId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Обновлённый список вложений лида
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeadFile'
+        '403':
+          description: FORBIDDEN — нет lead.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
+
+  /leads/{leadId}/contact-actions:
+    post:
+      operationId: recordLeadContactAction
+      summary: >
+        `[phase 3]` Append-only лог факта обращения к лиду (звонок/чат) —
+        lead.update. Записывается через AuditService (action:'lead.contact'),
+        отдельной сущности нет.
+      tags: [erp-crm]
+      parameters:
+        - name: leadId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contactType]
+              properties:
+                contactType: {type: string, enum: [call, chat]}
+      responses:
+        '201':
+          description: Факт обращения записан
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded]
+                properties:
+                  recorded: {type: boolean, enum: [true]}
+        '403':
+          description: FORBIDDEN — нет lead.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — лид не существует или вне permission scope
+          $ref: '#/components/responses/Error'
 
   /leads/{leadId}/stage:
     patch:
@@ -1660,6 +1867,12 @@ paths:
                     /leads/stage-definitions) — полный список велик (до 22
                     значений на продукт), enum здесь намеренно не
                     перечислен целиком.
+                comment:
+                  type: string
+                  description: >
+                    `[phase 3]` Опциональный комментарий, привязанный к
+                    ЭТОМУ переходу (легаси createStageComment) — сохраняется
+                    на LeadEvent, отдаётся в GET /leads/{leadId}/events.
       responses:
         '200':
           description: Лид после смены стадии
@@ -5068,6 +5281,75 @@ components:
             converted/lost — всегда false, правило их не касается. Для
             лидов С productType всегда false (правило покрывает только
             generic-воронку, out of scope этого прохода).
+        city: {type: string, nullable: true}
+        notes: {type: string, nullable: true}
+        tags:
+          type: array
+          items: {type: string}
+        dealValue: {type: number, nullable: true}
+        budgetValue: {type: number, nullable: true}
+        budgetCurrency: {type: string, nullable: true}
+        expectedCloseDate: {type: string, nullable: true}
+        rejectionReason: {type: string, nullable: true}
+        rejectionComment: {type: string, nullable: true}
+        telegram: {type: string, nullable: true}
+        country: {type: string, nullable: true}
+        realtorStage:
+          type: string
+          nullable: true
+          description: >
+            `[phase 3]` НЕ дубль stage — независимый указатель прогресса
+            риэлтора (см. CrmService.CrmLeadReadModel докстринг). Легаси
+            фронтенд использует отдельную таксономию realtor_1..realtor_6,
+            не входящую в GET /leads/stage-definitions — этот backend
+            валидирует значение тем же справочником, что stage
+            (productType лида → его стадии, иначе generic-пятёрка), это
+            задокументированное расхождение с легаси, не перенесённое 1:1.
+        curatorStage:
+          type: string
+          nullable: true
+          description: Симметрично realtorStage — независимый указатель прогресса куратора.
+
+    UpdateLeadRequest:
+      type: object
+      description: >
+        `[phase 3]` PATCH /leads/{leadId} — только сопутствующие поля
+        лида, НИКОГДА stage (тот путь — PATCH /leads/{leadId}/stage).
+        Все поля опциональны, изменяются только явно переданные.
+      properties:
+        city: {type: string}
+        notes: {type: string}
+        tags:
+          type: array
+          items: {type: string}
+        dealValue: {type: number}
+        budgetValue: {type: number}
+        budgetCurrency: {type: string}
+        expectedCloseDate: {type: string}
+        rejectionReason: {type: string}
+        rejectionComment: {type: string}
+        telegram: {type: string}
+        country: {type: string}
+        realtorStage: {type: string}
+        curatorStage: {type: string}
+
+    LeadFile:
+      type: object
+      required: [assetId, fileName, mimeType, sizeBytes, url, createdAt]
+      description: >
+        `[phase 3]` GET/POST/DELETE /leads/{leadId}/files item shape.
+        fileName выводится из MediaAsset storage key (originalPath), не
+        клиентское имя файла — MediaAssetDocument его не хранит.
+      properties:
+        assetId: {type: string}
+        fileName: {type: string}
+        mimeType: {type: string, nullable: true}
+        sizeBytes: {type: integer}
+        url:
+          type: string
+          nullable: true
+          description: Резолвится только из подтверждённого 'card' variant — null для pending/rejected asset'ов и для файлов без variant'а (например PDF).
+        createdAt: {type: string, format: date-time}
 
     LeadListResponse:
       type: object
@@ -5096,6 +5378,10 @@ components:
             type: {type: string, enum: [position, system]}
             positionId: {type: string, nullable: true}
         changedAt: {type: string, format: date-time}
+        comment:
+          type: string
+          nullable: true
+          description: '`[phase 3]` Опциональный комментарий, привязанный к этому переходу (легаси createStageComment/getStageComments).'
 
     LeadStageDefinition:
       type: object

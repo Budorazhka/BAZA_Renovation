@@ -38,5 +38,10 @@ export const MEDIA_PURPOSE_BUCKET: Record<string, 'private' | 'public'> = {
   profile_avatar: 'public',
   property_photo: 'public',
   task_attachment: 'private',
+  // `[phase 3]` детальная карточка лида, GET /leads/:leadId/files резолвит
+  // URL так же, как TeamService резолвит avatarUrl (см. CrmService.
+  // listLeadFiles докстринг) — это возможно ТОЛЬКО для 'public' bucket'а
+  // (ADR-008, тот же принцип, что unit_photo/property_photo/profile_avatar).
+  lead_attachment: 'public',
 };
 

@@ -81,6 +81,17 @@ export class LeadEventDocument extends Document {
   @Prop({ type: ChangedBySchema, required: true })
   changedBy!: LeadEventChangedBy;
 
+  /**
+   * `[phase 3]` Легаси getStageComments/createStageComment (api-crm.baza.sale)
+   * — комментарий, привязанный к КОНКРЕТНОМУ переходу стадии, не отдельная
+   * сущность (owner decision этого прохода: расширить уже существующий
+   * append-only LeadEvent, не заводить новую коллекцию/эндпоинт). Опционален
+   * — ChangeLeadStageDto.comment опционален, большинство переходов без
+   * комментария.
+   */
+  @Prop({ required: false })
+  comment?: string;
+
   declare changedAt: Date;
 }
 

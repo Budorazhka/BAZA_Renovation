@@ -158,6 +158,30 @@ describe('LeadController.changeStage', () => {
       },
     });
   });
+
+  it('пробрасывает comment в CrmService.changeLeadStage и в idempotencyRequestBody (phase 3)', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const changeLeadStage = jest.fn().mockResolvedValue({ id: leadId.toString(), stage: 'contacted', version: 1 });
+    const controller = new LeadController(
+      { changeLeadStage } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      { checkReplay: jest.fn().mockResolvedValue(null) } as unknown as IdempotencyService,
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.changeStage(
+      req as never,
+      leadId,
+      { stage: 'contacted', expectedVersion: 0, comment: 'Клиент попросил перезвонить завтра' },
+      'key-1',
+    );
+
+    expect(changeLeadStage).toHaveBeenCalledWith(
+      expect.objectContaining({ comment: 'Клиент попросил перезвонить завтра' }),
+    );
+  });
 });
 
 describe('LeadController — read scope', () => {
@@ -271,6 +295,184 @@ describe('LeadController — read scope', () => {
       cursor,
       limit: 20,
     });
+  });
+});
+
+describe('LeadController.updateLead', () => {
+  it('own-scope: сужает requiredOwnerPositionId до своей Position и пробрасывает поля', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const updateLead = jest.fn().mockResolvedValue({ id: leadId.toString() });
+    const controller = new LeadController(
+      { updateLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.updateLead(req as never, leadId, { city: 'Тбилиси', tags: ['vip'] });
+
+    expect(updateLead).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      requiredOwnerPositionId: positionId,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+      city: 'Тбилиси',
+      notes: undefined,
+      tags: ['vip'],
+      dealValue: undefined,
+      budgetValue: undefined,
+      budgetCurrency: undefined,
+      expectedCloseDate: undefined,
+      rejectionReason: undefined,
+      rejectionComment: undefined,
+      telegram: undefined,
+      country: undefined,
+      realtorStage: undefined,
+      curatorStage: undefined,
+    });
+  });
+
+  it('organization-scope: requiredOwnerPositionId не сужается (undefined)', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const updateLead = jest.fn().mockResolvedValue({ id: leadId.toString() });
+    const controller = new LeadController(
+      { updateLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+
+    await controller.updateLead(makeRequest(organizationId, positionId) as never, leadId, {});
+
+    expect(updateLead).toHaveBeenCalledWith(expect.objectContaining({ requiredOwnerPositionId: undefined }));
+  });
+});
+
+describe('LeadController.deleteLead', () => {
+  it('пробрасывает leadId/actor/organization в CrmService.deleteLead', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const deleteLead = jest.fn().mockResolvedValue({ deleted: true });
+    const controller = new LeadController(
+      { deleteLead } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    const result = await controller.deleteLead(req as never, leadId);
+
+    expect(deleteLead).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      requiredOwnerPositionId: undefined,
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+    expect(result).toEqual({ deleted: true });
+  });
+});
+
+describe('LeadController — файлы лида (phase 3)', () => {
+  it('GET /leads/:leadId/files — read-scope сужение, пробрасывает leadId/organizationId', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const listLeadFiles = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { listLeadFiles } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+
+    await controller.listLeadFiles(makeRequest(organizationId, positionId) as never, leadId);
+
+    expect(listLeadFiles).toHaveBeenCalledWith({ leadId, organizationId, ownerPositionId: positionId });
+  });
+
+  it('POST /leads/:leadId/files — пробрасывает assetId/actor, использует update-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const attachLeadFile = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { attachLeadFile } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.attachLeadFile(req as never, leadId, { assetId: assetId.toString() });
+
+    expect(attachLeadFile).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: undefined,
+      assetId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+  });
+
+  it('DELETE /leads/:leadId/files/:assetId — пробрасывает assetId из пути', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const assetId = new Types.ObjectId();
+    const detachLeadFile = jest.fn().mockResolvedValue([]);
+    const controller = new LeadController(
+      { detachLeadFile } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    await controller.detachLeadFile(req as never, leadId, assetId);
+
+    expect(detachLeadFile).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: positionId,
+      assetId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+  });
+});
+
+describe('LeadController.recordContactAction', () => {
+  it('пробрасывает contactType/actor/organization, использует update-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const recordContactAction = jest.fn().mockResolvedValue({ recorded: true });
+    const controller = new LeadController(
+      { recordContactAction } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    const result = await controller.recordContactAction(req as never, leadId, { contactType: 'call' });
+
+    expect(recordContactAction).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: positionId,
+      contactType: 'call',
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+    expect(result).toEqual({ recorded: true });
   });
 });
 

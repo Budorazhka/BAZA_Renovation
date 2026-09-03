@@ -10,6 +10,7 @@ import { OrganizationsModule } from '../../src/modules/organizations/organizatio
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
 import { ErrorCode } from '../../src/shared/errors/error-codes';
 import { IdempotencyService } from '../../src/shared/idempotency/idempotency.service';
+import { MediaAssetRepository } from '@baza/media-storage';
 
 /**
  * D-05B: GET/POST/PATCH /leads/* — самостоятельная integration-проверка
@@ -25,6 +26,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
   let crmService: CrmService;
   let organizationsService: OrganizationsService;
   let idempotencyService: IdempotencyService;
+  let mediaAssetRepository: MediaAssetRepository;
   let moduleRef: TestingModule;
 
   beforeAll(async () => {
@@ -62,6 +64,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     crmService = moduleRef.get(CrmService);
     organizationsService = moduleRef.get(OrganizationsService);
     idempotencyService = moduleRef.get(IdempotencyService);
+    mediaAssetRepository = moduleRef.get(MediaAssetRepository);
   }, 120_000);
 
   afterAll(async () => {
@@ -82,6 +85,7 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     await connection.collection('audit_events').deleteMany({});
     await connection.collection('permission_grants').deleteMany({});
     await connection.collection('idempotency_records').deleteMany({});
+    await connection.collection('media_assets').deleteMany({});
   });
 
   async function seedOrganization(organizationId: Types.ObjectId): Promise<void> {
@@ -134,6 +138,198 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     });
     return leadId;
   }
+
+  async function seedVerifiedMediaAsset(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
+    const assetId = new Types.ObjectId();
+    await mediaAssetRepository.create({
+      _id: assetId,
+      ownerScope: { type: 'organization', organizationId },
+      declaredMimeType: 'image/jpeg',
+      sizeBytes: 1024,
+      bucket: 'public',
+      originalPath: `${assetId.toString()}/original.jpg`,
+      purpose: 'lead_attachment',
+    });
+    // markVerified требует session изнутри транзакции confirmUpload
+    // (ADR-006) — здесь просто фикстура для теста CRM-стороны (upload/
+    // confirm уже покрыты media-confirm-upload.integration-spec.ts),
+    // прямая запись через native driver быстрее и не тянет транзакцию.
+    await connection
+      .collection('media_assets')
+      .updateOne({ _id: assetId }, { $set: { status: 'verified', verifiedMimeType: 'image/jpeg', checksum: 'test-checksum' } });
+    return assetId;
+  }
+
+  describe('recordContactAction — лог обращений (phase 3)', () => {
+    it('пишет audit-запись lead.contact с contactType/actorPositionId', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const result = await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'call',
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id',
+      });
+      expect(result).toEqual({ recorded: true });
+
+      const auditDoc = await connection.collection('audit_events').findOne({ action: 'lead.contact' });
+      expect(auditDoc).toMatchObject({
+        resourceId: leadId,
+        actor: { type: 'identity', id: actorIdentityId },
+        after: { contactType: 'call', actorPositionId: actorPositionId.toString() },
+      });
+    });
+
+    it('второй вызов (chat) для того же лида добавляет ВТОРУЮ audit-запись — append-only, не перезапись', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+
+      await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'call',
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id-1',
+      });
+      await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'chat',
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id-2',
+      });
+
+      const count = await connection.collection('audit_events').countDocuments({ action: 'lead.contact', resourceId: leadId });
+      expect(count).toBe(2);
+    });
+
+    it('чужая организация — NotFoundException, audit не пишется', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+
+      await expect(
+        crmService.recordContactAction({
+          leadId,
+          organizationId: orgB,
+          contactType: 'call',
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const count = await connection.collection('audit_events').countDocuments({ action: 'lead.contact' });
+      expect(count).toBe(0);
+    });
+  });
+
+  describe('lead files — upload-confirm-attach-list-delete цикл (phase 3)', () => {
+    it('attachLeadFile → listLeadFiles → detachLeadFile → listLeadFiles: полный цикл', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const assetId = await seedVerifiedMediaAsset(organizationId);
+      const actorIdentityId = new Types.ObjectId();
+
+      const afterAttach = await crmService.attachLeadFile({
+        leadId,
+        organizationId,
+        assetId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id-attach',
+      });
+      expect(afterAttach).toEqual([
+        expect.objectContaining({ assetId: assetId.toString(), fileName: 'original.jpg', mimeType: 'image/jpeg' }),
+      ]);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.attachedAssetIds?.map((id: Types.ObjectId) => id.toString())).toEqual([assetId.toString()]);
+
+      const files = await crmService.listLeadFiles({ leadId, organizationId });
+      expect(files).toHaveLength(1);
+
+      const auditAttach = await connection.collection('audit_events').findOne({
+        action: 'lead.update',
+        'after.attachedAssetId': assetId.toString(),
+      });
+      expect(auditAttach).toBeTruthy();
+
+      const afterDetach = await crmService.detachLeadFile({
+        leadId,
+        organizationId,
+        assetId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id-detach',
+      });
+      expect(afterDetach).toEqual([]);
+
+      const leadDocAfterDetach = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDocAfterDetach?.attachedAssetIds ?? []).toEqual([]);
+
+      const filesAfterDetach = await crmService.listLeadFiles({ leadId, organizationId });
+      expect(filesAfterDetach).toEqual([]);
+    });
+
+    it('attachLeadFile: не-verified asset — VALIDATION_FAILED, лид не изменяется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const assetId = new Types.ObjectId();
+      await mediaAssetRepository.create({
+        _id: assetId,
+        ownerScope: { type: 'organization', organizationId },
+        declaredMimeType: 'image/jpeg',
+        sizeBytes: 1024,
+        bucket: 'public',
+        originalPath: `${assetId.toString()}/original.jpg`,
+        purpose: 'lead_attachment',
+      });
+
+      await expect(
+        crmService.attachLeadFile({
+          leadId,
+          organizationId,
+          assetId,
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.attachedAssetIds ?? []).toEqual([]);
+    });
+
+    it('attachLeadFile: asset чужой организации — NotFoundException', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+      const foreignAssetId = await seedVerifiedMediaAsset(orgB);
+
+      await expect(
+        crmService.attachLeadFile({
+          leadId,
+          organizationId: orgA,
+          assetId: foreignAssetId,
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 
   describe('assignLead — tenant isolation и Position boundary (D-05B security fix)', () => {
     it('чужая организация — assign отклоняется NotFoundException, ownerPositionId не меняется', async () => {
@@ -354,6 +550,55 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       const auditDocs = await connection.collection('audit_events').find({ resourceId: leadId }).toArray();
       expect(auditDocs).toHaveLength(1);
       expect(auditDocs[0]?.action).toBe('lead.unassign');
+    });
+  });
+
+  describe('changeLeadStage — comment (phase 3, легаси createStageComment/getStageComments)', () => {
+    it('comment сохраняется на LeadEvent этого перехода и отдаётся в GET /leads/:id/events', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'new' });
+
+      await crmService.changeLeadStage({
+        leadId,
+        newStage: 'contacted',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+        comment: 'Клиент попросил перезвонить завтра',
+      });
+
+      const { items } = await crmService.listLeadEvents({ leadId, organizationId, limit: 20 });
+      const event = items.find((e) => e.stage === 'contacted');
+      expect(event?.comment).toBe('Клиент попросил перезвонить завтра');
+
+      const eventDoc = await connection.collection('lead_events').findOne({ leadId, stage: 'contacted' });
+      expect(eventDoc?.comment).toBe('Клиент попросил перезвонить завтра');
+    });
+
+    it('без comment — поле остаётся null (не задан), не ломает существующий переход', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'new' });
+
+      await crmService.changeLeadStage({
+        leadId,
+        newStage: 'contacted',
+        expectedVersion: 0,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'integration-test-correlation-id',
+        idempotencyKey: new Types.ObjectId().toString(),
+        idempotencyRequestBody: { probe: new Types.ObjectId().toString() },
+      });
+
+      const { items } = await crmService.listLeadEvents({ leadId, organizationId, limit: 20 });
+      expect(items[0]?.comment).toBeNull();
     });
   });
 
@@ -751,6 +996,197 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
       const leadDoc = await connection.collection('leads').findOne({ _id: new Types.ObjectId(result.id) });
       expect(leadDoc?.productType).toBeFalsy();
       expect(leadDoc?.stage).toBe('new');
+    });
+  });
+
+  describe('updateLead — PATCH /leads/:leadId сопутствующие поля (phase 3)', () => {
+    it('обновляет только переданные поля, не трогает stage/version, пишет audit lead.update', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { stage: 'qualified' });
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const result = await crmService.updateLead({
+        leadId,
+        organizationId,
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id',
+        city: 'Тбилиси',
+        tags: ['vip', 'hot'],
+        dealValue: 15000,
+      });
+
+      expect(result.city).toBe('Тбилиси');
+      expect(result.tags).toEqual(['vip', 'hot']);
+      expect(result.dealValue).toBe(15000);
+      expect(result.stage).toBe('qualified');
+      expect(result.version).toBe(0);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc).toMatchObject({ city: 'Тбилиси', tags: ['vip', 'hot'], dealValue: 15000, stage: 'qualified' });
+
+      const auditDoc = await connection.collection('audit_events').findOne({ action: 'lead.update' });
+      expect(auditDoc).toMatchObject({ after: { city: 'Тбилиси', tags: ['vip', 'hot'], dealValue: 15000 } });
+    });
+
+    it('realtorStage невалидная для productType лида — VALIDATION_FAILED, поле не сохраняется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
+
+      await expect(
+        crmService.updateLead({
+          leadId,
+          organizationId,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+          realtorStage: 'contacted',
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.VALIDATION_FAILED });
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.realtorStage).toBeFalsy();
+    });
+
+    it('realtorStage валидная для productType лида — сохраняется', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId, { productType: 'network', stage: 'network_new_lead' });
+
+      const result = await crmService.updateLead({
+        leadId,
+        organizationId,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id',
+        realtorStage: 'network_offer_given',
+      });
+
+      expect(result.realtorStage).toBe('network_offer_given');
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.realtorStage).toBe('network_offer_given');
+    });
+
+    it('чужая организация — NotFoundException, ничего не меняется', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+
+      await expect(
+        crmService.updateLead({
+          leadId,
+          organizationId: orgB,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+          city: 'Батуми',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('manager может обновить только свой лид (requiredOwnerPositionId), чужой — NotFoundException', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const managerPositionId = await seedVacantPosition(organizationId, 'manager');
+      const otherOwnerPositionId = await seedVacantPosition(organizationId, 'manager');
+      const leadId = await seedLead(organizationId, { ownerPositionId: otherOwnerPositionId });
+
+      await expect(
+        crmService.updateLead({
+          leadId,
+          organizationId,
+          requiredOwnerPositionId: managerPositionId,
+          actorPositionId: managerPositionId,
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+          city: 'Батуми',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('deleteLead — DELETE /leads/:leadId soft delete (phase 3)', () => {
+    it('успешное удаление — лид перестаёт отдаваться в getLead/listLeads, но остаётся в базе с status:deleted', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const result = await crmService.deleteLead({
+        leadId,
+        organizationId,
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id',
+      });
+      expect(result).toEqual({ deleted: true });
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.status).toBe('deleted');
+      expect(leadDoc?.deletedAt).toBeInstanceOf(Date);
+
+      await expect(
+        crmService.getLead({ leadId, organizationId }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const { items } = await crmService.listLeads({ organizationId, limit: 20 });
+      expect(items.find((i) => i.id === leadId.toString())).toBeUndefined();
+
+      const auditDoc = await connection.collection('audit_events').findOne({ action: 'lead.delete' });
+      expect(auditDoc).toMatchObject({ after: { status: 'deleted' } });
+    });
+
+    it('повторное удаление уже удалённого лида — NotFoundException (non-disclosure)', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      await crmService.deleteLead({
+        leadId,
+        organizationId,
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id-1',
+      });
+
+      await expect(
+        crmService.deleteLead({
+          leadId,
+          organizationId,
+          actorPositionId,
+          actorIdentityId,
+          correlationId: 'integration-test-correlation-id-2',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('чужая организация — NotFoundException, лид остаётся активным', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+
+      await expect(
+        crmService.deleteLead({
+          leadId,
+          organizationId: orgB,
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const leadDoc = await connection.collection('leads').findOne({ _id: leadId });
+      expect(leadDoc?.status ?? 'active').toBe('active');
     });
   });
 

@@ -7,6 +7,7 @@ import { MarketplacePublicationRepository } from '@baza/publication';
 import { DevelopmentRepository, type DevelopmentContact } from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MediaService } from '../media/media.service';
+import type { MediaVariant } from '@baza/media-storage';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -58,6 +59,21 @@ export interface CrmLeadReadModel {
    * их не касается, не значит "есть next action").
    */
   hasOpenNextAction: boolean;
+  /** `[phase 3]` PATCH /leads/:leadId сопутствующие поля — см. LeadDocument докстринг. */
+  city: string | null;
+  notes: string | null;
+  tags: string[];
+  dealValue: number | null;
+  budgetValue: number | null;
+  budgetCurrency: string | null;
+  expectedCloseDate: string | null;
+  rejectionReason: string | null;
+  rejectionComment: string | null;
+  telegram: string | null;
+  country: string | null;
+  /** См. LeadDocument.realtorStage/curatorStage докстринг — независимые указатели, не дубли `stage`. */
+  realtorStage: LeadStage | null;
+  curatorStage: LeadStage | null;
 }
 
 export interface CrmDealParticipantReadModel {
@@ -111,6 +127,31 @@ export interface CrmLeadEventReadModel {
   stage: LeadStage;
   changedBy: { type: 'position' | 'system'; positionId?: string };
   changedAt: string;
+  /** `[phase 3]` См. LeadEventDocument.comment докстринг — легаси stage-comment, привязанный к этому переходу. */
+  comment: string | null;
+}
+
+/**
+ * GET /leads/:leadId/files — легаси `getLeadFiles` (apps/erp-web/src/
+ * features/crm/services/api/leads.ts). `fileName` — НЕ клиентское имя
+ * файла (MediaAssetDocument его не хранит вовсе, только `originalPath`
+ * storage key и MIME/размер) — выводится из originalPath (тот же
+ * технический компромисс, что TaskDocument.attachments требует явный
+ * fileName от клиента при создании: здесь источника для него нет, потому
+ * что attachedAssetIds хранит только Types.ObjectId[], не пары
+ * {assetId,fileName}, по прямому требованию задачи). `url` — резолвится
+ * ТОЛЬКО из variant'ов (тот же принцип, что TeamService.resolveAvatarUrl/
+ * property-assets публичные проекции — originalPath никогда не отдаётся
+ * напрямую клиенту), поэтому null, пока worker не построил 'card' variant
+ * (или для не-изображений, для которых variant'ы не строятся вовсе).
+ */
+export interface CrmLeadFileReadModel {
+  assetId: string;
+  fileName: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  url: string | null;
+  createdAt: string;
 }
 
 export interface CrmContactReadModel {
@@ -1575,6 +1616,8 @@ export class CrmService {
     idempotencyKey: string;
     /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
     idempotencyRequestBody: Record<string, unknown>;
+    /** `[phase 3]` См. LeadEventDocument.comment докстринг — легаси stage-comment для ЭТОГО перехода. */
+    comment?: string;
   }) {
     const lead = await this.leadRepository.findByIdForOrganization(
       params.leadId,
@@ -1672,6 +1715,7 @@ export class CrmService {
           organizationId: params.expectedOrganizationId,
           stage: params.newStage,
           changedBy: { type: 'position', positionId: params.actorPositionId },
+          comment: params.comment,
         },
         session,
       );
@@ -1718,6 +1762,384 @@ export class CrmService {
 
       return readModel;
     });
+  }
+
+  /**
+   * PATCH /leads/:leadId — общее обновление сопутствующих полей лида (см.
+   * UpdateLeadDto докстринг: НИКОГДА `stage` — тот путь остаётся только за
+   * changeLeadStage/PATCH /leads/:leadId/stage). Только явно переданные в
+   * запросе поля попадают в $set (params.<field> === undefined значит "поле
+   * отсутствовало в теле запроса", не "клиент явно снёс значение" — тот же
+   * partial-PATCH принцип, что updateTask).
+   *
+   * `realtorStage`/`curatorStage` валидируются тем же справочником, что
+   * основной `stage` (см. LeadDocument докстринг): productType лида задан
+   * → stageIdsForProduct(productType), не задан → generic-пятёрка
+   * (LEAD_STAGE_TRANSITIONS ключи, без матрицы переходов — здесь просто
+   * "это известное значение", не порядок прохождения).
+   */
+  async updateLead(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    requiredOwnerPositionId?: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+    city?: string;
+    notes?: string;
+    tags?: string[];
+    dealValue?: number;
+    budgetValue?: number;
+    budgetCurrency?: string;
+    expectedCloseDate?: string;
+    rejectionReason?: string;
+    rejectionComment?: string;
+    telegram?: string;
+    country?: string;
+    realtorStage?: LeadStage;
+    curatorStage?: LeadStage;
+  }): Promise<CrmLeadReadModel> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.requiredOwnerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const allowedStages: readonly string[] = lead.productType
+      ? stageIdsForProduct(lead.productType)
+      : Object.keys(LEAD_STAGE_TRANSITIONS);
+    for (const [field, value] of [
+      ['realtorStage', params.realtorStage],
+      ['curatorStage', params.curatorStage],
+    ] as const) {
+      if (value !== undefined && !allowedStages.includes(value)) {
+        throw new AppException(
+          ErrorCode.VALIDATION_FAILED,
+          `${field} "${value}" is not a valid stage${lead.productType ? ` for product "${lead.productType}"` : ''}`,
+          { field, value, productType: lead.productType ?? null },
+        );
+      }
+    }
+
+    const editableFields: Array<
+      keyof Pick<
+        typeof params,
+        | 'city'
+        | 'notes'
+        | 'tags'
+        | 'dealValue'
+        | 'budgetValue'
+        | 'budgetCurrency'
+        | 'expectedCloseDate'
+        | 'rejectionReason'
+        | 'rejectionComment'
+        | 'telegram'
+        | 'country'
+        | 'realtorStage'
+        | 'curatorStage'
+      >
+    > = [
+      'city',
+      'notes',
+      'tags',
+      'dealValue',
+      'budgetValue',
+      'budgetCurrency',
+      'expectedCloseDate',
+      'rejectionReason',
+      'rejectionComment',
+      'telegram',
+      'country',
+      'realtorStage',
+      'curatorStage',
+    ];
+
+    const before: Record<string, unknown> = {};
+    const after: Record<string, unknown> = {};
+    const setFields: Record<string, unknown> = {};
+    for (const field of editableFields) {
+      const value = params[field];
+      if (value === undefined) continue;
+      before[field] = (lead as unknown as Record<string, unknown>)[field] ?? null;
+      after[field] = value;
+      setFields[field] = value;
+    }
+
+    if (Object.keys(setFields).length === 0) {
+      // Ничего не передано для изменения — не открываем транзакцию впустую,
+      // тот же short-circuit принцип, что reassignTask на no-op reassign.
+      const contact = await this.contactRepository.findByIdForOrganization(lead.contactId, params.organizationId);
+      const openTaskCount = isActiveLeadStage(lead.stage)
+        ? await this.taskRepository.countOpenForLead(params.organizationId, lead._id)
+        : 0;
+      return toLeadReadModel(lead, contact, {
+        stalled: isActiveLeadStage(lead.stage) && openTaskCount === 0,
+        hasOpenNextAction: openTaskCount > 0,
+      });
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.leadRepository.updateFields(
+        params.leadId,
+        params.organizationId,
+        setFields,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Lead not found');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before,
+          after,
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      const updated = await this.leadRepository.findByIdForOrganization(
+        params.leadId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+      const contact = await this.contactRepository.findByIdForOrganization(updated!.contactId, params.organizationId);
+      const openTaskCount = isActiveLeadStage(updated!.stage)
+        ? await this.taskRepository.countOpenForLead(params.organizationId, updated!._id)
+        : 0;
+
+      return toLeadReadModel(updated!, contact, {
+        stalled: isActiveLeadStage(updated!.stage) && openTaskCount === 0,
+        hasOpenNextAction: openTaskCount > 0,
+      });
+    });
+  }
+
+  /**
+   * DELETE /leads/:leadId — soft delete (см. LeadDocument.status докстринг):
+   * лид с историей (LeadEvent/audit/Task/Deal) не может быть физически
+   * удалён без потери этой истории. После удаления лид перестаёт
+   * отдаваться в GET /leads и GET /leads/:leadId (LeadRepository фильтрует
+   * `status:{$ne:'deleted'}` — тот же non-disclosure NotFoundException,
+   * что и для чужого лида), но документ и вся его история остаются в базе.
+   */
+  async deleteLead(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    requiredOwnerPositionId?: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ deleted: true }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.requiredOwnerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const deletedAt = new Date();
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.leadRepository.softDelete(
+        params.leadId,
+        params.organizationId,
+        deletedAt,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Lead not found');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.delete',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before: { status: 'active' },
+          after: { status: 'deleted', deletedAt: deletedAt.toISOString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return { deleted: true as const };
+    });
+  }
+
+  /**
+   * GET /leads/:leadId/files — легаси getLeadFiles. Резолвит
+   * attachedAssetIds через MediaService (ADR-001: другие модули только
+   * через сервис, не репозиторий) — тот же ownerScope, что upload-intent/
+   * confirm/task-attachments (`{type:'organization', organizationId}`).
+   */
+  async listLeadFiles(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+    const assetIds = lead.attachedAssetIds ?? [];
+    if (assetIds.length === 0) {
+      return [];
+    }
+    const assets = await this.mediaService.getAssetsForOwnerScope(assetIds, {
+      type: 'organization',
+      organizationId: params.organizationId,
+    });
+    // Порядок = порядок прикрепления (attachedAssetIds), не порядок Mongo
+    // $in-выборки (не гарантирован) — та же дисциплина, что TaskDocument.
+    // attachments уже сохраняет свой собственный порядок массива.
+    return assetIds
+      .map((assetId) => ({ assetId, asset: assets.get(assetId.toString()) }))
+      .filter((entry): entry is { assetId: Types.ObjectId; asset: NonNullable<typeof entry.asset> } => entry.asset !== undefined)
+      .map((entry) => toLeadFileReadModel(entry.assetId, entry.asset, this.mediaService));
+  }
+
+  /**
+   * POST /leads/:leadId/files — легаси uploadAndRegisterFile (в новом
+   * backend файл сначала грузится через POST /media/upload-intent +
+   * POST /media/:assetId/confirm, сюда приходит только ссылка на уже
+   * подтверждённый asset — тот же двухшаговый паттерн, что CreateTaskDto.
+   * attachments).
+   */
+  async attachLeadFile(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    assetId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    const asset = (
+      await this.mediaService.getAssetsForOwnerScope([params.assetId], {
+        type: 'organization',
+        organizationId: params.organizationId,
+      })
+    ).get(params.assetId.toString());
+    if (!asset) {
+      throw new NotFoundException('Media asset not found');
+    }
+    if (asset.status !== 'verified') {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'Media asset is not verified yet');
+    }
+
+    await runInTransaction(this.connection, async (session) => {
+      await this.leadRepository.addAttachedAsset(params.leadId, params.organizationId, params.assetId, session);
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          after: { attachedAssetId: params.assetId.toString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+    });
+
+    return this.listLeadFiles({ leadId: params.leadId, organizationId: params.organizationId });
+  }
+
+  /** DELETE /leads/:leadId/files/:assetId — легаси deleteLeadFileByName (по assetId, не по имени — тот же обмен, что registerLeadFile/attachedAssetIds не хранит имён). */
+  async detachLeadFile(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    assetId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<CrmLeadFileReadModel[]> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    await runInTransaction(this.connection, async (session) => {
+      await this.leadRepository.removeAttachedAsset(params.leadId, params.organizationId, params.assetId, session);
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'lead.update',
+          resource: 'lead',
+          resourceId: params.leadId,
+          before: { attachedAssetId: params.assetId.toString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+    });
+
+    return this.listLeadFiles({ leadId: params.leadId, organizationId: params.organizationId });
+  }
+
+  /**
+   * POST /leads/:leadId/contact-actions — легаси recordLeadContactAction
+   * ('call'|'chat'). Append-only лог факта контакта менеджера с лидом —
+   * owner decision этого прохода: не заводить отдельную сущность/таблицу,
+   * записывать через AuditService (action:'lead.contact'), тот же принцип,
+   * что легаси-эндпоинт сам по себе не хранил ничего сложнее факта+времени
+   * (createdAt берётся сервером — AuditEventDocument.createdAt).
+   */
+  async recordContactAction(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    contactType: 'call' | 'chat';
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ recorded: true }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    await this.auditService.append({
+      actor: { type: 'identity', id: params.actorIdentityId },
+      action: 'lead.contact',
+      resource: 'lead',
+      resourceId: params.leadId,
+      after: { contactType: params.contactType, actorPositionId: params.actorPositionId.toString() },
+      correlationId: params.correlationId,
+    });
+
+    return { recorded: true };
   }
 
   /**
@@ -2839,6 +3261,19 @@ function toLeadReadModel(
     source: { route: string; publicationId?: Types.ObjectId; utm?: Record<string, string>; referrer?: string };
     createdAt: Date;
     stalled?: boolean;
+    city?: string;
+    notes?: string;
+    tags?: string[];
+    dealValue?: number;
+    budgetValue?: number;
+    budgetCurrency?: string;
+    expectedCloseDate?: string;
+    rejectionReason?: string;
+    rejectionComment?: string;
+    telegram?: string;
+    country?: string;
+    realtorStage?: LeadStage;
+    curatorStage?: LeadStage;
   },
   contact: { _id: Types.ObjectId; name: string; phone: string; email?: string } | null | undefined,
   state: { stalled?: boolean; hasOpenNextAction?: boolean } = {},
@@ -2857,6 +3292,19 @@ function toLeadReadModel(
       ? { id: contact._id.toString(), name: contact.name, phone: contact.phone, email: contact.email }
       : null,
     hasOpenNextAction: state.hasOpenNextAction ?? false,
+    city: lead.city ?? null,
+    notes: lead.notes ?? null,
+    tags: lead.tags ?? [],
+    dealValue: lead.dealValue ?? null,
+    budgetValue: lead.budgetValue ?? null,
+    budgetCurrency: lead.budgetCurrency ?? null,
+    expectedCloseDate: lead.expectedCloseDate ?? null,
+    rejectionReason: lead.rejectionReason ?? null,
+    rejectionComment: lead.rejectionComment ?? null,
+    telegram: lead.telegram ?? null,
+    country: lead.country ?? null,
+    realtorStage: lead.realtorStage ?? null,
+    curatorStage: lead.curatorStage ?? null,
   };
 }
 
@@ -2878,6 +3326,7 @@ function toLeadEventReadModel(event: {
   stage: LeadStage;
   changedBy: { type: 'position' | 'system'; positionId?: Types.ObjectId };
   changedAt: Date;
+  comment?: string;
 }): CrmLeadEventReadModel {
   return {
     id: event._id.toString(),
@@ -2888,6 +3337,7 @@ function toLeadEventReadModel(event: {
       positionId: event.changedBy.positionId?.toString(),
     },
     changedAt: event.changedAt.toISOString(),
+    comment: event.comment ?? null,
   };
 }
 
@@ -2906,6 +3356,35 @@ function toContactReadModel(contact: {
     phone: contact.phone,
     email: contact.email ?? null,
     createdAt: contact.createdAt.toISOString(),
+  };
+}
+
+/**
+ * См. CrmLeadFileReadModel докстринг — fileName выводится из originalPath
+ * (последний сегмент storage key, например `original.jpg`), url резолвится
+ * только из 'card' variant (тот же принцип, что TeamService.resolveAvatarUrl).
+ */
+function toLeadFileReadModel(
+  assetId: Types.ObjectId,
+  asset: {
+    status: 'pending' | 'verified' | 'rejected';
+    variants: MediaVariant[];
+    declaredMimeType: string;
+    verifiedMimeType?: string;
+    sizeBytes: number;
+    createdAt: Date;
+    originalPath: string;
+  },
+  mediaService: MediaService,
+): CrmLeadFileReadModel {
+  const cardVariant = asset.variants.find((v) => v.type === 'card');
+  return {
+    assetId: assetId.toString(),
+    fileName: asset.originalPath.split('/').pop() ?? asset.originalPath,
+    mimeType: asset.verifiedMimeType ?? asset.declaredMimeType ?? null,
+    sizeBytes: asset.sizeBytes,
+    url: asset.status === 'verified' && cardVariant ? mediaService.getVariantUrl(cardVariant) : null,
+    createdAt: asset.createdAt.toISOString(),
   };
 }
 

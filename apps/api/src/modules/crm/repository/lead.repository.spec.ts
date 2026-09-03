@@ -89,7 +89,7 @@ describe('LeadRepository', () => {
 
       expect(aggregateSpy).toHaveBeenCalledWith(
         expect.arrayContaining([
-          { $match: { organizationId } },
+          { $match: { organizationId, status: { $ne: 'deleted' } } },
           { $sort: { _id: -1 } },
           { $limit: 21 },
           expect.objectContaining({ $lookup: expect.anything() }),
@@ -108,7 +108,7 @@ describe('LeadRepository', () => {
 
       expect(aggregateSpy).toHaveBeenCalledWith(
         expect.arrayContaining([
-          { $match: { organizationId, _id: { $lt: cursor } } },
+          { $match: { organizationId, status: { $ne: 'deleted' }, _id: { $lt: cursor } } },
           { $sort: { _id: -1 } },
         ]),
       );
