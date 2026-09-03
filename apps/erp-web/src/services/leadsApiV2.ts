@@ -2,10 +2,13 @@ import axios from 'axios'
 import { PLATFORM_API_BASE_URL } from '@/config/backend'
 import type {
   CreateLeadV2Payload,
+  LeadFileV2,
   LeadStageChangeResult,
   LeadV2,
+  ListLeadEventsV2Response,
   ListLeadsV2Params,
   ListLeadsV2Response,
+  UpdateLeadV2Payload,
 } from '@/types/leadsV2'
 
 export * from '@/types/leadsV2'
@@ -17,9 +20,14 @@ export * from '@/types/leadsV2'
  * - GET /api/v1/leads?stage=<optional>&ownerPositionId=<optional>&stalled=<optional>&cursor=<optional>&limit=<1..100>
  * - GET /api/v1/leads/:leadId
  * - POST /api/v1/leads body: CreateLeadV2Payload (требует заголовок Idempotency-Key)
- * - PATCH /api/v1/leads/:leadId/stage body: { stage: string, expectedVersion: number } (требует заголовок Idempotency-Key)
+ * - PATCH /api/v1/leads/:leadId body: UpdateLeadV2Payload — сопутствующие поля, не stage
+ * - DELETE /api/v1/leads/:leadId — soft delete
+ * - PATCH /api/v1/leads/:leadId/stage body: { stage: string, expectedVersion: number, comment?: string } (требует заголовок Idempotency-Key)
  * - POST /api/v1/leads/:leadId/assign body: { assigneePositionId: string }
  * - POST /api/v1/leads/:leadId/unassign
+ * - GET/POST /api/v1/leads/:leadId/files, DELETE /api/v1/leads/:leadId/files/:assetId
+ * - POST /api/v1/leads/:leadId/contact-actions body: { contactType: 'call'|'chat' }
+ * - GET /api/v1/leads/:leadId/events
  *
  * Авторизация только через cookie (withCredentials: true).
  * Tenant и права проверяются бэкендом (organizationId не передаётся клиентом).
@@ -118,15 +126,22 @@ export const leadsApiV2 = {
    * (тот же паттерн, что tasksApiV2.create, но с дефолтом ради обратной
    * совместимости существующего вызова в features/leads-v2/LeadDetailsModal.tsx).
    */
+  /**
+   * `comment` — `[phase 3]` легаси createStageComment/getStageComments:
+   * комментарий, привязанный к ЭТОМУ переходу (см. ChangeLeadStageDto.comment
+   * докстринг на бэкенде). Опционален — не каждый переход комментируется;
+   * отдаётся обратно через `leadsApiV2.listEvents`.
+   */
   async changeStage(
     id: string,
     stage: string,
     expectedVersion: number,
     idempotencyKey: string = newIdempotencyKey(),
+    comment?: string,
   ): Promise<LeadStageChangeResult> {
     const { data } = await api.patch<LeadStageChangeResult>(
       `/api/v1/leads/${id}/stage`,
-      { stage, expectedVersion },
+      { stage, expectedVersion, comment },
       { headers: { 'Idempotency-Key': idempotencyKey } },
     )
     return data
@@ -141,6 +156,64 @@ export const leadsApiV2 = {
   /** POST /api/v1/leads/:id/unassign — обратное действие assign, не меняет stage. */
   async unassign(id: string): Promise<LeadStageChangeResult> {
     const { data } = await api.post<LeadStageChangeResult>(`/api/v1/leads/${id}/unassign`)
+    return data
+  },
+
+  /**
+   * PATCH /api/v1/leads/:id — сопутствующие поля лида (см. UpdateLeadV2Payload
+   * докстринг). НЕ трогает `stage` — им заведует `changeStage` выше. Не
+   * версионирован (в отличие от stage): сервер не проверяет expectedVersion
+   * для этих полей (LeadRepository.updateFields).
+   */
+  async update(id: string, patch: UpdateLeadV2Payload): Promise<LeadV2> {
+    const { data } = await api.patch<LeadV2>(`/api/v1/leads/${id}`, patch)
+    return data
+  },
+
+  /** DELETE /api/v1/leads/:id — soft delete (лид пропадает из списков/поиска, из базы не удаляется). */
+  async remove(id: string): Promise<{ deleted: true }> {
+    const { data } = await api.delete<{ deleted: true }>(`/api/v1/leads/${id}`)
+    return data
+  },
+
+  /** GET /api/v1/leads/:id/files — легаси getLeadFiles. */
+  async listFiles(id: string): Promise<LeadFileV2[]> {
+    const { data } = await api.get<LeadFileV2[]>(`/api/v1/leads/${id}/files`)
+    return data
+  },
+
+  /**
+   * POST /api/v1/leads/:id/files — легаси uploadAndRegisterFile. `assetId` —
+   * id уже подтверждённого (`status:'verified'`) MediaAsset, полученного
+   * двухфазной загрузкой через `mediaApiV2.uploadFile(file, 'lead_attachment')`
+   * (тот же паттерн, что вложения задач). Возвращает полный обновлённый
+   * список файлов лида.
+   */
+  async attachFile(id: string, assetId: string): Promise<LeadFileV2[]> {
+    const { data } = await api.post<LeadFileV2[]>(`/api/v1/leads/${id}/files`, { assetId })
+    return data
+  },
+
+  /** DELETE /api/v1/leads/:id/files/:assetId — легаси deleteLeadFileByName (по assetId, не по имени файла). Возвращает обновлённый список файлов лида. */
+  async removeFile(id: string, assetId: string): Promise<LeadFileV2[]> {
+    const { data } = await api.delete<LeadFileV2[]>(`/api/v1/leads/${id}/files/${assetId}`)
+    return data
+  },
+
+  /**
+   * POST /api/v1/leads/:id/contact-actions — легаси recordLeadContactAction.
+   * Fire-and-forget append-only audit-лог: ответ не несёт данных для
+   * отображения (не read-модель), вызывающий код не должен пытаться
+   * построить из него список прошлых звонков/чатов.
+   */
+  async recordContactAction(id: string, contactType: 'call' | 'chat'): Promise<{ recorded: true }> {
+    const { data } = await api.post<{ recorded: true }>(`/api/v1/leads/${id}/contact-actions`, { contactType })
+    return data
+  },
+
+  /** GET /api/v1/leads/:id/events — история переходов стадии (включая `comment`, если был передан при смене). Только переходы стадии — НЕ общая лента действий с лидом (задачи и т.п. сюда не попадают). */
+  async listEvents(id: string, params?: { cursor?: string; limit?: number }): Promise<ListLeadEventsV2Response> {
+    const { data } = await api.get<ListLeadEventsV2Response>(`/api/v1/leads/${id}/events`, { params })
     return data
   },
 }

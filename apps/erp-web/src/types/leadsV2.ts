@@ -58,6 +58,76 @@ export interface LeadV2 {
   hasOpenNextAction: boolean
   /** Активная generic-стадия без открытых задач. */
   stalled: boolean
+  /**
+   * `[phase 3]` PATCH /leads/:leadId сопутствующие поля (см. CrmLeadReadModel
+   * в apps/api/src/modules/crm/crm.service.ts). Сервер всегда отдаёт их
+   * (null, если не заполнено) — здесь они опциональны по решению задачи, не
+   * строго `| null`, чтобы не заставлять каждого потребителя типа проверять
+   * поле, которого он не читает.
+   */
+  city?: string | null
+  notes?: string | null
+  tags?: string[]
+  dealValue?: number | null
+  budgetValue?: number | null
+  budgetCurrency?: string | null
+  expectedCloseDate?: string | null
+  rejectionReason?: string | null
+  rejectionComment?: string | null
+  telegram?: string | null
+  country?: string | null
+  /**
+   * realtorStage/curatorStage — независимые указатели легаси 6-ступенчатой
+   * шкалы (realtor_1..6/curator_1..6), НЕ дубли `stage`. Решение по целевому
+   * дизайну этих полей ещё не принято владельцем (см. lead.controller.ts
+   * докстринг PATCH /leads/:leadId) — здесь они прокинуты как обычные
+   * строки, без переосмысления.
+   */
+  realtorStage?: string | null
+  curatorStage?: string | null
+}
+
+/** Тело PATCH /leads/:leadId — см. UpdateLeadDto (apps/api). Все поля опциональны, `stage` сюда не входит (отдельный эндпоинт .../stage). */
+export interface UpdateLeadV2Payload {
+  city?: string
+  notes?: string
+  tags?: string[]
+  dealValue?: number
+  budgetValue?: number
+  budgetCurrency?: string
+  expectedCloseDate?: string
+  rejectionReason?: string
+  rejectionComment?: string
+  telegram?: string
+  country?: string
+  realtorStage?: string
+  curatorStage?: string
+}
+
+/** GET /leads/:leadId/files — см. CrmLeadFileReadModel (apps/api). */
+export interface LeadFileV2 {
+  assetId: string
+  fileName: string
+  mimeType: string | null
+  sizeBytes: number
+  url: string | null
+  createdAt: string
+}
+
+/** GET /leads/:leadId/events — см. CrmLeadEventReadModel (apps/api). */
+export interface LeadEventV2 {
+  id: string
+  leadId: string
+  stage: string
+  changedBy: { type: 'position' | 'system'; positionId?: string }
+  changedAt: string
+  /** `[phase 3]` Легаси stage-comment, привязанный к этому переходу. */
+  comment: string | null
+}
+
+export interface ListLeadEventsV2Response {
+  items: LeadEventV2[]
+  nextCursor: string | null
 }
 
 /**
