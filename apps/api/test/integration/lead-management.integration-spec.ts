@@ -160,6 +160,81 @@ describe('CrmService — Lead management integration (real MongoDB transactions)
     return assetId;
   }
 
+  describe('recordContactAction — лог обращений (phase 3)', () => {
+    it('пишет audit-запись lead.contact с contactType/actorPositionId', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+      const actorPositionId = new Types.ObjectId();
+      const actorIdentityId = new Types.ObjectId();
+
+      const result = await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'call',
+        actorPositionId,
+        actorIdentityId,
+        correlationId: 'integration-test-correlation-id',
+      });
+      expect(result).toEqual({ recorded: true });
+
+      const auditDoc = await connection.collection('audit_events').findOne({ action: 'lead.contact' });
+      expect(auditDoc).toMatchObject({
+        resourceId: leadId,
+        actor: { type: 'identity', id: actorIdentityId },
+        after: { contactType: 'call', actorPositionId: actorPositionId.toString() },
+      });
+    });
+
+    it('второй вызов (chat) для того же лида добавляет ВТОРУЮ audit-запись — append-only, не перезапись', async () => {
+      const organizationId = new Types.ObjectId();
+      await seedOrganization(organizationId);
+      const leadId = await seedLead(organizationId);
+
+      await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'call',
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id-1',
+      });
+      await crmService.recordContactAction({
+        leadId,
+        organizationId,
+        contactType: 'chat',
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'integration-test-correlation-id-2',
+      });
+
+      const count = await connection.collection('audit_events').countDocuments({ action: 'lead.contact', resourceId: leadId });
+      expect(count).toBe(2);
+    });
+
+    it('чужая организация — NotFoundException, audit не пишется', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      await seedOrganization(orgA);
+      await seedOrganization(orgB);
+      const leadId = await seedLead(orgA);
+
+      await expect(
+        crmService.recordContactAction({
+          leadId,
+          organizationId: orgB,
+          contactType: 'call',
+          actorPositionId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'integration-test-correlation-id',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      const count = await connection.collection('audit_events').countDocuments({ action: 'lead.contact' });
+      expect(count).toBe(0);
+    });
+  });
+
   describe('lead files — upload-confirm-attach-list-delete цикл (phase 3)', () => {
     it('attachLeadFile → listLeadFiles → detachLeadFile → listLeadFiles: полный цикл', async () => {
       const organizationId = new Types.ObjectId();

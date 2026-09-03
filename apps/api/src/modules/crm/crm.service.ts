@@ -2105,6 +2105,44 @@ export class CrmService {
   }
 
   /**
+   * POST /leads/:leadId/contact-actions — легаси recordLeadContactAction
+   * ('call'|'chat'). Append-only лог факта контакта менеджера с лидом —
+   * owner decision этого прохода: не заводить отдельную сущность/таблицу,
+   * записывать через AuditService (action:'lead.contact'), тот же принцип,
+   * что легаси-эндпоинт сам по себе не хранил ничего сложнее факта+времени
+   * (createdAt берётся сервером — AuditEventDocument.createdAt).
+   */
+  async recordContactAction(params: {
+    leadId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    ownerPositionId?: Types.ObjectId;
+    contactType: 'call' | 'chat';
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ recorded: true }> {
+    const lead = await this.leadRepository.findByIdForOrganization(
+      params.leadId,
+      params.organizationId,
+      params.ownerPositionId,
+    );
+    if (!lead) {
+      throw new NotFoundException('Lead not found');
+    }
+
+    await this.auditService.append({
+      actor: { type: 'identity', id: params.actorIdentityId },
+      action: 'lead.contact',
+      resource: 'lead',
+      resourceId: params.leadId,
+      after: { contactType: params.contactType, actorPositionId: params.actorPositionId.toString() },
+      correlationId: params.correlationId,
+    });
+
+    return { recorded: true };
+  }
+
+  /**
    * Общая идемпотентность-обвязка для revealContact/revealListingContact —
    * обе команды 404/резолюцию slug делают по-разному (development vs
    * listing), но сам Lead-create-транзакционный-flow идентичен, различается

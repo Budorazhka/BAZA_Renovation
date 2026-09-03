@@ -11,6 +11,7 @@ import { AssignLeadDto } from './dto/assign-lead.dto';
 import { ChangeLeadStageDto } from './dto/change-lead-stage.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { AttachLeadFileDto } from './dto/attach-lead-file.dto';
+import { RecordContactActionDto } from './dto/record-contact-action.dto';
 import { ListLeadsDto } from './dto/list-leads.dto';
 import { ListLeadEventsDto } from './dto/list-lead-events.dto';
 import { ListTimelineDto } from './dto/list-timeline.dto';
@@ -239,6 +240,31 @@ export class LeadController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'update'),
       assetId,
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  /**
+   * POST /leads/:leadId/contact-actions — легаси recordLeadContactAction.
+   * Append-only лог (CrmService.recordContactAction докстринг) — переиспользует
+   * lead.update (та же мутация-класса действие, что PATCH сопутствующих полей).
+   */
+  @Post(':leadId/contact-actions')
+  @HttpCode(201)
+  @RequirePermission('lead', 'update')
+  async recordContactAction(
+    @Req() req: FastifyRequest,
+    @Param('leadId', ParseObjectIdPipe) leadId: Types.ObjectId,
+    @Body() dto: RecordContactActionDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.recordContactAction({
+      leadId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      ownerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'update'),
+      contactType: dto.contactType,
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId: new Types.ObjectId(tenantContext.identityId),
       correlationId: req.correlationId,
     });

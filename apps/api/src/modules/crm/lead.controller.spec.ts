@@ -448,6 +448,34 @@ describe('LeadController — файлы лида (phase 3)', () => {
   });
 });
 
+describe('LeadController.recordContactAction', () => {
+  it('пробрасывает contactType/actor/organization, использует update-scope', async () => {
+    const organizationId = new Types.ObjectId();
+    const positionId = new Types.ObjectId();
+    const leadId = new Types.ObjectId();
+    const recordContactAction = jest.fn().mockResolvedValue({ recorded: true });
+    const controller = new LeadController(
+      { recordContactAction } as unknown as CrmService,
+      { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+    );
+    const req = makeRequest(organizationId, positionId);
+
+    const result = await controller.recordContactAction(req as never, leadId, { contactType: 'call' });
+
+    expect(recordContactAction).toHaveBeenCalledWith({
+      leadId,
+      organizationId,
+      ownerPositionId: positionId,
+      contactType: 'call',
+      actorPositionId: positionId,
+      actorIdentityId: new Types.ObjectId(req.tenantContext.identityId),
+      correlationId: undefined,
+    });
+    expect(result).toEqual({ recorded: true });
+  });
+});
+
 describe('LeadController — GET /leads/:leadId/events', () => {
   it('передаёт leadId/organizationId/ownerPositionId/cursor/limit в CrmService.listLeadEvents', async () => {
     const organizationId = new Types.ObjectId();
