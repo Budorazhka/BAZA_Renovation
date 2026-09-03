@@ -191,7 +191,7 @@ export const DEALS_MOCK: Deal[] = [
   {
     id: 'deal-7',
     type: 'secondary',
-    stage: 'new_deals',
+    stage: 'closed_lost',
     clientId: 'cl-11',
     clientName: 'Орлов Н.В.',
     propertyAddress: 'ул. Новаторов, д. 17, кв. 86',

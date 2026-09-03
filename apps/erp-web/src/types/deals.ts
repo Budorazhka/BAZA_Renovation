@@ -1,5 +1,18 @@
-/** Типы для модуля Сделки */
-
+/**
+ * Типы для модуля Сделки.
+ *
+ * `DealStage` синхронизирован с backend-источником истины
+ * (apps/api/src/modules/crm/deal-stage.ts::DEAL_STAGES) — до перехода на
+ * dealsApiV2 (см. lib/deal-v2-legacy-adapter.ts) здесь была mock-стадия
+ * `new_deals` ("выявление потребности о новых сделках"), у которой на
+ * реальном Deal-агрегате бэкенда никогда не было аналога — это была
+ * стадия ИЗ ВОРОНКИ ЛИДА продукта `sales` (см. lead-stage-definitions.ts),
+ * случайно совпадающая по первым 6 id со стадиями сделки. Настоящая 7-я
+ * стадия сделки на backend — `closed_lost` (терминальный провал, доступен
+ * из любой активной стадии), у которого не было легаси-аналога вовсе
+ * (mock никогда не моделировал "сделка сорвалась"). Заменено на честную
+ * стадию backend вместо придуманной.
+ */
 export type DealStage =
   | 'showing'      // Показ
   | 'deposit'      // Задаток получен
@@ -7,7 +20,7 @@ export type DealStage =
   | 'golden'       // Золотой фонд
   | 'check_in'     // Узнал как дела
   | 'referral'     // Взять рекомендацию
-  | 'new_deals'    // Выявление потребности о новых сделках
+  | 'closed_lost'  // Сделка сорвалась
 
 export type DealType = 'primary' | 'secondary'
 
@@ -85,13 +98,13 @@ export interface Deal {
 }
 
 export const STAGE_LABELS: Record<DealStage, string> = {
-  showing:   'Показ',
-  deposit:   'Задаток получен',
-  deal:      'Заключен договор',
-  golden:    'Золотой фонд',
-  check_in:  'Узнал как дела',
-  referral:  'Взять рекомендацию',
-  new_deals: 'Выявление потребности о новых сделках',
+  showing:     'Показ',
+  deposit:     'Задаток получен',
+  deal:        'Заключен договор',
+  golden:      'Золотой фонд',
+  check_in:    'Узнал как дела',
+  referral:    'Взять рекомендацию',
+  closed_lost: 'Сделка сорвалась',
 }
 
 export const STAGE_ORDER: DealStage[] = [
@@ -101,14 +114,14 @@ export const STAGE_ORDER: DealStage[] = [
   'golden',
   'check_in',
   'referral',
-  'new_deals',
+  'closed_lost',
 ]
 
+/** Пост-продажный цикл удержания клиента (сделка уже успешна). `closed_lost` сюда НЕ входит — это провал, а не продолжение работы с довольным клиентом. */
 export const POST_SALE_STAGES: readonly DealStage[] = [
   'golden',
   'check_in',
   'referral',
-  'new_deals',
 ]
 
 export const SUCCESS_DEAL_STAGES: readonly DealStage[] = [
