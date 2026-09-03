@@ -143,6 +143,7 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /leads/import':
     'НЕ клиентский Idempotency-Key: LeadImportService сам вычисляет детерминированный ключ на КАЖДУЮ строку файла (sha256 от organizationId+phone) и делает per-row checkReplay/record через тот же IdempotencyService, что и POST /leads — заголовок здесь бессмысленен (одна HTTP-команда = много логических createLead), защита от дублей есть, просто не на уровне заголовка запроса.',
   'POST /leads/:leadId/assign': 'условный update владельца',
+  'POST /leads/:leadId/unassign': 'условный update владельца (обратное действие assign, тот же принцип)',
   'PATCH /deals/:dealId': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/stage': 'expectedVersion (CAS)',
   'PATCH /deals/:dealId/checklist': 'expectedVersion (CAS)',

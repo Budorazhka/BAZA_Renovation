@@ -786,6 +786,91 @@ describe('CrmService.assignLead', () => {
   });
 });
 
+describe('CrmService.unassignLead', () => {
+  it('снимает owner, пишет LeadEvent с ТЕКУЩИМ stage (не меняет его) и audit', async () => {
+    const organizationId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+    const lead = makeLead({ organizationId, stage: 'qualified', ownerPositionId });
+    const actorPositionId = new Types.ObjectId();
+    const actorIdentityId = new Types.ObjectId();
+    const unassignOwnerSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const appendEventSpy = jest.fn().mockResolvedValue(undefined);
+    const auditAppendSpy = jest.fn().mockResolvedValue(undefined);
+
+    const service = createTestCrmService({
+      leadRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue(lead),
+        unassignOwner: unassignOwnerSpy,
+      },
+      leadEventRepository: { append: appendEventSpy },
+      auditService: { append: auditAppendSpy },
+    });
+
+    const result = await service.unassignLead({
+      leadId: lead._id,
+      actorPositionId,
+      actorIdentityId,
+      expectedOrganizationId: organizationId,
+      correlationId: 'test-correlation-id',
+    });
+
+    expect(unassignOwnerSpy).toHaveBeenCalledWith(lead._id, organizationId, expect.anything());
+    expect(appendEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ leadId: lead._id, stage: 'qualified', changedBy: { type: 'position', positionId: actorPositionId } }),
+      expect.anything(),
+    );
+    expect(auditAppendSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'identity', id: actorIdentityId },
+        action: 'lead.unassign',
+        before: { ownerPositionId: ownerPositionId.toString() },
+        after: { ownerPositionId: null },
+      }),
+      expect.anything(),
+    );
+    expect(result.ownerPositionId).toBeNull();
+    expect(result.stage).toBe('qualified');
+  });
+
+  it('бросает NotFoundException для чужой организации, не вызывает unassignOwner', async () => {
+    const unassignOwnerSpy = jest.fn();
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null), unassignOwner: unassignOwnerSpy },
+    });
+
+    await expect(
+      service.unassignLead({
+        leadId: new Types.ObjectId(),
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: new Types.ObjectId(),
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(unassignOwnerSpy).not.toHaveBeenCalled();
+  });
+
+  it('modifiedCount:0 (лид исчез между read и write) — бросает NotFoundException', async () => {
+    const organizationId = new Types.ObjectId();
+    const lead = makeLead({ organizationId });
+    const unassignOwnerSpy = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+    const service = createTestCrmService({
+      leadRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(lead), unassignOwner: unassignOwnerSpy },
+    });
+
+    await expect(
+      service.unassignLead({
+        leadId: lead._id,
+        actorPositionId: new Types.ObjectId(),
+        actorIdentityId: new Types.ObjectId(),
+        expectedOrganizationId: organizationId,
+        correlationId: 'test-correlation-id',
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 describe('CrmService.createLead', () => {
   function makeContact(overrides: Partial<{ _id: Types.ObjectId; name: string; phone: string }> = {}) {
     return {

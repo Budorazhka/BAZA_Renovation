@@ -198,6 +198,22 @@ export class LeadRepository {
   }
 
   /**
+   * unassignLead — обратное действие assignOwner (тот же грант `lead.assign`,
+   * см. CrmService.unassignLead докстринг): очищает ownerPositionId, не
+   * версионировано — тот же сознательный выбор, что и assignOwner выше.
+   */
+  async unassignOwner(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne({ _id: id, organizationId }, { $unset: { ownerPositionId: '' } }, { session })
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /**
    * conventions.md разд.5 optimistic concurrency — тот же паттерн, что
    * UnitRepository.updateStatusWithVersionCheck: `version: expectedVersion`
    * И `stage: { $in: allowedFromStages }` в ОДНОМ атомарном Mongo-фильтре

@@ -777,6 +777,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/leads/{leadId}/unassign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Снять назначение лида (обратное действие POST /leads/{leadId}/assign, тот же грант lead.assign.organization — отдельного grant нет). Не меняет stage. ownerPositionId становится null. */
+        post: operations["unassignLead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/leads/{leadId}": {
         parameters: {
             query?: never;
@@ -4792,6 +4809,32 @@ export interface operations {
             };
             /** @description FORBIDDEN — нет lead.assign.organization */
             403: components["responses"]["Error"];
+        };
+    };
+    unassignLead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                leadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Назначение снято */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Lead"];
+                };
+            };
+            /** @description FORBIDDEN — нет lead.assign.organization */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — лид не существует или вне организации */
+            404: components["responses"]["Error"];
         };
     };
     getLead: {
