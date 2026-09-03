@@ -438,7 +438,19 @@ export function LeadsProvider({ children }: { children: ReactNode }) {
           },
           newIdempotencyKey(),
         )
-        const mapped = mapLeadV2ToPoker(created)
+        // Редьюсер (ADD_LEAD-ветка выше) уже посчитал менеджера — round-robin,
+        // by-load или ручной выбор — и это осело в lead.managerId ДО этого
+        // dispatch. POST /leads не принимает владельца при создании (см.
+        // create-lead.dto.ts), поэтому без явного assign посчитанное
+        // распределение никогда не долетало до backend — найдено 03.09.2026
+        // внешним ревью: новый лид всегда создавался без владельца, локальный
+        // UI показывал назначение только до следующего fetchLeads().
+        let ownerPositionId = created.ownerPositionId ?? null
+        if (lead.managerId) {
+          await leadsApiV2.assign(created.id, lead.managerId)
+          ownerPositionId = lead.managerId
+        }
+        const mapped = mapLeadV2ToPoker({ ...created, ownerPositionId })
         dispatch({ type: 'SET_LEADS', leads: state.leadPool.map((l) => (l.id === lead.id ? mapped : l)) })
         dispatch({ type: 'SET_LEAD_VERSIONS', versions: { [mapped.id]: created.version } })
       }

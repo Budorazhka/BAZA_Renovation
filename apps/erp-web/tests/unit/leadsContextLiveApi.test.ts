@@ -204,4 +204,29 @@ describe('LeadsContext — карточный стол лидов на leadsApiV
       'test-idempotency-key',
     )
   })
+
+  it('ADD_LEAD с посчитанным менеджером вызывает leadsApiV2.assign после create (найдено 03.09.2026 внешним ревью — раньше распределение терялось)', async () => {
+    const { result } = await renderLeadsHook()
+    await waitFor(() => expect(result.current.state.leadPool).toHaveLength(1))
+
+    createMock.mockResolvedValueOnce(makeLeadV2({ id: 'lead-new', version: 0, ownerPositionId: null }))
+    assignMock.mockResolvedValueOnce(undefined)
+
+    await act(async () => {
+      await result.current.dispatch({
+        type: 'ADD_LEAD',
+        lead: {
+          id: 'temp-2',
+          source: 'primary',
+          stageId: 'new',
+          managerId: 'pos-5',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          name: 'Клиент с распределением',
+          phone: '+79990000002',
+        },
+      })
+    })
+
+    expect(assignMock).toHaveBeenCalledWith('lead-new', 'pos-5')
+  })
 })
