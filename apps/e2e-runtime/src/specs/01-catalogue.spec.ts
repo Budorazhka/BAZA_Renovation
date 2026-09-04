@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/test';
 import { apiUrl } from '../fixtures/env';
+import { seedPublishedDevelopment, seedPublishedListing } from '../fixtures/seed-catalogue';
 
 /**
  * Marketplace catalogue: open, filter, sort, pagination/cursor behavior,
@@ -16,6 +17,24 @@ import { apiUrl } from '../fixtures/env';
  * умолчанию, то есть проверки параметров API остаются ровно теми же, что были.
  */
 test.describe('marketplace catalogue', () => {
+  /**
+   * Каталог проверяется на реальных данных, а не на пустой выдаче.
+   *
+   * Стек поднимается с чистой базой, поэтому до 05.09.2026 сценарии каталога
+   * фактически подтверждали, что страница умеет показывать «пусто». Здесь
+   * публикуются один ЖК и одно объявление — по одному на каждую вкладку, — и
+   * дальше проверки требуют настоящий счётчик и настоящие карточки.
+   *
+   * beforeAll, а не beforeEach: публикация идёт через воркер и ждёт сборки
+   * проекции, повторять её перед каждым тестом значило бы тратить минуту на
+   * ровном месте.
+   */
+  test.beforeAll(async () => {
+    // Фикстура `request` у Playwright тестовая, в beforeAll её нет — поэтому
+    // засевы сами заводят себе HTTP-контекст, каждый со своей cookie-сессией.
+    await Promise.all([seedPublishedDevelopment(), seedPublishedListing()]);
+  });
+
   test('opens the developments tab by default and shows a results count', async ({ page }) => {
     const responsePromise = page.waitForResponse((res) => res.url().includes('/public/developments') && res.request().method() === 'GET');
     await page.goto('/newconstructions');
@@ -26,13 +45,10 @@ test.describe('marketplace catalogue', () => {
     // только в CSS: разметку выдачи переписали, элемент исчез, и тест падал.
     // testid переживает переверстку, класс — нет.
     //
-    // Принимается и пустая выдача: в свежеподнятом стеке опубликованных ЖК нет,
-    // и «Пока нет объектов» — такой же честный итог, как счётчик. Требовать
-    // счётчик безусловно значит требовать данные, которых окружению никто не
-    // обещал (тот же принцип, что в проверке пагинации ниже).
-    await expect(
-      page.getByTestId('catalogue-count').or(page.getByTestId('catalogue-empty-note')),
-    ).toBeVisible();
+    // Счётчик требуется безусловно: beforeAll публикует ЖК, поэтому пустая
+    // выдача здесь означала бы настоящую поломку, а не бедное окружение.
+    await expect(page.getByTestId('catalogue-count')).toBeVisible();
+    await expect(page.locator('.development-card').first()).toBeVisible();
   });
 
   test('switches to the listings tab via URL query param and reflects it in the tab UI', async ({ page }) => {
