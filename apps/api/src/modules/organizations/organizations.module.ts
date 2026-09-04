@@ -17,6 +17,7 @@ import { OrganizationsController } from './organizations.controller';
 import { OrganizationOnboardingController } from './organization-onboarding.controller';
 import { TeamController } from './team.controller';
 import { InvitationController } from './invitation.controller';
+import { MeController } from './me.controller';
 import { IdentityModule } from '../identity/identity.module';
 import { AuditModule } from '../audit/audit.module';
 import { OutboxModule } from '../outbox/outbox.module';
@@ -40,7 +41,13 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     MediaModule,
     RateLimitModule,
   ],
-  controllers: [OrganizationsController, OrganizationOnboardingController, TeamController, InvitationController],
+  controllers: [
+    OrganizationsController,
+    OrganizationOnboardingController,
+    TeamController,
+    InvitationController,
+    MeController,
+  ],
   providers: [
     OrganizationRepository,
     PositionRepository,
