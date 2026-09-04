@@ -1985,6 +1985,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/marketplace/favorites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Избранное покупателя
+         * @description Требует сессии: избранное принадлежит человеку, а не организации. Отдаёт только тип и slug — карточки страница дочитывает публичными эндпоинтами каталога, поэтому избранное не дублирует проекцию публикации и не может разойтись с ней в цене или адресе.
+         */
+        get: operations["listFavorites"];
+        put?: never;
+        /**
+         * Добавить объект в избранное
+         * @description Идемпотентно по построению: уникальный индекс {identityId, targetType, slug} плюс upsert. Повторное нажатие сердечка не создаёт вторую запись и не считается ошибкой, поэтому Idempotency-Key не требуется.
+         *
+         *     Существование объекта не проверяется намеренно: публичные карточки и так читаются по slug без аутентификации, проверка ничего не защищала бы, зато стоила бы лишнего запроса на каждое нажатие и ломала бы добавление, пока объект временно снят с публикации.
+         */
+        post: operations["addFavorite"];
+        /**
+         * Убрать объект из избранного
+         * @description Идемпотентно: снятие уже снятого возвращает тот же результат с `removed: false`.
+         */
+        delete: operations["removeFavorite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/marketplace/property-assets": {
         parameters: {
             query?: never;
@@ -2155,6 +2185,32 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/marketplace/property-assets/{assetId}/listings/{listingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Правка объявления владельцем (цена, характеристики, телефон)
+         * @description Менять можно цену, характеристики и телефон. Тип объекта, тип сделки и адрес править нельзя: по ним ищутся дубликаты, и правка позволила бы объявлению «переехать» в другой дом в обход проверки — для этого создаётся новое объявление (решение владельца от 04.09.2026). Поле вне списка отклоняется с 400 глобальным ValidationPipe, а не игнорируется молча.
+         *
+         *     Опубликованное объявление после правки пересобирается автоматически, иначе в каталоге осталась бы старая цена; с публикации оно при этом не снимается. Ответ сообщает `rebuildRequested`, чтобы клиент не гадал, почему каталог обновился не мгновенно.
+         *
+         *     Меняется дата обновления, дата публикации остаётся прежней. Часы актуальности (`lastConfirmedAt`) правкой НЕ сбрасываются: подтверждение актуальности — отдельное осознанное действие, иначе поправленная запятая вечно держала бы объявление свежим.
+         *
+         *     Idempotency-Key не требуется: повтор с тем же телом приводит объявление в то же состояние. От гонки двух одновременных правок защищает CAS по `version` — второй запрос получает 409.
+         */
+        patch: operations["marketplaceUpdateListing"];
         trace?: never;
     };
     "/marketplace/property-assets/{assetId}/listings/{listingId}/activate": {
@@ -3814,6 +3870,19 @@ export interface components {
             /** @enum {string} */
             scope: "own" | "position" | "team" | "organization" | "global" | "city" | "domain" | "project" | "assigned";
             scopeValue?: string;
+        };
+        FavoriteTarget: {
+            /** @enum {string} */
+            targetType: "development" | "listing";
+            /** @description Slug публикации — тот же, по которому карточка читается публично */
+            slug: string;
+        };
+        Favorite: {
+            /** @enum {string} */
+            targetType: "development" | "listing";
+            slug: string;
+            /** Format: date-time */
+            createdAt: string;
         };
         ErpMeResponse: {
             identity: {
@@ -5806,6 +5875,8 @@ export interface operations {
                 /** @description bounding box для поиска по области карты: minLng,minLat,maxLng,maxLat */
                 bbox?: string;
                 city?: string;
+                /** @description Фильтр «объекты этой компании»: id организации-публикатора (застройщика или агентства). Отдельных публичных страниц компаний нет — клик по названию ведёт в каталог с этим фильтром. Невалидный ObjectId даёт 400, а не пустой список: иначе «нет такой компании» было бы неотличимо от «у неё ничего не опубликовано». */
+                publisher?: string;
                 /** @description Порядок выдачи. Для ЖК поддерживается только newest. */
                 sort?: "newest";
             };
@@ -8394,6 +8465,82 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    listFavorites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список избранного, новые сверху */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Favorite"][];
+                };
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    addFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteTarget"];
+            };
+        };
+        responses: {
+            /** @description Объект в избранном */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Favorite"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
+    removeFavorite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FavoriteTarget"];
+            };
+        };
+        responses: {
+            /** @description Результат удаления */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @description Была ли запись; false означает, что её уже не было */
+                        removed: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+        };
+    };
     marketplaceListPropertyAssets: {
         parameters: {
             query?: never;
@@ -8702,6 +8849,57 @@ export interface operations {
             404: components["responses"]["Error"];
         };
     };
+    marketplaceUpdateListing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: components["parameters"]["AssetId"];
+                listingId: components["parameters"]["ListingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    price?: {
+                        amountMinorUnits: number;
+                        /** @enum {string} */
+                        currency: "USD" | "GEL" | "RUB";
+                    };
+                    characteristics?: {
+                        area?: number;
+                        rooms?: number;
+                        floor?: number;
+                        totalFloors?: number;
+                    };
+                    representativePhone?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Объявление изменено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        listing: components["schemas"]["Listing"];
+                        /** @description Была ли запрошена пересборка публикации в каталоге */
+                        rebuildRequested: boolean;
+                    };
+                };
+            };
+            /** @description Не передано ни одного поля либо прислано поле вне списка разрешённых */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description Объявление изменено другим запросом — обновить и повторить */
+            409: components["responses"]["Error"];
+        };
+    };
     marketplaceActivateListing: {
         parameters: {
             query?: never;
@@ -8951,6 +9149,8 @@ export interface operations {
                 dealType?: "sale" | "rent_long" | "rent_short";
                 propertyType?: "apartment" | "house" | "land" | "commercial";
                 commercialSubtype?: "office" | "warehouse" | "retail" | "business" | "free_purpose";
+                /** @description Фильтр «объявления этой компании»: id организации-публикатора. Семантика та же, что у одноимённого параметра GET /public/developments. */
+                publisher?: string;
                 /** @description Порядок выдачи: newest, price_asc/desc или area_asc/desc. */
                 sort?: "newest" | "price_asc" | "price_desc" | "area_asc" | "area_desc";
             };
