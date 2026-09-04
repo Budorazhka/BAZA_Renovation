@@ -157,7 +157,7 @@ export function AuthForm({
             autoComplete="username"
             value={loginInput}
             onChange={(e) => setLoginInput(e.target.value)}
-            placeholder="author@example.com"
+            placeholder="name@example.com"
             disabled={isLoading}
             required
             data-testid="auth-input-login"

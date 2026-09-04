@@ -176,25 +176,25 @@ async function resolvePublicSlugs() {
 }
 
 /**
- * Заводит сессию и отдаёт её в виде storageState для браузера.
+ * Заводит аккаунт для съёмки и объект у него.
  *
- * Без входа половина списка снимется как форма логина: разделы кабинета
- * закрыты `RequireAuth`. Снимок формы входа вместо кабинета — не тот материал,
- * по которому сверяют вёрстку.
+ * Не отдаёт `storageState`: перенос cookie из HTTP-контекста в браузер
+ * оказался нерабочим. Прогон 05.09.2026 показал это прямо — регистрация и
+ * вход по API прошли (`signedIn: true`), объект завёлся, адрес страницы
+ * редактирования собрался с настоящими идентификаторами, а кабинет всё равно
+ * снялся формой входа: перенесённая cookie до запросов из страницы не дошла.
+ * Поэтому браузер входит сам, через форму, и получает cookie на общих
+ * основаниях (см. `signInThroughUi`).
  *
- * Прогон 04.09.2026 дал `signedIn: false` по всем 24 снимкам, и кабинет снялся
- * формой входа. Причина оказалась не в лимите регистраций, как я решил сначала,
- * а в адресации: контекст создавался с `baseURL`, оканчивающимся на `/api/v1`, и
- * путь `/auth/register` резолвился в `new URL()` без этого префикса — запрос
- * уходил мимо API и получал 404, а отказ возвращался голым `null`, по которому
- * отличить одно от другого было нельзя. Отсюда две правки: адрес собирается
- * целиком (`apiUrl`), причина отказа пишется в отчёт.
+ * До этого была ещё одна причина того же снимка, уже исправленная: контекст
+ * создавался с `baseURL`, оканчивающимся на `/api/v1`, а Playwright резолвит
+ * относительные пути через `new URL()` — префикс версии отбрасывался, и
+ * регистрация уходила мимо API. Отсюда `apiUrl`.
  *
- * Ожидание на 429 при этом оставлено: лимит в пять регистраций в минуту на IP
- * общий, съёмка идёт следом за сквозными сценариями с того же адреса, и гонка
- * за остаток бюджета здесь реальна.
+ * Ожидание на 429 оставлено: лимит в пять регистраций в минуту на IP общий,
+ * съёмка идёт следом за сквозными сценариями с того же адреса.
  */
-async function createSignedInState() {
+async function createCaptureAccount() {
   const login = `capture-${Date.now()}@example.com`;
   const password = 'Correct-Horse-Battery-Staple-1!';
   const api = await apiRequest.newContext();
@@ -202,45 +202,77 @@ async function createSignedInState() {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const registered = await api.post(apiUrl('/auth/register'), { data: { login, password } });
       if (registered.status() === 429) {
-        // Окно лимита — 60 секунд; ждём его заметную часть, а не сотни миллисекунд.
+        // Окно лимита — 60 секунд; ждём заметную его часть, а не сотни миллисекунд.
         await new Promise((resolve) => setTimeout(resolve, 20_000));
         continue;
       }
       if (registered.status() !== 201) {
-        return { state: null, ownerListing: null, reason: `register ${registered.status()}: ${(await registered.text()).slice(0, 200)}` };
+        return { login: null, password: null, ownerListing: null, reason: `register ${registered.status()}: ${(await registered.text()).slice(0, 200)}` };
       }
       const loggedIn = await api.post(apiUrl('/auth/login'), {
         data: { login, password },
         headers: { Origin: BASE_URL },
       });
       if (loggedIn.status() !== 200 && loggedIn.status() !== 201) {
-        return { state: null, ownerListing: null, reason: `login ${loggedIn.status()}: ${(await loggedIn.text()).slice(0, 200)}` };
+        return { login: null, password: null, ownerListing: null, reason: `login ${loggedIn.status()}: ${(await loggedIn.text()).slice(0, 200)}` };
       }
       const ownerListing = await seedOwnerListing(api);
-      return { state: await api.storageState(), reason: null, ownerListing };
+      return { login, password, ownerListing, reason: ownerListing ? null : 'объект сессии не завёлся' };
     }
-    return { state: null, ownerListing: null, reason: 'register 429: лимит не отпустил за четыре попытки' };
+    return { login: null, password: null, ownerListing: null, reason: 'register 429: лимит не отпустил за четыре попытки' };
   } catch (err) {
-    return { state: null, reason: String(err).split('\n')[0] };
+    return { login: null, password: null, ownerListing: null, reason: String(err).split('\n')[0] };
   } finally {
     await api.dispose();
   }
 }
 
+/**
+ * Вход через форму, в том же браузерном контексте, в котором потом снимаем.
+ *
+ * Cookie ставит сам браузер, поэтому все её атрибуты (домен, путь, SameSite)
+ * заведомо те, с которыми она работает в жизни. Разделы кабинета закрыты
+ * `RequireAuth`, и без этого шага половина списка снимается формой входа.
+ */
+async function signInThroughUi(context, credentials) {
+  const page = await context.newPage();
+  try {
+    await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await page.getByTestId('auth-input-login').fill(credentials.login);
+    await page.getByTestId('auth-input-password').fill(credentials.password);
+    await Promise.all([
+      page.waitForResponse(
+        (res) => res.url().includes('/auth/login') && res.request().method() === 'POST',
+        { timeout: 30_000 },
+      ),
+      page.getByTestId('auth-submit-btn').click(),
+    ]);
+    // Форма входа исчезает только когда сессия принята: пока она на экране,
+    // считать вход состоявшимся нельзя.
+    await page.getByTestId('auth-page').waitFor({ state: 'detached', timeout: 30_000 });
+    return null;
+  } catch (err) {
+    return String(err).split('\n')[0];
+  } finally {
+    await page.close();
+  }
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
-  const { state: storageState, reason: signInError, ownerListing } = await createSignedInState();
-  if (!storageState) {
-    console.warn(`[capture] Войти не удалось (${signInError}) — разделы кабинета снимутся как форма входа.`);
-  } else if (!ownerListing) {
+  const account = await createCaptureAccount();
+  if (!account.login) {
+    console.warn(`[capture] Аккаунт не завёлся (${account.reason}) — разделы кабинета снимутся как форма входа.`);
+  } else if (!account.ownerListing) {
     console.warn('[capture] Объект сессии не завёлся — кабинет снимется пустым, редактирование не снимется.');
   }
+  const accountError = account.login ? null : account.reason;
 
   const { developmentSlug, listingSlug } = await resolvePublicSlugs();
   if (!developmentSlug) console.warn('[capture] В каталоге нет опубликованного ЖК — MKT-SCR-007 не снимается.');
   if (!listingSlug) console.warn('[capture] В каталоге нет опубликованного объявления — MKT-SCR-012 не снимается.');
 
-  const screens = buildScreens({ developmentSlug, listingSlug, ownerListing });
+  const screens = buildScreens({ developmentSlug, listingSlug, ownerListing: account.ownerListing });
   const browser = await chromium.launch();
   const report = [];
 
@@ -248,8 +280,19 @@ async function main() {
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
-      ...(storageState ? { storageState } : {}),
     });
+
+    // Вход делается в каждом контексте отдельно: контексты изолированы, и
+    // сессия из десктопного в мобильный сама не попадёт. Отказ пишется на свой
+    // брейкпоинт, а не на оба: они снимаются независимо.
+    let signInError = accountError;
+    if (account.login) {
+      const uiError = await signInThroughUi(context, account);
+      if (uiError) {
+        signInError = `вход через форму: ${uiError}`;
+        console.warn(`[capture] ${viewport.key}: ${signInError}`);
+      }
+    }
 
     for (const screen of screens) {
       const page = await context.newPage();
@@ -281,7 +324,7 @@ async function main() {
         figmaFrame: screen.figmaFrame,
         data: screen.data,
         file,
-        signedIn: Boolean(storageState),
+        signedIn: Boolean(account.login) && !signInError,
         signInError,
         navigationError: error,
         consoleErrors: consoleErrors.slice(0, 5),
