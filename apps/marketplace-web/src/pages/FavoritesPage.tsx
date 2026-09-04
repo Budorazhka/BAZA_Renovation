@@ -140,6 +140,29 @@ export function FavoritesPage() {
       return true
     })
 
+  // Гостю нужен вход, а не пустой список: сервер требует сессию, и без этой
+  // ветки человек видел бы «ничего не сохранено» вместо объяснения.
+  if (requiresAuth) {
+    return (
+      <div className="state-panel state-panel--empty">
+        <p>Избранное хранится в вашем аккаунте. Войдите, чтобы увидеть сохранённые объекты.</p>
+        <Link to="/auth/login?next=%2Ffavorites" className="clear-filter-btn">
+          Войти
+        </Link>
+      </div>
+    )
+  }
+
+  // Без этой ветки на секунду показывалось бы «ничего не сохранено», хотя
+  // список ещё грузится.
+  if (isLoading) {
+    return (
+      <div className="state-panel" role="status" aria-busy="true">
+        <p>Загружаем избранное…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="figma-fav-page">
       <div className="figma-fav-header">

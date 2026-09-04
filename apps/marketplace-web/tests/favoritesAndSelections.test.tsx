@@ -7,7 +7,7 @@ import { FavoritesPage } from '../src/pages/FavoritesPage'
 import { SelectionsPage } from '../src/pages/SelectionsPage'
 import { SelectionDetailPage } from '../src/pages/SelectionDetailPage'
 import { marketplaceApi } from '../src/api/marketplace-api'
-import { publishingApi } from '../src/features/publishing/api/publishing-api'
+import { publishingApi, PublishingApiError } from '../src/features/publishing/api/publishing-api'
 
 vi.mock('../src/features/publishing/api/publishing-api', async () => {
   const actual = await vi.importActual<typeof import('../src/features/publishing/api/publishing-api')>(
@@ -102,6 +102,23 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
         targetType: 'listing',
         slug: 'kvartira-more',
       })
+    })
+
+    it('гостю предлагает войти, а не пустой список', async () => {
+      // Именно PublishingApiError, а не любая ошибка со status: страница
+      // проверяет тип, и подделка прошла бы мимо этой ветки.
+      ;(publishingApi.listFavorites as any).mockRejectedValue(
+        new PublishingApiError('unauthorized', 401),
+      )
+
+      render(
+        <MemoryRouter>
+          <FavoritesPage />
+        </MemoryRouter>,
+      )
+
+      expect(await screen.findByText(/Избранное хранится в вашем аккаунте/)).toBeDefined()
+      expect(screen.getByRole('link', { name: 'Войти' }).getAttribute('href')).toContain('/auth/login')
     })
 
     it('снятый с публикации объект пропускается, страница не падает', async () => {
