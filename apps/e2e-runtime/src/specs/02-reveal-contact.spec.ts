@@ -98,7 +98,10 @@ test.describe('listing reveal-contact', () => {
 
     await page.getByLabel('Телефон *').fill(uniquePhone());
     await page.getByLabel('Ваше имя').fill('E2E Reveal Test');
-    await page.getByRole('button', { name: 'Показать телефон' }).click();
+    // exact: true обязателен. На детальной странице есть второй элемент,
+    // чьё доступное имя начинается так же — CTA «Показать телефон отдела
+    // продаж: …». Playwright по умолчанию ищет подстроку и находит оба.
+    await page.getByRole('button', { name: 'Показать телефон', exact: true }).click();
 
     const response = await revealResponsePromise;
     expect(response.status()).toBe(200);
@@ -130,7 +133,8 @@ test.describe('listing reveal-contact', () => {
     test.skip(!slug, 'First listing in the catalogue has no slug.');
 
     await page.goto(`/listings/${slug}`);
-    const submitButton = page.getByRole('button', { name: 'Показать телефон' });
+    // См. комментарий выше: без exact сюда попадает ещё и CTA отдела продаж.
+    const submitButton = page.getByRole('button', { name: 'Показать телефон', exact: true });
     // Button is disabled while the phone field is empty — HTML `required`
     // input semantics, matches ListingContactForm's `disabled={... || !phone.trim()}`.
     await expect(submitButton).toBeDisabled();
