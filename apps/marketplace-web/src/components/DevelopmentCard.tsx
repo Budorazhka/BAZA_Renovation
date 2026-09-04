@@ -190,10 +190,6 @@ export function DevelopmentCard({
             <span className="figma-facility-pill__icon" aria-hidden="true">🏢</span>
             <span>{completionText}</span>
           </span>
-          <span className="figma-facility-pill">
-            <span className="figma-facility-pill__icon" aria-hidden="true">📐</span>
-            <span>от 32 м²</span>
-          </span>
         </div>
 
         {/* Action Buttons Row (Figma 4747:74118) */}

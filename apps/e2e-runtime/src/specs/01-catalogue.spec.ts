@@ -158,7 +158,12 @@ test.describe('marketplace catalogue', () => {
     const developmentsPromise = page.waitForResponse((res) => res.url().includes('/public/developments'));
     await page.goto('/newconstructions');
     await developmentsPromise;
-    await page.locator('.development-card').first().click();
+    // Кликаем по кнопке «Подробнее», а не в центр карточки. Карточка сама по
+    // себе не ссылка: раньше клик в её центр случайно попадал в заголовок,
+    // потому что засев называл ЖК длинным email'ом и заголовок занимал три
+    // строки. С коротким именем центр съехал на нессылочную область, и тест
+    // упал — хотя переход работает.
+    await page.locator('.development-card').first().getByRole('link', { name: 'Подробнее' }).click();
     await expect(page).toHaveURL(/\/developments\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });
