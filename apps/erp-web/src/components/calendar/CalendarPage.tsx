@@ -4,7 +4,8 @@ import { DashboardShell } from '@/components/layout/DashboardShell'
 import { type CalEvent } from '@/data/calendar-events-mock'
 import { useAuth } from '@/context/AuthContext'
 import { useCrmSync } from '@/features/crm/context/CrmSyncContext'
-import { apiService, EventType } from '@/features/crm/services/api'
+import { calendarApiV2, newIdempotencyKey } from '@/services/calendarApiV2'
+import { mapLegacyEventTypeToV2 } from '@/lib/calendar-v2-legacy-adapter'
 import { toast } from 'sonner'
 import { useI18n } from "@/i18n";
 
@@ -87,21 +88,17 @@ export function CalendarPage() {
       const start = new Date(`${data.date}T${data.time}:00`);
       const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 час по умолчанию
 
-      const res = await apiService.createCalendarEvent({
+      await calendarApiV2.create({
         title: data.title,
         startTime: start.toISOString(),
         endTime: end.toISOString(),
-        type: data.type === 'call' ? EventType.CALL : EventType.MEETING,
+        type: mapLegacyEventTypeToV2(data.type),
         location: data.location,
         description: data.client ? `Клиент: ${data.client}` : undefined,
-      }, currentUser.id);
+      }, newIdempotencyKey());
 
-      if (res.success) {
-        toast.success('Мероприятие создано');
-        refresh(); 
-      } else {
-        toast.error(res.message || 'Ошибка при создании мероприятия');
-      }
+      toast.success('Мероприятие создано');
+      refresh();
     } catch (error) {
       console.error('Failed to create event:', error);
       toast.error('Произошла ошибка при создании мероприятия');
