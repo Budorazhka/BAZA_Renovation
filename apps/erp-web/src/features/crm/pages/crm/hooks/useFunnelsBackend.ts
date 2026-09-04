@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { apiService, ProductType } from '../../../services/api';
+import { crmReportApiV2 } from '@/services/crmReportApiV2';
+import type { CrmReportProductType } from '@/types/crmReportV2';
 import type { FunnelBoard } from '@/types/analytics';
-import { buildFunnelBoardsFromStageCounts } from '../funnelTemplates';
+import { buildFunnelBoardsFromStageCounts, STAGE_NAME_TO_LEAD_STAGE_V2 } from '../funnelTemplates';
 
 const EMPTY_FUNNELS: FunnelBoard[] = [];
 
@@ -9,27 +10,25 @@ function normalizeStageKey(s: string): string {
   return s.toLowerCase().trim();
 }
 
-/** Загружает этапы по всем категориям (продажи, сеть, собственник, партнёры) и объединяет в один список для канбана */
+/**
+ * Загружает воронку лидов по всем 4 продуктам (продажи, сеть, собственник,
+ * партнёры) с РЕАЛЬНОГО backend (GET /crm/reports/lead-funnel по истории
+ * lead_events, см. её докстринг) и объединяет в один список для канбана —
+ * тот же merge-паттерн, что и раньше на легаси `getLeadsByStage`, только
+ * источник данных теперь событийная история, не текущий снимок.
+ */
 async function loadAllStagesMerged(): Promise<Array<{ stage: string; count: number }>> {
-  const productTypes = [
-    ProductType.SALES,
-    ProductType.NETWORK,
-    ProductType.OWNER,
-    ProductType.AGENT,
-  ];
+  const productTypes: CrmReportProductType[] = ['sales', 'network', 'owner', 'agent'];
   const results = await Promise.allSettled(
-    productTypes.map((pt) => apiService.getLeadsByStage(pt))
+    productTypes.map((productType) => crmReportApiV2.getLeadFunnel({ productType }))
   );
 
   const byStage: Record<string, number> = {};
   for (const result of results) {
     if (result.status !== 'fulfilled') continue;
-    const res = result.value;
-    if (!res?.success || typeof res.data !== 'object' || res.data === null) continue;
-    for (const [stage, count] of Object.entries(res.data)) {
-      if (typeof count !== 'number') continue;
+    for (const { stage, leadCount } of result.value.stages) {
       const key = normalizeStageKey(stage);
-      byStage[key] = (byStage[key] ?? 0) + count;
+      byStage[key] = (byStage[key] ?? 0) + leadCount;
     }
   }
 
@@ -58,7 +57,7 @@ export function useFunnelsBackend(): {
 
       if (cancelledRef.current) return;
 
-      setFunnels(buildFunnelBoardsFromStageCounts(stageCounts));
+      setFunnels(buildFunnelBoardsFromStageCounts(stageCounts, STAGE_NAME_TO_LEAD_STAGE_V2));
     } catch (e: unknown) {
       if (!cancelledRef.current) {
         setError(e instanceof Error ? e.message : 'Ошибка загрузки воронок');

@@ -4,6 +4,7 @@ import type {
   CreateLeadV2Payload,
   LeadFileV2,
   LeadStageChangeResult,
+  LeadStageDefinitionsV2Response,
   LeadV2,
   ListLeadEventsV2Response,
   ListLeadsV2Params,
@@ -214,6 +215,12 @@ export const leadsApiV2 = {
   /** GET /api/v1/leads/:id/events — история переходов стадии (включая `comment`, если был передан при смене). Только переходы стадии — НЕ общая лента действий с лидом (задачи и т.п. сюда не попадают). */
   async listEvents(id: string, params?: { cursor?: string; limit?: number }): Promise<ListLeadEventsV2Response> {
     const { data } = await api.get<ListLeadEventsV2Response>(`/api/v1/leads/${id}/events`, { params })
+    return data
+  },
+
+  /** GET /api/v1/leads/stage-definitions — справочник стадий воронки по всем 4 продуктам, без спецправа (валидной сессии достаточно). */
+  async getStageDefinitions(): Promise<LeadStageDefinitionsV2Response> {
+    const { data } = await api.get<LeadStageDefinitionsV2Response>('/api/v1/leads/stage-definitions')
     return data
   },
 }

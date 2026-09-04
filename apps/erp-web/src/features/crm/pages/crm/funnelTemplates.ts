@@ -1,6 +1,17 @@
 /**
  * Шаблоны воронок для канбана — те же этапы и колонки, что в dashboard-front.
  * Названия этапов совпадают с LeadsBlock (statusToLeadStageMap) для маппинга на LeadStage с бэкенда.
+ *
+ * `STAGE_NAME_TO_LEAD_STAGE`/`buildFunnelBoardsFromStageCounts` остаются НА
+ * ЛЕГАСИ `LeadStage` enum намеренно (04.09.2026) — их всё ещё читают
+ * useMeAnalyticsData/usePartnerAnalyticsBackend/useNetworkAnalyticsBackend
+ * через `stageCountsByProductToArray`, а те получают `stageCountsByProduct`
+ * с ЛЕГАСИ `GET /crm/analytics/lead-report`, ключи которого — этот самый
+ * enum, не machine-id нового backend. Только `useFunnelsBackend.ts` (вкладка
+ * "Продажи/Сеть/Собственник/Партнёры" на канбане) переведена на реальный
+ * `GET /crm/reports/lead-funnel` — она использует ОТДЕЛЬНЫЙ
+ * `STAGE_NAME_TO_LEAD_STAGE_V2`/параметр `stageMap` ниже, не трогая эту
+ * карту и не ломая три analytics-хука, которые пока остаются на легаси.
  */
 import type { FunnelBoard, FunnelColumn, FunnelStage, FunnelId } from '@/types/analytics';
 import { LeadStage } from '../../services/api';
@@ -215,6 +226,60 @@ const FUNNEL_TEMPLATES: FunnelTemplate[] = [
   },
 ];
 
+/**
+ * Machine-id стадий продукта `sales` НОВОГО backend
+ * (apps/api/src/modules/crm/lead-stage-definitions.ts
+ * `LEAD_STAGE_DEFINITIONS.sales`), в том же порядке, что русские имена
+ * `STAGE_NAME_TO_LEAD_STAGE.RP` выше — позиционно соответствуют один в
+ * один (сверено построчно), но САМИ ЗНАЧЕНИЯ другие: легаси `LeadStage`
+ * enum описывает generic 22-стадийный пайплайн api-crm.baza.sale
+ * (`rejected`/`first_contact`/`qualification`/...), который с новым
+ * backend для продукта `sales` не пересекается вообще.
+ */
+const SALES_STAGE_IDS_V2 = [
+  'defective', 'refused', 'no_answer_3', 'no_answer_2', 'no_answer_1',
+  'new', 'callback', 'presented', 'country_discussed', 'need_identified',
+  'need_adjusted', 'kp_sent', 'objections', 'deferred', 'warmup', 'showing',
+  'deposit', 'deal', 'golden', 'check_in', 'referral', 'new_deals',
+] as const;
+
+/**
+ * Вариант `STAGE_NAME_TO_LEAD_STAGE` для GET /crm/reports/lead-funnel
+ * (useFunnelsBackend.ts) — `RP` (sales) заменён на machine-id нового
+ * backend (см. SALES_STAGE_IDS_V2 докстринг), `Net`/`Owner`/`Agent` те же
+ * значения, что легаси (`network_*`/`owner_*`/`agent_*` совпадают у обоих
+ * backend дословно, замена не нужна).
+ */
+export const STAGE_NAME_TO_LEAD_STAGE_V2: Record<ProductTab, Record<string, string>> = {
+  RP: {
+    'Бракованный лид': SALES_STAGE_IDS_V2[0],
+    'Отказ': SALES_STAGE_IDS_V2[1],
+    'Не дозвонился 3': SALES_STAGE_IDS_V2[2],
+    'Не дозвонился 2': SALES_STAGE_IDS_V2[3],
+    'Не дозвонился 1': SALES_STAGE_IDS_V2[4],
+    'Новый лид': SALES_STAGE_IDS_V2[5],
+    'Попросил связаться позже': SALES_STAGE_IDS_V2[6],
+    'Презентовали компанию': SALES_STAGE_IDS_V2[7],
+    'Обсудили ситуацию в стране': SALES_STAGE_IDS_V2[8],
+    'Выявлена потребность': SALES_STAGE_IDS_V2[9],
+    'Потребность скорректирована': SALES_STAGE_IDS_V2[10],
+    'Отправлено КП': SALES_STAGE_IDS_V2[11],
+    'Отработка возражений': SALES_STAGE_IDS_V2[12],
+    'Отложенный спрос': SALES_STAGE_IDS_V2[13],
+    'Прогрев': SALES_STAGE_IDS_V2[14],
+    'Показ': SALES_STAGE_IDS_V2[15],
+    'Задаток получен': SALES_STAGE_IDS_V2[16],
+    'Заключен договор': SALES_STAGE_IDS_V2[17],
+    'Золотой фонд': SALES_STAGE_IDS_V2[18],
+    ' Узнал как дела': SALES_STAGE_IDS_V2[19],
+    'Взять рекомендацию': SALES_STAGE_IDS_V2[20],
+    'Выявление потребности о новых сделках': SALES_STAGE_IDS_V2[21],
+  },
+  Net: STAGE_NAME_TO_LEAD_STAGE.Net,
+  Owner: STAGE_NAME_TO_LEAD_STAGE.Owner,
+  Agent: STAGE_NAME_TO_LEAD_STAGE.Agent,
+};
+
 function normalizeStageKey(stage: string | LeadStage): string {
   return (typeof stage === 'string' ? stage : String(stage)).toLowerCase().trim();
 }
@@ -248,9 +313,16 @@ export function stageCountsByProductToArray(
   return arr;
 }
 
-/** Строит FunnelBoard[] из ответа бэкенда (массив { stage, count }) по шаблонам */
+/**
+ * Строит FunnelBoard[] из ответа бэкенда (массив { stage, count }) по
+ * шаблонам. `stageMap` — по умолчанию легаси `STAGE_NAME_TO_LEAD_STAGE`
+ * (используется stageCountsByProductToArray-потребителями на легаси
+ * lead-report); useFunnelsBackend.ts передаёт `STAGE_NAME_TO_LEAD_STAGE_V2`
+ * явно (см. её докстринг).
+ */
 export function buildFunnelBoardsFromStageCounts(
-  stageCounts: Array<{ stage: LeadStage | string; count: number }>
+  stageCounts: Array<{ stage: LeadStage | string; count: number }>,
+  stageMap: Record<ProductTab, Record<string, LeadStage | string>> = STAGE_NAME_TO_LEAD_STAGE
 ): FunnelBoard[] {
   const byStage: Record<string, number> = {};
   for (const { stage, count } of stageCounts) {
@@ -260,7 +332,7 @@ export function buildFunnelBoardsFromStageCounts(
 
   return FUNNEL_TEMPLATES.map((template) => {
     const productTab = FUNNEL_ID_TO_TAB[template.id];
-    const stageToLeadStage = STAGE_NAME_TO_LEAD_STAGE[productTab];
+    const stageToLeadStage = stageMap[productTab];
 
     const columns: FunnelColumn[] = template.columns.map((col) => {
       const stages: FunnelStage[] = col.stages.map((stageName, idx) => {

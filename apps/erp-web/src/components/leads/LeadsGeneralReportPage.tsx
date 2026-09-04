@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, BarChart3, Filter, Users } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { useLeads } from '@/context/LeadsContext'
-import { LEAD_STAGE_COLUMN, LEAD_STAGES } from '@/data/leads-mock'
+import { leadsApiV2 } from '@/services/leadsApiV2'
+import type { LeadProductTypeV2, LeadStageDefinitionsV2Response } from '@/types/leadsV2'
 import type { Lead, LeadSource } from '@/types/leads'
 import { useI18n } from "@/i18n";
 
@@ -13,7 +14,6 @@ const SOURCE_LABELS: Record<LeadSource, string> = {
   ad_campaigns: 'Реклама',
 }
 
-const STAGE_NAME_BY_ID = Object.fromEntries(LEAD_STAGES.map((s) => [s.id, s.name])) as Record<string, string>
 const FILTER_SELECT_CLASS =
   "rounded-md border border-[var(--hub-card-border)] bg-[color-mix(in_srgb,var(--rail-bg)_82%,transparent)] px-2 py-2 text-sm text-[color:var(--workspace-text)] [color-scheme:dark]"
 
@@ -27,13 +27,16 @@ function getIsoWeekKey(iso: string) {
   return `${date.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`
 }
 
-function leadStatusForFilter(lead: Lead): string {
+/** Каталог стадий сведён из всех 4 продуктов (см. useEffect ниже) — стадия сети/собственника/агента резолвится тем же способом, что и sales, а не только 22 sales-стадии, как было раньше на data/leads-mock.ts. */
+function leadStatusForFilter(lead: Lead, stageColumnById: Record<string, LeadStageColumn>): string {
   if (lead.status) return lead.status
   if (lead.stageId === 'new') return 'new'
-  if (LEAD_STAGE_COLUMN[lead.stageId] === 'rejection') return 'lost'
-  if (LEAD_STAGE_COLUMN[lead.stageId] === 'success') return 'qualified'
+  if (stageColumnById[lead.stageId] === 'rejection') return 'lost'
+  if (stageColumnById[lead.stageId] === 'success') return 'qualified'
   return 'in_progress'
 }
+
+type LeadStageColumn = 'rejection' | 'in_progress' | 'success'
 
 export default function LeadsGeneralReportPage() {
     const { t } = useI18n();
@@ -43,6 +46,43 @@ export default function LeadsGeneralReportPage() {
   const [team, setTeam] = useState<string>('all')
   const [status, setStatus] = useState<string>('all')
   const [source, setSource] = useState<'all' | LeadSource>('all')
+
+  /**
+   * GET /leads/stage-definitions — каталог стадий по ВСЕМ 4 продуктам
+   * (04.09.2026, замена data/leads-mock.ts::LEAD_STAGES/LEAD_STAGE_COLUMN,
+   * которые покрывали только продукт `sales`): лид с productType network/
+   * owner/agent раньше показывал сырой machine-id вместо русского имени и
+   * не попадал ни в один статус-фильтр (LEAD_STAGE_COLUMN не знал его id).
+   */
+  const [stageNameById, setStageNameById] = useState<Record<string, string>>({})
+  const [stageColumnById, setStageColumnById] = useState<Record<string, LeadStageColumn>>({})
+
+  useEffect(() => {
+    let cancelled = false
+    leadsApiV2
+      .getStageDefinitions()
+      .then((defs: LeadStageDefinitionsV2Response) => {
+        if (cancelled) return
+        const names: Record<string, string> = {}
+        const columns: Record<string, LeadStageColumn> = {}
+        for (const productType of Object.keys(defs) as LeadProductTypeV2[]) {
+          for (const stage of defs[productType]) {
+            names[stage.id] = stage.name
+            columns[stage.id] = stage.column
+          }
+        }
+        setStageNameById(names)
+        setStageColumnById(columns)
+      })
+      .catch(() => {
+        // Отчёт остаётся читаемым и без каталога — просто покажет сырые
+        // machine-id вместо русских имён, тот же деградационный путь, что
+        // был до этого прохода при отсутствующей стадии в мок-каталоге.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const now = useMemo(() => Date.now(), [])
   const periodLeads = useMemo(() => {
@@ -71,25 +111,25 @@ export default function LeadsGeneralReportPage() {
         if (employee !== 'unassigned' && lead.managerId !== employee) return false
       }
       if (team !== 'all' && teamLabelByLead(lead) !== team) return false
-      if (status !== 'all' && leadStatusForFilter(lead) !== status) return false
+      if (status !== 'all' && leadStatusForFilter(lead, stageColumnById) !== status) return false
       if (source !== 'all' && lead.source !== source) return false
       return true
     })
-  }, [employee, periodLeads, source, status, team])
+  }, [employee, periodLeads, source, status, stageColumnById, team])
 
   const kpi = useMemo(() => {
     const total = filtered.length
     const newLeads = filtered.filter((l) => l.stageId === 'new').length
     const unassigned = filtered.filter((l) => l.managerId == null).length
     const slaBreaches = filtered.filter((l) => l.taskOverdue).length
-    const success = filtered.filter((l) => LEAD_STAGE_COLUMN[l.stageId] === 'success').length
+    const success = filtered.filter((l) => stageColumnById[l.stageId] === 'success').length
     const conversion = total > 0 ? Math.round((success / total) * 100) : 0
     return { total, newLeads, unassigned, slaBreaches, conversion }
-  }, [filtered])
+  }, [filtered, stageColumnById])
 
   const problematicLeads = useMemo(
-    () => filtered.filter((l) => l.taskOverdue || l.managerId == null || LEAD_STAGE_COLUMN[l.stageId] === 'rejection').slice(0, 8),
-    [filtered],
+    () => filtered.filter((l) => l.taskOverdue || l.managerId == null || stageColumnById[l.stageId] === 'rejection').slice(0, 8),
+    [filtered, stageColumnById],
   )
 
   const dynamics = useMemo(() => {
@@ -182,7 +222,7 @@ export default function LeadsGeneralReportPage() {
                     <tr key={lead.id} className="border-b border-[color:var(--workspace-row-border)]">
                       <td className="px-2 py-2 text-[color:var(--workspace-text)]">{lead.name ?? lead.id}</td>
                       <td className="px-2 py-2 text-[color:var(--workspace-text-muted)]">{SOURCE_LABELS[lead.source]}</td>
-                      <td className="px-2 py-2 text-[color:var(--workspace-text-muted)]">{STAGE_NAME_BY_ID[lead.stageId] ?? lead.stageId}</td>
+                      <td className="px-2 py-2 text-[color:var(--workspace-text-muted)]">{stageNameById[lead.stageId] ?? lead.stageId}</td>
                       <td className="px-2 py-2 text-[color:var(--workspace-text-muted)]">
                         {lead.managerId ? (managerById[lead.managerId]?.name ?? lead.managerId) : 'Не назначен'}
                       </td>
