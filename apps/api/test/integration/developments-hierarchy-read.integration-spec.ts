@@ -246,4 +246,82 @@ describe('DevelopmentsService — read hierarchy integration (real MongoDB)', ()
       await expect(developmentsService.listFloorPlansForBuilding(buildingA._id, orgB)).rejects.toThrow();
     });
   });
+
+  /**
+   * BOOK-002: listUnitIdsForBuilding/listUnitIdsForDevelopment — единственная
+   * причина существования этих двух методов — GET /bookings developmentId/
+   * buildingId фильтры (см. BookingsService.listBookings). Реальная БД, не
+   * мок — то же обоснование, что остальные describe-блоки этого файла:
+   * organizationId-изоляция должна реально работать через настоящую БД.
+   */
+  describe('listUnitIdsForBuilding / listUnitIdsForDevelopment (BOOK-002)', () => {
+    it('building чужой организации → безопасный 404 при listUnitIdsForBuilding', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      const { building: buildingA } = await seedFullHierarchy(orgA);
+
+      await expect(developmentsService.listUnitIdsForBuilding(buildingA._id, orgB)).rejects.toThrow();
+    });
+
+    it('возвращает все unitId данного building своей организации, но не unitId другого building', async () => {
+      const orgA = new Types.ObjectId();
+      const { building, floor, unit } = await seedFullHierarchy(orgA);
+      const secondUnitSameBuilding = await unitRepository.create({
+        buildingId: building._id,
+        floorId: floor._id,
+        organizationId: orgA,
+        number: '2',
+        kind: 'apartment',
+        area: 30,
+        price: { amountMinorUnits: 5_000_000, currency: 'USD' },
+      });
+      // unit из ДРУГОЙ иерархии (свой building) — не должен попасть в результат.
+      await seedFullHierarchy(orgA);
+
+      const result = await developmentsService.listUnitIdsForBuilding(building._id, orgA);
+
+      expect(result.map((id) => id.toString()).sort()).toEqual(
+        [unit._id.toString(), secondUnitSameBuilding._id.toString()].sort(),
+      );
+    });
+
+    it('development чужой организации → безопасный 404 при listUnitIdsForDevelopment', async () => {
+      const orgA = new Types.ObjectId();
+      const orgB = new Types.ObjectId();
+      const { development: developmentA } = await seedFullHierarchy(orgA);
+
+      await expect(developmentsService.listUnitIdsForDevelopment(developmentA._id, orgB)).rejects.toThrow();
+    });
+
+    it('возвращает unitId всех buildings данного development (несколько корпусов)', async () => {
+      const orgA = new Types.ObjectId();
+      const { development, unit: unitInFirstBuilding } = await seedFullHierarchy(orgA);
+      const secondBuilding = await buildingRepository.create({
+        developmentId: development._id,
+        organizationId: orgA,
+        name: 'Корпус 2',
+        floorsCount: 3,
+      });
+      const secondFloor = await floorRepository.create({
+        buildingId: secondBuilding._id,
+        organizationId: orgA,
+        floorNumber: 1,
+      });
+      const unitInSecondBuilding = await unitRepository.create({
+        buildingId: secondBuilding._id,
+        floorId: secondFloor._id,
+        organizationId: orgA,
+        number: '1',
+        kind: 'apartment',
+        area: 45,
+        price: { amountMinorUnits: 8_000_000, currency: 'USD' },
+      });
+
+      const result = await developmentsService.listUnitIdsForDevelopment(development._id, orgA);
+
+      expect(result.map((id) => id.toString()).sort()).toEqual(
+        [unitInFirstBuilding._id.toString(), unitInSecondBuilding._id.toString()].sort(),
+      );
+    });
+  });
 });

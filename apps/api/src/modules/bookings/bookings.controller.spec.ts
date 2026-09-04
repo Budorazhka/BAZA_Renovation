@@ -228,3 +228,64 @@ describe('BookingsController.extendBooking', () => {
     expect(result).toMatchObject({ id: bookingId.toString(), status: 'booked' });
   });
 });
+
+describe('BookingsController.listBookings', () => {
+  it('передаёт разобранные ObjectId-фильтры и organization-scope (ownerFilterForAction undefined) в сервис', async () => {
+    const developmentId = new Types.ObjectId();
+    const buildingId = new Types.ObjectId();
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const service = { listBookings: listSpy } as unknown as BookingsService;
+    const idempotency = {} as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator(['organization']));
+
+    const result = await controller.listBookings(makeRequest(), {
+      developmentId: developmentId.toString(),
+      buildingId: buildingId.toString(),
+      status: 'pending',
+      limit: 20,
+    });
+
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        developmentId,
+        buildingId,
+        unitId: undefined,
+        status: 'pending',
+        managerPositionId: undefined,
+        cursor: undefined,
+        limit: 20,
+      }),
+    );
+    expect(result).toEqual({ items: [], nextCursor: null });
+  });
+
+  it('own scope — ownerFilterForAction сужает до вызывающей Position (managerPositionId)', async () => {
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const service = { listBookings: listSpy } as unknown as BookingsService;
+    const idempotency = {} as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator(['own']));
+    const req = makeRequest() as unknown as { tenantContext: { positionId: string } };
+
+    await controller.listBookings(req as never, { limit: 20 });
+
+    expect(listSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ managerPositionId: new Types.ObjectId(req.tenantContext.positionId) }),
+    );
+  });
+
+  it('nextCursor — последний _id страницы, только когда items.length === limit', async () => {
+    const lastId = new Types.ObjectId();
+    const listSpy = jest.fn().mockResolvedValue([
+      { _id: new Types.ObjectId(), unitId: new Types.ObjectId(), organizationId: new Types.ObjectId(), manager: new Types.ObjectId(), dateRange: { startsAt: new Date(), expiresAt: new Date() }, status: 'pending', createdAt: new Date() },
+      { _id: lastId, unitId: new Types.ObjectId(), organizationId: new Types.ObjectId(), manager: new Types.ObjectId(), dateRange: { startsAt: new Date(), expiresAt: new Date() }, status: 'pending', createdAt: new Date() },
+    ]);
+    const service = { listBookings: listSpy } as unknown as BookingsService;
+    const idempotency = {} as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator(['organization']));
+
+    const result = await controller.listBookings(makeRequest(), { limit: 2 });
+
+    expect(result.nextCursor).toBe(lastId.toString());
+    expect(result.items).toHaveLength(2);
+  });
+});

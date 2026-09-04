@@ -52,6 +52,40 @@ export class BookingRepository {
       .exec();
   }
 
+  /**
+   * GET /bookings (BOOK-002) — organizationId обязательная часть фильтра
+   * (ADR-002 требование 1), тот же cursor-паттерн, что
+   * DevelopmentRepository.listForOrganization (`_id: {$gt: cursor}`,
+   * `sort({_id:1})`). unitId/unitIds — взаимоисключающие сужения,
+   * вычисленные вызывающим сервисом ДО этого запроса (developmentId/
+   * buildingId уже разрешены в набор unitId) — репозиторий не знает про
+   * Development/Building вообще, только про свою же коллекцию `bookings`.
+   * managerPositionId — own-scope сужение (BookingsController.
+   * ownerFilterForAction), тот же принцип, что confirmIfPending.
+   */
+  async listForOrganization(
+    organizationId: Types.ObjectId,
+    filter: {
+      unitId?: Types.ObjectId;
+      unitIds?: Types.ObjectId[];
+      status?: BookingStatus;
+      managerPositionId?: Types.ObjectId;
+      cursor?: Types.ObjectId;
+      limit: number;
+    },
+  ): Promise<BookingDocument[]> {
+    const query: Record<string, unknown> = { organizationId };
+    if (filter.unitId) {
+      query.unitId = filter.unitId;
+    } else if (filter.unitIds) {
+      query.unitId = { $in: filter.unitIds };
+    }
+    if (filter.status) query.status = filter.status;
+    if (filter.managerPositionId) query.manager = filter.managerPositionId;
+    if (filter.cursor) query._id = { $gt: filter.cursor };
+    return this.model.find(query).sort({ _id: 1 }).limit(filter.limit).exec();
+  }
+
   async create(
     params: {
       unitId: Types.ObjectId;

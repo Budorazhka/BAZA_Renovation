@@ -856,6 +856,40 @@ export class DevelopmentsService {
   }
 
   /**
+   * BOOK-002 (GET /bookings developmentId/buildingId фильтры): Booking
+   * хранит только unitId (schemas/booking.schema.ts), не buildingId/
+   * developmentId напрямую — BookingsService не может отфильтровать по ним
+   * без похода через Development-агрегат. UnitRepository — единственная
+   * точка доступа к коллекции units (ADR-002 требование 2), поэтому
+   * bookings-модуль идёт через этот публичный метод, а не напрямую в
+   * репозиторий (граница модуля, тот же принцип, что
+   * CrmService.getLeadForOrganization в BookingsService.book).
+   * listForBuildings (не listForBuilding) — тот же unbounded-read, что
+   * buildChessboardExport: список нужен целиком для корректной фильтрации,
+   * урезанный лимитом список молча терял бы брони на юнитах, не попавших
+   * в страницу.
+   */
+  async listUnitIdsForBuilding(buildingId: Types.ObjectId, organizationId: Types.ObjectId): Promise<Types.ObjectId[]> {
+    const building = await this.buildingRepository.findByIdForOrganization(buildingId, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    const units = await this.unitRepository.listForBuildings([buildingId], organizationId);
+    return units.map((unit) => unit._id);
+  }
+
+  /** BOOK-002 — тот же принцип, что listUnitIdsForBuilding, для все корпуса ЖК сразу. */
+  async listUnitIdsForDevelopment(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<Types.ObjectId[]> {
+    const buildings = await this.listBuildingsForDevelopment(developmentId, organizationId);
+    const buildingIds = buildings.map((building) => building._id);
+    const units = await this.unitRepository.listForBuildings(buildingIds, organizationId);
+    return units.map((unit) => unit._id);
+  }
+
+  /**
    * chessboard.export: собирает строки шахматки по ВСЕМУ ЖК (все корпуса
    * сразу — владелец подтвердил 31.08.2026: один файл на ЖК, корпус
    * отдельной колонкой). Только kind:'apartment' — паркинги/кладовые/
