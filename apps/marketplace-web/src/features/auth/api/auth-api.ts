@@ -1,4 +1,4 @@
-import { resolveApiBaseUrl } from './api-base'
+import { resolveApiBaseUrl } from '../../publishing/api/api-base'
 
 const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 

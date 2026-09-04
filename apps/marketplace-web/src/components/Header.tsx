@@ -192,9 +192,14 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
           </div>
 
           {/* Cabinet / Auth CTA (Figma 381:7193 [163x44]) */}
+          {/*
+            Кнопка «Войти» вела на /publish — то есть в мастер публикации, где
+            вход был лишь первым шагом. Человек, которому нужен кабинет, попадал
+            в форму размещения объекта. Теперь ведёт на страницу входа.
+          */}
           <Link
             className="header-action header-action--dark figma-header__cabinet-btn"
-            to="/publish"
+            to="/auth/login"
           >
             <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
             <span>Войти</span>

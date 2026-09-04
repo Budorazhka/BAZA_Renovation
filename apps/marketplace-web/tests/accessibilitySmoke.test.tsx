@@ -48,7 +48,9 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
     expect(screen.getByRole('search')).toBeDefined()
     expect(screen.getByRole('contentinfo')).toBeDefined()
     expect(screen.getByText('Перейти к основному содержанию')).toBeDefined()
-    expect(screen.getByRole('link', { name: /Войти/ }).getAttribute('href')).toBe('/publish')
+    // До 04.09.2026 «Войти» вело на /publish: человек, которому нужен кабинет,
+    // попадал в мастер размещения объекта, где вход был лишь первым шагом.
+    expect(screen.getByRole('link', { name: /Войти/ }).getAttribute('href')).toBe('/auth/login')
   })
 
   it('has proper heading hierarchy with h1 and section h2', async () => {

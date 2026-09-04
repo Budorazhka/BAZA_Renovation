@@ -36,6 +36,8 @@ import { SelectionDetailPage } from './pages/SelectionDetailPage'
 import { RequestsPage } from './pages/RequestsPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { AuthPage } from './pages/AuthPage'
+import { RequireAuth } from './features/auth/components/RequireAuth'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -757,12 +759,14 @@ export default function App() {
         <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
         <Route path="/realtors/:id" element={<Shell><RealtorProfilePage /></Shell>} />
         <Route path="/favorites" element={<Shell><FavoritesPage /></Shell>} />
-        <Route path="/account/favorites" element={<Shell><FavoritesPage /></Shell>} />
+        <Route path="/account/favorites" element={<Shell><RequireAuth><FavoritesPage /></RequireAuth></Shell>} />
         <Route path="/selections" element={<Shell><SelectionsPage /></Shell>} />
         <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
         <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
-        <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
-        <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
+        <Route path="/account/properties" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
+        <Route path="/account" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
+        <Route path="/auth/login" element={<Shell><AuthPage mode="login" /></Shell>} />
+        <Route path="/auth/register" element={<Shell><AuthPage mode="register" /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
         {/*
           Неизвестный адрес отдаёт 404, а не главную: иначе битая ссылка выглядит

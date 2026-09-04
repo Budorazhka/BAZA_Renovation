@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { authApi } from '../src/features/publishing/api/auth-api'
+import { authApi } from '../src/features/auth/api/auth-api'
 
 afterEach(() => {
   vi.unstubAllGlobals()

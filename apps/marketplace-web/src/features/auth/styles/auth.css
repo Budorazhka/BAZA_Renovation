@@ -1,0 +1,24 @@
+/*
+ * Обрамление самостоятельной страницы входа (MKT-SCR-013).
+ *
+ * Сама форма использует классы `wizard-*` из publishing.css: разметка намеренно
+ * общая с шагом мастера публикации, чтобы две формы авторизации не разошлись в
+ * валидации и виде. Здесь только то, чего у шага мастера нет — центрирование
+ * карточки на пустой странице.
+ *
+ * Известный долг: примитивы формы (`wizard-field`, `wizard-btn`, `wizard-alert`)
+ * по-прежнему живут в стилях мастера публикации. Разносить их по общим файлам
+ * стоит вместе со сверкой по Figma, а не отдельным проходом.
+ */
+.auth-page-shell {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--space-12) var(--space-5) var(--space-20);
+}
+
+.auth-page {
+  padding: var(--space-8);
+  border: var(--rule) solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper-raised);
+}

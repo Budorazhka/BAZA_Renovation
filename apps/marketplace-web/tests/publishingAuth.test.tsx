@@ -4,9 +4,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { PublishingWizard } from '../src/features/publishing'
-import { authApi } from '../src/features/publishing/api/auth-api'
+import { authApi } from '../src/features/auth/api/auth-api'
 
-vi.mock('../src/features/publishing/api/auth-api', () => ({
+vi.mock('../src/features/auth/api/auth-api', () => ({
   authApi: {
     login: vi.fn(),
     register: vi.fn(),

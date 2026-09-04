@@ -1,5 +1,5 @@
 import React from 'react'
-import { useAuthSession } from '../model/useAuthSession'
+import { useAuthSession } from '../../auth/model/useAuthSession'
 import { usePublishingWizard } from '../model/usePublishingWizard'
 import { AuthStep } from './steps/AuthStep'
 import { LocationStep } from './steps/LocationStep'
