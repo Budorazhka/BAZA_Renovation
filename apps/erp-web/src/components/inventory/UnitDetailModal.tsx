@@ -184,6 +184,10 @@ function UnitDetailModalContent({ onClose, initialData, preferredBuildingId }: O
 
   const selections = useDevSelectionsStore((s) => s.selections)
   const addUnitsToSelection = useDevSelectionsStore((s) => s.addUnits)
+  const fetchSelections = useDevSelectionsStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchSelections()
+  }, [fetchSelections])
   const [selDropOpen, setSelDropOpen] = useState(false)
   const [selAdded, setSelAdded] = useState<string | null>(null)
   const [showCreateSelModal, setShowCreateSelModal] = useState(false)

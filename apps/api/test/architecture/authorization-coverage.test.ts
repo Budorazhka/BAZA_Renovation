@@ -52,6 +52,8 @@ const INTENTIONALLY_UNAUTHORIZED: Record<string, string> = {
   'POST /public/listings/:slug/complaints': 'ADMIN-OPS-001: подача жалобы анонимным посетителем по определению (жалоба сама по себе не даёт прав ни над чем); защищено IpRateLimitGuard',
 
   'GET /leads/stage-definitions': 'справочник стадий воронки по продуктам — статичные метаданные, не данные лидов; под TenantGuard, требует только валидную tenant-сессию, без специального права',
+
+  'GET /public/selections/:token': 'публичный просмотр подборки клиентом по ссылке — анонимный посетитель по определению (нет аутентификации, единственный ключ доступа это сам publicToken, 256 бит энтропии), whitelist-проекция (toPublicDevSelection) не содержит organizationId/внутренних ID',
 };
 
 function listControllers(dir: string): string[] {

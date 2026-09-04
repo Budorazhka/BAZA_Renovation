@@ -1608,6 +1608,295 @@ paths:
           description: Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key
           $ref: '#/components/responses/Error'
 
+  /selections:
+    post:
+      operationId: createSelection
+      summary: >
+        Создать подборку лотов для клиента (dev selections). `dev_selection.create`
+        — own-scope у manager, organization-scope у owner/director/rop/developer.
+        Юнит-существование/принадлежность организации и leadId (если передан)
+        проверяются server-side.
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSelectionRequest'
+      responses:
+        '201':
+          description: Подборка создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — один из unitId или leadId не существует/чужой
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listSelections
+      summary: Список подборок (own-scope у manager сужается до созданных им)
+      tags: [erp-selections]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: {type: string, enum: [draft, sent, viewed, archived]}
+      responses:
+        '200':
+          description: Список подборок
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Selection'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /selections/{id}:
+    get:
+      operationId: getSelection
+      summary: Получить подборку по id
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/SelectionId'
+      responses:
+        '200':
+          description: Подборка
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — не существует/чужая организация/own-scope не совпал
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateSelection
+      summary: Обновить общие поля подборки (title/clientName/clientPhone/agentNote/leadId/customization)
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSelectionRequest'
+      responses:
+        '200':
+          description: Подборка обновлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteSelection
+      summary: Удалить подборку
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+        - name: expectedVersion
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0}
+      responses:
+        '204':
+          description: Подборка удалена
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+
+  /selections/{id}/status:
+    patch:
+      operationId: setSelectionStatus
+      summary: Изменить статус подборки (draft/sent/viewed/archived); переход в sent проставляет sentAt
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, status]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                status: {type: string, enum: [draft, sent, viewed, archived]}
+      responses:
+        '200':
+          description: Статус изменён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+
+  /selections/{id}/items:
+    post:
+      operationId: addSelectionItems
+      summary: Добавить лоты в подборку (дедупликация против уже существующих items)
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion, unitIds]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                unitIds: {type: array, items: {type: string}, minItems: 1}
+      responses:
+        '200':
+          description: Лоты добавлены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — подборка или один из unitId не существует/чужой
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+
+  /selections/{id}/items/{unitId}:
+    patch:
+      operationId: updateSelectionItem
+      summary: Заметка агента и/или реакция клиента на конкретный лот подборки
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+        - name: unitId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedVersion]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                agentNote: {type: string}
+                reaction: {type: string, enum: [liked, disliked, question], nullable: true}
+      responses:
+        '200':
+          description: Лот подборки обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — подборка не найдена/чужая, либо unitId не в этой подборке
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: removeSelectionItem
+      summary: Удалить лот из подборки
+      tags: [erp-selections]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/SelectionId'
+        - name: unitId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: expectedVersion
+          in: query
+          required: false
+          schema: {type: integer, minimum: 0}
+      responses:
+        '200':
+          description: Лот удалён из подборки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Selection'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+
   /public/developments:
     get:
       operationId: searchPublicDevelopments
@@ -5182,6 +5471,35 @@ paths:
           description: RATE_LIMITED
           $ref: '#/components/responses/Error'
 
+  /public/selections/{token}:
+    get:
+      operationId: getPublicSelection
+      summary: >
+        Публичный просмотр подборки клиентом по ссылке. Единственный публичный
+        эндпоинт подборок — единственный ключ доступа это сам `token` (256 бит
+        случайности, не хешируется на диске, см. DevSelectionDocument
+        докстринг). Side-effect: атомарный инкремент viewCount, lastOpenedAt,
+        и переход status sent->viewed при первом открытии. Проекция
+        whitelist-only (не включает organizationId/createdByPositionId/leadId/
+        publicToken/version).
+      tags: [public-selections]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Публичная проекция подборки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSelection'
+        '404':
+          description: NOT_FOUND — токен не существует
+          $ref: '#/components/responses/Error'
+
   /admin/complaints:
     get:
       operationId: adminListComplaints
@@ -5301,6 +5619,11 @@ components:
       schema: {type: string}
     BookingId:
       name: bookingId
+      in: path
+      required: true
+      schema: {type: string}
+    SelectionId:
+      name: id
       in: path
       required: true
       schema: {type: string}
@@ -5522,6 +5845,104 @@ components:
         discountPercent: {type: number}
         description: {type: string}
         sortOrder: {type: integer}
+
+    SelectionItem:
+      type: object
+      required: [unitId]
+      properties:
+        unitId: {type: string}
+        agentNote: {type: string, nullable: true}
+        reaction: {type: string, enum: [liked, disliked, question], nullable: true}
+        viewedAt: {type: string, format: date-time, nullable: true}
+
+    Selection:
+      type: object
+      required:
+        - id
+        - organizationId
+        - createdByPositionId
+        - publicToken
+        - title
+        - status
+        - items
+        - createdAt
+        - updatedAt
+        - viewCount
+        - version
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        createdByPositionId: {type: string}
+        publicToken: {type: string}
+        title: {type: string}
+        leadId: {type: string, nullable: true}
+        clientName: {type: string, nullable: true}
+        clientPhone: {type: string, nullable: true}
+        agentNote: {type: string, nullable: true}
+        status: {type: string, enum: [draft, sent, viewed, archived]}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionItem'
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        sentAt: {type: string, format: date-time, nullable: true}
+        lastOpenedAt: {type: string, format: date-time, nullable: true}
+        viewCount: {type: integer}
+        customization:
+          type: object
+          additionalProperties: true
+          nullable: true
+        version: {type: integer}
+
+    CreateSelectionRequest:
+      type: object
+      required: [title, unitIds]
+      properties:
+        title: {type: string}
+        unitIds: {type: array, items: {type: string}, minItems: 1}
+        leadId: {type: string}
+        clientName: {type: string}
+        clientPhone: {type: string}
+        agentNote: {type: string}
+        customization:
+          type: object
+          additionalProperties: true
+
+    UpdateSelectionRequest:
+      type: object
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        title: {type: string}
+        leadId: {type: string}
+        clientName: {type: string}
+        clientPhone: {type: string}
+        agentNote: {type: string}
+        customization:
+          type: object
+          additionalProperties: true
+
+    PublicSelection:
+      type: object
+      required: [title, status, items, createdAt, viewCount]
+      properties:
+        title: {type: string}
+        clientName: {type: string, nullable: true}
+        clientPhone: {type: string, nullable: true}
+        agentNote: {type: string, nullable: true}
+        status: {type: string, enum: [draft, sent, viewed, archived]}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionItem'
+        createdAt: {type: string, format: date-time}
+        sentAt: {type: string, format: date-time, nullable: true}
+        viewCount: {type: integer}
+        customization:
+          type: object
+          additionalProperties: true
+          nullable: true
 
     CreateBuildingRequest:
       type: object
