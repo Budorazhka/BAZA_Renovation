@@ -20,7 +20,7 @@ export interface PropertyAssetMediaViewItem {
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
-import { PropertyAssetRepository, ListingRepository } from '@baza/property-assets';
+import { PropertyAssetRepository, ListingRepository, ListingRevisionRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import type { Currency } from '@baza/contracts';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -60,6 +60,7 @@ export class MarketplacePropertyAssetsService {
   constructor(
     private readonly propertyAssetRepository: PropertyAssetRepository,
     private readonly listingRepository: ListingRepository,
+    private readonly listingRevisionRepository: ListingRevisionRepository,
     private readonly publicationService: PublicationService,
     private readonly publicationRepository: MarketplacePublicationRepository,
     private readonly idempotencyService: IdempotencyService,
@@ -709,6 +710,26 @@ export class MarketplacePropertyAssetsService {
       }
 
       const updated = await this.listingRepository.findByIdForIdentity(params.listingId, params.identityId);
+      const updatedAsset = await this.propertyAssetRepository.findByIdForIdentity(params.assetId, params.identityId);
+
+      // Журнал версий вёлся только для объектов организаций: у маркетплейса
+      // править было нечего, пока не появилось это редактирование. Снимок
+      // берётся после записи, иначе в истории осталось бы состояние «до».
+      await this.listingRevisionRepository.record(
+        {
+          propertyAssetId: params.assetId,
+          listingId: params.listingId,
+          publisherScope: (updatedAsset ?? asset).publisherScope,
+          actor: { type: 'identity', id: params.identityId },
+          changeType: 'listing_updated',
+          price: updated?.price,
+          status: updated?.status,
+          characteristics: (updatedAsset ?? asset).characteristics,
+          mediaKeys: ((updatedAsset ?? asset).media || []).map((m) => m.mediaAssetId.toString()),
+        },
+        session,
+      );
+
       return { listing: updated, rebuildRequested: needsRebuild };
     });
   }

@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { MarketplacePropertyAssetsService } from './marketplace-property-assets.service';
-import type { PropertyAssetRepository, ListingRepository } from '@baza/property-assets';
+import type { PropertyAssetRepository, ListingRepository, ListingRevisionRepository } from '@baza/property-assets';
 import type { PublicationService } from '../publication/publication.service';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
@@ -34,6 +34,7 @@ function makeMockConnection() {
 function makeService(overrides: {
   propertyAssetRepository?: Partial<PropertyAssetRepository>;
   listingRepository?: Partial<ListingRepository>;
+  listingRevisionRepository?: Partial<ListingRevisionRepository>;
   publicationService?: Partial<PublicationService>;
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
@@ -43,6 +44,7 @@ function makeService(overrides: {
   return new MarketplacePropertyAssetsService(
     (overrides.propertyAssetRepository ?? {}) as PropertyAssetRepository,
     (overrides.listingRepository ?? {}) as ListingRepository,
+    (overrides.listingRevisionRepository ?? { record: jest.fn().mockResolvedValue(undefined) }) as unknown as ListingRevisionRepository,
     (overrides.publicationService ?? {}) as PublicationService,
     (overrides.publicationRepository ?? { findBySource: jest.fn().mockResolvedValue(null) }) as MarketplacePublicationRepository,
     // MKT-002-IDEMP-RACE-001: awaitReplay по умолчанию null, см. тот же
@@ -275,6 +277,7 @@ describe('MarketplacePropertyAssetsService', () => {
             .mockResolvedValue(publicationStatus ? { status: publicationStatus } : null),
         },
         publicationService: { requestPublication: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+        listingRevisionRepository: { record: jest.fn().mockResolvedValue(undefined) },
       };
     }
 
@@ -293,6 +296,46 @@ describe('MarketplacePropertyAssetsService', () => {
       expect(repos.listingRepository.updatePriceForIdentity).toHaveBeenCalled();
       expect(repos.publicationService.requestPublication).toHaveBeenCalled();
       expect(result.rebuildRequested).toBe(true);
+    });
+
+    it('правка попадает в журнал версий снимком состояния ПОСЛЕ записи', async () => {
+      const repos = makeRepos('published');
+      // Репозитории отдают состояние «после»: сервис перечитывает объект и
+      // объявление в конце транзакции, и в журнал должно уйти именно оно.
+      repos.propertyAssetRepository.findByIdForIdentity = jest.fn().mockResolvedValue({
+        _id: assetId,
+        version: 4,
+        characteristics: { area: 61, rooms: 3 },
+        publisherScope: { type: 'marketplace_account', identityId },
+        media: [],
+      });
+      repos.listingRepository.findByIdForIdentity = jest.fn().mockResolvedValue({
+        _id: listingId,
+        propertyAssetId: assetId,
+        version: 8,
+        status: 'active',
+        price: { amountMinorUnits: 9_000_00, currency: 'USD' },
+      });
+      const service = makeService(repos as never);
+
+      await service.updateListing({
+        assetId,
+        listingId,
+        identityId,
+        correlationId: 'corr-revision',
+        price: { amountMinorUnits: 9_000_00, currency: 'USD' },
+        characteristics: { area: 61, rooms: 3 },
+      });
+
+      expect(repos.listingRevisionRepository.record).toHaveBeenCalledTimes(1);
+      const [entry] = repos.listingRevisionRepository.record.mock.calls[0];
+      expect(entry.changeType).toBe('listing_updated');
+      expect(entry.propertyAssetId).toBe(assetId);
+      expect(entry.listingId).toBe(listingId);
+      expect(entry.actor).toEqual({ type: 'identity', id: identityId });
+      expect(entry.price).toEqual({ amountMinorUnits: 9_000_00, currency: 'USD' });
+      expect(entry.characteristics).toEqual({ area: 61, rooms: 3 });
+      expect(entry.publisherScope).toEqual({ type: 'marketplace_account', identityId });
     });
 
     it('правка черновика публикацию не трогает', async () => {
