@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { teamApi } from '@/services/teamApi'
 import { developersApi } from '@/services/developersApi'
-import { platformAuthApi } from '@/services/platformAuthApi'
+import { platformAuthApi, type PlatformMeResponse } from '@/services/platformAuthApi'
 import type { CurrentUser } from '@/types/auth'
 import type { AccountType, UserRole } from '@/types/auth'
 import { ROLE_LABEL, ACCOUNT_TYPE_LABEL } from '@/lib/permissions'
@@ -146,6 +146,37 @@ export const MOCK_USERS: (CurrentUser & { password: string })[] = [
   },
 ]
 
+/**
+ * Серверный контекст сессии (GET /me) → поля CurrentUser.
+ *
+ * Это единственный авторитетный источник организации, позиции и прав: сервер
+ * выводит их из cookie-сессии, клиент подменить не может. Всё, чего в /me нет
+ * (телефон, «о себе», соцсети), по-прежнему приходит из team-users — там оно и
+ * живёт.
+ *
+ * FixedRole на бэке ('owner' | 'director' | 'rop' | 'manager' |
+ * 'administrator' | 'marketer' | 'developer') — подмножество UserRole, поэтому
+ * приведение безопасно: каждое серверное значение существует в клиентском
+ * типе. Обратное неверно, и роли вроде 'lawyer' или 'finance' сервер вернуть
+ * не может — они остаются достижимы только в демо-входе.
+ */
+function patchFromMe(me: PlatformMeResponse): Partial<CurrentUser> {
+  const role = me.position.role as UserRole
+  return {
+    id: me.position.id,
+    name: me.position.displayName,
+    login: me.identity.login,
+    role,
+    accountType: me.organization.type === 'developer' ? 'developer' : 'agency',
+    organizationType: me.organization.type,
+    companyId: me.organization.id,
+    companyName: me.organization.name,
+    positionId: me.position.id,
+    avatarUrl: me.position.avatarUrl,
+    serverPermissions: me.permissions,
+  }
+}
+
 export type LoginResult = 'ok' | 'blocked' | 'invalid'
 
 interface AuthContextValue {
@@ -208,6 +239,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (MOCK_USERS.some((u) => u.id === currentUser.id)) return
 
     let cancelled = false
+
+    // Восстановление сессии после перезагрузки страницы. Раньше контекст
+    // собирался из трёх эндпоинтов team-users/developers, и роль с
+    // организацией зависели от того, какой из них ответил. Теперь сервер
+    // отдаёт это одним вызовом.
+    void platformAuthApi
+      .me()
+      .then((me) => {
+        if (cancelled) return
+        setCurrentUser((prev) => (prev ? { ...prev, ...patchFromMe(me) } : prev))
+      })
+      .catch((error: unknown) => {
+        // 401 здесь означает, что cookie-сессии больше нет (истекла, отозвана,
+        // разлогин в другой вкладке). Локальный кэш в этом случае — обещание
+        // доступа, которого нет: любой запрос данных всё равно получит 401, но
+        // пользователь до первого такого запроса видит рабочий интерфейс.
+        console.warn('[Auth] GET /me недоступен — контекст сессии остаётся из кэша:', error)
+      })
+
     void teamApi
       .ensureSelf()
       .then((user) => {
@@ -228,18 +278,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // только из реального логина. Не даём team-users (в т.ч. мок-данным при
         // USE_MOCK_TEAM) перезаписать developer другой ролью — иначе теряется
         // доступ к разделу «Девелопмент».
-        setCurrentUser((prev) =>
-          prev
-            ? {
+        setCurrentUser((prev) => {
+          if (!prev) return prev
+          // Ответы /me и ensureSelf приходят в непредсказуемом порядке. Признак
+          // «/me уже ответил» — заполненный serverPermissions: он появляется
+          // только из серверного контекста сессии. В этом случае поля, которыми
+          // владеет /me (кто вошёл, какая позиция, какая организация), не
+          // перезаписываются анкетой team-users — иначе роль пользователя
+          // зависела бы от гонки двух запросов.
+          const meWon = prev.serverPermissions !== undefined
+          return {
                 ...prev,
-                id: user.id,
-                name: user.name ?? prev.name,
-                role: prev.role === 'developer' ? 'developer' : (teamUserRole ?? prev.role),
-                accountType: teamUserRole === 'developer' ? 'developer' : prev.accountType,
+                id: meWon ? prev.id : user.id,
+                name: meWon ? prev.name : (user.name ?? prev.name),
+                role: meWon ? prev.role : prev.role === 'developer' ? 'developer' : (teamUserRole ?? prev.role),
+                accountType: meWon
+                  ? prev.accountType
+                  : teamUserRole === 'developer'
+                    ? 'developer'
+                    : prev.accountType,
                 // null (позиция ещё не занята / ensure-team не успел) не затирает
                 // уже известную team-роль — например, засеянный owner.
                 teamRole: (user.teamRole as UserRole | undefined) ?? prev.teamRole,
-                positionId: user.positionId ?? prev.positionId,
+                positionId: meWon ? prev.positionId : (user.positionId ?? prev.positionId),
                 position: user.position ?? prev.position,
                 phone: user.phone ?? prev.phone,
                 telegram: user.telegram ?? prev.telegram,
@@ -255,27 +316,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 website: user.website ?? prev.website,
                 avatarUrl: user.avatarUrl ?? prev.avatarUrl,
                 permissionOverrides: user.permissionOverrides ?? prev.permissionOverrides,
-              }
-            : prev,
-        )
+          }
+        })
       })
       .catch(() => {
         /* team-users недоступен или id не team_user — оставляем кэш сессии */
       })
 
-    // Автопровижининг команды владельца: create-or-return команды с дефолтной
-    // оргструктурой. Гейт по isOwner из JWT на бэке — для не-владельцев вернётся
-    // null, ничего не создаётся. Реальный teamId уходит в companyId, откуда его
-    // берёт teamApi.list() (см. docs/tracking/teams-tracker.md §5).
-    void teamApi
-      .ensureTeam()
-      .then((team) => {
-        if (cancelled || !team?.teamId) return
-        setCurrentUser((prev) => (prev ? { ...prev, companyId: team.teamId } : prev))
-      })
-      .catch(() => {
-        /* эндпоинт ещё не задеплоен или недоступен — оставляем companyId из кэша */
-      })
+    // Вызов teamApi.ensureTeam() убран отсюда 04.09.2026. Он существовал ради
+    // одного поля — companyId, — а на этом backend'е endpoint давно стал
+    // идемпотентным no-op и возвращал ровно tenantContext.organizationId (см.
+    // докстринг TeamController.ensureTeam). Ту же величину /me отдаёт как
+    // organization.id в том же ответе, где приходят роль и права. Автосоздание
+    // команды, ради которого endpoint задумывался, здесь происходит атомарно
+    // при создании организации, а не после логина.
 
     // Реальный API застройщиков: create-or-return записи текущего пользователя.
     // Для ролей ≠ developer без записи вернётся null — безопасно звать всегда.
@@ -383,11 +437,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // это было безопасно случайно — сейчас USE_MOCK_TEAM_READ=false и
         // ensureSelf() делает реальный HTTP-запрос, который может упасть или
         // вернуть null (TeamController.ensureSelf честно может отдать null).
+        // GET /me — авторитетный контекст сессии (организация, позиция, права).
+        // Идёт параллельно с ensureSelf: у них разные зоны ответственности и
+        // разные последствия отказа. /me решает, КТО вошёл и куда ему можно;
+        // ensureSelf добавляет к этому анкету (телефон, соцсети, «о себе»).
+        let me: PlatformMeResponse | null = null
         let teamUser: Awaited<ReturnType<typeof teamApi.ensureSelf>> = null
-        try {
-          teamUser = await teamApi.ensureSelf()
-        } catch (error) {
-          console.error('[Auth] ensureSelf failed after successful login — proceeding with minimal profile:', error)
+        const [meResult, teamUserResult] = await Promise.allSettled([
+          platformAuthApi.me(),
+          teamApi.ensureSelf(),
+        ])
+        if (meResult.status === 'fulfilled') {
+          me = meResult.value
+        } else {
+          console.error('[Auth] GET /me failed after successful login:', meResult.reason)
+        }
+        if (teamUserResult.status === 'fulfilled') {
+          teamUser = teamUserResult.value
+        } else {
+          console.error(
+            '[Auth] ensureSelf failed after successful login — proceeding with minimal profile:',
+            teamUserResult.reason,
+          )
         }
 
         // null — валидная, не error-сессия (см. ensureSelf() докстринг): собираем
@@ -406,7 +477,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           accountType,
           teamRole: teamUser?.teamRole as UserRole | undefined,
           positionId: teamUser?.positionId,
-          companyId: teamUser?.teamId || 'c1',
+          // 'c1' — идентификатор мок-компании Estate Group. Он оставался
+          // запасным вариантом для РЕАЛЬНОГО пользователя: при недоступном
+          // team-users человек молча оказывался в скоупе демо-организации.
+          // Теперь запасной вариант — пустая строка: без организации UI
+          // покажет пустое состояние, а не чужие данные.
+          companyId: teamUser?.teamId || '',
           companyName: teamUser?.name || identityId,
           avatarUrl: teamUser?.avatarUrl,
           position: teamUser?.position,
@@ -425,7 +501,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           permissionOverrides: teamUser?.permissionOverrides ?? {},
         }
 
-        setCurrentUser(mappedUser)
+        // /me поверх анкеты, а не наоборот: организация, позиция, роль и права
+        // берутся у сервера, даже если team-users ответил иначе или не ответил
+        // вовсе.
+        setCurrentUser(me ? { ...mappedUser, ...patchFromMe(me) } : mappedUser)
         return 'ok'
       }
     } catch (error) {

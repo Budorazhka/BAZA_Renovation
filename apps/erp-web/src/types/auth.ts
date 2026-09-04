@@ -53,6 +53,19 @@ export type DataScope = 'own' | 'team' | 'branch' | 'project' | 'assigned' | 'al
 /** Тип бизнес-аккаунта: четыре версии продукта — один вход, разные кабинеты */
 export type AccountType = 'agency' | 'developer' | 'realtor' | 'internal'
 
+/**
+ * Один активный PermissionGrant позиции, как его отдаёт GET /api/v1/me.
+ * Серверная правда о правах: считается по PermissionGrant'ам позиции, а не
+ * выводится на клиенте из ROLE_PERMISSIONS (та матрица остаётся для мок- и
+ * демо-сессий, у которых сервера за спиной нет).
+ */
+export interface ServerPermission {
+  resource: string
+  action: string
+  scope: string
+  scopeValue?: string
+}
+
 /** Текущий авторизованный пользователь */
 export interface CurrentUser {
   id: string
@@ -90,6 +103,17 @@ export interface CurrentUser {
   website?: string
   /** Персональные overrides категорий доступа (из team_users). */
   permissionOverrides?: Record<string, string>
+  /**
+   * Тип организации из GET /me: 'agency' | 'developer' и т.д. Серверное
+   * значение, а не догадка по роли пользователя.
+   */
+  organizationType?: string
+  /**
+   * Активные права позиции из GET /me. Заполнено только у реальной серверной
+   * сессии; у мок- и демо-входа отсутствует — по этому признаку код и отличает
+   * «прав нет» от «сервера не спрашивали».
+   */
+  serverPermissions?: ServerPermission[]
   /** Верификация в MLS-круге BAZA.sale — отдельно от ролевого доступа к publish_mls. */
   mlsCircleVerified?: boolean
 }
