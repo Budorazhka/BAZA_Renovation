@@ -3,9 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { MongooseModule, getConnectionToken } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
+import { DevelopmentRepository } from '@baza/development';
 import { BookingsModule } from '../../src/modules/bookings/bookings.module';
 import { BookingsService } from '../../src/modules/bookings/bookings.service';
 import { UnitRepository } from '../../src/modules/developments/repository/unit.repository';
+import { BuildingRepository } from '../../src/modules/developments/repository/building.repository';
+import { FloorRepository } from '../../src/modules/developments/repository/floor.repository';
 
 describe('BOOK-001 atomic booking (real MongoDB transaction)', () => {
   let replSet: MongoMemoryReplSet;
@@ -576,5 +579,231 @@ describe('BOOK-001 follow-up: extendBooking (real MongoDB transaction)', () => {
         correlationId: 'booking-integration',
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+});
+
+describe('BOOK-002 listBookings (real MongoDB)', () => {
+  let replSet: MongoMemoryReplSet;
+  let connection: Connection;
+  let bookingsService: BookingsService;
+  let unitRepository: UnitRepository;
+  let buildingRepository: BuildingRepository;
+  let floorRepository: FloorRepository;
+  let developmentRepository: DevelopmentRepository;
+
+  beforeAll(async () => {
+    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    await replSet.waitUntilRunning();
+
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(replSet.getUri()), BookingsModule],
+    }).compile();
+
+    connection = moduleRef.get<Connection>(getConnectionToken());
+    bookingsService = moduleRef.get(BookingsService);
+    unitRepository = moduleRef.get(UnitRepository);
+    buildingRepository = moduleRef.get(BuildingRepository);
+    floorRepository = moduleRef.get(FloorRepository);
+    developmentRepository = moduleRef.get(DevelopmentRepository);
+  }, 120_000);
+
+  afterAll(async () => {
+    await connection?.close();
+    await replSet?.stop();
+  });
+
+  afterEach(async () => {
+    for (const collection of [
+      'bookings',
+      'booking_locks',
+      'outbox_events',
+      'idempotency_records',
+      'audit_events',
+      'units',
+      'buildings',
+      'developments',
+      'floors',
+    ]) {
+      await connection.collection(collection).deleteMany({});
+    }
+  });
+
+  async function seedUnit(organizationId: Types.ObjectId, developmentId?: Types.ObjectId) {
+    const development =
+      developmentId !== undefined
+        ? undefined
+        : await developmentRepository.create({
+            organizationId,
+            name: 'ЖК BOOK-002',
+            location: { country: 'Georgia', city: 'Batumi', geo: { type: 'Point', coordinates: [41.6, 41.6] } },
+            contact: { phone: '+995500000000' },
+          });
+    const building = await buildingRepository.create({
+      developmentId: developmentId ?? development!._id,
+      organizationId,
+      name: 'Корпус BOOK-002',
+      floorsCount: 5,
+    });
+    const floor = await floorRepository.create({ buildingId: building._id, organizationId, floorNumber: 1 });
+    const unit = await unitRepository.create({
+      buildingId: building._id,
+      floorId: floor._id,
+      organizationId,
+      number: '1',
+      kind: 'apartment',
+      area: 40,
+      price: { amountMinorUnits: 10_000_000, currency: 'USD' },
+    });
+    return { development: development ?? { _id: developmentId! }, building, unit };
+  }
+
+  async function bookUnit(
+    organizationId: Types.ObjectId,
+    unitId: Types.ObjectId,
+    managerPositionId: Types.ObjectId,
+    idempotencyKey: string,
+  ) {
+    const booking = await bookingsService.book({
+      unitId,
+      organizationId,
+      managerPositionId,
+      actorIdentityId: new Types.ObjectId(),
+      startsAt: new Date('2026-09-01T10:00:00.000Z'),
+      expiresAt: new Date('2026-09-01T12:00:00.000Z'),
+      idempotencyKey,
+      correlationId: 'booking-list-integration',
+    });
+    if (!('_id' in booking)) throw new Error('expected a real booking, not a replay');
+    return booking;
+  }
+
+  it('изолирует брони по organizationId — tenant A не видит брони tenant B', async () => {
+    const orgA = new Types.ObjectId();
+    const orgB = new Types.ObjectId();
+    const { unit: unitA } = await seedUnit(orgA);
+    const { unit: unitB } = await seedUnit(orgB);
+    await bookUnit(orgA, unitA._id, new Types.ObjectId(), 'list-key-a');
+    await bookUnit(orgB, unitB._id, new Types.ObjectId(), 'list-key-b');
+
+    const resultA = await bookingsService.listBookings({ organizationId: orgA, limit: 20 });
+
+    expect(resultA).toHaveLength(1);
+    expect(resultA[0]!.unitId.toString()).toBe(unitA._id.toString());
+  });
+
+  it('unitId — сужает точно до одного юнита (чужой unitId → BOOKING по нему не найден в результате)', async () => {
+    const organizationId = new Types.ObjectId();
+    const { unit: unitA } = await seedUnit(organizationId);
+    const { unit: unitB } = await seedUnit(organizationId);
+    await bookUnit(organizationId, unitA._id, new Types.ObjectId(), 'list-key-c');
+    await bookUnit(organizationId, unitB._id, new Types.ObjectId(), 'list-key-d');
+
+    const result = await bookingsService.listBookings({ organizationId, unitId: unitA._id, limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.unitId.toString()).toBe(unitA._id.toString());
+  });
+
+  it('unitId чужой организации → безопасный 404, не утечка чужого юнита (тот же принцип, что getUnitForOrganization)', async () => {
+    const organizationId = new Types.ObjectId();
+    const { unit } = await seedUnit(new Types.ObjectId());
+
+    await expect(
+      bookingsService.listBookings({ organizationId, unitId: unit._id, limit: 20 }),
+    ).rejects.toThrow();
+  });
+
+  it('buildingId — резолвит все unitId этого building и фильтрует брони по ним', async () => {
+    const organizationId = new Types.ObjectId();
+    const { building, unit: unitInBuilding } = await seedUnit(organizationId);
+    const { unit: unitInOtherBuilding } = await seedUnit(organizationId);
+    await bookUnit(organizationId, unitInBuilding._id, new Types.ObjectId(), 'list-key-e');
+    await bookUnit(organizationId, unitInOtherBuilding._id, new Types.ObjectId(), 'list-key-f');
+
+    const result = await bookingsService.listBookings({ organizationId, buildingId: building._id, limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.unitId.toString()).toBe(unitInBuilding._id.toString());
+  });
+
+  it('developmentId — резолвит unitId всех buildings этого ЖК (несколько корпусов)', async () => {
+    const organizationId = new Types.ObjectId();
+    const { development, unit: unitInFirstBuilding } = await seedUnit(organizationId);
+    const { unit: unitInSecondBuilding } = await seedUnit(organizationId, development._id);
+    const { unit: unitInOtherDevelopment } = await seedUnit(organizationId);
+    await bookUnit(organizationId, unitInFirstBuilding._id, new Types.ObjectId(), 'list-key-g');
+    await bookUnit(organizationId, unitInSecondBuilding._id, new Types.ObjectId(), 'list-key-h');
+    await bookUnit(organizationId, unitInOtherDevelopment._id, new Types.ObjectId(), 'list-key-i');
+
+    const result = await bookingsService.listBookings({ organizationId, developmentId: development._id, limit: 20 });
+
+    expect(result.map((b) => b.unitId.toString()).sort()).toEqual(
+      [unitInFirstBuilding._id.toString(), unitInSecondBuilding._id.toString()].sort(),
+    );
+  });
+
+  it('status — фильтрует по статусу брони', async () => {
+    const organizationId = new Types.ObjectId();
+    const { unit: unitA } = await seedUnit(organizationId);
+    const { unit: unitB } = await seedUnit(organizationId);
+    const bookingA = await bookUnit(organizationId, unitA._id, new Types.ObjectId(), 'list-key-j');
+    await bookUnit(organizationId, unitB._id, new Types.ObjectId(), 'list-key-k');
+    await bookingsService.cancelBooking({
+      bookingId: bookingA._id,
+      organizationId,
+      actorIdentityId: new Types.ObjectId(),
+      idempotencyKey: 'list-cancel-a',
+      correlationId: 'booking-list-integration',
+    });
+
+    const result = await bookingsService.listBookings({ organizationId, status: 'rejected', limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.unitId.toString()).toBe(unitA._id.toString());
+  });
+
+  it('managerPositionId (own-scope) — сужает до броней конкретной Position', async () => {
+    const organizationId = new Types.ObjectId();
+    const managerA = new Types.ObjectId();
+    const managerB = new Types.ObjectId();
+    const { unit: unitA } = await seedUnit(organizationId);
+    const { unit: unitB } = await seedUnit(organizationId);
+    await bookUnit(organizationId, unitA._id, managerA, 'list-key-l');
+    await bookUnit(organizationId, unitB._id, managerB, 'list-key-m');
+
+    const result = await bookingsService.listBookings({ organizationId, managerPositionId: managerA, limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.manager.toString()).toBe(managerA.toString());
+  });
+
+  it('cursor-пагинация — сортировка по _id, cursor исключает уже прочитанные', async () => {
+    const organizationId = new Types.ObjectId();
+    const { unit } = await seedUnit(organizationId);
+    const bookingIds: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const { unit: iterationUnit } = await seedUnit(organizationId);
+      const booking = await bookUnit(organizationId, i === 0 ? unit._id : iterationUnit._id, new Types.ObjectId(), `list-key-page-${i}`);
+      bookingIds.push(booking._id.toString());
+    }
+    bookingIds.sort();
+
+    const firstPage = await bookingsService.listBookings({ organizationId, limit: 2 });
+    expect(firstPage).toHaveLength(2);
+    expect(firstPage.map((b) => b._id.toString())).toEqual(bookingIds.slice(0, 2));
+
+    const secondPage = await bookingsService.listBookings({
+      organizationId,
+      cursor: firstPage[firstPage.length - 1]!._id,
+      limit: 2,
+    });
+    expect(secondPage.map((b) => b._id.toString())).toEqual(bookingIds.slice(2));
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
 import { AppException } from '../../shared/errors/app-exception';
@@ -13,6 +13,7 @@ import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe'
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { ExtendBookingDto } from './dto/extend-booking.dto';
+import { ListBookingsQueryDto } from './dto/list-bookings.dto';
 import { BookingsService, toBookingResponse } from './bookings.service';
 
 @Controller()
@@ -230,6 +231,35 @@ export class BookingsController {
 
     reply.status(200);
     return toBookingResponse(result);
+  }
+
+  /**
+   * BOOK-002: GET /bookings — единственный не-idempotency-gated эндпоинт
+   * этого контроллера (read, не мутирует ничего, Idempotency-Key ему не
+   * нужен). developmentId/buildingId/unitId — опциональные, взаимно
+   * приоритетные фильтры (см. BookingsService.listBookings докстринг).
+   * managerPositionId — own-scope сужение через тот же
+   * ownerFilterForAction, что confirmBooking (undefined при organization/
+   * global scope гранта `booking.read`).
+   */
+  @Get('bookings')
+  @RequirePermission('booking', 'read')
+  async listBookings(@Req() req: FastifyRequest, @Query() dto: ListBookingsQueryDto) {
+    const tenantContext = requireTenantContext(req);
+
+    const items = await this.bookingsService.listBookings({
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      developmentId: dto.developmentId ? new Types.ObjectId(dto.developmentId) : undefined,
+      buildingId: dto.buildingId ? new Types.ObjectId(dto.buildingId) : undefined,
+      unitId: dto.unitId ? new Types.ObjectId(dto.unitId) : undefined,
+      status: dto.status,
+      managerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      limit: dto.limit,
+    });
+
+    const nextCursor = items.length === dto.limit ? items[items.length - 1]!._id.toString() : null;
+    return { items: items.map(toBookingResponse), nextCursor };
   }
 
   /**

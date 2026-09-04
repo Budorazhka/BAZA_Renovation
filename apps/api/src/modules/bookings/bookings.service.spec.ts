@@ -685,3 +685,101 @@ describe('BookingsService.extendBooking', () => {
     expect(extendSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('BookingsService.listBookings', () => {
+  const organizationId = new Types.ObjectId();
+  const unitId = new Types.ObjectId();
+  const buildingId = new Types.ObjectId();
+  const developmentId = new Types.ObjectId();
+  const managerPositionId = new Types.ObjectId();
+
+  it('unitId — валидирует принадлежность юнита организации и фильтрует по точному unitId', async () => {
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const getUnitSpy = jest.fn().mockResolvedValue({ _id: unitId });
+    const service = makeService({
+      bookingRepository: { listForOrganization: listSpy } as never,
+      developmentsService: { getUnitForOrganization: getUnitSpy } as never,
+    });
+
+    await service.listBookings({ organizationId, unitId, limit: 20 });
+
+    expect(getUnitSpy).toHaveBeenCalledWith(unitId, organizationId);
+    expect(listSpy).toHaveBeenCalledWith(
+      organizationId,
+      expect.objectContaining({ unitId, unitIds: undefined, limit: 20 }),
+    );
+  });
+
+  it('buildingId (без unitId) — резолвит unitIds через DevelopmentsService.listUnitIdsForBuilding', async () => {
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const unitIds = [new Types.ObjectId(), new Types.ObjectId()];
+    const listUnitIdsSpy = jest.fn().mockResolvedValue(unitIds);
+    const service = makeService({
+      bookingRepository: { listForOrganization: listSpy } as never,
+      developmentsService: { listUnitIdsForBuilding: listUnitIdsSpy } as never,
+    });
+
+    await service.listBookings({ organizationId, buildingId, limit: 20 });
+
+    expect(listUnitIdsSpy).toHaveBeenCalledWith(buildingId, organizationId);
+    expect(listSpy).toHaveBeenCalledWith(
+      organizationId,
+      expect.objectContaining({ unitId: undefined, unitIds, limit: 20 }),
+    );
+  });
+
+  it('developmentId (без buildingId/unitId) — резолвит unitIds через DevelopmentsService.listUnitIdsForDevelopment', async () => {
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const unitIds = [new Types.ObjectId()];
+    const listUnitIdsSpy = jest.fn().mockResolvedValue(unitIds);
+    const service = makeService({
+      bookingRepository: { listForOrganization: listSpy } as never,
+      developmentsService: { listUnitIdsForDevelopment: listUnitIdsSpy } as never,
+    });
+
+    await service.listBookings({ organizationId, developmentId, limit: 20 });
+
+    expect(listUnitIdsSpy).toHaveBeenCalledWith(developmentId, organizationId);
+    expect(listSpy).toHaveBeenCalledWith(
+      organizationId,
+      expect.objectContaining({ unitIds, limit: 20 }),
+    );
+  });
+
+  it('unitId побеждает buildingId/developmentId, если переданы все три', async () => {
+    const listSpy = jest.fn().mockResolvedValue([]);
+    const getUnitSpy = jest.fn().mockResolvedValue({ _id: unitId });
+    const listUnitIdsForBuildingSpy = jest.fn();
+    const listUnitIdsForDevelopmentSpy = jest.fn();
+    const service = makeService({
+      bookingRepository: { listForOrganization: listSpy } as never,
+      developmentsService: {
+        getUnitForOrganization: getUnitSpy,
+        listUnitIdsForBuilding: listUnitIdsForBuildingSpy,
+        listUnitIdsForDevelopment: listUnitIdsForDevelopmentSpy,
+      } as never,
+    });
+
+    await service.listBookings({ organizationId, unitId, buildingId, developmentId, limit: 20 });
+
+    expect(getUnitSpy).toHaveBeenCalledWith(unitId, organizationId);
+    expect(listUnitIdsForBuildingSpy).not.toHaveBeenCalled();
+    expect(listUnitIdsForDevelopmentSpy).not.toHaveBeenCalled();
+  });
+
+  it('без единого filter — организация целиком, managerPositionId передаётся дальше как own-scope сужение', async () => {
+    const items = [{ _id: new Types.ObjectId() }];
+    const listSpy = jest.fn().mockResolvedValue(items);
+    const service = makeService({
+      bookingRepository: { listForOrganization: listSpy } as never,
+    });
+
+    await expect(
+      service.listBookings({ organizationId, managerPositionId, status: 'pending', limit: 20 }),
+    ).resolves.toBe(items);
+    expect(listSpy).toHaveBeenCalledWith(
+      organizationId,
+      expect.objectContaining({ unitId: undefined, unitIds: undefined, managerPositionId, status: 'pending', limit: 20 }),
+    );
+  });
+});

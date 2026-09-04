@@ -11,7 +11,7 @@ import { DevelopmentsService } from '../developments/developments.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { BookingRepository } from './repository/booking.repository';
 import { BookingLockRepository } from './repository/booking-lock.repository';
-import type { BookingDocument } from './schemas/booking.schema';
+import type { BookingDocument, BookingStatus } from './schemas/booking.schema';
 
 export interface BookingResponse {
   id: string;
@@ -182,6 +182,50 @@ export class BookingsService {
         'Idempotency-Key was concurrently claimed but its response is unavailable',
       );
     }
+  }
+
+  /**
+   * BOOK-002: GET /bookings — unitId побеждает buildingId побеждает
+   * developmentId, если клиент прислал несколько (самый специфичный
+   * фильтр выигрывает, не пересечение множеств) — см. DevelopmentsService.
+   * listUnitIdsForBuilding/listUnitIdsForDevelopment докстринг для того,
+   * почему это идёт через DevelopmentsService, а не напрямую в
+   * UnitRepository. managerPositionId — own-scope сужение
+   * (BookingsController.ownerFilterForAction), тот же паттерн, что
+   * confirmBooking.requiredManagerPositionId.
+   */
+  async listBookings(params: {
+    organizationId: Types.ObjectId;
+    developmentId?: Types.ObjectId;
+    buildingId?: Types.ObjectId;
+    unitId?: Types.ObjectId;
+    status?: BookingStatus;
+    managerPositionId?: Types.ObjectId;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<BookingDocument[]> {
+    let unitIds: Types.ObjectId[] | undefined;
+    let unitId: Types.ObjectId | undefined;
+
+    if (params.unitId) {
+      // Non-disclosure: чужой/несуществующий unitId — единый 404, тот же
+      // принцип, что остальные tenant-scoped lookup'ы этого сервиса.
+      await this.developmentsService.getUnitForOrganization(params.unitId, params.organizationId);
+      unitId = params.unitId;
+    } else if (params.buildingId) {
+      unitIds = await this.developmentsService.listUnitIdsForBuilding(params.buildingId, params.organizationId);
+    } else if (params.developmentId) {
+      unitIds = await this.developmentsService.listUnitIdsForDevelopment(params.developmentId, params.organizationId);
+    }
+
+    return this.bookingRepository.listForOrganization(params.organizationId, {
+      unitId,
+      unitIds,
+      status: params.status,
+      managerPositionId: params.managerPositionId,
+      cursor: params.cursor,
+      limit: params.limit,
+    });
   }
 
   private requestBody(params: {

@@ -149,6 +149,22 @@ export interface DefaultGrant {
  * это не пересекается с TEAM-001/MyReportPage — та работа отложена отдельным
  * эпиком, см. её докстринг). `administrator`/`marketer` не получают —
  * тот же круг, что `calendar_event.*`.
+ *
+ * `booking.read` (BOOK-002, 04.09.2026, GET /bookings) — до этого коммита
+ * GET-эндпоинта для списка броней не было вообще, только create/confirm/
+ * cancel/extend. `organization` scope у owner/director/rop/developer —
+ * тот же круг ролей, что уже имеет `booking.cancel`/`booking.extend`
+ * (organization, не own): если роль может отменить/продлить ЛЮБУЮ бронь
+ * организации, она обязана и видеть список этих броней, иначе cancel/
+ * extend UI неоткуда получить bookingId. `manager` получает `own` (не
+ * organization) — Booking.manager (schemas/booking.schema.ts) это ИМЕННО
+ * Position, создавшая/владеющая бронью (см. booking.schema.ts докстринг:
+ * "the Position that created/owns the booking"), а manager уже имеет
+ * `booking.confirm` со scope `own` — без `booking.read.own` он не смог бы
+ * увидеть даже свои pending-брони, которые сам же должен подтверждать.
+ * `administrator`/`marketer` не получают — у них нет вообще ни одного
+ * booking.*-гранта (booking-workflow вне их круга обязанностей, тот же
+ * принцип, что `calendar_event.*`/`crm_report.read`).
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -187,6 +203,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'read', scope: 'organization' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
     { resource: 'booking', action: 'cancel', scope: 'organization' },
     { resource: 'booking', action: 'extend', scope: 'organization' },
@@ -237,6 +254,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'read', scope: 'organization' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
     { resource: 'booking', action: 'cancel', scope: 'organization' },
     { resource: 'booking', action: 'extend', scope: 'organization' },
@@ -292,6 +310,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'read', scope: 'organization' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
     { resource: 'booking', action: 'cancel', scope: 'organization' },
     { resource: 'booking', action: 'extend', scope: 'organization' },
@@ -345,6 +364,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'listing', action: 'create', scope: 'organization' },
     { resource: 'listing', action: 'edit', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'read', scope: 'own' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
   ],
   administrator: [
@@ -408,6 +428,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'unit', action: 'status.update', scope: 'organization' },
     { resource: 'chessboard', action: 'export', scope: 'organization' },
     { resource: 'booking', action: 'create', scope: 'own' },
+    { resource: 'booking', action: 'read', scope: 'organization' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
     { resource: 'booking', action: 'cancel', scope: 'organization' },
     { resource: 'booking', action: 'extend', scope: 'organization' },
