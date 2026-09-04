@@ -98,13 +98,19 @@ services:
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
       CORS_ALLOWED_ORIGIN_MARKETPLACE: ${CORS_ALLOWED_ORIGIN_MARKETPLACE:-http://localhost:4173}
       CORS_ALLOWED_ORIGIN_ADMIN: ${CORS_ALLOWED_ORIGIN_ADMIN:-http://localhost:4174}
-      # apps/erp-web стал вендоренной копией внутри монорепо 02.09.2026 — до
-      # этого его здесь не было, и переменная намеренно не задавалась. Теперь
-      # без неё resolveProductAudienceFromOrigin (apps/api/src/modules/identity/
-      # resolve-product-audience.ts) никогда не попадает в ветку 'erp', и логин
-      # из ERP падает с AUTH_AUDIENCE_MISMATCH — то есть GET /me и вся сессия
-      # ERP в этом стеке недостижимы.
-      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-http://localhost:4175}
+      # Origin для ERP-клиента. Самого erp-web в этом стеке НЕТ и быть не может:
+      # apps/erp-web намеренно исключён из workspace (см. pnpm-workspace.yaml —
+      # его зависимостей нет в lockfile, и подключение к гейтам названо там
+      # отдельным решением). Сервис отсюда убран 05.09.2026 после того, как его
+      # добавление уронило runtime-гейт дважды: сначала на pnpm install, потом на
+      # turbo build с «No package found with name '@baza/erp-web'».
+      #
+      # Переменная оставлена и по умолчанию ПУСТА: без неё
+      # resolveProductAudienceFromOrigin никогда не попадает в ветку 'erp', и
+      # логин из ERP отвечает AUTH_AUDIENCE_MISMATCH. Тот, кто поднимает
+      # ERP-клиент своими командами рядом со стеком, задаёт её своим origin —
+      # например CORS_ALLOWED_ORIGIN_ERP=http://localhost:5173.
+      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -199,30 +205,6 @@ services:
         node apps/api/dist/jobs/actuality-expire.command.js || echo "[actuality-expire] прогон завершился с ошибками, расписание продолжается";
         sleep "$${ACTUALITY_EXPIRE_INTERVAL_SECONDS}";
         done
-
-  erp-web:
-    build:
-      context: ../..
-      dockerfile: infrastructure/docker/Dockerfile.erp-web
-      args:
-        # Именно "/" (origin), а не "/api/v1" (путь): клиенты ERP кладут
-        # PLATFORM_API_BASE_URL в axios baseURL и сами дописывают "/api/v1/..."
-        # (см. teamApi.ts, platformAuthApi.ts). С "/api/v1" получился бы
-        # "/api/v1/api/v1/auth/login". Дальше nginx этого контейнера проксирует
-        # location /api/ на api:3000 — тот же приём, что у admin-web.
-        VITE_PLATFORM_API_BASE_URL: "/"
-        VITE_CRM_API_BASE_URL: "/"
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    ports:
-      - "${ERP_WEB_PORT:-4175}:80"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
 
   admin-web:
     build:
