@@ -1,0 +1,366 @@
+/* ==========================================================================
+   Figma Realtor Account: My Properties Styles
+   Source of Truth:
+   - Section `Кабинет риелтора`: Node ID 824:17645
+   - Frame `Мои объекты - большие карточки`: Node ID 5071:68119
+   - Frame `Мои объекты - список / таблица`: Node ID 5071:68253
+   - ComponentSet `статус`: Node ID 5071:68767
+   - ComponentSet `актуальность`: Node ID 5071:68749
+   - ComponentSet `кнопки управления объектом`: Node ID 5071:68795
+   ========================================================================== */
+
+.figma-account-page {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+  box-sizing: border-box;
+}
+
+/* Status Badges */
+.figma-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.figma-actuality-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 600;
+  background: transparent;
+  white-space: nowrap;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.figma-actuality-badge:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+/* Header & Stat Summary Cards */
+.figma-account-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.figma-account-header__title {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--color-primary-dark, #232323);
+  margin: 0 0 8px;
+}
+
+.figma-account-header__desc {
+  font-size: 15px;
+  color: var(--color-dark-text-muted, #757575);
+  margin: 0;
+}
+
+.figma-account-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: var(--color-main, #1BA800);
+  color: #FFFFFF;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.2s ease, transform 0.15s ease;
+}
+
+.figma-account-add-btn:hover {
+  background: var(--color-main-hover, #169600);
+  transform: translateY(-1px);
+}
+
+/* Overall metrics ribbon */
+.figma-account-metrics-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.figma-account-metric-card {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-account-metric-card__value {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--color-primary-dark, #232323);
+}
+
+.figma-account-metric-card__label {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+  font-weight: 500;
+}
+
+/* Filter bar & view toggler */
+.figma-account-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-light-element-bg, #F8F9FA);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.figma-account-status-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.figma-account-tab-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-dark-text-muted, #757575);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.figma-account-tab-btn:hover {
+  background: #FFFFFF;
+  color: var(--color-primary-dark, #232323);
+}
+
+.figma-account-tab-btn.is-active {
+  background: #FFFFFF;
+  border-color: var(--color-element-stroke, #EAEAEA);
+  color: var(--color-primary-dark, #232323);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.figma-account-view-toggles {
+  display: flex;
+  gap: 4px;
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.figma-account-view-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--color-dark-text-muted, #757575);
+  cursor: pointer;
+}
+
+.figma-account-view-btn.is-active {
+  background: var(--color-main, #1BA800);
+  color: #FFFFFF;
+}
+
+/* Big Cards Representation (5071:68119) */
+.figma-account-big-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.figma-account-big-card {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 200px 1fr auto;
+  gap: 24px;
+  align-items: center;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+@media (max-width: 900px) {
+  .figma-account-big-card {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.figma-account-big-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
+  border-color: #D0D0D0;
+}
+
+.figma-account-card-media {
+  width: 100%;
+  height: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-light-grey, #F0F0F0);
+  position: relative;
+}
+
+.figma-account-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.figma-account-card-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.figma-account-card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.figma-account-card-title {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+  margin: 0;
+}
+
+.figma-account-card-price {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--color-main, #1BA800);
+}
+
+.figma-account-card-address {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+  margin: 0;
+}
+
+.figma-account-card-stats-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.figma-account-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-dark-text-muted, #757575);
+}
+
+.figma-account-stat-item strong {
+  color: var(--color-primary-dark, #232323);
+}
+
+/* Actions Menu / Buttons (5071:68795) */
+.figma-account-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 160px;
+}
+
+.figma-account-action-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  background: #FFFFFF;
+  color: var(--color-primary-dark, #232323);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.figma-account-action-btn:hover {
+  background: var(--color-light-element-bg, #F8F9FA);
+  border-color: #D0D0D0;
+}
+
+.figma-account-action-btn--primary {
+  background: var(--color-main, #1BA800);
+  border-color: var(--color-main, #1BA800);
+  color: #FFFFFF;
+}
+
+.figma-account-action-btn--primary:hover {
+  background: var(--color-main-hover, #169600);
+}
+
+/* Table representation (5071:68253) */
+.figma-account-table-wrapper {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  overflow-x: auto;
+}
+
+.figma-account-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.figma-account-table th {
+  background: var(--color-light-element-bg, #F8F9FA);
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-dark-text-muted, #757575);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--color-element-stroke, #EAEAEA);
+}
+
+.figma-account-table td {
+  padding: 16px;
+  border-bottom: 1px solid var(--color-element-stroke, #EAEAEA);
+  vertical-align: middle;
+}
+
+.figma-account-table tr:hover td {
+  background: #FAFAFA;
+}

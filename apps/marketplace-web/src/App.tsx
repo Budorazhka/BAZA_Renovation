@@ -29,6 +29,7 @@ import { RevealContactCTA } from './components/RevealContactCTA'
 import { UnitQuickViewModal, type UnitInfo } from './components/UnitQuickViewModal'
 import { RealtorsPage } from './pages/RealtorsPage'
 import { RealtorProfilePage } from './pages/RealtorProfilePage'
+import { MyPropertiesPage } from './pages/MyPropertiesPage'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -36,6 +37,7 @@ import './styles/filters.css'
 import './styles/development-detail.css'
 import './styles/listing-detail.css'
 import './styles/realtors.css'
+import './styles/my-properties.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
@@ -810,6 +812,8 @@ export default function App() {
         <Route path="/listings/:slug" element={<ListingDetailPage />} />
         <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
         <Route path="/realtors/:id" element={<Shell><RealtorProfilePage /></Shell>} />
+        <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
+        <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
         <Route path="*" element={<CataloguePage />} />
       </Routes>
