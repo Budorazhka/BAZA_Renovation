@@ -144,6 +144,8 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [discovery/figma-screen-inventory.md](discovery/figma-screen-inventory.md) — инвентарь фреймов Figma: node ID, состояния, пометки `(не используется)`.
 - [discovery/marketplace-screen-build-spec.md](discovery/marketplace-screen-build-spec.md) — спецификация сборки экранов marketplace.
 - [discovery/marketplace-gap-matrix.md](discovery/marketplace-gap-matrix.md) — матрица расхождений marketplace между Figma, старым сайтом и реализацией.
+- [discovery/figma-owner-decisions-stage2.md](discovery/figma-owner-decisions-stage2.md) — шесть решений владельца по Figma с готовыми вариантами и ценой отказа. Ждёт ответа.
+- [discovery/screenshots/](discovery/screenshots/) — снимки экранов marketplace в габаритах Figma (1920 и 375) для visual compare, плюс разбор того, что видно уже по ним.
 - [codex/plans/](codex/plans/) — планы отдельных работ, писавшиеся до реализации.
 
 ## Правило пополнения

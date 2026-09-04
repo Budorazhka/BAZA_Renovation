@@ -1,0 +1,362 @@
+[
+  {
+    "screen": "MKT-SCR-004",
+    "name": "Каталог новостроек (список)",
+    "viewport": "desktop",
+    "path": "/",
+    "figmaFrame": "236:27197 / 4182:72529",
+    "data": "api",
+    "file": "MKT-SCR-004-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-005",
+    "name": "Каталог новостроек (карта)",
+    "viewport": "desktop",
+    "path": "/?view=map",
+    "figmaFrame": "236:26596 / 3854:67902",
+    "data": "api",
+    "file": "MKT-SCR-005-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-010",
+    "name": "Каталог вторички",
+    "viewport": "desktop",
+    "path": "/?tab=listings&dealType=sale",
+    "figmaFrame": "236:27197 / 3854:62977",
+    "data": "api",
+    "file": "MKT-SCR-010-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-011",
+    "name": "Каталог аренды",
+    "viewport": "desktop",
+    "path": "/?tab=listings&dealType=rent_long",
+    "figmaFrame": "236:27197 / 4182:69880",
+    "data": "api",
+    "file": "MKT-SCR-011-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-014",
+    "name": "Рейтинг риэлторов",
+    "viewport": "desktop",
+    "path": "/realtors",
+    "figmaFrame": "3576:53108 / 3699:60246",
+    "data": "fixture",
+    "file": "MKT-SCR-014-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-015",
+    "name": "Профиль риэлтора",
+    "viewport": "desktop",
+    "path": "/realtors/1",
+    "figmaFrame": "3576:53737 / 3699:60823",
+    "data": "fixture",
+    "file": "MKT-SCR-015-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-016",
+    "name": "Запросы клиентов",
+    "viewport": "desktop",
+    "path": "/requests",
+    "figmaFrame": "2287:34150",
+    "data": "fixture",
+    "file": "MKT-SCR-016-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-017",
+    "name": "Избранное",
+    "viewport": "desktop",
+    "path": "/favorites",
+    "figmaFrame": "1376:19390 / 1376:19776",
+    "data": "fixture",
+    "file": "MKT-SCR-017-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-018",
+    "name": "Подборки объектов",
+    "viewport": "desktop",
+    "path": "/selections",
+    "figmaFrame": "1311:18621 / 1311:18671",
+    "data": "fixture",
+    "file": "MKT-SCR-018-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-019",
+    "name": "Кабинет: мои объекты",
+    "viewport": "desktop",
+    "path": "/account/properties",
+    "figmaFrame": "5071:68119 / 5071:68253",
+    "data": "fixture",
+    "file": "MKT-SCR-019-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-020",
+    "name": "Мастер публикации",
+    "viewport": "desktop",
+    "path": "/publish",
+    "figmaFrame": "не назначен",
+    "data": "api",
+    "file": "MKT-SCR-020-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-022",
+    "name": "CRM: воронка сделок",
+    "viewport": "desktop",
+    "path": "/account/crm",
+    "figmaFrame": "3760:57807",
+    "data": "fixture",
+    "file": "MKT-SCR-022-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-023",
+    "name": "CRM: задачи и заметки",
+    "viewport": "desktop",
+    "path": "/account/tasks",
+    "figmaFrame": "3927:57386",
+    "data": "fixture",
+    "file": "MKT-SCR-023-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-024",
+    "name": "CRM: календарь показов",
+    "viewport": "desktop",
+    "path": "/account/calendar",
+    "figmaFrame": "3929:57331",
+    "data": "fixture",
+    "file": "MKT-SCR-024-desktop.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-004",
+    "name": "Каталог новостроек (список)",
+    "viewport": "mobile",
+    "path": "/",
+    "figmaFrame": "236:27197 / 4182:72529",
+    "data": "api",
+    "file": "MKT-SCR-004-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-005",
+    "name": "Каталог новостроек (карта)",
+    "viewport": "mobile",
+    "path": "/?view=map",
+    "figmaFrame": "236:26596 / 3854:67902",
+    "data": "api",
+    "file": "MKT-SCR-005-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-010",
+    "name": "Каталог вторички",
+    "viewport": "mobile",
+    "path": "/?tab=listings&dealType=sale",
+    "figmaFrame": "236:27197 / 3854:62977",
+    "data": "api",
+    "file": "MKT-SCR-010-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-011",
+    "name": "Каталог аренды",
+    "viewport": "mobile",
+    "path": "/?tab=listings&dealType=rent_long",
+    "figmaFrame": "236:27197 / 4182:69880",
+    "data": "api",
+    "file": "MKT-SCR-011-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    ],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-014",
+    "name": "Рейтинг риэлторов",
+    "viewport": "mobile",
+    "path": "/realtors",
+    "figmaFrame": "3576:53108 / 3699:60246",
+    "data": "fixture",
+    "file": "MKT-SCR-014-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-015",
+    "name": "Профиль риэлтора",
+    "viewport": "mobile",
+    "path": "/realtors/1",
+    "figmaFrame": "3576:53737 / 3699:60823",
+    "data": "fixture",
+    "file": "MKT-SCR-015-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-016",
+    "name": "Запросы клиентов",
+    "viewport": "mobile",
+    "path": "/requests",
+    "figmaFrame": "2287:34150",
+    "data": "fixture",
+    "file": "MKT-SCR-016-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-017",
+    "name": "Избранное",
+    "viewport": "mobile",
+    "path": "/favorites",
+    "figmaFrame": "1376:19390 / 1376:19776",
+    "data": "fixture",
+    "file": "MKT-SCR-017-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-018",
+    "name": "Подборки объектов",
+    "viewport": "mobile",
+    "path": "/selections",
+    "figmaFrame": "1311:18621 / 1311:18671",
+    "data": "fixture",
+    "file": "MKT-SCR-018-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-019",
+    "name": "Кабинет: мои объекты",
+    "viewport": "mobile",
+    "path": "/account/properties",
+    "figmaFrame": "5071:68119 / 5071:68253",
+    "data": "fixture",
+    "file": "MKT-SCR-019-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-020",
+    "name": "Мастер публикации",
+    "viewport": "mobile",
+    "path": "/publish",
+    "figmaFrame": "не назначен",
+    "data": "api",
+    "file": "MKT-SCR-020-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-022",
+    "name": "CRM: воронка сделок",
+    "viewport": "mobile",
+    "path": "/account/crm",
+    "figmaFrame": "3760:57807",
+    "data": "fixture",
+    "file": "MKT-SCR-022-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-023",
+    "name": "CRM: задачи и заметки",
+    "viewport": "mobile",
+    "path": "/account/tasks",
+    "figmaFrame": "3927:57386",
+    "data": "fixture",
+    "file": "MKT-SCR-023-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  },
+  {
+    "screen": "MKT-SCR-024",
+    "name": "CRM: календарь показов",
+    "viewport": "mobile",
+    "path": "/account/calendar",
+    "figmaFrame": "3929:57331",
+    "data": "fixture",
+    "file": "MKT-SCR-024-mobile.png",
+    "navigationError": null,
+    "consoleErrors": [],
+    "failedRequests": []
+  }
+]

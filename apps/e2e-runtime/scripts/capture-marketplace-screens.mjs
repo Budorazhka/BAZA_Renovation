@@ -1,0 +1,117 @@
+/**
+ * Снимает скриншоты экранов marketplace в габаритах Figma-фреймов.
+ *
+ * Существует ради пункта DoD гейта «Screenshot implementation сопоставлен с
+ * Figma» (docs/discovery/figma-ui-delivery-gate.md): до 04.09.2026 по 21 экрану
+ * не было снято ни одного скриншота, поэтому ни один экран нельзя было сдать.
+ *
+ * Скриншот — половина сверки. Вторая половина, сопоставление с фреймом, делается
+ * человеком; этот скрипт только даёт материал и делает его воспроизводимым.
+ *
+ * Запуск (marketplace-web должен быть собран и отдаваться по BASE_URL):
+ *   pnpm --filter marketplace-web build
+ *   npx vite preview --port 4173   # из apps/marketplace-web
+ *   node scripts/capture-marketplace-screens.mjs
+ *
+ * Переменные: BASE_URL (по умолчанию http://localhost:4173),
+ * OUT_DIR (по умолчанию ../../docs/discovery/screenshots).
+ */
+import { chromium } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BASE_URL = process.env.BASE_URL ?? 'http://localhost:4173';
+const OUT_DIR = process.env.OUT_DIR ?? resolve(HERE, '../../../docs/discovery/screenshots');
+
+/**
+ * Экраны в терминах гейта. `figmaFrame` — фрейм, с которым потом сверяют, чтобы
+ * человек не искал ID заново. `data` говорит, откуда экран берёт содержимое:
+ * это меняет смысл скриншота (см. README рядом со снимками).
+ */
+const SCREENS = [
+  { id: 'MKT-SCR-004', name: 'Каталог новостроек (список)', path: '/', figmaFrame: '236:27197 / 4182:72529', data: 'api' },
+  { id: 'MKT-SCR-005', name: 'Каталог новостроек (карта)', path: '/?view=map', figmaFrame: '236:26596 / 3854:67902', data: 'api' },
+  { id: 'MKT-SCR-010', name: 'Каталог вторички', path: '/?tab=listings&dealType=sale', figmaFrame: '236:27197 / 3854:62977', data: 'api' },
+  { id: 'MKT-SCR-011', name: 'Каталог аренды', path: '/?tab=listings&dealType=rent_long', figmaFrame: '236:27197 / 4182:69880', data: 'api' },
+  { id: 'MKT-SCR-014', name: 'Рейтинг риэлторов', path: '/realtors', figmaFrame: '3576:53108 / 3699:60246', data: 'fixture' },
+  { id: 'MKT-SCR-015', name: 'Профиль риэлтора', path: '/realtors/1', figmaFrame: '3576:53737 / 3699:60823', data: 'fixture' },
+  { id: 'MKT-SCR-016', name: 'Запросы клиентов', path: '/requests', figmaFrame: '2287:34150', data: 'fixture' },
+  { id: 'MKT-SCR-017', name: 'Избранное', path: '/favorites', figmaFrame: '1376:19390 / 1376:19776', data: 'fixture' },
+  { id: 'MKT-SCR-018', name: 'Подборки объектов', path: '/selections', figmaFrame: '1311:18621 / 1311:18671', data: 'fixture' },
+  { id: 'MKT-SCR-019', name: 'Кабинет: мои объекты', path: '/account/properties', figmaFrame: '5071:68119 / 5071:68253', data: 'fixture' },
+  { id: 'MKT-SCR-020', name: 'Мастер публикации', path: '/publish', figmaFrame: 'не назначен', data: 'api' },
+  { id: 'MKT-SCR-022', name: 'CRM: воронка сделок', path: '/account/crm', figmaFrame: '3760:57807', data: 'fixture' },
+  { id: 'MKT-SCR-023', name: 'CRM: задачи и заметки', path: '/account/tasks', figmaFrame: '3927:57386', data: 'fixture' },
+  { id: 'MKT-SCR-024', name: 'CRM: календарь показов', path: '/account/calendar', figmaFrame: '3929:57331', data: 'fixture' },
+];
+
+/** Ровно два брейкпоинта Figma: промежуточного tablet в файле нет. */
+const VIEWPORTS = [
+  { key: 'desktop', width: 1920, height: 1080 },
+  { key: 'mobile', width: 375, height: 812 },
+];
+
+async function main() {
+  await mkdir(OUT_DIR, { recursive: true });
+  const browser = await chromium.launch();
+  const report = [];
+
+  for (const viewport of VIEWPORTS) {
+    const context = await browser.newContext({
+      viewport: { width: viewport.width, height: viewport.height },
+      deviceScaleFactor: 1,
+    });
+
+    for (const screen of SCREENS) {
+      const page = await context.newPage();
+      // Ошибки консоли и проваленные запросы собираем сразу: скриншот пустого
+      // экрана без них не объясняет, почему он пустой.
+      const consoleErrors = [];
+      const failedRequests = [];
+      page.on('console', (msg) => {
+        if (msg.type() === 'error') consoleErrors.push(msg.text().slice(0, 200));
+      });
+      page.on('requestfailed', (req) => failedRequests.push(`${req.method()} ${req.url().slice(0, 120)}`));
+
+      const file = `${screen.id}-${viewport.key}.png`;
+      let error = null;
+      try {
+        await page.goto(`${BASE_URL}${screen.path}`, { waitUntil: 'networkidle', timeout: 30_000 });
+      } catch (err) {
+        // networkidle не наступает, если на странице висит незавершённый
+        // запрос к недоступному API. Это само по себе факт для отчёта, а не
+        // повод не снимать экран.
+        error = String(err).split('\n')[0];
+        await page.waitForTimeout(2000);
+      }
+      await page.screenshot({ path: resolve(OUT_DIR, file), fullPage: true });
+      report.push({
+        screen: screen.id,
+        name: screen.name,
+        viewport: viewport.key,
+        path: screen.path,
+        figmaFrame: screen.figmaFrame,
+        data: screen.data,
+        file,
+        navigationError: error,
+        consoleErrors: consoleErrors.slice(0, 5),
+        failedRequests: failedRequests.slice(0, 5),
+      });
+      await page.close();
+      process.stdout.write(`${file}${error ? ' (с ошибкой навигации)' : ''}\n`);
+    }
+
+    await context.close();
+  }
+
+  await browser.close();
+  await writeFile(resolve(OUT_DIR, 'capture-report.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  console.log(`\nснимков: ${report.length}, отчёт: ${resolve(OUT_DIR, 'capture-report.json')}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
