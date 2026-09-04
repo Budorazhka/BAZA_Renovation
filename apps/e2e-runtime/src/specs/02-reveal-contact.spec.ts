@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { test, expect } from '../fixtures/test';
 import type { APIRequestContext } from '@playwright/test';
 import { apiUrl } from '../fixtures/env';
+import { registerIdentityOrFail } from '../fixtures/register';
 import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from '../fixtures/test-data';
 
 /**
@@ -23,8 +24,7 @@ test.describe('listing reveal-contact', () => {
   async function seedOrganizationListing(request: APIRequestContext) {
     const login = uniqueLogin('reveal-owner');
     const password = STRONG_TEST_PASSWORD;
-    const register = await request.post(apiUrl('/auth/register'), { data: { login, password } });
-    expect(register.status()).toBe(201);
+    await registerIdentityOrFail(request, login, { password });
 
     const onboarding = await request.post(apiUrl('/organizations/register'), {
       data: { login, password, type: 'agency', name: `E2E Reveal Agency ${login}` },

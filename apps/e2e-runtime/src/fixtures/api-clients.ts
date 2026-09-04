@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { APIRequestContext } from '@playwright/test';
 import { env, apiUrl } from './env';
+import { registerIdentity } from './register';
 
 /**
  * Thin wrappers over Playwright's own `request` APIRequestContext for
@@ -24,11 +25,7 @@ export function marketplaceApiClient(request: APIRequestContext) {
 
   return {
     async register(login: string, password: string) {
-      const response = await request.post(apiUrl('/auth/register'), {
-        headers: { Origin: origin },
-        data: { login, password },
-      });
-      return { status: response.status(), body: await response.json().catch(() => undefined) };
+      return registerIdentity(request, login, { password, origin });
     },
 
     async login(login: string, password: string): Promise<AuthResult & { body: unknown }> {

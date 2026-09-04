@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { expect, request as apiRequest, type APIRequestContext } from '@playwright/test';
+import { expect, request as apiRequest } from '@playwright/test';
 import { apiUrl } from './env';
+import { registerIdentityOrFail } from './register';
 import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from './test-data';
 
 /**
@@ -17,25 +18,8 @@ import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from '.
  * Первая версия этой фикстуры заводила две организации — и выела бюджет,
  * из-за чего 429 получили ЧУЖИЕ сценарии (логаут и раскрытие контакта), которые
  * до этого проходили. Отсюда правило: засев не должен стоить больше одной
- * регистрации, а на 429 — ждать и повторять, а не падать.
+ * регистрации. Ожидание лимита живёт в `registerIdentityOrFail`.
  */
-
-/** Регистрация с ожиданием на 429: лимит общий на весь набор, гонка за него нормальна. */
-async function registerWithBackoff(request: APIRequestContext, login: string): Promise<void> {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const response = await request.post(apiUrl('/auth/register'), {
-      data: { login, password: STRONG_TEST_PASSWORD },
-    });
-    if (response.status() === 201) return;
-    if (response.status() !== 429) {
-      expect(response.status(), `register failed: ${await response.text()}`).toBe(201);
-      return;
-    }
-    // Окно лимита — 60 секунд; ждём заметную его часть, а не сотни миллисекунд.
-    await new Promise((resolve) => setTimeout(resolve, 20_000));
-  }
-  throw new Error('register: лимит 429 не отпустил за четыре попытки');
-}
 
 /**
  * Один опубликованный ЖК в каталоге. Возвращает slug публикации.
@@ -53,7 +37,7 @@ export async function seedPublishedDevelopment(): Promise<string> {
   const request = await apiRequest.newContext();
   try {
     const login = uniqueLogin('catalogue-developer');
-    await registerWithBackoff(request, login);
+    await registerIdentityOrFail(request, login, { password: STRONG_TEST_PASSWORD });
 
     const onboarding = await request.post(apiUrl('/organizations/register'), {
       data: { login, password: STRONG_TEST_PASSWORD, type: 'developer', name: `E2E Developer ${login}` },

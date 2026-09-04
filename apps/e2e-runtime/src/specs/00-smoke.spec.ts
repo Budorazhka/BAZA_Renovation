@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures/test';
 import { env, apiUrl } from '../fixtures/env';
+import { registerIdentity } from '../fixtures/register';
 import { uniqueLogin, STRONG_TEST_PASSWORD } from '../fixtures/test-data';
 
 /**
@@ -34,12 +35,11 @@ test.describe('baseline smoke', () => {
   test('register + login flow works end to end against the real API', async ({ request }) => {
     const login = uniqueLogin('smoke');
 
-    const registerResponse = await request.post(apiUrl('/auth/register'), {
-      headers: { Origin: env.marketplaceOrigin },
-      data: { login, password: STRONG_TEST_PASSWORD },
+    const { status: registerStatus, body: registerBody } = await registerIdentity(request, login, {
+      password: STRONG_TEST_PASSWORD,
+      origin: env.marketplaceOrigin,
     });
-    expect(registerResponse.status()).toBe(201);
-    const registerBody = await registerResponse.json();
+    expect(registerStatus).toBe(201);
     expect(registerBody).toHaveProperty('identityId');
 
     const loginResponse = await request.post(apiUrl('/auth/login'), {
