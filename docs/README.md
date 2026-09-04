@@ -8,6 +8,8 @@
 
 | Документ | Когда нужен |
 | --- | --- |
+| [../CLAUDE_HANDOFF_TZ.md](../CLAUDE_HANDOFF_TZ.md) | Техзадание владельца. **Обязательно перед любой задачей по marketplace UI:** §5.1 — жёсткий gate по Figma. Перенесён сюда из корня рабочей папки 04.09.2026. |
+| [discovery/figma-ui-delivery-gate.md](discovery/figma-ui-delivery-gate.md) | Процедура и Definition of Done для marketplace UI. Каждый UI-пакет изменений обязан добавить сюда запись. |
 | [BAZA_MASTER_PLAN.md](BAZA_MASTER_PLAN.md) | Источник объёма работ: решения владельца продукта, целевая модель, план этапов 0–12, бэклог с критериями приёмки, журнал решений. Перенесён сюда из корня рабочей папки 01.09.2026. |
 | [roadmap-2026-09.md](roadmap-2026-09.md) | Куда двигаемся дальше: волны работ, что взято в работу и какие решения ждут владельца. |
 | [architecture.md](architecture.md) | Перед любой задачей. Карта владения кодом, правила зависимостей, чек-лист изменения, правило про три уровня тестов. |
@@ -36,6 +38,7 @@
 | [architecture/adr/002-mongodb-tenancy.md](architecture/adr/002-mongodb-tenancy.md) | стражем `tenant-scope`: 18 запросов без `organizationId` разобраны, утечек нет |
 | [architecture/adr/006-transactions-outbox-workers.md](architecture/adr/006-transactions-outbox-workers.md) | стражем `idempotency-coverage`: противоречие §4/§8 conventions.md разрешено |
 | [security/permission-matrix.md](security/permission-matrix.md) | стражем `permission-grants`: все три мёртвых гранта включены |
+| [../CLAUDE_HANDOFF_TZ.md](../CLAUDE_HANDOFF_TZ.md), [discovery/figma-ui-delivery-gate.md](discovery/figma-ui-delivery-gate.md), [discovery/figma-screen-inventory.md](discovery/figma-screen-inventory.md), [discovery/marketplace-screen-build-spec.md](discovery/marketplace-screen-build-spec.md), [discovery/marketplace-gap-matrix.md](discovery/marketplace-gap-matrix.md) | стартом работ по Figma-гейту marketplace (04.09.2026). Разрыв был не теоретический: ТЗ §5.1 требует запись в `docs/discovery/figma-ui-delivery-gate.md` при каждом UI-пакете, а самого файла в этом репозитории не было — исполнитель физически не мог выполнить требование, которое к нему предъявляют |
 
 Ещё снаружи, в `BAZA_Renovation/docs/`:
 
@@ -135,6 +138,10 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [architecture/screen-as-spec-boundary-audit-2026-09-02.md](architecture/screen-as-spec-boundary-audit-2026-09-02.md) — аудит правила «экран — спецификация»: где граница между контрактом чтения и схемой хранения, вердикты по двенадцати полям задачи, предсказания к 02.11.
 
 - [discovery/figma-local-handoff.md](discovery/figma-local-handoff.md) — передача макетов.
+- [discovery/figma-ui-delivery-gate.md](discovery/figma-ui-delivery-gate.md) — процедура сдачи marketplace UI и реестр реализации экранов.
+- [discovery/figma-screen-inventory.md](discovery/figma-screen-inventory.md) — инвентарь фреймов Figma: node ID, состояния, пометки `(не используется)`.
+- [discovery/marketplace-screen-build-spec.md](discovery/marketplace-screen-build-spec.md) — спецификация сборки экранов marketplace.
+- [discovery/marketplace-gap-matrix.md](discovery/marketplace-gap-matrix.md) — матрица расхождений marketplace между Figma, старым сайтом и реализацией.
 - [codex/plans/](codex/plans/) — планы отдельных работ, писавшиеся до реализации.
 
 ## Правило пополнения
