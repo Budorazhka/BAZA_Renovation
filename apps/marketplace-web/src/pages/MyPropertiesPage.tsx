@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { publishingApi, type OwnerListing, type OwnerPropertyAsset } from '../features/publishing/api/publishing-api'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import {
   SaleStatusBadge,
@@ -24,9 +25,17 @@ export interface MyPropertyItem {
   totalFloors: number
   status: ObjectSaleStatus
   actuality: ObjectActualityState
-  viewsCount: number
-  leadsCount: number
-  favoritesCount: number
+  /** id объекта и объявления в API — нужны ссылке на редактирование. */
+  assetId?: string
+  listingId?: string
+  /**
+   * Счётчики просмотров, контактов и добавлений в избранное. Необязательные,
+   * потому что API их не отдаёт: у приватных эндпоинтов владельца таких полей
+   * нет вовсе. Раньше здесь стояли выдуманные числа, показанные как настоящие.
+   */
+  viewsCount?: number
+  leadsCount?: number
+  favoritesCount?: number
   createdAt: string
   imageUrl?: string
 }
@@ -137,8 +146,65 @@ const INITIAL_PROPERTIES: MyPropertyItem[] = [
 /**
  * MyPropertiesPage Component (Figma: Кабинет риелтора: Мои объекты Node ID 824:17645 / 5071:68119)
  */
+/**
+ * Объект и объявление из API -> строка кабинета.
+ *
+ * Всё, чего в API нет, остаётся пустым, а не заполняется правдоподобным: статус
+ * модерации и актуальность выводятся из статуса объявления, счётчики просмотров
+ * не выводятся вовсе.
+ */
+function toItem(asset: OwnerPropertyAsset, listing: OwnerListing): MyPropertyItem {
+  const price = listing.price
+  const amount = Math.round(price.amountMinorUnits / 100)
+  return {
+    id: listing._id,
+    assetId: asset._id,
+    listingId: listing._id,
+    title: `${asset.propertyType}, ${asset.location.address}`,
+    dealType: listing.dealType,
+    propertyType: asset.propertyType,
+    priceFormatted: `${amount.toLocaleString('ru-RU')} ${price.currency}`,
+    address: asset.location.address,
+    city: asset.location.city,
+    rooms: asset.characteristics.rooms ?? 0,
+    area: asset.characteristics.area ?? 0,
+    floor: asset.characteristics.floor ?? 0,
+    totalFloors: asset.characteristics.totalFloors ?? 0,
+    status: listing.status === 'archived' ? 'archived' : 'for_sale',
+    actuality: listing.status === 'expired' ? 'needs_update' : 'up_to_date',
+    createdAt: listing.createdAt ? new Date(listing.createdAt).toLocaleDateString('ru-RU') : '',
+  }
+}
+
 export function MyPropertiesPage() {
-  const [properties, setProperties] = useState<MyPropertyItem[]>(INITIAL_PROPERTIES)
+  // Кабинет снят с фикстур 04.09.2026: раньше здесь лежал массив выдуманных
+  // объектов, включая счётчики просмотров и контактов, показанные как настоящие.
+  const [properties, setProperties] = useState<MyPropertyItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const assets = await publishingApi.listPropertyAssets()
+        const rows = await Promise.all(
+          assets.map(async (asset) => {
+            const listings = await publishingApi.listListingsForAsset(asset._id)
+            return listings.map((listing) => toItem(asset, listing))
+          }),
+        )
+        if (!cancelled) setProperties(rows.flat())
+      } catch {
+        if (!cancelled) setLoadError('Не удалось загрузить ваши объекты. Попробуйте обновить страницу.')
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
   const [statusFilter, setStatusFilter] = useState<'all' | ObjectSaleStatus>('all')
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
   const [searchQuery, setSearchQuery] = useState('')
@@ -146,7 +212,7 @@ export function MyPropertiesPage() {
 
   useSeoMetadata({
     title: 'Кабинет риелтора — Мои объекты | BAZA',
-    description: 'Управление объектами недвижимости, модерация, статистика просмотров и подтверждение актуальности.',
+    description: 'Управление объектами недвижимости, редактирование объявлений и подтверждение актуальности.',
   })
 
   // Handlers
@@ -204,7 +270,7 @@ export function MyPropertiesPage() {
   const countModeration = properties.filter((p) => p.status === 'moderation').length
   const countBooked = properties.filter((p) => p.status === 'booked').length
   const countArchived = properties.filter((p) => p.status === 'archived').length
-  const totalViews = properties.reduce((acc, p) => acc + p.viewsCount, 0)
+  const totalViews = properties.reduce((acc, p) => acc + (p.viewsCount ?? 0), 0)
 
   return (
     <div className="figma-account-page">
@@ -213,7 +279,7 @@ export function MyPropertiesPage() {
         <div>
           <h1 className="figma-account-header__title">Мои объекты</h1>
           <p className="figma-account-header__desc">
-            Управление опубликованными объектами, аналитика просмотров и контроль актуальности базы.
+            Управление опубликованными объектами и контроль актуальности базы.
           </p>
         </div>
         <Link to="/publish" className="figma-account-add-btn" data-testid="account-add-property-cta">
@@ -365,20 +431,27 @@ export function MyPropertiesPage() {
                 </p>
 
                 {/* Statistics row */}
-                <div className="figma-account-card-stats-row">
-                  <div className="figma-account-stat-item">
-                    <span>👁</span>
-                    <span><strong>{item.viewsCount}</strong> просмотров</span>
+                {/*
+                  Статистика показывается, только если она пришла. API её пока
+                  не отдаёт, поэтому блок обычно скрыт — это честнее, чем
+                  нарисовать нули или выдуманные числа.
+                */}
+                {item.viewsCount !== undefined && (
+                  <div className="figma-account-card-stats-row">
+                    <div className="figma-account-stat-item">
+                      <span>👁</span>
+                      <span><strong>{item.viewsCount}</strong> просмотров</span>
+                    </div>
+                    <div className="figma-account-stat-item">
+                      <span>📞</span>
+                      <span><strong>{item.leadsCount}</strong> контактов</span>
+                    </div>
+                    <div className="figma-account-stat-item">
+                      <span>♥</span>
+                      <span><strong>{item.favoritesCount}</strong> в избранном</span>
+                    </div>
                   </div>
-                  <div className="figma-account-stat-item">
-                    <span>📞</span>
-                    <span><strong>{item.leadsCount}</strong> контактов</span>
-                  </div>
-                  <div className="figma-account-stat-item">
-                    <span>♥</span>
-                    <span><strong>{item.favoritesCount}</strong> в избранном</span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Action Buttons (Figma 5071:68795) */}
@@ -389,6 +462,19 @@ export function MyPropertiesPage() {
                 >
                   Смотреть на сайте ↗
                 </Link>
+                {/*
+                  Правка ведёт на реальные id объекта и объявления. Раньше
+                  кабинет работал на выдуманных данных, и такой ссылке некуда
+                  было бы вести.
+                */}
+                {item.assetId && item.listingId && (
+                  <Link
+                    to={`/account/properties/${item.assetId}/listings/${item.listingId}/edit`}
+                    className="figma-account-action-btn"
+                  >
+                    Редактировать
+                  </Link>
+                )}
                 <button
                   type="button"
                   className="figma-account-action-btn"
@@ -439,7 +525,7 @@ export function MyPropertiesPage() {
                       onConfirm={() => handleConfirmActuality(item.id)}
                     />
                   </td>
-                  <td>{item.viewsCount}</td>
+                  <td>{item.viewsCount ?? '—'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: '6px' }}>
                       <Link

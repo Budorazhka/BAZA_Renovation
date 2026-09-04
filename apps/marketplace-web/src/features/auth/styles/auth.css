@@ -22,3 +22,60 @@
   border-radius: var(--radius-lg);
   background: var(--color-paper-raised);
 }
+
+/*
+ * MKT-SCR-021: экран редактирования объявления. Использует те же примитивы
+ * формы (wizard-field, wizard-btn, wizard-alert), что мастер публикации и вход:
+ * это одна и та же форма ввода данных объекта, разводить её визуально не за что.
+ */
+.edit-listing {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-5) var(--space-20);
+}
+
+.edit-listing__title {
+  margin: 0 0 var(--space-6);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--color-ink);
+}
+
+.edit-listing__fixed {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-5);
+  border: var(--rule) solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-paper);
+}
+
+.edit-listing__fixed dt {
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.edit-listing__fixed dd {
+  margin: 0;
+  color: var(--color-ink);
+}
+
+.edit-listing__fixed-note {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.edit-listing__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.edit-listing__updated {
+  margin-top: var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}

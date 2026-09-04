@@ -37,6 +37,7 @@ import { RequestsPage } from './pages/RequestsPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { AuthPage } from './pages/AuthPage'
+import { EditListingPage } from './pages/EditListingPage'
 import { RequireAuth } from './features/auth/components/RequireAuth'
 import './styles/header-footer.css'
 import './styles/cards.css'
@@ -764,6 +765,10 @@ export default function App() {
         <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
         <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
         <Route path="/account/properties" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
+        <Route
+          path="/account/properties/:assetId/listings/:listingId/edit"
+          element={<Shell><RequireAuth><EditListingPage /></RequireAuth></Shell>}
+        />
         <Route path="/account" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
         <Route path="/auth/login" element={<Shell><AuthPage mode="login" /></Shell>} />
         <Route path="/auth/register" element={<Shell><AuthPage mode="register" /></Shell>} />

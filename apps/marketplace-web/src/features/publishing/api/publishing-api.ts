@@ -10,6 +10,37 @@ import { resolveApiBaseUrl } from './api-base'
 
 const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL)
 
+/**
+ * Объект недвижимости, как его отдаёт приватный API владельцу.
+ *
+ * Умышленно узкий тип: только то, что реально приходит и используется. Счётчиков
+ * просмотров, лидов и добавлений в избранное здесь нет, потому что их нет и в
+ * API — см. `docs/operations/marketplace-listing-edit.md`.
+ */
+export interface OwnerPropertyAsset {
+  _id: string
+  propertyType: string
+  commercialSubtype?: string
+  location: { country: string; city: string; address: string }
+  characteristics: { area?: number; rooms?: number; floor?: number; totalFloors?: number }
+  representativePhone: string
+  version: number
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface OwnerListing {
+  _id: string
+  propertyAssetId: string
+  dealType: 'sale' | 'rent_long' | 'rent_short'
+  price: { amountMinorUnits: number; currency: string }
+  status: 'draft' | 'active' | 'expired' | 'archived'
+  version: number
+  createdAt?: string
+  /** Дата последней правки. Отсутствует у объявлений, которые ни разу не правили. */
+  updatedAt?: string
+}
+
 export class PublishingApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -102,6 +133,45 @@ export const publishingApi = {
         // Ключ обязателен: повтор без него создал бы второй листинг (ADR-006).
         headers: { 'Idempotency-Key': idempotencyKey },
         body: JSON.stringify(payload),
+      },
+    )
+  },
+
+  /** Объекты текущего владельца. Кабинет «Мои объекты» и экран редактирования. */
+  async listPropertyAssets(): Promise<OwnerPropertyAsset[]> {
+    return request<OwnerPropertyAsset[]>('/marketplace/property-assets')
+  },
+
+  async getPropertyAsset(assetId: string): Promise<OwnerPropertyAsset> {
+    return request<OwnerPropertyAsset>(`/marketplace/property-assets/${assetId}`)
+  },
+
+  async listListingsForAsset(assetId: string): Promise<OwnerListing[]> {
+    return request<OwnerListing[]>(`/marketplace/property-assets/${assetId}/listings`)
+  },
+
+  /**
+   * Правка объявления (MKT-SCR-021).
+   *
+   * Тип объекта, тип сделки и адрес в патч не входят: по ним ищутся дубликаты,
+   * и сервер такие поля отклоняет с 400. Ответ говорит `rebuildRequested` —
+   * была ли запрошена пересборка каталога, чтобы экран мог честно сказать, что
+   * изменения появятся в каталоге не мгновенно.
+   */
+  async updateListing(
+    assetId: string,
+    listingId: string,
+    patch: {
+      price?: { amountMinorUnits: number; currency: string }
+      characteristics?: { area?: number; rooms?: number; floor?: number; totalFloors?: number }
+      representativePhone?: string
+    },
+  ): Promise<{ listing: OwnerListing; rebuildRequested: boolean }> {
+    return request<{ listing: OwnerListing; rebuildRequested: boolean }>(
+      `/marketplace/property-assets/${assetId}/listings/${listingId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(patch),
       },
     )
   },

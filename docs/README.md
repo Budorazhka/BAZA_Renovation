@@ -94,6 +94,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 - [marketplace-functional-acceptance.md](operations/marketplace-functional-acceptance.md) — функциональная приёмка.
 - [marketplace-public-api-gap-closure.md](operations/marketplace-public-api-gap-closure.md) — закрытие расхождений публичного API.
 - [marketplace-operational-hardening-runbook.md](operations/marketplace-operational-hardening-runbook.md) — runbook эксплуатации.
+- [marketplace-listing-edit.md](operations/marketplace-listing-edit.md) — редактирование объявления владельцем: чего не было в модели данных, что можно менять и почему адрес нельзя; кабинет снят с фикстур.
 - [marketplace-publisher-filter.md](operations/marketplace-publisher-filter.md) — клик по застройщику и агентству ведёт в отфильтрованный каталог; отдельных страниц компаний нет по решению владельца.
 - [public-listing-leads.md](operations/public-listing-leads.md) — раскрытие контакта и создание лида.
 - [property-asset-media.md](operations/property-asset-media.md) — загрузка медиа и публичная галерея.
