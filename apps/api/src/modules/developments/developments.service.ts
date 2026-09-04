@@ -31,12 +31,20 @@ import { SectionRepository } from './repository/section.repository';
 import { FloorRepository } from './repository/floor.repository';
 import { FloorPlanRepository } from './repository/floor-plan.repository';
 import { UnitRepository } from './repository/unit.repository';
+import { InstallmentPlanRepository, type UpdateInstallmentPlanPatch } from './repository/installment-plan.repository';
 import { OrganizationsService } from '../organizations/organizations.service';
 import type { BuildingDocument, GeoPolygon } from './schemas/building.schema';
 import type { SectionDocument } from './schemas/section.schema';
 import type { FloorDocument } from './schemas/floor.schema';
 import type { FloorPlanDocument, GeoPolygon2D } from './schemas/floor-plan.schema';
 import type { UnitDocument, UnitKind, UnitStatus } from './schemas/unit.schema';
+import type {
+  InstallmentPlanDocument,
+  InstallmentApplyTo,
+  InstallmentDownPaymentType,
+  InstallmentPaymentFrequency,
+  InstallmentTermType,
+} from './schemas/installment-plan.schema';
 import { sortChessboardUnits, type ChessboardUnitInput } from './chessboard-export';
 
 /**
@@ -113,6 +121,7 @@ export class DevelopmentsService {
     private readonly publicationRepository: MarketplacePublicationRepository,
     private readonly idempotencyService: IdempotencyService,
     private readonly organizationsService: OrganizationsService,
+    private readonly installmentPlanRepository: InstallmentPlanRepository,
   ) {}
 
   /**
@@ -1015,5 +1024,206 @@ export class DevelopmentsService {
       unpublishedAt: publication.unpublishedAt?.toISOString(),
       buildError: publication.status === 'build_failed' ? 'Не удалось опубликовать. Обратитесь в поддержку.' : undefined,
     };
+  }
+
+  async createInstallmentPlan(params: {
+    developmentId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    unitId?: Types.ObjectId;
+    title: string;
+    isActive?: boolean;
+    applyTo?: InstallmentApplyTo;
+    downPaymentType: InstallmentDownPaymentType;
+    downPaymentValue: number;
+    termType: InstallmentTermType;
+    termMonths?: number;
+    endDate?: string;
+    paymentFrequency: InstallmentPaymentFrequency;
+    useDiscount?: boolean;
+    discountFromDownPayment?: boolean;
+    discountPercent?: number;
+    description?: string;
+    sortOrder?: number;
+    idempotency: IdempotencyParams;
+  }): Promise<InstallmentPlanDocument> {
+    const development = await this.developmentRepository.findByIdForOrganization(
+      params.developmentId,
+      params.organizationId,
+    );
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    if (params.unitId) {
+      const unit = await this.unitRepository.findByIdForOrganization(
+        params.unitId,
+        params.organizationId,
+      );
+      if (!unit) {
+        throw new NotFoundException('Unit not found');
+      }
+    }
+
+    return this.createIdempotently(params.idempotency, (session) =>
+      this.installmentPlanRepository.create(
+        {
+          organizationId: params.organizationId,
+          developmentId: params.developmentId,
+          unitId: params.unitId,
+          title: params.title,
+          isActive: params.isActive,
+          applyTo: params.applyTo,
+          downPaymentType: params.downPaymentType,
+          downPaymentValue: params.downPaymentValue,
+          termType: params.termType,
+          termMonths: params.termMonths,
+          endDate: params.endDate,
+          paymentFrequency: params.paymentFrequency,
+          useDiscount: params.useDiscount,
+          discountFromDownPayment: params.discountFromDownPayment,
+          discountPercent: params.discountPercent,
+          description: params.description,
+          sortOrder: params.sortOrder,
+        },
+        session,
+      ),
+    );
+  }
+
+  async listInstallmentPlans(
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    filter: { unitId?: Types.ObjectId } = {},
+  ): Promise<InstallmentPlanDocument[]> {
+    const development = await this.developmentRepository.findByIdForOrganization(
+      developmentId,
+      organizationId,
+    );
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+    return this.installmentPlanRepository.listForDevelopment(developmentId, organizationId, filter);
+  }
+
+  async getInstallmentPlanForOrganization(
+    id: Types.ObjectId,
+    developmentId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<InstallmentPlanDocument> {
+    const plan = await this.installmentPlanRepository.findByIdForOrganization(id, organizationId);
+    if (!plan || !plan.developmentId.equals(developmentId)) {
+      throw new NotFoundException('Installment plan not found');
+    }
+    return plan;
+  }
+
+  async updateInstallmentPlan(params: {
+    id: Types.ObjectId;
+    developmentId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    expectedVersion: number;
+    patch: UpdateInstallmentPlanPatch;
+    idempotency: IdempotencyParams;
+  }): Promise<InstallmentPlanDocument> {
+    const development = await this.developmentRepository.findByIdForOrganization(
+      params.developmentId,
+      params.organizationId,
+    );
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    const existing = await this.installmentPlanRepository.findByIdForOrganization(
+      params.id,
+      params.organizationId,
+    );
+    if (!existing || !existing.developmentId.equals(params.developmentId)) {
+      throw new NotFoundException('Installment plan not found');
+    }
+
+    if (params.patch.unitId) {
+      const unit = await this.unitRepository.findByIdForOrganization(
+        params.patch.unitId,
+        params.organizationId,
+      );
+      if (!unit) {
+        throw new NotFoundException('Unit not found');
+      }
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const updated = await this.installmentPlanRepository.updateWithVersionCheck(
+        params.id,
+        params.organizationId,
+        params.expectedVersion,
+        params.patch,
+        session,
+      );
+      if (!updated) {
+        throw new ConflictException('Installment plan was modified by another request (version conflict)');
+      }
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: params.idempotency.operation,
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 200,
+          responseBody: toPlainRecord(updated),
+        },
+        session,
+      );
+
+      return updated;
+    });
+  }
+
+  async deleteInstallmentPlan(params: {
+    id: Types.ObjectId;
+    developmentId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    expectedVersion: number;
+    idempotency: IdempotencyParams;
+  }): Promise<void> {
+    const development = await this.developmentRepository.findByIdForOrganization(
+      params.developmentId,
+      params.organizationId,
+    );
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    const existing = await this.installmentPlanRepository.findByIdForOrganization(
+      params.id,
+      params.organizationId,
+    );
+    if (!existing || !existing.developmentId.equals(params.developmentId)) {
+      throw new NotFoundException('Installment plan not found');
+    }
+
+    await runInTransaction(this.connection, async (session) => {
+      const deleted = await this.installmentPlanRepository.deleteWithVersionCheck(
+        params.id,
+        params.organizationId,
+        params.expectedVersion,
+        session,
+      );
+      if (!deleted) {
+        throw new ConflictException('Installment plan was modified by another request (version conflict)');
+      }
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: params.idempotency.operation,
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 204,
+          responseBody: {},
+        },
+        session,
+      );
+    });
   }
 }

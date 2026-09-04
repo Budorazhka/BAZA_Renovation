@@ -51,6 +51,9 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /buildings/:buildingId/floor-plans': 'дубль планировки',
   'POST /floors/:floorId/units': 'дубль юнита — шахматка показала бы несуществующий лот',
   'POST /admin/accounts': 'дубль админ-аккаунта: второй аккаунт с админ-доступом на ту же identity',
+  'POST /developments/:developmentId/installment-plans': 'создание плана рассрочки — дубль создал бы дублирующий план',
+  'PATCH /developments/:developmentId/installment-plans/:id': 'обновление плана рассрочки с Idempotency-Key и expectedVersion',
+  'DELETE /developments/:developmentId/installment-plans/:id': 'удаление плана рассрочки с Idempotency-Key и expectedVersion',
 };
 
 /**

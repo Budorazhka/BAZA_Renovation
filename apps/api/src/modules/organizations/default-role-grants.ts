@@ -216,6 +216,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
     { resource: 'crm_report', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'create', scope: 'organization' },
+    { resource: 'installment_plan', action: 'update', scope: 'organization' },
+    { resource: 'installment_plan', action: 'delete', scope: 'organization' },
   ],
   director: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -266,6 +270,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
     { resource: 'crm_report', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'create', scope: 'organization' },
+    { resource: 'installment_plan', action: 'update', scope: 'organization' },
+    { resource: 'installment_plan', action: 'delete', scope: 'organization' },
   ],
   rop: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -317,6 +325,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
     { resource: 'crm_report', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'create', scope: 'organization' },
+    { resource: 'installment_plan', action: 'update', scope: 'organization' },
+    { resource: 'installment_plan', action: 'delete', scope: 'organization' },
   ],
   manager: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -440,5 +452,9 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
     { resource: 'crm_report', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'read', scope: 'organization' },
+    { resource: 'installment_plan', action: 'create', scope: 'organization' },
+    { resource: 'installment_plan', action: 'update', scope: 'organization' },
+    { resource: 'installment_plan', action: 'delete', scope: 'organization' },
   ],
 };

@@ -447,6 +447,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/developments/{developmentId}/installment-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список планов рассрочки ЖК */
+        get: operations["listInstallmentPlans"];
+        put?: never;
+        /** Создать план рассрочки для ЖК или юнита */
+        post: operations["createInstallmentPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/developments/{developmentId}/installment-plans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить план рассрочки */
+        delete: operations["deleteInstallmentPlan"];
+        options?: never;
+        head?: never;
+        /** Обновить план рассрочки */
+        patch: operations["updateInstallmentPlan"];
+        trace?: never;
+    };
     "/developments/{developmentId}/buildings": {
         parameters: {
             query?: never;
@@ -2387,6 +2423,78 @@ export interface components {
             unpublishedAt?: string | null;
             /** @description Безопасный константный текст при build_failed, не реальная причина сборки */
             buildError?: string | null;
+        };
+        InstallmentPlan: {
+            id: string;
+            developmentId: string;
+            organizationId: string;
+            unitId?: string | null;
+            title: string;
+            isActive: boolean;
+            /** @enum {string} */
+            applyTo: "project" | "unit";
+            /** @enum {string} */
+            downPaymentType: "percent" | "amount";
+            downPaymentValue: number;
+            /** @enum {string} */
+            termType: "months_from_current_date" | "fixed_end_date";
+            termMonths?: number | null;
+            endDate?: string | null;
+            /** @enum {string} */
+            paymentFrequency: "monthly" | "quarterly";
+            useDiscount: boolean;
+            discountFromDownPayment?: boolean | null;
+            discountPercent?: number | null;
+            description?: string | null;
+            sortOrder: number;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateInstallmentPlanRequest: {
+            title: string;
+            isActive?: boolean;
+            /** @enum {string} */
+            applyTo?: "project" | "unit";
+            unitId?: string;
+            /** @enum {string} */
+            downPaymentType: "percent" | "amount";
+            downPaymentValue: number;
+            /** @enum {string} */
+            termType: "months_from_current_date" | "fixed_end_date";
+            termMonths?: number;
+            endDate?: string;
+            /** @enum {string} */
+            paymentFrequency: "monthly" | "quarterly";
+            useDiscount?: boolean;
+            discountFromDownPayment?: boolean;
+            discountPercent?: number;
+            description?: string;
+            sortOrder?: number;
+        };
+        UpdateInstallmentPlanRequest: {
+            expectedVersion: number;
+            title?: string;
+            isActive?: boolean;
+            /** @enum {string} */
+            applyTo?: "project" | "unit";
+            unitId?: string;
+            /** @enum {string} */
+            downPaymentType?: "percent" | "amount";
+            downPaymentValue?: number;
+            /** @enum {string} */
+            termType?: "months_from_current_date" | "fixed_end_date";
+            termMonths?: number;
+            endDate?: string;
+            /** @enum {string} */
+            paymentFrequency?: "monthly" | "quarterly";
+            useDiscount?: boolean;
+            discountFromDownPayment?: boolean;
+            discountPercent?: number;
+            description?: string;
+            sortOrder?: number;
         };
         CreateBuildingRequest: {
             name: string;
@@ -4493,6 +4601,134 @@ export interface operations {
             403: components["responses"]["Error"];
             /** @description NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код) */
             404: components["responses"]["Error"];
+        };
+    };
+    listInstallmentPlans: {
+        parameters: {
+            query?: {
+                unitId?: string;
+            };
+            header?: never;
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список планов рассрочки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallmentPlan"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createInstallmentPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateInstallmentPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description План рассрочки создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallmentPlan"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteInstallmentPlan: {
+        parameters: {
+            query?: {
+                expectedVersion?: number;
+            };
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description План рассрочки удалён */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    updateInstallmentPlan: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                developmentId: components["parameters"]["DevelopmentId"];
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateInstallmentPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description План рассрочки обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstallmentPlan"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
         };
     };
     listBuildings: {

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import { Types } from 'mongoose';
@@ -23,6 +23,9 @@ import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitPriceDto } from './dto/update-unit-price.dto';
 import { UpdateUnitStatusDto } from './dto/update-unit-status.dto';
 import { ListUnitsQueryDto } from './dto/list-units-query.dto';
+import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
+import { UpdateInstallmentPlanDto } from './dto/update-installment-plan.dto';
+import { ListInstallmentPlansQueryDto } from './dto/list-installment-plans-query.dto';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -592,5 +595,130 @@ export class DevelopmentsController {
       new Types.ObjectId(unitId),
       new Types.ObjectId(tenantContext.organizationId),
     );
+  }
+
+  @Post('developments/:developmentId/installment-plans')
+  @HttpCode(201)
+  @RequirePermission('installment_plan', 'create')
+  async createInstallmentPlan(
+    @Req() req: FastifyRequest,
+    @Param('developmentId') developmentId: string,
+    @Body() dto: CreateInstallmentPlanDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { developmentId, title: dto.title, downPaymentValue: dto.downPaymentValue };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devCreateInstallmentPlan', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    return this.developmentsService.createInstallmentPlan({
+      developmentId: new Types.ObjectId(developmentId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      unitId: dto.unitId ? new Types.ObjectId(dto.unitId) : undefined,
+      title: dto.title,
+      isActive: dto.isActive,
+      applyTo: dto.applyTo,
+      downPaymentType: dto.downPaymentType,
+      downPaymentValue: dto.downPaymentValue,
+      termType: dto.termType,
+      termMonths: dto.termMonths,
+      endDate: dto.endDate,
+      paymentFrequency: dto.paymentFrequency,
+      useDiscount: dto.useDiscount,
+      discountFromDownPayment: dto.discountFromDownPayment,
+      discountPercent: dto.discountPercent,
+      description: dto.description,
+      sortOrder: dto.sortOrder,
+      idempotency: { identityId, operation: 'devCreateInstallmentPlan', key: idempotencyKey, requestBody },
+    });
+  }
+
+  @Get('developments/:developmentId/installment-plans')
+  @RequirePermission('installment_plan', 'read')
+  async listInstallmentPlans(
+    @Req() req: FastifyRequest,
+    @Param('developmentId') developmentId: string,
+    @Query() query: ListInstallmentPlansQueryDto,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.developmentsService.listInstallmentPlans(
+      new Types.ObjectId(developmentId),
+      new Types.ObjectId(tenantContext.organizationId),
+      { unitId: query.unitId ? new Types.ObjectId(query.unitId) : undefined },
+    );
+  }
+
+  @Patch('developments/:developmentId/installment-plans/:id')
+  @RequirePermission('installment_plan', 'update')
+  async updateInstallmentPlan(
+    @Req() req: FastifyRequest,
+    @Param('developmentId') developmentId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateInstallmentPlanDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { developmentId, id, expectedVersion: dto.expectedVersion, title: dto.title };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devUpdateInstallmentPlan', idempotencyKey, requestBody);
+    if (replay) {
+      return replay.responseBody;
+    }
+
+    const { expectedVersion, ...patchFields } = dto;
+    return this.developmentsService.updateInstallmentPlan({
+      id: new Types.ObjectId(id),
+      developmentId: new Types.ObjectId(developmentId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      expectedVersion,
+      patch: {
+        ...patchFields,
+        unitId: patchFields.unitId ? new Types.ObjectId(patchFields.unitId) : undefined,
+      },
+      idempotency: { identityId, operation: 'devUpdateInstallmentPlan', key: idempotencyKey, requestBody },
+    });
+  }
+
+  @Delete('developments/:developmentId/installment-plans/:id')
+  @HttpCode(204)
+  @RequirePermission('installment_plan', 'delete')
+  async deleteInstallmentPlan(
+    @Req() req: FastifyRequest,
+    @Param('developmentId') developmentId: string,
+    @Param('id') id: string,
+    @Query('expectedVersion') expectedVersionParam?: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const expectedVersion = expectedVersionParam !== undefined ? parseInt(expectedVersionParam, 10) : 0;
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { developmentId, id, expectedVersion };
+    const replay = await this.developmentsService.checkCreateReplay(identityId, 'devDeleteInstallmentPlan', idempotencyKey, requestBody);
+    if (replay) {
+      return;
+    }
+
+    await this.developmentsService.deleteInstallmentPlan({
+      id: new Types.ObjectId(id),
+      developmentId: new Types.ObjectId(developmentId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      expectedVersion,
+      idempotency: { identityId, operation: 'devDeleteInstallmentPlan', key: idempotencyKey, requestBody },
+    });
   }
 }

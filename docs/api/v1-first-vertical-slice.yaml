@@ -908,6 +908,132 @@ paths:
           description: NOT_FOUND — ЖК не существует/чужой (единый non-disclosure код)
           $ref: '#/components/responses/Error'
 
+  /developments/{developmentId}/installment-plans:
+    post:
+      operationId: createInstallmentPlan
+      summary: Создать план рассрочки для ЖК или юнита
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/DevelopmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInstallmentPlanRequest'
+      responses:
+        '201':
+          description: План рассрочки создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallmentPlan'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: listInstallmentPlans
+      summary: Список планов рассрочки ЖК
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/DevelopmentId'
+        - name: unitId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Список планов рассрочки
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstallmentPlan'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /developments/{developmentId}/installment-plans/{id}:
+    patch:
+      operationId: updateInstallmentPlan
+      summary: Обновить план рассрочки
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/DevelopmentId'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInstallmentPlanRequest'
+      responses:
+        '200':
+          description: План рассрочки обновлён
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallmentPlan'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteInstallmentPlan
+      summary: Удалить план рассрочки
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - $ref: '#/components/parameters/DevelopmentId'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: expectedVersion
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '204':
+          description: План рассрочки удалён
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT
+          $ref: '#/components/responses/Error'
+
   /developments/{developmentId}/buildings:
     post:
       operationId: createBuilding
@@ -5308,6 +5434,94 @@ components:
         publishedAt: {type: string, format: date-time, nullable: true}
         unpublishedAt: {type: string, format: date-time, nullable: true}
         buildError: {type: string, nullable: true, description: "Безопасный константный текст при build_failed, не реальная причина сборки"}
+
+    InstallmentPlan:
+      type: object
+      required:
+        - id
+        - developmentId
+        - organizationId
+        - title
+        - isActive
+        - applyTo
+        - downPaymentType
+        - downPaymentValue
+        - termType
+        - paymentFrequency
+        - useDiscount
+        - sortOrder
+        - version
+        - createdAt
+        - updatedAt
+      properties:
+        id: {type: string}
+        developmentId: {type: string}
+        organizationId: {type: string}
+        unitId: {type: string, nullable: true}
+        title: {type: string}
+        isActive: {type: boolean}
+        applyTo: {type: string, enum: [project, unit]}
+        downPaymentType: {type: string, enum: [percent, amount]}
+        downPaymentValue: {type: number}
+        termType: {type: string, enum: [months_from_current_date, fixed_end_date]}
+        termMonths: {type: integer, nullable: true}
+        endDate: {type: string, nullable: true}
+        paymentFrequency: {type: string, enum: [monthly, quarterly]}
+        useDiscount: {type: boolean}
+        discountFromDownPayment: {type: boolean, nullable: true}
+        discountPercent: {type: number, nullable: true}
+        description: {type: string, nullable: true}
+        sortOrder: {type: integer}
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    CreateInstallmentPlanRequest:
+      type: object
+      required:
+        - title
+        - downPaymentType
+        - downPaymentValue
+        - termType
+        - paymentFrequency
+      properties:
+        title: {type: string}
+        isActive: {type: boolean}
+        applyTo: {type: string, enum: [project, unit]}
+        unitId: {type: string}
+        downPaymentType: {type: string, enum: [percent, amount]}
+        downPaymentValue: {type: number}
+        termType: {type: string, enum: [months_from_current_date, fixed_end_date]}
+        termMonths: {type: integer}
+        endDate: {type: string}
+        paymentFrequency: {type: string, enum: [monthly, quarterly]}
+        useDiscount: {type: boolean}
+        discountFromDownPayment: {type: boolean}
+        discountPercent: {type: number}
+        description: {type: string}
+        sortOrder: {type: integer}
+
+    UpdateInstallmentPlanRequest:
+      type: object
+      required:
+        - expectedVersion
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        title: {type: string}
+        isActive: {type: boolean}
+        applyTo: {type: string, enum: [project, unit]}
+        unitId: {type: string}
+        downPaymentType: {type: string, enum: [percent, amount]}
+        downPaymentValue: {type: number}
+        termType: {type: string, enum: [months_from_current_date, fixed_end_date]}
+        termMonths: {type: integer}
+        endDate: {type: string}
+        paymentFrequency: {type: string, enum: [monthly, quarterly]}
+        useDiscount: {type: boolean}
+        discountFromDownPayment: {type: boolean}
+        discountPercent: {type: number}
+        description: {type: string}
+        sortOrder: {type: integer}
 
     CreateBuildingRequest:
       type: object

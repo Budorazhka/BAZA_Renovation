@@ -13,6 +13,7 @@ import type { PublicationService } from '../publication/publication.service';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { OrganizationsService } from '../organizations/organizations.service';
+import type { InstallmentPlanRepository } from './repository/installment-plan.repository';
 
 function makeMockConnection() {
   return {
@@ -36,6 +37,7 @@ function makeService(overrides: {
   publicationRepository?: Partial<MarketplacePublicationRepository>;
   idempotencyService?: Partial<IdempotencyService>;
   organizationsService?: Partial<OrganizationsService>;
+  installmentPlanRepository?: Partial<InstallmentPlanRepository>;
 } = {}) {
   return new DevelopmentsService(
     makeMockConnection() as never,
@@ -56,6 +58,7 @@ function makeService(overrides: {
     // новым гейтом; тесты именно на organization.type переопределяют явно.
     (overrides.organizationsService ??
       { getOrganizationById: jest.fn().mockResolvedValue({ type: 'developer' }) }) as OrganizationsService,
+    (overrides.installmentPlanRepository ?? {}) as InstallmentPlanRepository,
   );
 }
 
@@ -1461,3 +1464,147 @@ describe('DevelopmentsService.buildChessboardExport', () => {
     expect(result.units.map((u) => u.number)).toEqual(['A-1001', 'B-0201']);
   });
 });
+
+describe('DevelopmentsService — Installment Plans', () => {
+  const developmentId = new Types.ObjectId();
+  const organizationId = new Types.ObjectId();
+
+  describe('createInstallmentPlan', () => {
+    it('отклоняет, если ЖК не найден в организации', async () => {
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.createInstallmentPlan({
+          developmentId,
+          organizationId,
+          title: 'Тест',
+          downPaymentType: 'percent',
+          downPaymentValue: 30,
+          termType: 'months_from_current_date',
+          paymentFrequency: 'monthly',
+          idempotency: idem(),
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('отклоняет, если unitId указан, но не найден в организации', async () => {
+      const unitId = new Types.ObjectId();
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+        unitRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      });
+
+      await expect(
+        service.createInstallmentPlan({
+          developmentId,
+          organizationId,
+          unitId,
+          title: 'Тест',
+          downPaymentType: 'percent',
+          downPaymentValue: 30,
+          termType: 'months_from_current_date',
+          paymentFrequency: 'monthly',
+          idempotency: idem(),
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('создаёт план через репозиторий при валидных параметрах', async () => {
+      const mockCreated = { _id: new Types.ObjectId(), title: 'Тест' };
+      const createSpy = jest.fn().mockResolvedValue(mockCreated);
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+        installmentPlanRepository: { create: createSpy },
+      });
+
+      const result = await service.createInstallmentPlan({
+        developmentId,
+        organizationId,
+        title: 'Тест',
+        downPaymentType: 'percent',
+        downPaymentValue: 30,
+        termType: 'months_from_current_date',
+        paymentFrequency: 'monthly',
+        idempotency: idem(),
+      });
+
+      expect(result).toBe(mockCreated);
+      expect(createSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('listInstallmentPlans', () => {
+    it('отклоняет, если ЖК не найден в организации', async () => {
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) },
+      });
+
+      await expect(service.listInstallmentPlans(developmentId, organizationId)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('делегирует в installmentPlanRepository.listForDevelopment', async () => {
+      const mockList = [{ id: '1' }];
+      const listSpy = jest.fn().mockResolvedValue(mockList);
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+        installmentPlanRepository: { listForDevelopment: listSpy },
+      });
+
+      const result = await service.listInstallmentPlans(developmentId, organizationId);
+      expect(result).toBe(mockList);
+      expect(listSpy).toHaveBeenCalledWith(developmentId, organizationId, {});
+    });
+  });
+
+  describe('updateInstallmentPlan', () => {
+    it('бросает ConflictException при расхождении версий', async () => {
+      const planId = new Types.ObjectId();
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+        installmentPlanRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: planId, developmentId }),
+          updateWithVersionCheck: jest.fn().mockResolvedValue(null),
+        },
+      });
+
+      await expect(
+        service.updateInstallmentPlan({
+          id: planId,
+          developmentId,
+          organizationId,
+          expectedVersion: 1,
+          patch: { title: 'New' },
+          idempotency: idem(),
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  describe('deleteInstallmentPlan', () => {
+    it('бросает ConflictException при расхождении версий', async () => {
+      const planId = new Types.ObjectId();
+      const service = makeService({
+        developmentRepository: { findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }) },
+        installmentPlanRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: planId, developmentId }),
+          deleteWithVersionCheck: jest.fn().mockResolvedValue(false),
+        },
+      });
+
+      await expect(
+        service.deleteInstallmentPlan({
+          id: planId,
+          developmentId,
+          organizationId,
+          expectedVersion: 1,
+          idempotency: idem(),
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+});
+
