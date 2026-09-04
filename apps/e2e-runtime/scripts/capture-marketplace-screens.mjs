@@ -8,21 +8,34 @@
  * Скриншот — половина сверки. Вторая половина, сопоставление с фреймом, делается
  * человеком; этот скрипт только даёт материал и делает его воспроизводимым.
  *
- * Запуск (marketplace-web должен быть собран и отдаваться по BASE_URL):
- *   pnpm --filter marketplace-web build
+ * Основной способ запуска — сквозной гейт: шаг «Capture marketplace
+ * screenshots» в .github/workflows/runtime-release-gate.yml снимает экраны на
+ * поднятом стеке с реальными данными и кладёт их артефактом
+ * `marketplace-screenshots`. Локально стек поднять получается не у всех (нужен
+ * Docker), а снимки без backend показывают состояние ошибки загрузки, по
+ * которому вёрстку не сверить.
+ *
+ * Локально, если стек всё-таки есть:
+ *   pnpm runtime:up
+ *   node apps/e2e-runtime/scripts/capture-marketplace-screens.mjs
+ *
+ * Без стека, только вёрстка пустых состояний:
+ *   pnpm --filter @baza/marketplace-web build
  *   npx vite preview --port 4173   # из apps/marketplace-web
  *   node scripts/capture-marketplace-screens.mjs
  *
  * Переменные: BASE_URL (по умолчанию http://localhost:4173),
  * OUT_DIR (по умолчанию ../../docs/discovery/screenshots).
  */
-import { chromium } from '@playwright/test';
+import { chromium, request as apiRequest } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BASE_URL = process.env.BASE_URL ?? 'http://localhost:4173';
+const API_URL = process.env.RUNTIME_API_URL ?? 'http://localhost:3000';
+const API_BASE_PATH = process.env.RUNTIME_API_BASE_PATH ?? '/api/v1';
 const OUT_DIR = process.env.OUT_DIR ?? resolve(HERE, '../../../docs/discovery/screenshots');
 
 /**
@@ -51,8 +64,43 @@ const VIEWPORTS = [
   { key: 'mobile', width: 375, height: 812 },
 ];
 
+/**
+ * Заводит сессию и отдаёт её в виде storageState для браузера.
+ *
+ * Без входа половина списка снимется как форма логина: разделы кабинета
+ * закрыты `RequireAuth`. Снимок формы входа вместо кабинета — не тот материал,
+ * по которому сверяют вёрстку.
+ *
+ * Возвращает `null`, если войти не удалось (например упёрлись в лимит
+ * регистраций — пять в минуту на IP): тогда снимки просто делаются гостем, и
+ * это честно записывается в отчёт, а не выдаётся за кабинет.
+ */
+async function createSignedInState() {
+  const login = `capture-${Date.now()}@example.com`;
+  const password = 'Correct-Horse-Battery-Staple-1!';
+  const api = await apiRequest.newContext({ baseURL: `${API_URL}${API_BASE_PATH}` });
+  try {
+    const registered = await api.post('/auth/register', { data: { login, password } });
+    if (registered.status() !== 201) return null;
+    const loggedIn = await api.post('/auth/login', {
+      data: { login, password },
+      headers: { Origin: BASE_URL },
+    });
+    if (loggedIn.status() !== 200 && loggedIn.status() !== 201) return null;
+    return await api.storageState();
+  } catch {
+    return null;
+  } finally {
+    await api.dispose();
+  }
+}
+
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
+  const storageState = await createSignedInState();
+  if (!storageState) {
+    console.warn('[capture] Войти не удалось — разделы кабинета снимутся как форма входа.');
+  }
   const browser = await chromium.launch();
   const report = [];
 
@@ -60,6 +108,7 @@ async function main() {
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
+      ...(storageState ? { storageState } : {}),
     });
 
     for (const screen of SCREENS) {
@@ -92,6 +141,7 @@ async function main() {
         figmaFrame: screen.figmaFrame,
         data: screen.data,
         file,
+        signedIn: Boolean(storageState),
         navigationError: error,
         consoleErrors: consoleErrors.slice(0, 5),
         failedRequests: failedRequests.slice(0, 5),

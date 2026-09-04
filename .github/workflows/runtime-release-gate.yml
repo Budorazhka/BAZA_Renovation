@@ -121,6 +121,29 @@ jobs:
       - name: Run real Playwright runtime gate
         run: pnpm runtime:e2e -- --project chromium --reporter=list --retries=1
 
+      # Снимки экранов для сверки с Figma. Делаются здесь, а не на машине
+      # разработчика: поднятый стек с реальными данными есть только тут, и
+      # снимки получаются повторяемыми, а не «как было у меня локально».
+      #
+      # continue-on-error: снимки — материал для сверки, а не критерий приёмки.
+      # Сбой съёмки не должен красить гейт, который проверяет работу продукта.
+      - name: Capture marketplace screenshots
+        if: always()
+        continue-on-error: true
+        env:
+          BASE_URL: ${{ env.RUNTIME_MARKETPLACE_URL }}
+        run: node apps/e2e-runtime/scripts/capture-marketplace-screens.mjs
+
+      - name: Upload marketplace screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: marketplace-screenshots
+          path: docs/discovery/screenshots
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload Playwright artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
