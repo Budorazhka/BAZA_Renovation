@@ -8,6 +8,13 @@ export interface SeoConfig {
   canonicalUrl?: string
   imageUrl?: string
   jsonLd?: Record<string, unknown>
+  /**
+   * Закрыть страницу от индексации.
+   *
+   * Нужно страницам, адресованным одному человеку: персональная подборка
+   * содержит имя клиента и заметки агента, ей нечего делать в поиске.
+   */
+  noindex?: boolean
 }
 
 const DEFAULT_TITLE = 'BAZA.sale · каталог объектов недвижимости'
@@ -84,6 +91,7 @@ export function useSeoMetadata(config: SeoConfig) {
 
     document.title = title
     setMetaTag('description', description)
+    setMetaTag('robots', config.noindex ? 'noindex, nofollow' : 'index, follow')
     setMetaTag('og:title', title, 'property')
     setMetaTag('og:description', description, 'property')
     if (config.imageUrl) {

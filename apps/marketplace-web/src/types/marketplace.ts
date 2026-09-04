@@ -124,3 +124,39 @@ export interface ListingCatalogueQuery {
   publisher?: string
 }
 
+
+/**
+ * Персональная подборка, как её видит клиент по ссылке от риэлтора.
+ *
+ * `unit` необязателен: объект мог быть удалён или переехать в другую
+ * организацию. Подборка в этом случае показывается без него, а не падает
+ * целиком — ронять страницу клиента из-за одной пропавшей квартиры нельзя.
+ */
+export interface PublicSelectionUnit {
+  number: string
+  kind: string
+  rooms?: number
+  area: number
+  price?: { amountMinorUnits: number; currency: string }
+  status: string
+}
+
+export interface PublicSelectionItem {
+  unitId: string
+  agentNote?: string
+  reaction?: string
+  viewedAt?: string
+  unit?: PublicSelectionUnit
+}
+
+export interface PublicSelection {
+  title: string
+  clientName?: string
+  clientPhone?: string
+  agentNote?: string
+  status: string
+  items: PublicSelectionItem[]
+  createdAt: string
+  sentAt?: string
+  viewCount: number
+}

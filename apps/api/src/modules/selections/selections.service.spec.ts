@@ -232,5 +232,71 @@ describe('SelectionsService', () => {
       expect(result.title).toBe(doc.title);
       expect(result).not.toHaveProperty('organizationId');
     });
+
+    it('подставляет данные объектов: без них клиенту нечего смотреть', async () => {
+      const doc = makeDoc();
+      const unitId = doc.items[0].unitId;
+      const service = makeService({
+        repository: { markViewedByPublicToken: jest.fn().mockResolvedValue(doc) },
+        developmentsService: {
+          getUnitForOrganization: jest.fn().mockResolvedValue({
+            number: '42',
+            kind: 'apartment',
+            rooms: 2,
+            area: 65,
+            price: { amountMinorUnits: 8_500_000, currency: 'USD' },
+            status: 'available',
+            // Внутренние поля: в публичный ответ попадать не должны.
+            organizationId: new Types.ObjectId(),
+            buildingId: new Types.ObjectId(),
+          }),
+        },
+      });
+
+      const result = await service.getPublicSelectionAndMarkViewed(doc.publicToken);
+      const item = result.items.find((entry) => entry.unitId === unitId.toString());
+
+      expect(item?.unit).toEqual({
+        number: '42',
+        kind: 'apartment',
+        rooms: 2,
+        area: 65,
+        price: { amountMinorUnits: 8_500_000, currency: 'USD' },
+        status: 'available',
+      });
+      expect(item?.unit).not.toHaveProperty('organizationId');
+      expect(item?.unit).not.toHaveProperty('buildingId');
+    });
+
+    it('пропавший объект не роняет всю подборку', async () => {
+      const doc = makeDoc();
+      const service = makeService({
+        repository: { markViewedByPublicToken: jest.fn().mockResolvedValue(doc) },
+        developmentsService: {
+          getUnitForOrganization: jest.fn().mockRejectedValue(new NotFoundException('Unit not found')),
+        },
+      });
+
+      const result = await service.getPublicSelectionAndMarkViewed(doc.publicToken);
+
+      // Подборка показывается, объект просто без данных: ронять страницу
+      // клиента из-за одной удалённой квартиры — худший вариант.
+      expect(result.title).toBe(doc.title);
+      expect(result.items[0].unit).toBeUndefined();
+    });
+
+    it('объекты резолвятся организацией подборки, а не контекстом запроса', async () => {
+      const doc = makeDoc();
+      const getUnitForOrganization = jest.fn().mockResolvedValue({ number: '1', kind: 'apartment', area: 30, status: 'available' });
+      const service = makeService({
+        repository: { markViewedByPublicToken: jest.fn().mockResolvedValue(doc) },
+        developmentsService: { getUnitForOrganization },
+      });
+
+      await service.getPublicSelectionAndMarkViewed(doc.publicToken);
+
+      const [, organizationId] = getUnitForOrganization.mock.calls[0];
+      expect(organizationId).toEqual(doc.organizationId);
+    });
   });
 });

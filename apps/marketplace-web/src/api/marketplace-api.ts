@@ -1,4 +1,5 @@
 import type {
+  PublicSelection,
   CatalogueQuery,
   PublicDevelopmentCard,
   PublicDevelopmentList,
@@ -95,6 +96,19 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
   const apiBaseUrl = normalizedBaseUrl(baseUrl)
 
   return {
+    /**
+     * Персональная подборка по токену из ссылки, которую риэлтор отправил
+     * клиенту. Без аутентификации: авторизует сам токен (256 бит случайности),
+     * и он открывает ровно эту подборку.
+     */
+    async getPublicSelection(token: string, options?: RequestOptions): Promise<PublicSelection> {
+      const response = await fetcher(`${apiBaseUrl}/public/selections/${encodeURIComponent(token)}`, {
+        headers: { Accept: 'application/json' },
+        signal: options?.signal,
+      })
+      return parseResponse<PublicSelection>(response)
+    },
+
     async listDevelopments(query: CatalogueQuery = {}, options?: RequestOptions): Promise<PublicDevelopmentList> {
       const params = new URLSearchParams()
       if (query.city?.trim()) params.set('city', query.city.trim())

@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import type { UnitDocument } from '../developments/schemas/unit.schema';
 import { InjectConnection } from '@nestjs/mongoose';
 import { randomBytes } from 'node:crypto';
 import { ClientSession, Connection, Types } from 'mongoose';
@@ -29,26 +30,70 @@ export interface PublicDevSelection {
   clientPhone?: string;
   agentNote?: string;
   status: DevSelectionStatus;
-  items: Array<{ unitId: string; agentNote?: string; reaction?: DevSelectionReaction; viewedAt?: string }>;
+  items: Array<{
+    unitId: string;
+    agentNote?: string;
+    reaction?: DevSelectionReaction;
+    viewedAt?: string;
+    /**
+     * Сам объект: номер, площадь, цена. До 04.09.2026 публичный ответ отдавал
+     * только `unitId`, а публично разрешить объект по id было нечем — клиент,
+     * открывший ссылку от риэлтора, физически не мог увидеть подобранные
+     * квартиры. Поле необязательное: если объект удалён или переехал в другую
+     * организацию, подборка показывается без него, а не падает целиком.
+     */
+    unit?: {
+      number: string;
+      kind: string;
+      rooms?: number;
+      area: number;
+      price?: { amountMinorUnits: number; currency: string };
+      status: string;
+    };
+  }>;
   createdAt: string;
   sentAt?: string;
   viewCount: number;
   customization?: Record<string, unknown>;
 }
 
-export function toPublicDevSelection(doc: DevSelectionDocument): PublicDevSelection {
+export function toPublicDevSelection(
+  doc: DevSelectionDocument,
+  units?: Map<string, UnitDocument>,
+): PublicDevSelection {
   return {
     title: doc.title,
     clientName: doc.clientName,
     clientPhone: doc.clientPhone,
     agentNote: doc.agentNote,
     status: doc.status,
-    items: doc.items.map((item) => ({
-      unitId: item.unitId.toString(),
-      agentNote: item.agentNote,
-      reaction: item.reaction,
-      viewedAt: item.viewedAt?.toISOString(),
-    })),
+    items: doc.items.map((item) => {
+      const unit = units?.get(item.unitId.toString());
+      return {
+        unitId: item.unitId.toString(),
+        agentNote: item.agentNote,
+        reaction: item.reaction,
+        viewedAt: item.viewedAt?.toISOString(),
+        // Явный whitelist, а не разворот документа: тот же принцип, что у
+        // публичных карточек каталога. Внутренние поля объекта (organizationId,
+        // buildingId, floorId) в публичный ответ попадать не должны.
+        unit: unit
+          ? {
+              number: unit.number,
+              kind: unit.kind,
+              rooms: unit.rooms,
+              area: unit.area,
+              // Цена через опциональный доступ: подборка не должна падать
+              // целиком из-за одного объекта с неполными данными — клиент
+              // увидит остальные, а не пустой экран.
+              price: unit.price
+                ? { amountMinorUnits: unit.price.amountMinorUnits, currency: unit.price.currency }
+                : undefined,
+              status: unit.status,
+            }
+          : undefined,
+      };
+    }),
     createdAt: doc.createdAt.toISOString(),
     sentAt: doc.sentAt?.toISOString(),
     viewCount: doc.viewCount,
@@ -68,7 +113,27 @@ export interface SelectionResponse {
   clientPhone?: string;
   agentNote?: string;
   status: DevSelectionStatus;
-  items: Array<{ unitId: string; agentNote?: string; reaction?: DevSelectionReaction; viewedAt?: string }>;
+  items: Array<{
+    unitId: string;
+    agentNote?: string;
+    reaction?: DevSelectionReaction;
+    viewedAt?: string;
+    /**
+     * Сам объект: номер, площадь, цена. До 04.09.2026 публичный ответ отдавал
+     * только `unitId`, а публично разрешить объект по id было нечем — клиент,
+     * открывший ссылку от риэлтора, физически не мог увидеть подобранные
+     * квартиры. Поле необязательное: если объект удалён или переехал в другую
+     * организацию, подборка показывается без него, а не падает целиком.
+     */
+    unit?: {
+      number: string;
+      kind: string;
+      rooms?: number;
+      area: number;
+      price?: { amountMinorUnits: number; currency: string };
+      status: string;
+    };
+  }>;
   createdAt: string;
   updatedAt: string;
   sentAt?: string;
@@ -425,6 +490,25 @@ export class SelectionsService {
     if (!updated) {
       throw new NotFoundException('Selection not found');
     }
-    return toPublicDevSelection(updated);
+
+    // Объекты подборки резолвятся организацией самой подборки, а не
+    // tenant-контекстом запроса: у публичного клиента его нет и быть не должно.
+    // Авторизует показ сам токен — 256 бит случайности, — и он открывает ровно
+    // те объекты, которые агент положил в эту подборку, ничего сверх.
+    const units = new Map<string, UnitDocument>();
+    await Promise.all(
+      updated.items.map(async (item) => {
+        try {
+          const unit = await this.developmentsService.getUnitForOrganization(item.unitId, updated.organizationId);
+          units.set(item.unitId.toString(), unit);
+        } catch {
+          // Объект удалён или больше не принадлежит организации: подборка
+          // показывается без него. Ронять всю страницу из-за одной пропавшей
+          // квартиры — худший вариант для клиента, который просто открыл ссылку.
+        }
+      }),
+    );
+
+    return toPublicDevSelection(updated, units);
   }
 }

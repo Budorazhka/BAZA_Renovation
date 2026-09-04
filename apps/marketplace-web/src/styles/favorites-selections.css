@@ -409,3 +409,90 @@
   margin-left: auto;
   margin-right: auto;
 }
+
+/*
+ * MKT-SCR-018: персональная подборка глазами клиента.
+ *
+ * Страница переписана 04.09.2026 с захардкоженной вёрстки на реальные данные.
+ * Вместе с выдуманным содержимым ушёл и тёмный градиентный блок с инлайновыми
+ * стилями: он не из UI kit и в дизайн-системе опоры не имел.
+ */
+.client-selection {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--space-10) var(--space-5) var(--space-20);
+}
+
+.client-selection__header {
+  margin-bottom: var(--space-8);
+}
+
+.client-selection__title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--color-ink);
+}
+
+.client-selection__client,
+.client-selection__note {
+  margin: 0 0 var(--space-2);
+  color: var(--color-ink-muted);
+}
+
+.client-selection__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.client-selection__card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: var(--rule) solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-paper-raised);
+}
+
+.client-selection__media {
+  aspect-ratio: 4 / 3;
+}
+
+.client-selection__body {
+  padding: var(--space-5);
+}
+
+.client-selection__unit-number {
+  margin: 0 0 var(--space-2);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.client-selection__price {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--color-ink);
+}
+
+.client-selection__params {
+  margin: 0 0 var(--space-3);
+  color: var(--color-ink-muted);
+}
+
+.client-selection__missing {
+  margin: 0 0 var(--space-3);
+  color: var(--color-error);
+}
+
+.client-selection__agent-note {
+  margin: 0;
+  padding-top: var(--space-3);
+  border-top: var(--rule) solid var(--color-line);
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}

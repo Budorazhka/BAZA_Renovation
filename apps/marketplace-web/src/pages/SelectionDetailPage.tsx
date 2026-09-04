@@ -1,128 +1,152 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import { BuildingPlaceholder } from '../components/DevelopmentCard'
+import { marketplaceApi } from '../api/marketplace-api'
+import type { PublicSelection, PublicSelectionItem } from '../types/marketplace'
+import '../styles/favorites-selections.css'
 
+/**
+ * MKT-SCR-018: персональная подборка, которую клиент открывает по ссылке от
+ * риэлтора.
+ *
+ * До 04.09.2026 страница была 128 строками захардкоженной вёрстки: она
+ * игнорировала токен из адреса и любому клиенту показывала одни и те же
+ * выдуманные объекты, выдуманного эксперта «Георгий Беридзе» и выдуманный номер
+ * WhatsApp. То есть человек, которому агент прислал ссылку, видел не свою
+ * подборку, а декорацию с чужими контактами.
+ *
+ * Теперь читает `GET /public/selections/:token`. Просмотр там же отмечается на
+ * сервере (sent -> viewed), поэтому агент видит, что клиент открыл ссылку.
+ */
 export function SelectionDetailPage() {
+  const { slug = '' } = useParams()
+  const [selection, setSelection] = useState<PublicSelection | null>(null)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'not_found' | 'error'>('loading')
+
   useSeoMetadata({
-    title: 'Персональная подборка недвижимости | BAZA',
-    description: 'Индивидуально подобранные объекты недвижимости от эксперта BAZA.',
+    title: selection ? `${selection.title} | BAZA` : 'Персональная подборка | BAZA',
+    description: 'Объекты, подобранные для вас риелтором BAZA.',
+    // Подборка адресована одному человеку и открывается по ссылке: в поиске ей
+    // делать нечего.
+    noindex: true,
   })
 
+  useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+
+    void (async () => {
+      setStatus('loading')
+      try {
+        const result = await marketplaceApi.getPublicSelection(slug, { signal: controller.signal })
+        if (cancelled) return
+        setSelection(result)
+        setStatus('ready')
+      } catch (error) {
+        if (cancelled) return
+        const httpStatus = (error as { status?: number }).status
+        setStatus(httpStatus === 404 ? 'not_found' : 'error')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [slug])
+
+  if (status === 'loading') {
+    return (
+      <div className="state-panel" role="status" aria-busy="true">
+        <p>Загружаем подборку…</p>
+      </div>
+    )
+  }
+
+  if (status === 'not_found') {
+    return (
+      <div className="state-panel state-panel--empty">
+        <p>Подборка не найдена. Возможно, ссылка устарела — попросите риелтора прислать новую.</p>
+        <Link to="/newconstructions" className="clear-filter-btn">
+          Смотреть каталог
+        </Link>
+      </div>
+    )
+  }
+
+  if (status === 'error' || !selection) {
+    return (
+      <div className="state-panel state-panel--error" role="alert">
+        <p>Не удалось загрузить подборку. Обновите страницу.</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="figma-fav-page">
-      <div style={{
-        background: 'linear-gradient(135deg, #111111 0%, #222222 100%)',
-        color: '#FFFFFF',
-        borderRadius: '20px',
-        padding: '36px 32px',
-        marginBottom: '40px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flexWrap: 'wrap',
-        gap: '24px',
-      }}>
-        <div>
-          <span style={{
-            background: 'rgba(27, 168, 0, 0.2)',
-            color: '#1BA800',
-            fontSize: '13px',
-            fontWeight: 700,
-            padding: '4px 12px',
-            borderRadius: '12px',
-            display: 'inline-block',
-            marginBottom: '12px',
-          }}>
-            ПЕРСОНАЛЬНАЯ ПОДБОРКА
-          </span>
-          <h1 style={{ fontSize: '28px', fontWeight: 700, margin: '0 0 8px 0' }}>
-            Объекты для вашего запроса
-          </h1>
-          <p style={{ fontSize: '15px', color: '#CCCCCC', margin: 0, maxWidth: '540px' }}>
-            Подборка сформирована риелтором на основе ваших предпочтений и актуальных предложений рынка.
-          </p>
+    <section className="client-selection" aria-labelledby="selection-title">
+      <header className="client-selection__header">
+        <h1 id="selection-title" className="client-selection__title">
+          {selection.title}
+        </h1>
+        {selection.clientName && (
+          <p className="client-selection__client">Подобрано для: {selection.clientName}</p>
+        )}
+        {selection.agentNote && <p className="client-selection__note">{selection.agentNote}</p>}
+      </header>
+
+      {selection.items.length === 0 ? (
+        <div className="state-panel state-panel--empty">
+          <p>В подборке пока нет объектов. Риелтор добавит их и пришлёт ссылку снова.</p>
         </div>
+      ) : (
+        <ul className="client-selection__grid">
+          {selection.items.map((item) => (
+            <SelectionItemCard key={item.unitId} item={item} />
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          borderRadius: '16px',
-          padding: '16px 20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '14px',
-        }}>
-          <div style={{
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            background: '#1BA800',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '20px',
-            fontWeight: 700,
-          }}>
-            ГБ
-          </div>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: '15px' }}>Георгий Беридзе</div>
-            <div style={{ fontSize: '13px', color: '#AAAAAA' }}>Ваш эксперт BAZA</div>
-          </div>
-          <a
-            href="https://wa.me/995599000000"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="figma-collection-btn figma-collection-btn--primary"
-            style={{ marginLeft: '12px' }}
-          >
-            Написать в WhatsApp
-          </a>
-        </div>
+function formatPrice(price?: { amountMinorUnits: number; currency: string }): string | null {
+  if (!price) return null
+  return `${Math.round(price.amountMinorUnits / 100).toLocaleString('ru-RU')} ${price.currency}`
+}
+
+function SelectionItemCard({ item }: { item: PublicSelectionItem }) {
+  const price = formatPrice(item.unit?.price)
+
+  return (
+    <li className="client-selection__card">
+      <div className="client-selection__media">
+        <BuildingPlaceholder />
       </div>
+      <div className="client-selection__body">
+        {item.unit ? (
+          <>
+            <p className="client-selection__unit-number">Квартира №{item.unit.number}</p>
+            {price && <p className="client-selection__price">{price}</p>}
+            <p className="client-selection__params">
+              {[
+                item.unit.rooms !== undefined ? `${item.unit.rooms} комн.` : null,
+                `${item.unit.area} м²`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          </>
+        ) : (
+          /*
+            Объект пропал из базы после того, как агент собрал подборку. Честно
+            говорим об этом, а не показываем пустую карточку без объяснения.
+          */
+          <p className="client-selection__missing">Объект больше недоступен</p>
+        )}
 
-      <div className="figma-fav-grid">
-        <article className="figma-fav-card">
-          <div className="figma-fav-card__media">
-            <BuildingPlaceholder />
-          </div>
-          <div className="figma-fav-card__body">
-            <div className="figma-fav-card__price">$85 000</div>
-            <h2 className="figma-fav-card__title">2-комн. апартаменты с панорамным видом на море</h2>
-            <p className="figma-fav-card__address">📍 Батуми, ул. Шерифа Химшиашвили, 15</p>
-            <div className="figma-fav-card__specs">
-              <span>🛏 2 комн.</span>
-              <span>📐 65 м²</span>
-              <span>🏢 12 эт.</span>
-            </div>
-            <div className="figma-fav-card__actions">
-              <Link to="/listings/batumi-flat-sea-view" className="figma-fav-card-btn figma-fav-card-btn--primary">
-                Смотреть детали
-              </Link>
-            </div>
-          </div>
-        </article>
-
-        <article className="figma-fav-card">
-          <div className="figma-fav-card__media">
-            <BuildingPlaceholder />
-          </div>
-          <div className="figma-fav-card__body">
-            <div className="figma-fav-card__price">$48 000</div>
-            <h2 className="figma-fav-card__title">Студия под ключ в Orbi City</h2>
-            <p className="figma-fav-card__address">📍 Батуми, ул. Пиросмани, 8</p>
-            <div className="figma-fav-card__specs">
-              <span>🛏 1 комн.</span>
-              <span>📐 33 м²</span>
-              <span>🏢 18 эт.</span>
-            </div>
-            <div className="figma-fav-card__actions">
-              <Link to="/listings/batumi-studio-orbi" className="figma-fav-card-btn figma-fav-card-btn--primary">
-                Смотреть детали
-              </Link>
-            </div>
-          </div>
-        </article>
+        {item.agentNote && <p className="client-selection__agent-note">{item.agentNote}</p>}
       </div>
-    </div>
+    </li>
   )
 }
