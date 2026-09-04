@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, Power, Trash2, Wallet } from 'lucide-react'
 
 import { InstallmentPlanForm } from '@/components/inventory/InstallmentPlanForm'
@@ -17,12 +17,19 @@ export default function InstallmentsPage() {
   const plans = useInstallmentStore((s) => s.plans)
   const togglePlanActive = useInstallmentStore((s) => s.toggleActive)
   const removePlan = useInstallmentStore((s) => s.remove)
+  const fetchForProject = useInstallmentStore((s) => s.fetchForProject)
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     activeProjectId ?? projects[0]?._id ?? '',
   )
   const [editingPlan, setEditingPlan] = useState<IInstallmentPlan | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      void fetchForProject(selectedProjectId)
+    }
+  }, [selectedProjectId, fetchForProject])
 
   const selectedProject = useMemo(
     () => projects.find((p) => p._id === selectedProjectId) ?? null,

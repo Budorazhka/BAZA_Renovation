@@ -25,6 +25,7 @@ export interface IInstallmentPlan {
 
   description?: string
   sortOrder?: number
+  version?: number
   createdAt: string
   updatedAt: string
 }

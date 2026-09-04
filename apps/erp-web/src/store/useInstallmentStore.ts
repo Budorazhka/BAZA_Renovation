@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 
 import { developmentApi } from '@/services/developmentApi'
+import { installmentPlansApiV2 } from '@/services/installmentPlansApiV2'
 import { applyProjectInstallmentPlans } from '@/store/useCoreStore'
 import type { IInstallmentPlan, NewInstallmentPlan } from '@/types/installment'
 
@@ -13,6 +14,7 @@ function uid(): string {
 
 function load(): IInstallmentPlan[] {
   try {
+    if (typeof localStorage === 'undefined') return []
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return []
     return JSON.parse(raw) as IInstallmentPlan[]
@@ -22,7 +24,12 @@ function load(): IInstallmentPlan[] {
 }
 
 function persist(plans: IInstallmentPlan[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(plans)) } catch { /* best-effort */ }
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(plans))
+  } catch {
+    /* best-effort */
+  }
 }
 
 interface State {
@@ -33,16 +40,19 @@ interface State {
   toggleActive: (id: string) => void
   /** Replace all plans for a given project with the provided ones (used to hydrate from API on edit). */
   hydrateForProject: (projectId: string, plans: IInstallmentPlan[]) => void
+  /** Fetch fresh plans from backend /api/v1/developments/:id/installment-plans and hydrate */
+  fetchForProject: (projectId: string) => Promise<IInstallmentPlan[]>
 }
 
 let state: State
 const listeners = new Set<() => void>()
 
-function emit() { for (const l of listeners) l() }
+function emit() {
+  for (const l of listeners) l()
+}
 
 /**
- * Сохраняет рассрочки проекта на сервере (PATCH комплекса `installmentPlans`) —
- * иначе планы живут только в localStorage и другие аккаунты их не видят.
+ * Fallback-синхронизация со старым API (PATCH комплекса installmentPlans) для обратной совместимости.
  */
 function syncProjectPlansToApi(projectId: string | undefined) {
   if (!projectId) return
@@ -53,52 +63,139 @@ function syncProjectPlansToApi(projectId: string | undefined) {
       if (resp.success) applyProjectInstallmentPlans(projectId, plans)
     })
     .catch((err) => {
-      console.error('Не удалось сохранить рассрочки ЖК на сервере:', err)
+      console.error('Не удалось сохранить рассрочки ЖК в legacy-комплексе:', err)
     })
 }
+
 function set(next: Partial<State>) {
   state = { ...state, ...next }
   persist(state.plans)
   emit()
 }
-function get() { return state }
+
+function get() {
+  return state
+}
 
 state = {
   plans: load(),
 
   create(data) {
     const now = new Date().toISOString()
-    const plan: IInstallmentPlan = { ...data, id: uid(), createdAt: now, updatedAt: now }
-    set({ plans: [...get().plans, plan] })
-    syncProjectPlansToApi(plan.projectId)
+    const tempId = uid()
+    const plan: IInstallmentPlan = {
+      ...data,
+      id: tempId,
+      version: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    const updatedList = [...get().plans, plan]
+    set({ plans: updatedList })
+
+    if (plan.projectId) {
+      applyProjectInstallmentPlans(
+        plan.projectId,
+        updatedList.filter((p) => p.projectId === plan.projectId),
+      )
+
+      installmentPlansApiV2
+        .create(plan.projectId, data)
+        .then((saved) => {
+          const currentPlans = get().plans.map((p) => (p.id === tempId ? saved : p))
+          set({ plans: currentPlans })
+          applyProjectInstallmentPlans(
+            plan.projectId,
+            currentPlans.filter((p) => p.projectId === plan.projectId),
+          )
+        })
+        .catch((err) => {
+          console.error('Ошибка сохранения плана рассрочки на сервере:', err)
+          syncProjectPlansToApi(plan.projectId)
+        })
+    }
+
     return plan
   },
 
   update(id, patch) {
+    const target = get().plans.find((p) => p.id === id)
+    if (!target) return
+
     const now = new Date().toISOString()
-    set({
-      plans: get().plans.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: now } : p)),
-    })
-    syncProjectPlansToApi(get().plans.find((p) => p.id === id)?.projectId)
+    const updatedPlan: IInstallmentPlan = { ...target, ...patch, updatedAt: now }
+    const updatedList = get().plans.map((p) => (p.id === id ? updatedPlan : p))
+    set({ plans: updatedList })
+
+    if (target.projectId) {
+      applyProjectInstallmentPlans(
+        target.projectId,
+        updatedList.filter((p) => p.projectId === target.projectId),
+      )
+
+      installmentPlansApiV2
+        .update(target.projectId, id, patch, target.version ?? 0)
+        .then((saved) => {
+          const currentPlans = get().plans.map((p) => (p.id === id ? saved : p))
+          set({ plans: currentPlans })
+          applyProjectInstallmentPlans(
+            target.projectId,
+            currentPlans.filter((p) => p.projectId === target.projectId),
+          )
+        })
+        .catch((err) => {
+          console.error('Ошибка обновления плана рассрочки на сервере:', err)
+          syncProjectPlansToApi(target.projectId)
+        })
+    }
   },
 
   remove(id) {
     const removed = get().plans.find((p) => p.id === id)
-    set({ plans: get().plans.filter((p) => p.id !== id) })
-    syncProjectPlansToApi(removed?.projectId)
+    if (!removed) return
+
+    const remainingPlans = get().plans.filter((p) => p.id !== id)
+    set({ plans: remainingPlans })
+
+    if (removed.projectId) {
+      applyProjectInstallmentPlans(
+        removed.projectId,
+        remainingPlans.filter((p) => p.projectId === removed.projectId),
+      )
+
+      installmentPlansApiV2
+        .remove(removed.projectId, id, removed.version ?? 0)
+        .catch((err) => {
+          console.error('Ошибка удаления плана рассрочки на сервере:', err)
+          syncProjectPlansToApi(removed.projectId)
+        })
+    }
   },
 
   toggleActive(id) {
-    const now = new Date().toISOString()
-    set({
-      plans: get().plans.map((p) => (p.id === id ? { ...p, isActive: !p.isActive, updatedAt: now } : p)),
-    })
-    syncProjectPlansToApi(get().plans.find((p) => p.id === id)?.projectId)
+    const target = get().plans.find((p) => p.id === id)
+    if (!target) return
+    get().update(id, { isActive: !target.isActive })
   },
 
   hydrateForProject(projectId, plans) {
     const others = get().plans.filter((p) => p.projectId !== projectId)
-    set({ plans: [...others, ...plans] })
+    const combined = [...others, ...plans]
+    set({ plans: combined })
+    applyProjectInstallmentPlans(projectId, plans)
+  },
+
+  async fetchForProject(projectId: string): Promise<IInstallmentPlan[]> {
+    if (!projectId) return []
+    try {
+      const plans = await installmentPlansApiV2.list(projectId)
+      get().hydrateForProject(projectId, plans)
+      return plans
+    } catch (err) {
+      console.error('Не удалось получить планы рассрочки с сервера:', err)
+      return get().plans.filter((p) => p.projectId === projectId)
+    }
   },
 }
 
@@ -111,4 +208,10 @@ export function useInstallmentStore<T>(selector: (s: State) => T): T {
   return useSyncExternalStore(subscribe, () => selector(get()))
 }
 
-export function getInstallmentStore(): State { return get() }
+export function getInstallmentStore(): State {
+  return new Proxy({} as State, {
+    get(_target, prop: keyof State) {
+      return get()[prop]
+    },
+  })
+}
