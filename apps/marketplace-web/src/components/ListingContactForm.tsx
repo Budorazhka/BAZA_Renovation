@@ -99,8 +99,14 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
 
   return (
     <section className="listing-lead-card">
+      {/*
+        Заголовок даёт секция-обёртка на детальной странице
+        (`figma-listing-contacts` в App.tsx, `h2#contacts-heading`). Свой `h3`
+        здесь был бы вторым заголовком с ровно тем же текстом: на экране это
+        видно как дубль, а для программ чтения с экрана и для тестов — два
+        разных элемента с одинаковым именем.
+      */}
       <div className="listing-lead-card__header">
-        <h3>Связаться с риелтором</h3>
         <p>Оставьте номер телефона, чтобы получить прямой контакт представителя объекта и назначить просмотр.</p>
       </div>
 

@@ -23,6 +23,12 @@ vi.mock('../src/api/marketplace-api', () => ({
   },
 }))
 
+/**
+ * Счётчик выдачи с 05.09.2026 разбит на элементы (число в <strong>) и помечен
+ * data-testid: сквозной гейт искал класс `.catalogue-count`, которого в
+ * разметке уже не было. Поэтому здесь проверяется содержимое счётчика целиком,
+ * а не точное совпадение текстового узла.
+ */
 describe('Cursor Pagination & Deduplication Acceptance', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -58,7 +64,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 2 из 3')).toBeDefined()
+      expect(screen.getByTestId('catalogue-count').textContent).toBe('Показано: 2 из 3')
     })
 
     const resultsHeading = screen.getByRole('heading', { name: 'Все опубликованные объекты' })
@@ -69,7 +75,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
 
     await waitFor(() => {
       // 2 initial + 1 new (deduplicated item-2) = 3 total
-      expect(screen.getByText('Показано: 3 из 3')).toBeDefined()
+      expect(screen.getByTestId('catalogue-count').textContent).toBe('Показано: 3 из 3')
     })
 
     // Next cursor is null, button disappears and end note is shown
@@ -102,7 +108,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 1 из 2')).toBeDefined()
+      expect(screen.getByTestId('catalogue-count').textContent).toBe('Показано: 1 из 2')
     })
 
     const loadMoreBtn = screen.getByRole('button', { name: /показать ещё/i })
@@ -111,14 +117,14 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
     // Error alert is shown, but initial item-1 is still visible!
     await waitFor(() => {
       expect(screen.getByText('Network connection timeout')).toBeDefined()
-       expect(screen.getByText('Показано: 1 из 2')).toBeDefined()
+       expect(screen.getByTestId('catalogue-count').textContent).toBe('Показано: 1 из 2')
     })
 
     const retryBtn = screen.getByRole('button', { name: /попробовать снова/i })
     fireEvent.click(retryBtn)
 
     await waitFor(() => {
-      expect(screen.getByText('Показано: 2 из 2')).toBeDefined()
+      expect(screen.getByTestId('catalogue-count').textContent).toBe('Показано: 2 из 2')
     })
   })
 })

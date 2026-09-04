@@ -264,7 +264,17 @@ function CataloguePage({
               ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
               : `Все опубликованные ${isDev ? 'ЖК' : 'объекты'}`}
           </h2>
-          {state.status === 'ready' ? <span>{`Показано: ${state.items.length} из ${state.total}`}</span> : null}
+          {/*
+            Счётчик выдачи. У него есть testid, потому что на него опирается
+            runtime-гейт: раньше сценарий искал класс `.catalogue-count`,
+            который остался только в CSS — саму разметку переписали, и тест
+            падал, пока гейт до него не доходил.
+          */}
+          {state.status === 'ready' ? (
+            <span data-testid="catalogue-count">
+              Показано: <strong>{state.items.length}</strong> из {state.total}
+            </span>
+          ) : null}
           {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
         </div>
 

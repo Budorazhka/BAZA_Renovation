@@ -22,7 +22,10 @@ test.describe('marketplace catalogue', () => {
     const response = await responsePromise;
     expect(response.status()).toBe(200);
 
-    await expect(page.locator('.catalogue-count strong')).toBeVisible();
+    // Раньше здесь стоял `.catalogue-count strong` — класс, который остался
+    // только в CSS: разметку выдачи переписали, элемент исчез, и тест падал.
+    // testid переживает переверстку, класс — нет.
+    await expect(page.getByTestId('catalogue-count')).toBeVisible();
   });
 
   test('switches to the listings tab via URL query param and reflects it in the tab UI', async ({ page }) => {
@@ -35,8 +38,9 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('city filter re-queries the API with the city parameter', async ({ page }) => {
+    const initialResponsePromise = page.waitForResponse((res) => res.url().includes('/public/listings'));
     await page.goto('/newconstructions?tab=listings');
-    await page.waitForResponse((res) => res.url().includes('/public/listings'));
+    await initialResponsePromise;
 
     const filteredResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/public/listings') && res.url().includes('city=Batumi-e2e'),
@@ -52,8 +56,12 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('deal-type filter chip re-queries the API with dealType', async ({ page }) => {
+    // Ожидание регистрируется ДО перехода: иначе ответ каталога успевает
+    // прийти во время goto, и waitForResponse ждёт события, которого уже не
+    // будет. Гонка была латентной, пока страница грузилась дольше.
+    const initialResponsePromise = page.waitForResponse((res) => res.url().includes('/public/listings'));
     await page.goto('/newconstructions?tab=listings');
-    await page.waitForResponse((res) => res.url().includes('/public/listings'));
+    await initialResponsePromise;
 
     const filteredResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/public/listings') && res.url().includes('dealType=rent_long'),
@@ -65,8 +73,9 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('sort control re-queries the API with the chosen sort', async ({ page }) => {
+    const initialResponsePromise = page.waitForResponse((res) => res.url().includes('/public/listings'));
     await page.goto('/newconstructions?tab=listings');
-    await page.waitForResponse((res) => res.url().includes('/public/listings'));
+    await initialResponsePromise;
 
     const sortedResponsePromise = page.waitForResponse(
       (res) => res.url().includes('/public/listings') && res.url().includes('sort=price_asc'),
@@ -88,8 +97,10 @@ test.describe('marketplace catalogue', () => {
     const firstPage = await request.get(apiUrl('/public/developments?limit=1'));
     const firstPageBody = await firstPage.json();
 
+    // То же, что выше: подписка до перехода, иначе ответ теряется.
+    const initialDevelopmentsPromise = page.waitForResponse((res) => res.url().includes('/public/developments'));
     await page.goto('/newconstructions');
-    await page.waitForResponse((res) => res.url().includes('/public/developments'));
+    await initialDevelopmentsPromise;
 
     if (!firstPageBody.nextCursor) {
       if (firstPageBody.items?.length === 0) {
@@ -113,8 +124,9 @@ test.describe('marketplace catalogue', () => {
     const body = await listResponse.json();
     test.skip(body.items.length === 0, 'No published developments in this environment to navigate to.');
 
+    const developmentsPromise = page.waitForResponse((res) => res.url().includes('/public/developments'));
     await page.goto('/newconstructions');
-    await page.waitForResponse((res) => res.url().includes('/public/developments'));
+    await developmentsPromise;
     await page.locator('.development-card').first().click();
     await expect(page).toHaveURL(/\/developments\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -125,8 +137,9 @@ test.describe('marketplace catalogue', () => {
     const body = await listResponse.json();
     test.skip(body.items.length === 0, 'No published listings in this environment to navigate to.');
 
+    const listingsPromise = page.waitForResponse((res) => res.url().includes('/public/listings'));
     await page.goto('/newconstructions?tab=listings');
-    await page.waitForResponse((res) => res.url().includes('/public/listings'));
+    await listingsPromise;
     await page.locator('.listing-card').first().click();
     await expect(page).toHaveURL(/\/listings\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();

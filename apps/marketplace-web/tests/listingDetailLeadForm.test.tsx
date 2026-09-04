@@ -26,7 +26,10 @@ describe('ListingContactForm Component', () => {
   it('renders input fields and submit button in idle state', () => {
     render(<ListingContactForm slug="batumi-sea-flat" />)
 
-    expect(screen.getByText('Связаться с риелтором')).toBeDefined()
+    // Заголовок даёт секция-обёртка детальной страницы, а не сама форма:
+    // собственный h3 был вторым заголовком с тем же текстом. Проверяем
+    // поясняющий текст формы, который остался её частью.
+    expect(screen.getByText(/Оставьте номер телефона/)).toBeDefined()
     expect(screen.getByLabelText(/Телефон/i)).toBeDefined()
     expect(screen.getByLabelText(/Ваше имя/i)).toBeDefined()
     const submitBtn = screen.getByRole('button', { name: /Показать телефон/i }) as HTMLButtonElement
