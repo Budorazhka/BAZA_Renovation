@@ -34,6 +34,9 @@ import { FavoritesPage } from './pages/FavoritesPage'
 import { SelectionsPage } from './pages/SelectionsPage'
 import { SelectionDetailPage } from './pages/SelectionDetailPage'
 import { RequestsPage } from './pages/RequestsPage'
+import { CrmKanbanPage } from './pages/CrmKanbanPage'
+import { CrmTasksPage } from './pages/CrmTasksPage'
+import { CrmCalendarPage } from './pages/CrmCalendarPage'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -44,6 +47,7 @@ import './styles/realtors.css'
 import './styles/my-properties.css'
 import './styles/favorites-selections.css'
 import './styles/requests.css'
+import './styles/crm.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
@@ -824,6 +828,9 @@ export default function App() {
         <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
         <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
         <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
+        <Route path="/account/crm" element={<Shell><CrmKanbanPage /></Shell>} />
+        <Route path="/account/tasks" element={<Shell><CrmTasksPage /></Shell>} />
+        <Route path="/account/calendar" element={<Shell><CrmCalendarPage /></Shell>} />
         <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
         <Route path="*" element={<CataloguePage />} />

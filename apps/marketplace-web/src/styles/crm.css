@@ -1,0 +1,366 @@
+/* ==========================================================================
+   REALTOR CRM & PIPELINES (Figma: 3927:57331, 3929:57331, 3674:56511)
+   ========================================================================== */
+
+.figma-crm-page {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  font-family: var(--font-primary, system-ui, -apple-system, sans-serif);
+}
+
+.figma-crm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.figma-crm-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #111111;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.5px;
+}
+
+.figma-crm-desc {
+  font-size: 15px;
+  color: #757575;
+  margin: 0;
+}
+
+.figma-crm-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #1BA800;
+  color: #FFFFFF;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.figma-crm-add-btn:hover {
+  background: #169600;
+  transform: translateY(-1px);
+}
+
+/* CRM Navigation Bar (Kanban / Tasks / Calendar) */
+.figma-crm-nav {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid #EAEAEA;
+  padding-bottom: 12px;
+}
+
+.figma-crm-nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #555555;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.figma-crm-nav-link:hover {
+  background: #F4F4F4;
+  color: #111111;
+}
+
+.figma-crm-nav-link.is-active {
+  background: #111111;
+  color: #FFFFFF;
+}
+
+/* Metrics summary ribbon */
+.figma-crm-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+@media (max-width: 900px) {
+  .figma-crm-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.figma-crm-metric-card {
+  background: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-crm-metric-card__value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111111;
+}
+
+.figma-crm-metric-card__label {
+  font-size: 13px;
+  color: #757575;
+}
+
+/* Kanban Board Layout */
+.figma-kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 24px;
+}
+
+@media (max-width: 1100px) {
+  .figma-kanban-board {
+    grid-template-columns: repeat(2, 320px);
+  }
+}
+
+.figma-kanban-col {
+  background: #F8F9FA;
+  border: 1px solid #EAEAEA;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 400px;
+}
+
+.figma-kanban-col__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  color: #111111;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #E0E0E0;
+}
+
+.figma-kanban-col__count {
+  background: #EAEAEA;
+  color: #555555;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Kanban Card */
+.figma-kanban-card {
+  background: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.figma-kanban-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.figma-kanban-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.figma-kanban-card__name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111111;
+}
+
+.figma-kanban-card__budget {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1BA800;
+}
+
+.figma-kanban-card__object {
+  font-size: 13px;
+  color: #555555;
+  line-height: 1.35;
+}
+
+.figma-kanban-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid #F4F4F4;
+  font-size: 12px;
+  color: #9E9E9E;
+}
+
+.figma-kanban-card__move-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.figma-kanban-move-btn {
+  background: #F4F4F4;
+  border: 1px solid #EAEAEA;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #333333;
+}
+
+.figma-kanban-move-btn:hover {
+  background: #111111;
+  color: #FFFFFF;
+}
+
+/* Tasks Page Layout */
+.figma-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.figma-task-item {
+  background: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: all 0.15s ease;
+}
+
+.figma-task-item.is-done {
+  opacity: 0.6;
+  background: #FAFAFA;
+}
+
+.figma-task-item.is-done .figma-task-title {
+  text-decoration: line-through;
+}
+
+.figma-task-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.figma-task-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.figma-task-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111111;
+  margin: 0 0 4px 0;
+}
+
+.figma-task-meta {
+  font-size: 13px;
+  color: #757575;
+}
+
+.figma-task-priority {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.figma-task-priority--high {
+  background: #FFEBEE;
+  color: #D32F2F;
+}
+
+.figma-task-priority--medium {
+  background: #FFF3E0;
+  color: #E65100;
+}
+
+.figma-task-priority--low {
+  background: #E8F5E9;
+  color: #2E7D32;
+}
+
+/* Calendar Layout */
+.figma-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .figma-calendar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.figma-calendar-day-col {
+  background: #FFFFFF;
+  border: 1px solid #EAEAEA;
+  border-radius: 14px;
+  padding: 14px;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.figma-calendar-day-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: #757575;
+  text-align: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.figma-calendar-event {
+  background: #E8F5E9;
+  border-left: 3px solid #1BA800;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 12px;
+  color: #111111;
+}
+
+.figma-calendar-event__time {
+  font-weight: 700;
+  color: #1BA800;
+  margin-bottom: 2px;
+}
+
+.figma-calendar-event__title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}

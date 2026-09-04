@@ -83,6 +83,9 @@ Marketplace переписывается по Figma. Цель этого док�
 | Избранное | `MKT-SCR-017` | `824:17645` | `1376:19390` (`realtor account_favories`) | `1376:19776` (`mob_favorites`) | Сетка избранного + фильтры | `apps/marketplace-web/src/pages/FavoritesPage.tsx` | **Verified in code** |
 | Подборки объектов | `MKT-SCR-018` | `824:17645` | `1311:18621` (`realtor account_my collections`) | `1311:18671` (`mob_my collections`) | Карточки подборок + клиентская витрина | `apps/marketplace-web/src/pages/SelectionsPage.tsx` | **Verified in code** |
 | Кабинет: Мои объекты | `MKT-SCR-019` | `824:17645` | `5071:68119` (карточки), `5071:68253` (таблица) | Интегрирован адаптивный вид | `5071:68767` (статусы), `5071:68749` (актуальность), `5071:68795` (кнопки) | `apps/marketplace-web/src/pages/MyPropertiesPage.tsx` | **Verified in code** |
+| CRM: Воронка сделок | `MKT-SCR-022` | `3927:57331` | `3760:57807` (воронка канбан), `3674:56511` | Интегрирован адаптивный вид | 4 стадии воронки + добавление лида | `apps/marketplace-web/src/pages/CrmKanbanPage.tsx` | **Verified in code** |
+| CRM: Задачи и заметки | `MKT-SCR-023` | `3927:57331` | `3927:57386` (`задачи`), `3151:53942` | Интегрирован адаптивный вид | Чеклисты, дедлайны, приоритеты | `apps/marketplace-web/src/pages/CrmTasksPage.tsx` | **Verified in code** |
+| CRM: Календарь показов | `MKT-SCR-024` | `3929:57331` | `3929:57331` (`Календарь - неделя`) | `3151:53847` (календарь) | Сетка показов по часам и дням недели | `apps/marketplace-web/src/pages/CrmCalendarPage.tsx` | **Verified in code** |
 
 ## Принятые решения владельца (Этап 2)
 
