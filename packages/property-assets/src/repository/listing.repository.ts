@@ -240,6 +240,42 @@ export class ListingRepository {
   }
 
   /**
+   * Правка цены объявления владельцем-физлицом.
+   *
+   * CAS по `version` тот же, что у markPublishingForIdentity: два человека,
+   * открывшие форму редактирования одновременно, не должны затирать правки друг
+   * друга молча — второй получит 0 изменённых документов и явный конфликт.
+   *
+   * `status` в фильтре не ограничен: править можно и черновик, и активное, и
+   * опубликованное объявление. Запрещённые к правке поля (тип сделки, тип
+   * объекта, адрес) сюда не попадают вообще — не потому что фильтр их не
+   * пропустит, а потому что их нет в сигнатуре.
+   *
+   * `updatedAt` выставляет Mongoose по timestamps схемы: дата обновления
+   * меняется, дата публикации остаётся прежней.
+   */
+  async updatePriceForIdentity(
+    id: Types.ObjectId,
+    identityId: Types.ObjectId,
+    expectedVersion: number,
+    price: { amountMinorUnits: number; currency: Currency },
+    session?: ClientSession,
+  ) {
+    return this.model
+      .updateOne(
+        {
+          _id: id,
+          'publisherScope.type': 'marketplace_account',
+          'publisherScope.identityId': identityId,
+          version: expectedVersion,
+        },
+        { $set: { price }, $inc: { version: 1 } },
+        { session },
+      )
+      .exec();
+  }
+
+  /**
    * Worker-side: без tenant-фильтра — worker резолвит Listing по sourceId
    * из outbox-событие payload (тот же принцип, что DevelopmentRepository.findById).
    */

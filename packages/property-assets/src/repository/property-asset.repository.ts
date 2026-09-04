@@ -113,6 +113,44 @@ export class PropertyAssetRepository {
    * silently lose one write — whichever `$set` committed last won outright,
    * discarding the other caller's change with no error to either side.
    */
+  /**
+   * Правка характеристик объекта владельцем-физлицом (площадь, комнаты, этаж,
+   * телефон в объявлении).
+   *
+   * Тип объекта и адрес сюда намеренно не входят: по ним система ищет дубликаты,
+   * и разрешить их правку значило бы дать объявлению «переехать» в другой дом,
+   * обойдя проверку. Для этого создаётся новое объявление — решение владельца от
+   * 04.09.2026.
+   *
+   * CAS по `version` — тот же приём, что у медиа ниже.
+   */
+  async updateEditableForIdentity(
+    id: Types.ObjectId,
+    identityId: Types.ObjectId,
+    expectedVersion: number,
+    patch: {
+      characteristics?: PropertyAssetDocument['characteristics'];
+      representativePhone?: string;
+    },
+    session?: ClientSession,
+  ) {
+    const $set: Record<string, unknown> = {};
+    if (patch.characteristics) $set.characteristics = patch.characteristics;
+    if (patch.representativePhone) $set.representativePhone = patch.representativePhone;
+    return this.model
+      .updateOne(
+        {
+          _id: id,
+          'publisherScope.type': 'marketplace_account',
+          'publisherScope.identityId': identityId,
+          version: expectedVersion,
+        },
+        { $set, $inc: { version: 1 } },
+        { session },
+      )
+      .exec();
+  }
+
   private async updateMediaIfVersionMatches(
     id: Types.ObjectId,
     media: PropertyAssetDocument['media'],

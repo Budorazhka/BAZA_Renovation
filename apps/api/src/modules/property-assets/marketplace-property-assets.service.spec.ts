@@ -246,4 +246,114 @@ describe('MarketplacePropertyAssetsService', () => {
     });
   });
 
+
+  describe('updateListing (MKT-SCR-021)', () => {
+    const assetId = new Types.ObjectId();
+    const listingId = new Types.ObjectId();
+    const identityId = new Types.ObjectId();
+
+    function makeRepos(publicationStatus: string | null) {
+      const asset = {
+        _id: assetId,
+        version: 3,
+        characteristics: { area: 55, rooms: 2 },
+        publisherScope: { type: 'marketplace_account', identityId },
+      };
+      const listing = { _id: listingId, propertyAssetId: assetId, version: 7, status: 'active' };
+      return {
+        propertyAssetRepository: {
+          findByIdForIdentity: jest.fn().mockResolvedValue(asset),
+          updateEditableForIdentity: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        },
+        listingRepository: {
+          findByIdForIdentity: jest.fn().mockResolvedValue(listing),
+          updatePriceForIdentity: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        },
+        publicationRepository: {
+          findBySource: jest
+            .fn()
+            .mockResolvedValue(publicationStatus ? { status: publicationStatus } : null),
+        },
+        publicationService: { requestPublication: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }) },
+      };
+    }
+
+    it('правка цены опубликованного объявления пересобирает публикацию', async () => {
+      const repos = makeRepos('published');
+      const service = makeService(repos as never);
+
+      const result = await service.updateListing({
+        assetId,
+        listingId,
+        identityId,
+        correlationId: 'corr-1',
+        price: { amountMinorUnits: 9_000_00, currency: 'USD' },
+      });
+
+      expect(repos.listingRepository.updatePriceForIdentity).toHaveBeenCalled();
+      expect(repos.publicationService.requestPublication).toHaveBeenCalled();
+      expect(result.rebuildRequested).toBe(true);
+    });
+
+    it('правка черновика публикацию не трогает', async () => {
+      const repos = makeRepos(null);
+      const service = makeService(repos as never);
+
+      const result = await service.updateListing({
+        assetId,
+        listingId,
+        identityId,
+        correlationId: 'corr-2',
+        price: { amountMinorUnits: 9_000_00, currency: 'USD' },
+      });
+
+      expect(repos.publicationService.requestPublication).not.toHaveBeenCalled();
+      expect(result.rebuildRequested).toBe(false);
+    });
+
+    it('CAS по version: устаревшая правка получает конфликт, а не затирает чужую', async () => {
+      const repos = makeRepos('published');
+      repos.listingRepository.updatePriceForIdentity = jest.fn().mockResolvedValue({ modifiedCount: 0 });
+      const service = makeService(repos as never);
+
+      await expect(
+        service.updateListing({
+          assetId,
+          listingId,
+          identityId,
+          correlationId: 'corr-3',
+          price: { amountMinorUnits: 1, currency: 'USD' },
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(repos.publicationService.requestPublication).not.toHaveBeenCalled();
+    });
+
+    it('правка характеристик дополняет существующие, а не заменяет их целиком', async () => {
+      const repos = makeRepos('published');
+      const service = makeService(repos as never);
+
+      await service.updateListing({
+        assetId,
+        listingId,
+        identityId,
+        correlationId: 'corr-4',
+        characteristics: { rooms: 3 },
+      });
+
+      const [, , , patch] = repos.propertyAssetRepository.updateEditableForIdentity.mock.calls[0];
+      // Площадь не передавали — она обязана остаться прежней, а не обнулиться.
+      expect(patch.characteristics).toEqual({ area: 55, rooms: 3 });
+    });
+
+    it('пустое тело отклоняется до похода в репозитории', async () => {
+      const repos = makeRepos('published');
+      const service = makeService(repos as never);
+
+      await expect(
+        service.updateListing({ assetId, listingId, identityId, correlationId: 'corr-5' }),
+      ).rejects.toThrow();
+      expect(repos.listingRepository.findByIdForIdentity).not.toHaveBeenCalled();
+    });
+  });
+
 });

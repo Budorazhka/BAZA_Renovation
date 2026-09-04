@@ -13,6 +13,7 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { CreatePropertyAssetDto } from './dto/create-property-asset.dto';
 import { CreateListingDto } from './dto/create-listing.dto';
+import { UpdateListingDto } from './dto/update-listing.dto';
 import { UnpublishListingDto } from './dto/unpublish-listing.dto';
 import { ConfirmActualityDto } from './dto/confirm-actuality.dto';
 import { OverrideDuplicateDto } from './dto/override-duplicate.dto';
@@ -212,6 +213,34 @@ export class MarketplacePropertyAssetsController {
   listListings(@Req() req: FastifyRequest, @Param('assetId') assetId: string) {
     const account = requireMarketplaceAccountContext(req);
     return this.service.listListings(objectId(assetId, 'assetId'), new Types.ObjectId(account.identityId));
+  }
+
+  /**
+   * Правка объявления (MKT-SCR-021). Менять можно цену, характеристики и
+   * телефон; тип объекта, тип сделки и адрес — нельзя, см. докстринг
+   * UpdateListingDto.
+   *
+   * Опубликованное объявление после правки пересобирается автоматически, иначе
+   * в каталоге осталась бы старая цена. Ответ сообщает, была ли запрошена
+   * пересборка, чтобы клиент не гадал, почему каталог обновился не мгновенно.
+   */
+  @Patch(':assetId/listings/:listingId')
+  updateListing(
+    @Req() req: FastifyRequest,
+    @Param('assetId') assetId: string,
+    @Param('listingId') listingId: string,
+    @Body() dto: UpdateListingDto,
+  ) {
+    const account = requireMarketplaceAccountContext(req);
+    return this.service.updateListing({
+      assetId: objectId(assetId, 'assetId'),
+      listingId: objectId(listingId, 'listingId'),
+      identityId: new Types.ObjectId(account.identityId),
+      correlationId: req.correlationId,
+      price: dto.price,
+      characteristics: dto.characteristics,
+      representativePhone: dto.representativePhone,
+    });
   }
 
   @Patch(':assetId/listings/:listingId/activate')

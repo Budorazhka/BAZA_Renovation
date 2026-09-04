@@ -14,7 +14,17 @@ const MoneyAmountSchema = new MongooseSchema(
   { _id: false },
 );
 
-@Schema({ collection: 'listings', timestamps: { createdAt: 'createdAt', updatedAt: false } })
+/**
+ * `updatedAt` включён 04.09.2026 вместе с редактированием объявления. До этого
+ * стояло `updatedAt: false` — и это было честно: менять у объявления было
+ * нечего, ни одного эндпоинта правки не существовало.
+ *
+ * Решение владельца: при правке меняется именно дата обновления, а дата
+ * публикации остаётся прежней. Поэтому `createdAt` не трогается, а
+ * `lastConfirmedAt` (часы актуальности) правкой не сбрасывается — иначе
+ * поправленная запятая в описании вечно держала бы объявление свежим.
+ */
+@Schema({ collection: 'listings', timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } })
 export class ListingDocument extends Document {
   declare _id: Types.ObjectId;
 
@@ -40,6 +50,8 @@ export class ListingDocument extends Document {
   lastConfirmedAt?: Date;
 
   declare createdAt: Date;
+  /** Дата последней правки. Отсутствует у объявлений, которые ни разу не правили. */
+  declare updatedAt?: Date;
 }
 
 export const ListingSchema = SchemaFactory.createForClass(ListingDocument);

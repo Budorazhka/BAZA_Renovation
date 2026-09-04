@@ -22,6 +22,7 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { PropertyAssetRepository, ListingRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
+import type { Currency } from '@baza/contracts';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
@@ -622,6 +623,94 @@ export class MarketplacePropertyAssetsService {
     });
 
     return this.listMedia(assetId, identityId);
+  }
+
+
+  /**
+   * Правка объявления владельцем-физлицом (MKT-SCR-021).
+   *
+   * До 04.09.2026 редактирования не существовало: ни эндпоинта, ни типа
+   * события в журнале ревизий. Решения владельца, по которым это сделано:
+   *
+   * 1. Менять можно цену, характеристики и телефон. Тип объекта и адрес —
+   *    нельзя: по ним ищутся дубликаты, и правка позволила бы объявлению
+   *    «переехать» в другой дом мимо проверки. Эти поля физически не приходят
+   *    в метод.
+   * 2. Опубликованное объявление пересобирается сразу: иначе покупатель видел
+   *    бы в каталоге старую цену. Публикация при этом не снимается.
+   * 3. Меняется дата обновления, дата публикации остаётся. Часы актуальности
+   *    (lastConfirmedAt) правкой НЕ сбрасываются — иначе поправленная запятая
+   *    вечно держала бы объявление свежим, а подтверждение актуальности
+   *    существует отдельной осознанной кнопкой.
+   */
+  async updateListing(params: {
+    assetId: Types.ObjectId;
+    listingId: Types.ObjectId;
+    identityId: Types.ObjectId;
+    correlationId: string;
+    price?: { amountMinorUnits: number; currency: Currency };
+    characteristics?: { area?: number; rooms?: number; floor?: number; totalFloors?: number };
+    representativePhone?: string;
+  }) {
+    if (!params.price && !params.characteristics && !params.representativePhone) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'Нечего менять: не передано ни одного поля');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const asset = await this.propertyAssetRepository.findByIdForIdentity(params.assetId, params.identityId);
+      if (!asset) throw new NotFoundException('Property asset not found');
+
+      const listing = await this.listingRepository.findByIdForIdentity(params.listingId, params.identityId);
+      if (!listing || !listing.propertyAssetId.equals(params.assetId)) {
+        throw new NotFoundException('Listing not found');
+      }
+
+      if (params.price) {
+        const { modifiedCount } = await this.listingRepository.updatePriceForIdentity(
+          params.listingId,
+          params.identityId,
+          listing.version,
+          params.price,
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new ConflictException('Listing was modified by another request — refresh and retry');
+        }
+      }
+
+      if (params.characteristics || params.representativePhone) {
+        const { modifiedCount } = await this.propertyAssetRepository.updateEditableForIdentity(
+          params.assetId,
+          params.identityId,
+          asset.version,
+          { characteristics: { ...asset.characteristics, ...params.characteristics }, representativePhone: params.representativePhone },
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new ConflictException('Property asset was modified by another request — refresh and retry');
+        }
+      }
+
+      // Пересборка публикации нужна только тому объявлению, которое сейчас
+      // видно в каталоге. У черновика и снятого с публикации пересобирать
+      // нечего, и лишнее событие только загрузило бы worker.
+      const publication = await this.publicationRepository.findBySource('listing', params.listingId);
+      const needsRebuild = publication?.status === 'published' || publication?.status === 'publication_pending';
+      if (needsRebuild) {
+        await this.publicationService.requestPublication(
+          {
+            sourceType: 'listing',
+            sourceId: params.listingId,
+            publisherScope: { type: 'marketplace_account', identityId: params.identityId },
+            correlationId: params.correlationId,
+          },
+          session,
+        );
+      }
+
+      const updated = await this.listingRepository.findByIdForIdentity(params.listingId, params.identityId);
+      return { listing: updated, rebuildRequested: needsRebuild };
+    });
   }
 
 }

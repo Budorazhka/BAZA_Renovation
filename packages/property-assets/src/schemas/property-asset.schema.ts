@@ -57,7 +57,13 @@ const CharacteristicsSchema = new MongooseSchema(
   { _id: false },
 );
 
-@Schema({ collection: 'property_assets', timestamps: { createdAt: 'createdAt', updatedAt: false } })
+/**
+ * `updatedAt` включён 04.09.2026 вместе с редактированием объявления, см.
+ * докстринг ListingDocument: характеристики объекта живут здесь, а не в
+ * объявлении, поэтому правка площади или числа комнат меняет дату обновления
+ * именно этого документа.
+ */
+@Schema({ collection: 'property_assets', timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } })
 export class PropertyAssetDocument extends Document {
   declare _id: Types.ObjectId;
 
@@ -107,6 +113,8 @@ export class PropertyAssetDocument extends Document {
   version!: number;
 
   declare createdAt: Date;
+  /** Дата последней правки характеристик. Отсутствует, если объект не правили. */
+  declare updatedAt?: Date;
 }
 
 export const PropertyAssetSchema = SchemaFactory.createForClass(PropertyAssetDocument);

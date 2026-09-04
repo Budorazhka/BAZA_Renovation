@@ -5080,6 +5080,82 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /marketplace/property-assets/{assetId}/listings/{listingId}:
+    patch:
+      operationId: marketplaceUpdateListing
+      summary: Правка объявления владельцем (цена, характеристики, телефон)
+      description: >-
+        Менять можно цену, характеристики и телефон. Тип объекта, тип сделки и адрес править
+        нельзя: по ним ищутся дубликаты, и правка позволила бы объявлению «переехать» в другой дом
+        в обход проверки — для этого создаётся новое объявление (решение владельца от 04.09.2026).
+        Поле вне списка отклоняется с 400 глобальным ValidationPipe, а не игнорируется молча.
+
+
+        Опубликованное объявление после правки пересобирается автоматически, иначе в каталоге
+        осталась бы старая цена; с публикации оно при этом не снимается. Ответ сообщает
+        `rebuildRequested`, чтобы клиент не гадал, почему каталог обновился не мгновенно.
+
+
+        Меняется дата обновления, дата публикации остаётся прежней. Часы актуальности
+        (`lastConfirmedAt`) правкой НЕ сбрасываются: подтверждение актуальности — отдельное
+        осознанное действие, иначе поправленная запятая вечно держала бы объявление свежим.
+
+
+        Idempotency-Key не требуется: повтор с тем же телом приводит объявление в то же состояние.
+        От гонки двух одновременных правок защищает CAS по `version` — второй запрос получает 409.
+      tags: [marketplace-property-assets]
+      parameters:
+        - $ref: '#/components/parameters/AssetId'
+        - $ref: '#/components/parameters/ListingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                price:
+                  type: object
+                  required: [amountMinorUnits, currency]
+                  properties:
+                    amountMinorUnits: {type: integer, minimum: 0}
+                    currency: {type: string, enum: [USD, GEL, RUB]}
+                characteristics:
+                  type: object
+                  properties:
+                    area: {type: integer, minimum: 1, maximum: 100000}
+                    rooms: {type: integer, minimum: 0, maximum: 50}
+                    floor: {type: integer, minimum: -5, maximum: 200}
+                    totalFloors: {type: integer, minimum: 1, maximum: 200}
+                representativePhone: {type: string, minLength: 5, maxLength: 32}
+      responses:
+        '200':
+          description: Объявление изменено
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [listing, rebuildRequested]
+                properties:
+                  listing:
+                    $ref: '#/components/schemas/Listing'
+                  rebuildRequested:
+                    type: boolean
+                    description: Была ли запрошена пересборка публикации в каталоге
+        '400':
+          description: Не передано ни одного поля либо прислано поле вне списка разрешённых
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Объявление изменено другим запросом — обновить и повторить
+          $ref: '#/components/responses/Error'
+
   /marketplace/property-assets/{assetId}/listings/{listingId}/activate:
     patch:
       operationId: marketplaceActivateListing

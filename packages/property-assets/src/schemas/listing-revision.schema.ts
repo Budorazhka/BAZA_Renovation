@@ -8,7 +8,10 @@ export type ListingRevisionChangeType =
   | 'listing_created'
   | 'listing_activated'
   | 'listing_published'
-  | 'listing_unpublished';
+  | 'listing_unpublished'
+  // Добавлено 04.09.2026 вместе с редактированием объявления: до этого журнал
+  // знал только события жизненного цикла, потому что править было нечем.
+  | 'listing_updated';
 
 export interface ListingRevisionCharacteristicsSnapshot {
   area?: number;
@@ -88,7 +91,14 @@ export class ListingRevisionDocument extends Document {
 
   @Prop({
     required: true,
-    enum: ['asset_created', 'listing_created', 'listing_activated', 'listing_published', 'listing_unpublished'],
+    enum: [
+      'asset_created',
+      'listing_created',
+      'listing_activated',
+      'listing_published',
+      'listing_unpublished',
+      'listing_updated',
+    ],
   })
   changeType!: ListingRevisionChangeType;
 
