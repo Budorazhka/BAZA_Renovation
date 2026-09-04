@@ -7,11 +7,18 @@ import { apiUrl } from '../fixtures/env';
  * are against the real rendered DOM driven by the real
  * `GET /public/developments` / `GET /public/listings` responses — no
  * mocked/intercepted API responses anywhere in this file.
+ *
+ * Маршруты обновлены 04.09.2026: каталог переехал с `/` в разделы
+ * (`/newconstructions`, `/secondary`, `/rent`) по решению владельца — главная
+ * стала информационной, как на действующем baza.sale. Хостом для вкладки
+ * объявлений здесь выбран `/newconstructions?tab=listings`, а не `/secondary`:
+ * так вкладка задаётся query-параметром и в запрос не подмешивается dealType по
+ * умолчанию, то есть проверки параметров API остаются ровно теми же, что были.
  */
 test.describe('marketplace catalogue', () => {
   test('opens the developments tab by default and shows a results count', async ({ page }) => {
     const responsePromise = page.waitForResponse((res) => res.url().includes('/public/developments') && res.request().method() === 'GET');
-    await page.goto('/');
+    await page.goto('/newconstructions');
     const response = await responsePromise;
     expect(response.status()).toBe(200);
 
@@ -20,7 +27,7 @@ test.describe('marketplace catalogue', () => {
 
   test('switches to the listings tab via URL query param and reflects it in the tab UI', async ({ page }) => {
     const responsePromise = page.waitForResponse((res) => res.url().includes('/public/listings') && res.request().method() === 'GET');
-    await page.goto('/?tab=listings');
+    await page.goto('/newconstructions?tab=listings');
     const response = await responsePromise;
     expect(response.status()).toBe(200);
 
@@ -28,7 +35,7 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('city filter re-queries the API with the city parameter', async ({ page }) => {
-    await page.goto('/?tab=listings');
+    await page.goto('/newconstructions?tab=listings');
     await page.waitForResponse((res) => res.url().includes('/public/listings'));
 
     const filteredResponsePromise = page.waitForResponse(
@@ -45,7 +52,7 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('deal-type filter chip re-queries the API with dealType', async ({ page }) => {
-    await page.goto('/?tab=listings');
+    await page.goto('/newconstructions?tab=listings');
     await page.waitForResponse((res) => res.url().includes('/public/listings'));
 
     const filteredResponsePromise = page.waitForResponse(
@@ -58,7 +65,7 @@ test.describe('marketplace catalogue', () => {
   });
 
   test('sort control re-queries the API with the chosen sort', async ({ page }) => {
-    await page.goto('/?tab=listings');
+    await page.goto('/newconstructions?tab=listings');
     await page.waitForResponse((res) => res.url().includes('/public/listings'));
 
     const sortedResponsePromise = page.waitForResponse(
@@ -81,7 +88,7 @@ test.describe('marketplace catalogue', () => {
     const firstPage = await request.get(apiUrl('/public/developments?limit=1'));
     const firstPageBody = await firstPage.json();
 
-    await page.goto('/');
+    await page.goto('/newconstructions');
     await page.waitForResponse((res) => res.url().includes('/public/developments'));
 
     if (!firstPageBody.nextCursor) {
@@ -106,7 +113,7 @@ test.describe('marketplace catalogue', () => {
     const body = await listResponse.json();
     test.skip(body.items.length === 0, 'No published developments in this environment to navigate to.');
 
-    await page.goto('/');
+    await page.goto('/newconstructions');
     await page.waitForResponse((res) => res.url().includes('/public/developments'));
     await page.locator('.development-card').first().click();
     await expect(page).toHaveURL(/\/developments\//);
@@ -118,7 +125,7 @@ test.describe('marketplace catalogue', () => {
     const body = await listResponse.json();
     test.skip(body.items.length === 0, 'No published listings in this environment to navigate to.');
 
-    await page.goto('/?tab=listings');
+    await page.goto('/newconstructions?tab=listings');
     await page.waitForResponse((res) => res.url().includes('/public/listings'));
     await page.locator('.listing-card').first().click();
     await expect(page).toHaveURL(/\/listings\//);
