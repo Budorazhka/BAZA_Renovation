@@ -2,12 +2,18 @@ import type {
   AdminAccountList,
   AdminAuditEventList,
   AdminAuditEventListQuery,
+  AdminComplaintList,
+  AdminComplaintListQuery,
+  AdminDuplicateCandidateList,
+  AdminDuplicateCandidateListQuery,
   AdminMe,
   AdminPublicationList,
   AdminPublicationListQuery,
+  ConfirmDuplicateResult,
   DeactivateReactivateResult,
   PermissionGrant,
   PermissionScope,
+  ResolveComplaintResult,
   UnpublishResult,
 } from '../types/admin'
 
@@ -94,6 +100,44 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
 
     async unpublish(publicationId: string, reason: string): Promise<UnpublishResult> {
       return request(`/admin/publications/${encodeURIComponent(publicationId)}/unpublish`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async listComplaints(query: AdminComplaintListQuery = {}): Promise<AdminComplaintList> {
+      const params = new URLSearchParams()
+      if (query.status) params.set('status', query.status)
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/complaints${suffix}`)
+    },
+
+    async resolveComplaint(
+      complaintId: string,
+      params: { decision: 'upheld' | 'dismissed'; reason: string },
+    ): Promise<ResolveComplaintResult> {
+      return request(`/admin/complaints/${encodeURIComponent(complaintId)}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      })
+    },
+
+    async listDuplicateCandidates(query: AdminDuplicateCandidateListQuery = {}): Promise<AdminDuplicateCandidateList> {
+      const params = new URLSearchParams()
+      if (query.status) params.set('status', query.status)
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/duplicate-candidates${suffix}`)
+    },
+
+    async confirmDuplicate(
+      duplicateCandidateId: string,
+      reason: string,
+    ): Promise<ConfirmDuplicateResult> {
+      return request(`/admin/duplicate-candidates/${encodeURIComponent(duplicateCandidateId)}/confirm`, {
         method: 'POST',
         body: JSON.stringify({ reason }),
       })

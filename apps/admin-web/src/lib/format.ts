@@ -25,3 +25,36 @@ export function formatDateTime(value: string | null): string {
   if (!value) return '—'
   return new Date(value).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' })
 }
+
+const COMPLAINT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Ожидает проверки',
+  resolved_upheld: 'Удовлетворена (снято)',
+  resolved_dismissed: 'Отклонена',
+}
+
+export function complaintStatusLabel(status: string): string {
+  return COMPLAINT_STATUS_LABELS[status] ?? status
+}
+
+const COMPLAINT_CATEGORY_LABELS: Record<string, string> = {
+  not_available: 'Объект недоступен / сдан',
+  wrong_info: 'Недостоверная информация',
+  scam: 'Мошенничество',
+  duplicate: 'Дубликат',
+  other: 'Другое',
+}
+
+export function complaintCategoryLabel(category: string): string {
+  return COMPLAINT_CATEGORY_LABELS[category] ?? category
+}
+
+const DUPLICATE_CANDIDATE_STATUS_LABELS: Record<string, string> = {
+  detected: 'Обнаружен системой',
+  override_not_duplicate: 'Оспорен автором (не дубль)',
+  confirmed_duplicate: 'Подтверждён администратором',
+}
+
+export function duplicateCandidateStatusLabel(status: string): string {
+  return DUPLICATE_CANDIDATE_STATUS_LABELS[status] ?? status
+}
+

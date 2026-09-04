@@ -87,7 +87,7 @@ export interface AdminMe {
   publicationReadScope: 'all' | Partial<Record<PublicationSourceType, PublicationReadScopeEntry>>
 }
 
-export type AuditResource = PublicationSourceType | 'admin_account'
+export type AuditResource = PublicationSourceType | 'admin_account' | 'complaint' | 'duplicate_candidate'
 
 export interface AdminAuditEventView {
   id: string
@@ -119,3 +119,79 @@ export interface AdminAuditEventListQuery {
   cursor?: string
   limit?: number
 }
+
+// Complaints
+export type ComplaintCategory = 'not_available' | 'wrong_info' | 'scam' | 'duplicate' | 'other'
+export type ComplaintStatus = 'pending' | 'resolved_upheld' | 'resolved_dismissed'
+
+export interface AdminComplaintListItem {
+  id: string
+  status: ComplaintStatus
+  category: ComplaintCategory
+  details: string | null
+  propertyAssetId: string
+  listingId: string
+  scopeCity: string
+  respondentScope: { type: string; organizationId: string | null }
+  createdAt: string
+  resolvedAt: string | null
+  resolutionReason: string | null
+}
+
+export interface AdminComplaintList {
+  items: AdminComplaintListItem[]
+  nextCursor: string | null
+}
+
+export interface AdminComplaintListQuery {
+  status?: ComplaintStatus
+  cursor?: string
+  limit?: number
+}
+
+export interface ResolveComplaintResult {
+  id: string
+  status: 'resolved_upheld' | 'resolved_dismissed'
+}
+
+// Duplicate Candidates
+export type DuplicateCandidateStatus = 'detected' | 'confirmed_duplicate' | 'override_not_duplicate'
+
+export interface AdminDuplicateCandidateAssetSummary {
+  id: string
+  propertyType: string
+  location: { city: string; address: string }
+  characteristics: { area: number; rooms: number | null; floor: number | null }
+  representativePhone: string
+  publisherScope: { type: string; organizationId: string | null }
+}
+
+export interface AdminDuplicateCandidateListItem {
+  id: string
+  status: DuplicateCandidateStatus
+  signals: { phoneMatch: boolean; addressMatch: boolean; roomsAreaFloorMatch: boolean }
+  detectedAt: string
+  overrideReason: string | null
+  overrideAt: string | null
+  confirmReason: string | null
+  confirmedAt: string | null
+  assetA: AdminDuplicateCandidateAssetSummary | null
+  assetB: AdminDuplicateCandidateAssetSummary | null
+}
+
+export interface AdminDuplicateCandidateList {
+  items: AdminDuplicateCandidateListItem[]
+  nextCursor: string | null
+}
+
+export interface AdminDuplicateCandidateListQuery {
+  status?: DuplicateCandidateStatus
+  cursor?: string
+  limit?: number
+}
+
+export interface ConfirmDuplicateResult {
+  id: string
+  status: 'confirmed_duplicate'
+}
+

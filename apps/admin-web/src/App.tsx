@@ -4,6 +4,8 @@ import { useAdminAuth } from './hooks/useAdminAuth'
 import { RequireAdmin, RequireSuperAdmin } from './hooks/RequireAdmin'
 import { LoginPage } from './pages/LoginPage'
 import { PublicationsPage } from './pages/PublicationsPage'
+import { ComplaintsPage } from './pages/ComplaintsPage'
+import { DuplicateCandidatesPage } from './pages/DuplicateCandidatesPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { AuditPage } from './pages/AuditPage'
 
@@ -32,6 +34,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         {state.status === 'signed-in' ? (
           <nav className="site-nav">
             <Link to="/publications">Публикации</Link>
+            <Link to="/complaints">Жалобы</Link>
+            <Link to="/duplicate-candidates">Дубликаты</Link>
             <Link to="/audit">Журнал аудита</Link>
             {isSuperAdmin ? <Link to="/accounts">Аккаунты</Link> : null}
             <span className="session-role">{isSuperAdmin ? 'super_admin' : 'admin'}</span>
@@ -56,6 +60,22 @@ export default function App() {
           element={
             <RequireAdmin>
               <PublicationsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/complaints"
+          element={
+            <RequireAdmin>
+              <ComplaintsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/duplicate-candidates"
+          element={
+            <RequireAdmin>
+              <DuplicateCandidatesPage />
             </RequireAdmin>
           }
         />

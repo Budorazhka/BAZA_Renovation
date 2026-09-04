@@ -266,15 +266,65 @@ button.danger {
 }
 
 .status-pill--unpublished,
-.status-pill--build_failed {
+.status-pill--build_failed,
+.status-pill--resolved_upheld,
+.status-pill--confirmed_duplicate {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.status-pill--pending,
+.status-pill--detected,
+.status-pill--override_not_duplicate {
+  border-color: var(--warn-ink);
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+}
+
+.status-pill--resolved_dismissed {
+  border-color: var(--line);
+  color: var(--ink-soft);
 }
 
 .unpublish-reason {
   margin: 0.25rem 0 0;
   font-size: 0.8rem;
   color: var(--ink-soft);
+}
+
+.asset-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.asset-summary__details {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+}
+
+.asset-summary__phone,
+.asset-summary__id {
+  color: var(--ink-soft);
+  font-size: 0.75rem;
+}
+
+.signals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.signal-pill {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  font-size: 0.75rem;
+  font-weight: 500;
+  width: fit-content;
 }
 
 .load-more {

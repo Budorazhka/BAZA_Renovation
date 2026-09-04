@@ -142,4 +142,50 @@ describe('createAdminApi', () => {
       code: 'VERSION_CONFLICT',
     })
   })
+
+  it('listComplaints builds query params for status, cursor, and limit', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await api.listComplaints({ status: 'pending', cursor: 'c1', limit: 10 })
+
+    const [url] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/complaints?status=pending&cursor=c1&limit=10')
+  })
+
+  it('resolveComplaint posts decision and reason to correct complaintId path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ id: 'comp1', status: 'resolved_upheld' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.resolveComplaint('comp1', { decision: 'upheld', reason: 'объявление нарушает правила' })
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/complaints/comp1/resolve')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ decision: 'upheld', reason: 'объявление нарушает правила' })
+    expect(result).toEqual({ id: 'comp1', status: 'resolved_upheld' })
+  })
+
+  it('listDuplicateCandidates builds query params for status, cursor, and limit', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await api.listDuplicateCandidates({ status: 'detected', cursor: 'c2', limit: 15 })
+
+    const [url] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/duplicate-candidates?status=detected&cursor=c2&limit=15')
+  })
+
+  it('confirmDuplicate posts reason to correct duplicateCandidateId path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ id: 'dup1', status: 'confirmed_duplicate' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.confirmDuplicate('dup1', 'совпадают все параметры и контакты')
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/duplicate-candidates/dup1/confirm')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'совпадают все параметры и контакты' })
+    expect(result).toEqual({ id: 'dup1', status: 'confirmed_duplicate' })
+  })
 })
