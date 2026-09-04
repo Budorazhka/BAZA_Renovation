@@ -178,4 +178,43 @@ describe('LeadRepository', () => {
       );
     });
   });
+
+  describe('aggregateByOwnerPosition', () => {
+    it('без from/to — match содержит organizationId и исключает deleted, группировка по (ownerPositionId, stage)', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateByOwnerPosition(organizationId, {});
+
+      expect(aggregateSpy).toHaveBeenCalledWith([
+        { $match: { organizationId, status: { $ne: 'deleted' } } },
+        {
+          $group: {
+            _id: { ownerPositionId: { $ifNull: ['$ownerPositionId', null] }, stage: '$stage' },
+            count: { $sum: 1 },
+          },
+        },
+        { $project: { _id: 0, ownerPositionId: '$_id.ownerPositionId', stage: '$_id.stage', count: 1 } },
+      ]);
+    });
+
+    it('from/to собираются в один $match.createdAt', async () => {
+      const organizationId = new Types.ObjectId();
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-02-01T00:00:00.000Z');
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateByOwnerPosition(organizationId, { from, to });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          { $match: { organizationId, status: { $ne: 'deleted' }, createdAt: { $gte: from, $lte: to } } },
+        ]),
+      );
+    });
+  });
 });
