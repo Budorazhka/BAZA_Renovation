@@ -6,171 +6,102 @@ import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from '.
 /**
  * Засев публичного каталога реальными данными.
  *
- * Зачем это появилось 05.09.2026. Runtime-стек поднимается с чистой базой, и
- * проверки каталога до сих пор выполнялись на пустой выдаче: сценарий требовал
- * счётчик, счётчика на пустом каталоге нет, тест падал. Первым побуждением было
- * ослабить проверку и принять пустое состояние — но так гейт подтверждал бы, что
- * страница умеет показывать «пусто», а не что каталог работает.
+ * Зачем. Runtime-стек поднимается с чистой базой, и проверки каталога шли по
+ * пустой выдаче: сценарий требовал счётчик, счётчика на пустом каталоге нет.
+ * Первым побуждением было ослабить проверку и принять пустое состояние — но так
+ * гейт подтверждал бы, что страница умеет показывать «пусто», а не что каталог
+ * работает. Правильный ход — дать окружению данные.
  *
- * Правильный ход — дать окружению данные. Здесь один рецепт на весь набор
- * сценариев, вместо копии в каждом файле: рецепт длинный (регистрация,
- * онбординг организации, создание, активация, публикация, ожидание сборки
- * проекции), и разъехавшиеся копии — вопрос времени.
- *
- * **Каждый засев работает в собственном HTTP-контексте.** Сессия живёт в
- * cookie, и два онбординга на одном контексте затёрли бы сессию друг друга:
- * запросы второй организации ушли бы от имени первой. При параллельном запуске
- * это выглядело бы как случайные отказы прав.
+ * **Ровно одна регистрация на весь засев.** `POST /auth/register` ограничен
+ * пятью запросами в минуту на IP, а в CI все сценарии приходят с одного адреса.
+ * Первая версия этой фикстуры заводила две организации — и выела бюджет,
+ * из-за чего 429 получили ЧУЖИЕ сценарии (логаут и раскрытие контакта), которые
+ * до этого проходили. Отсюда правило: засев не должен стоить больше одной
+ * регистрации, а на 429 — ждать и повторять, а не падать.
  */
 
-/** Выполняет засев в отдельном контексте с собственной cookie-сессией. */
-async function inOwnContext<T>(work: (request: APIRequestContext) => Promise<T>): Promise<T> {
-  const context = await apiRequest.newContext();
-  try {
-    return await work(context);
-  } finally {
-    await context.dispose();
+/** Регистрация с ожиданием на 429: лимит общий на весь набор, гонка за него нормальна. */
+async function registerWithBackoff(request: APIRequestContext, login: string): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const response = await request.post(apiUrl('/auth/register'), {
+      data: { login, password: STRONG_TEST_PASSWORD },
+    });
+    if (response.status() === 201) return;
+    if (response.status() !== 429) {
+      expect(response.status(), `register failed: ${await response.text()}`).toBe(201);
+      return;
+    }
+    // Окно лимита — 60 секунд; ждём заметную его часть, а не сотни миллисекунд.
+    await new Promise((resolve) => setTimeout(resolve, 20_000));
   }
-}
-
-async function registerOrganization(
-  request: APIRequestContext,
-  type: 'agency' | 'developer',
-  prefix: string,
-): Promise<{ login: string }> {
-  const login = uniqueLogin(prefix);
-  const register = await request.post(apiUrl('/auth/register'), {
-    data: { login, password: STRONG_TEST_PASSWORD },
-  });
-  expect(register.status()).toBe(201);
-
-  const onboarding = await request.post(apiUrl('/organizations/register'), {
-    data: { login, password: STRONG_TEST_PASSWORD, type, name: `E2E ${prefix} ${login}` },
-  });
-  expect(onboarding.status()).toBe(201);
-
-  return { login };
+  throw new Error('register: лимит 429 не отпустил за четыре попытки');
 }
 
 /**
- * Опубликованное объявление вторички. Возвращает slug публикации.
+ * Один опубликованный ЖК в каталоге. Возвращает slug публикации.
  *
- * Ожидание статуса `published` обязательно: публикация собирается воркером
- * асинхронно, и без ожидания сценарий пошёл бы искать в каталоге объект,
- * которого там ещё нет.
- */
-export async function seedPublishedListing(): Promise<string> {
-  return inOwnContext(async (request) => {
-  const { login } = await registerOrganization(request, 'agency', 'catalogue-agency');
-
-  const assetResponse = await request.post(apiUrl('/property-assets'), {
-    headers: { 'Idempotency-Key': randomUUID() },
-    data: {
-      propertyType: 'apartment',
-      location: {
-        country: 'Georgia',
-        city: 'Batumi',
-        address: uniqueAddress(),
-        geo: { type: 'Point', coordinates: [41.6367, 41.6434] },
-      },
-      characteristics: { area: 64, rooms: 2, floor: 5, totalFloors: 12 },
-      representativePhone: uniquePhone(),
-    },
-  });
-  expect(assetResponse.status()).toBe(201);
-  const asset = await assetResponse.json();
-
-  const listingResponse = await request.post(apiUrl(`/property-assets/${asset._id}/listings`), {
-    headers: { 'Idempotency-Key': randomUUID() },
-    data: { dealType: 'sale', price: { amountMinorUnits: 8_500_000, currency: 'USD' } },
-  });
-  expect(listingResponse.status()).toBe(201);
-  const listing = await listingResponse.json();
-
-  expect(
-    (await request.patch(apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/activate`))).status(),
-  ).toBe(200);
-
-  expect(
-    (
-      await request.post(apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publish`), {
-        headers: { 'Idempotency-Key': `e2e-catalogue-${login}` },
-      })
-    ).status(),
-  ).toBe(202);
-
-  await expect
-    .poll(
-      async () => {
-        const response = await request.get(
-          apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publication-status`),
-        );
-        if (response.status() !== 200) return null;
-        return (await response.json()).status;
-      },
-      { timeout: 60_000, intervals: [500, 1_000, 2_000] },
-    )
-    .toBe('published');
-
-  const status = await (
-    await request.get(apiUrl(`/property-assets/${asset._id}/listings/${listing._id}/publication-status`))
-  ).json();
-  return status.slug as string;
-  });
-}
-
-/**
- * Опубликованный ЖК. Возвращает slug публикации.
+ * Организация — `developer`: ЖК создаёт и публикует только застройщик
+ * (`DevelopmentsService.requireDeveloperOrganization`), агентство получит отказ.
  *
- * Организация здесь именно `developer`: ЖК создаёт и публикует только
- * застройщик (`DevelopmentsService.requireDeveloperOrganization`), агентству
- * тот же запрос вернёт отказ.
+ * Ожидание статуса `published` обязательно: проекцию собирает воркер
+ * асинхронно, без ожидания сценарий пошёл бы искать в каталоге объект, которого
+ * там ещё нет.
  */
 export async function seedPublishedDevelopment(): Promise<string> {
-  return inOwnContext(async (request) => {
-  const { login } = await registerOrganization(request, 'developer', 'catalogue-developer');
+  // Собственный HTTP-контекст: сессия живёт в cookie, и засев не должен ни
+  // перебивать чужую сессию, ни зависеть от неё.
+  const request = await apiRequest.newContext();
+  try {
+    const login = uniqueLogin('catalogue-developer');
+    await registerWithBackoff(request, login);
 
-  const developmentResponse = await request.post(apiUrl('/developments'), {
-    headers: { 'Idempotency-Key': randomUUID() },
-    data: {
-      name: `E2E ЖК ${login}`,
-      location: {
-        country: 'Georgia',
-        city: 'Batumi',
-        address: uniqueAddress(),
-        geo: { type: 'Point', coordinates: [41.6412, 41.6501] },
+    const onboarding = await request.post(apiUrl('/organizations/register'), {
+      data: { login, password: STRONG_TEST_PASSWORD, type: 'developer', name: `E2E Developer ${login}` },
+    });
+    expect(onboarding.status(), `org onboarding failed: ${await onboarding.text()}`).toBe(201);
+
+    const developmentResponse = await request.post(apiUrl('/developments'), {
+      headers: { 'Idempotency-Key': randomUUID() },
+      data: {
+        name: `E2E ЖК ${login}`,
+        location: {
+          country: 'Georgia',
+          city: 'Batumi',
+          address: uniqueAddress(),
+          geo: { type: 'Point', coordinates: [41.6412, 41.6501] },
+        },
+        contact: { phone: uniquePhone() },
+        classType: 'comfort',
+        // Именно ISO-дата: поле объявлено как @IsDateString(). Первая версия
+        // передавала сюда «2027-Q4» — квартал из UI-формата — и получала 400.
+        completionDate: '2027-12-01T00:00:00.000Z',
+        description: 'Объект, засеянный сквозным гейтом для проверки каталога.',
       },
-      contact: { phone: uniquePhone() },
-      classType: 'comfort',
-      completionDate: '2027-Q4',
-      description: 'Объект, засеянный сквозным гейтом для проверки каталога.',
-    },
-  });
-  expect(developmentResponse.status()).toBe(201);
-  const development = await developmentResponse.json();
+    });
+    expect(developmentResponse.status(), `development create failed: ${await developmentResponse.text()}`).toBe(201);
+    const development = await developmentResponse.json();
 
-  expect(
-    (
-      await request.post(apiUrl(`/developments/${development._id}/publish`), {
-        headers: { 'Idempotency-Key': `e2e-catalogue-dev-${login}` },
-      })
-    ).status(),
-  ).toBe(202);
+    const publishResponse = await request.post(apiUrl(`/developments/${development._id}/publish`), {
+      headers: { 'Idempotency-Key': `e2e-catalogue-dev-${login}` },
+    });
+    expect(publishResponse.status(), `development publish failed: ${await publishResponse.text()}`).toBe(202);
 
-  await expect
-    .poll(
-      async () => {
-        const response = await request.get(apiUrl(`/developments/${development._id}/publication-status`));
-        if (response.status() !== 200) return null;
-        return (await response.json()).status;
-      },
-      { timeout: 60_000, intervals: [500, 1_000, 2_000] },
-    )
-    .toBe('published');
+    await expect
+      .poll(
+        async () => {
+          const response = await request.get(apiUrl(`/developments/${development._id}/publication-status`));
+          if (response.status() !== 200) return null;
+          return (await response.json()).status;
+        },
+        { timeout: 60_000, intervals: [500, 1_000, 2_000] },
+      )
+      .toBe('published');
 
-  const status = await (
-    await request.get(apiUrl(`/developments/${development._id}/publication-status`))
-  ).json();
-  return status.slug as string;
-  });
+    const status = await (
+      await request.get(apiUrl(`/developments/${development._id}/publication-status`))
+    ).json();
+    return status.slug as string;
+  } finally {
+    await request.dispose();
+  }
 }

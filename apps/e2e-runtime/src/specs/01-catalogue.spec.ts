@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/test';
 import { apiUrl } from '../fixtures/env';
-import { seedPublishedDevelopment, seedPublishedListing } from '../fixtures/seed-catalogue';
+import { seedPublishedDevelopment } from '../fixtures/seed-catalogue';
 
 /**
  * Marketplace catalogue: open, filter, sort, pagination/cursor behavior,
@@ -22,17 +22,25 @@ test.describe('marketplace catalogue', () => {
    *
    * Стек поднимается с чистой базой, поэтому до 05.09.2026 сценарии каталога
    * фактически подтверждали, что страница умеет показывать «пусто». Здесь
-   * публикуются один ЖК и одно объявление — по одному на каждую вкладку, — и
-   * дальше проверки требуют настоящий счётчик и настоящие карточки.
+   * публикуется один ЖК, и дальше проверка требует настоящий счётчик и
+   * настоящую карточку.
+   *
+   * Засевается только ЖК, хотя вкладок две. Причина не в лени: `POST
+   * /auth/register` ограничен пятью запросами в минуту на IP, а в CI весь набор
+   * идёт с одного адреса. Первая версия заводила две организации и выела бюджет
+   * — 429 получили чужие сценарии, логаут и раскрытие контакта, которые до
+   * этого проходили. Проверкам вкладки объявлений отдельные данные не нужны:
+   * они смотрят параметры запроса, а навигация в карточку и так пропускается,
+   * когда объявлений нет.
    *
    * beforeAll, а не beforeEach: публикация идёт через воркер и ждёт сборки
    * проекции, повторять её перед каждым тестом значило бы тратить минуту на
    * ровном месте.
    */
   test.beforeAll(async () => {
-    // Фикстура `request` у Playwright тестовая, в beforeAll её нет — поэтому
-    // засевы сами заводят себе HTTP-контекст, каждый со своей cookie-сессией.
-    await Promise.all([seedPublishedDevelopment(), seedPublishedListing()]);
+    // Фикстура `request` у Playwright тестовая, в beforeAll её нет — засев сам
+    // заводит себе HTTP-контекст.
+    await seedPublishedDevelopment();
   });
 
   test('opens the developments tab by default and shows a results count', async ({ page }) => {
