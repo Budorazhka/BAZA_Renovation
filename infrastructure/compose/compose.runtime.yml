@@ -98,13 +98,13 @@ services:
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
       CORS_ALLOWED_ORIGIN_MARKETPLACE: ${CORS_ALLOWED_ORIGIN_MARKETPLACE:-http://localhost:4173}
       CORS_ALLOWED_ORIGIN_ADMIN: ${CORS_ALLOWED_ORIGIN_ADMIN:-http://localhost:4174}
-      # CORS_ALLOWED_ORIGIN_ERP intentionally left unset here — no erp-web
-      # app exists in this worktree (see the removed erp-web service below,
-      # replaced by admin-web on the same 4174 slot the old ERP_WEB_PORT
-      # used). resolveProductAudienceFromOrigin (apps/api/src/modules/
-      # identity/resolve-product-audience.ts) simply never matches the
-      # 'erp' branch when this var is unset — not a bug, an honest reflection
-      # of "ERP is out of scope for this worktree's runtime stack".
+      # apps/erp-web стал вендоренной копией внутри монорепо 02.09.2026 — до
+      # этого его здесь не было, и переменная намеренно не задавалась. Теперь
+      # без неё resolveProductAudienceFromOrigin (apps/api/src/modules/identity/
+      # resolve-product-audience.ts) никогда не попадает в ветку 'erp', и логин
+      # из ERP падает с AUTH_AUDIENCE_MISMATCH — то есть GET /me и вся сессия
+      # ERP в этом стеке недостижимы.
+      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-http://localhost:4175}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -152,6 +152,77 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+
+  # Протухание актуальности объявлений. ActualityService.expireOverdueListings
+  # умеет снимать просроченные listing'и с публикации, apps/api/src/jobs/
+  # actuality-expire.command.ts даёт ей точку входа вне HTTP — но до сих пор
+  # эту точку никто не вызывал ни в одном окружении, и объявления не протухали
+  # никогда. Здесь появляется расписание.
+  #
+  # Профиль `scheduled`: по умолчанию сервис не поднимается, чтобы прогон E2E
+  # не получал фоновых мутаций данных под собой. Запуск —
+  # `docker compose --profile scheduled up -d`.
+  #
+  # Цикл на sh, а не cron-образ и не @nestjs/schedule в процессе API: в кодовой
+  # базе нет ни одной scheduling-зависимости (см. докстринг команды), и здесь
+  # добавляется расписание, а не новый паттерн в коде.
+  actuality-expire:
+    profiles: ["scheduled"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://minio:9000/baza-public}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
+      ACTUALITY_EXPIRE_INTERVAL_SECONDS: ${ACTUALITY_EXPIRE_INTERVAL_SECONDS:-3600}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    # `|| true` намеренно: команда выходит с кодом 1, когда часть listing'ов не
+    # обработалась (result.errors > 0). Это повод для записи в лог, а не для
+    # остановки расписания — иначе один битый listing выключил бы протухание
+    # для всех остальных до ручного вмешательства.
+    command:
+      - >-
+        while true; do
+        node apps/api/dist/jobs/actuality-expire.command.js || echo "[actuality-expire] прогон завершился с ошибками, расписание продолжается";
+        sleep "$${ACTUALITY_EXPIRE_INTERVAL_SECONDS}";
+        done
+
+  erp-web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.erp-web
+      args:
+        # Именно "/" (origin), а не "/api/v1" (путь): клиенты ERP кладут
+        # PLATFORM_API_BASE_URL в axios baseURL и сами дописывают "/api/v1/..."
+        # (см. teamApi.ts, platformAuthApi.ts). С "/api/v1" получился бы
+        # "/api/v1/api/v1/auth/login". Дальше nginx этого контейнера проксирует
+        # location /api/ на api:3000 — тот же приём, что у admin-web.
+        VITE_PLATFORM_API_BASE_URL: "/"
+        VITE_CRM_API_BASE_URL: "/"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ERP_WEB_PORT:-4175}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   admin-web:
     build:

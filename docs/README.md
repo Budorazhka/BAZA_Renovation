@@ -126,6 +126,7 @@ permission-matrix.md», и ни один из четырёх читателю э
 ### Асинхронный контур
 
 - [outbox-dead-letter-noise.md](operations/outbox-dead-letter-noise.md) — семь типов событий уходили в `dead_letter` без единой попытки; обработчик подтверждаемых событий и страж покрытия.
+- [actuality-expire-schedule.md](operations/actuality-expire-schedule.md) — протухание актуальности получило расписание: команда была вызываема, но её никто не вызывал ни в одном окружении.
 
 ### Сверки состояния
 
