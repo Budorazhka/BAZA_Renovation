@@ -1985,3 +1985,63 @@ main { padding: 22px clamp(18px, 5vw, 52px) 48px; }
   text-decoration: underline;
   cursor: pointer;
 }
+
+/*
+ * MKT-SCR-027: служебная страница «не найдено».
+ *
+ * Собрана из подтверждённых токенов UI kit: отдельного фрейма в Figma нет,
+ * это зафиксированный gap, разрешённый владельцем 04.09.2026 к сборке «в той же
+ * стилистике». Никаких новых цветов и приёмов здесь не вводится.
+ */
+.not-found-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-16) var(--space-5) var(--space-20);
+  text-align: center;
+}
+
+.not-found-page__code {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  color: var(--color-accent);
+}
+
+.not-found-page__title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--color-ink);
+}
+
+.not-found-page__text {
+  margin: 0 0 var(--space-8);
+  color: var(--color-ink-muted);
+}
+
+.not-found-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+
+.not-found-page__btn {
+  padding: var(--space-3) var(--space-6);
+  border: var(--rule) solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
+  text-decoration: none;
+}
+
+.not-found-page__btn--primary {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+.not-found-page__btn--primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}

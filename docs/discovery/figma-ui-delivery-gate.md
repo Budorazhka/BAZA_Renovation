@@ -145,6 +145,7 @@ Marketplace переписывается по Figma. Цель этого док�
 | Избранное | `MKT-SCR-017` | `824:17645` | `1376:19390` (`realtor account_favories`) | `1376:19776` (`mob_favorites`) | Сетка избранного + фильтры | `apps/marketplace-web/src/pages/FavoritesPage.tsx` | `scaffold` — данные захардкожены, backend нет, visual compare не делался |
 | Подборки объектов | `MKT-SCR-018` | `824:17645` | `1311:18621` (`realtor account_my collections`) | `1311:18671` (`mob_my collections`) | Карточки подборок + клиентская витрина | `apps/marketplace-web/src/pages/SelectionsPage.tsx` | `scaffold` — данные захардкожены, backend нет, visual compare не делался |
 | Кабинет: Мои объекты | `MKT-SCR-019` | `824:17645` | `5071:68119` (карточки), `5071:68253` (таблица) | Интегрирован адаптивный вид | `5071:68767` (статусы), `5071:68749` (актуальность), `5071:68795` (кнопки) | `apps/marketplace-web/src/pages/MyPropertiesPage.tsx` | `scaffold` — данные захардкожены, backend нет, visual compare не делался |
+| Страница «не найдено» | `MKT-SCR-027` | Canvas `40:4517` (UI kit) | **Figma gap** — отдельного фрейма нет | **Figma gap** | Токены UI kit, новых приёмов не вводится | `apps/marketplace-web/src/pages/NotFoundPage.tsx`, маршрут `*` | `scaffold` — собрана по токенам с разрешения владельца от 04.09.2026; сверять не с чем, фрейма нет |
 
 ## Скриншоты и visual compare
 

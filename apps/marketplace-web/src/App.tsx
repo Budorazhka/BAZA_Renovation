@@ -35,6 +35,7 @@ import { SelectionsPage } from './pages/SelectionsPage'
 import { SelectionDetailPage } from './pages/SelectionDetailPage'
 import { RequestsPage } from './pages/RequestsPage'
 import { HomePage } from './pages/HomePage'
+import { NotFoundPage } from './pages/NotFoundPage'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -763,7 +764,11 @@ export default function App() {
         <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
-        <Route path="*" element={<Shell><HomePage /></Shell>} />
+        {/*
+          Неизвестный адрес отдаёт 404, а не главную: иначе битая ссылка выглядит
+          как рабочая страница, и человек не понимает, что ошибся адресом.
+        */}
+        <Route path="*" element={<Shell><NotFoundPage /></Shell>} />
       </Routes>
     </RouteErrorBoundary>
   )
