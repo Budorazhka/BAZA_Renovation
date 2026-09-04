@@ -89,7 +89,17 @@
   color: #FFFFFF;
 }
 
-.figma-listing-card__badge--deal {
+/*
+ * Селектор удлинён намеренно. Тот же элемент на детальной странице несёт ещё и
+ * класс `.listing-badge`, а тот в app.css красит текст в `--color-accent`, то
+ * есть в тот же зелёный, что и фон бейджа. При равной специфичности побеждал
+ * app.css по порядку подключения, и надпись «Продажа» была зелёной по зелёному:
+ * на снимке MKT-SCR-012 от 05.09.2026 бейдж пустой.
+ *
+ * В каталоге дефекта не было: там действует `.listing-card .listing-badge`
+ * (специфичность выше) и красит текст белым.
+ */
+.figma-listing-card__badge.figma-listing-card__badge--deal {
   background: var(--color-main, #1BA800);
   color: #FFFFFF;
 }
