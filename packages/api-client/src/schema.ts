@@ -645,7 +645,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Список бронирований (BOOK-002) — cursor pagination, тот же паттерн, что GET /developments. developmentId/buildingId/unitId — независимые опциональные фильтры, если переданы несколько сразу, unitId побеждает buildingId побеждает developmentId (самый специфичный выигрывает). booking.read: organization scope у owner/director/rop/developer, own scope у manager (сужение до Booking.manager === своя Position). */
+        get: operations["listBookings"];
         put?: never;
         /**
          * Создать атомарную бронь юнита (BOOK-001, ADR-006)
@@ -2500,6 +2501,10 @@ export interface components {
             manager: string;
             /** Format: date-time */
             createdAt: string;
+        };
+        BookingList: {
+            items?: components["schemas"]["Booking"][];
+            nextCursor?: string | null;
         };
         PublicationStatus: {
             id?: string;
@@ -4890,6 +4895,38 @@ export interface operations {
             400: components["responses"]["Error"];
             /** @description IDEMPOTENCY_KEY_CONFLICT */
             409: components["responses"]["Error"];
+        };
+    };
+    listBookings: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+                developmentId?: string;
+                buildingId?: string;
+                unitId?: string;
+                status?: "pending" | "booked" | "rejected" | "expired" | "paid";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список бронирований */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingList"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description developmentId/buildingId/unitId не существует/чужая организация */
+            404: components["responses"]["Error"];
         };
     };
     createBooking: {

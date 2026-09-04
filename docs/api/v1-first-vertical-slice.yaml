@@ -1287,6 +1287,46 @@ paths:
           $ref: '#/components/responses/Error'
 
   /bookings:
+    get:
+      operationId: listBookings
+      summary: >
+        Список бронирований (BOOK-002) — cursor pagination, тот же паттерн,
+        что GET /developments. developmentId/buildingId/unitId — независимые
+        опциональные фильтры, если переданы несколько сразу, unitId
+        побеждает buildingId побеждает developmentId (самый специфичный
+        выигрывает). booking.read: organization scope у
+        owner/director/rop/developer, own scope у manager (сужение до
+        Booking.manager === своя Position).
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+        - name: developmentId
+          in: query
+          schema: {type: string}
+        - name: buildingId
+          in: query
+          schema: {type: string}
+        - name: unitId
+          in: query
+          schema: {type: string}
+        - name: status
+          in: query
+          schema: {type: string, enum: [pending, booked, rejected, expired, paid]}
+      responses:
+        '200':
+          description: Список бронирований
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingList'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: developmentId/buildingId/unitId не существует/чужая организация
+          $ref: '#/components/responses/Error'
     post:
       operationId: createBooking
       summary: Создать атомарную бронь юнита (BOOK-001, ADR-006)
@@ -5406,6 +5446,12 @@ components:
         status: {type: string, enum: [pending, booked, rejected, expired, paid]}
         manager: {type: string, description: Position that owns the booking}
         createdAt: {type: string, format: date-time}
+
+    BookingList:
+      type: object
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Booking'}}
+        nextCursor: {type: string, nullable: true}
 
     PublicationStatus:
       type: object
