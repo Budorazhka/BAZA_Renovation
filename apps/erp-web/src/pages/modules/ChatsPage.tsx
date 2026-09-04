@@ -796,6 +796,10 @@ export default function ChatsPage() {
   const allBuildings = useCoreStore((s) => s.allBuildings)
   const projects = useCoreStore((s) => s.projects)
   const devSelections = useDevSelectionsStore((s) => s.selections)
+  const fetchDevSelections = useDevSelectionsStore((s) => s.fetchAll)
+  useEffect(() => {
+    void fetchDevSelections()
+  }, [fetchDevSelections])
   const branding = useAgencyBranding()
   // Подписка на in-memory store — перерисовка при смене настроек ИИ
   useMessengerAiSettingsStore((s) => s.byDialogId)

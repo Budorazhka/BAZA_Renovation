@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Check, ClipboardCopy, ExternalLink, Heart, HelpCircle,
@@ -409,12 +409,17 @@ function SelectionDetail({ sel, onBack }: { sel: DevSelection; onBack: () => voi
 export function SelectionsDevPage() {
     const { t } = useI18n();
   const selections = useDevSelectionsStore((s) => s.selections)
+  const fetchAll = useDevSelectionsStore((s) => s.fetchAll)
   const navigate = useNavigate()
   const location = useLocation()
   const { pathname } = location
   const [activeId, setActiveId] = useState<string | null>(
     (location.state as { activeId?: string } | null)?.activeId || null
   )
+
+  useEffect(() => {
+    void fetchAll()
+  }, [fetchAll])
 
   /** Одна и та же страница используется и в Девелопменте, и в Новостройках — шахматку открываем в текущем контуре. */
   const chessboardPath = pathname.startsWith('/dashboard/new-buildings')
