@@ -362,3 +362,55 @@
   height: 42px;
   border-radius: var(--radius-card, 10px);
 }
+
+/* ==========================================================================
+   Catalogue Map Split-View (Figma 236:26596)
+   ========================================================================== */
+.catalogue-split-view {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 24px;
+  min-height: 700px;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .catalogue-split-view {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+}
+
+.catalogue-split-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 800px;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+}
+
+.catalogue-split-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.catalogue-split-map {
+  position: sticky;
+  top: 90px;
+  height: calc(100vh - 120px);
+  min-height: 560px;
+  border-radius: var(--radius-card, 10px);
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+@media (max-width: 1024px) {
+  .catalogue-split-map {
+    position: static;
+    height: 420px;
+  }
+}
+

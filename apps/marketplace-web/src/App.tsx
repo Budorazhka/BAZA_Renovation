@@ -354,10 +354,29 @@ function CataloguePage() {
         {state.status === 'ready' ? (
           <>
             {isMapView ? (
-              <MarketplaceMap
-                items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
-                onBoundsChange={handleMapBoundsChange}
-              />
+              <div className="catalogue-split-view">
+                <aside className="catalogue-split-sidebar" aria-label="Список объектов на карте">
+                  <div className="catalogue-split-cards">
+                    {isDev
+                      ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
+                          <DevelopmentCard
+                            key={item.slug ?? `${item.name}-${index}`}
+                            item={item}
+                            size="small"
+                          />
+                        ))
+                      : (state.items as PublicListingCard[]).map((item, index) => (
+                          <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                        ))}
+                  </div>
+                </aside>
+                <div className="catalogue-split-map">
+                  <MarketplaceMap
+                    items={state.items as Array<PublicDevelopmentCard | PublicListingCard>}
+                    onBoundsChange={handleMapBoundsChange}
+                  />
+                </div>
+              </div>
             ) : (
               <div className="development-grid">
                 {isDev
