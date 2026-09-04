@@ -23,4 +23,26 @@ export class OrganizationRepository {
   async findById(id: Types.ObjectId): Promise<OrganizationDocument | null> {
     return this.model.findById(id).exec();
   }
+
+  /**
+   * Пакетное чтение публичных полей: id, название, тип.
+   *
+   * Нужно публичному каталогу, который показывает имя застройщика или
+   * агентства рядом с объектом. Отдельный метод, а не findById в цикле —
+   * иначе страница из 20 карточек стоила бы 20 запросов.
+   *
+   * `select` не для оптимизации, а как граница: публичный контур не должен
+   * получать документ организации целиком, даже если вызывающий код собирался
+   * взять оттуда одно поле.
+   */
+  async findPublicByIds(
+    ids: Types.ObjectId[],
+  ): Promise<Array<{ id: Types.ObjectId; name: string; type: OrganizationType }>> {
+    if (ids.length === 0) return [];
+    const docs = await this.model
+      .find({ _id: { $in: ids } })
+      .select('_id name type')
+      .exec();
+    return docs.map((doc) => ({ id: doc._id, name: doc.name, type: doc.type }));
+  }
 }

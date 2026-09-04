@@ -414,3 +414,43 @@
   }
 }
 
+
+/*
+ * Ссылка на застройщика или агентство в карточке. Отдельной страницы компании
+ * нет: ссылка ведёт в каталог, отфильтрованный по этому публикатору (решение
+ * владельца от 04.09.2026, как на действующем baza.sale).
+ *
+ * Подчёркивание оставлено намеренно: это единственный текстовый элемент
+ * карточки, который ведёт не на сам объект, и без него он неотличим от подписи.
+ */
+.figma-card-jk__publisher,
+.figma-listing-card__publisher {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.figma-card-jk__publisher a,
+.figma-listing-card__publisher a {
+  color: var(--color-ink-muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.figma-card-jk__publisher a:hover,
+.figma-listing-card__publisher a:hover {
+  color: var(--color-accent-hover);
+}
+
+/*
+ * Плашка активного фильтра по компании над выдачей каталога.
+ */
+.active-publisher-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}

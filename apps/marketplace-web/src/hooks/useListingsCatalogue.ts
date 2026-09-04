@@ -28,6 +28,8 @@ export interface UseListingsCatalogueQuery {
   propertyType?: ListingPropertyType
   commercialSubtype?: string
   bbox?: BoundingBox
+  /** id организации-публикатора: «показать всё этой компании». */
+  publisher?: string
   limit?: number
   sort?: PublicListingSort
 }
@@ -42,7 +44,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const loadMoreAbortControllerRef = useRef<AbortController | null>(null)
-  const { city, dealType, propertyType, commercialSubtype, bbox, limit = 12, sort = 'newest' } = query
+  const { city, dealType, propertyType, commercialSubtype, bbox, publisher, limit = 12, sort = 'newest' } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
   const loadFirstPage = useCallback(async () => {
@@ -65,6 +67,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           propertyType,
           commercialSubtype,
           bbox,
+          publisher,
           limit,
           sort,
         },
@@ -102,7 +105,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           : 'Не удалось загрузить каталог объявлений. Проверьте соединение и попробуйте снова.'
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit, sort])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort])
 
   useEffect(() => {
     void loadFirstPage()
@@ -131,6 +134,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
         propertyType,
         commercialSubtype,
         bbox,
+        publisher,
         cursor,
         limit,
         sort,
@@ -173,7 +177,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, limit, sort])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

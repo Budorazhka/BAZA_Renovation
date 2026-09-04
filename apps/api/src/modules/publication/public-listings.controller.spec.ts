@@ -4,6 +4,15 @@ import { PublicListingsController } from './public-listings.controller';
 import { SearchPublicListingsQueryDto } from './dto/search-public-listings-query.dto';
 
 /**
+ * Публикатор карточки читается из organizations на том же запросе
+ * (publisher-lookup.ts). В этих тестах организации не участвуют: заглушка
+ * отдаёт пустой список, и publisher в карточке остаётся undefined.
+ */
+function emptyOrganizationsService() {
+  return { listPublicOrganizations: async () => [] } as unknown as never;
+}
+
+/**
  * MKT-002 hardening: тот же regression-тест на whitelist-границу, что
  * public.controller.spec.ts уже применяет к toPublicCard (Development) —
  * до этого прохода PublicListingsController не имел собственного
@@ -90,7 +99,7 @@ describe('PublicListingsController — whitelist границы public response'
       listPublishedByFilterPage: jest.fn().mockResolvedValue({ items: listPublishedResult, total: listPublishedResult.length }),
       findBySlug: jest.fn().mockResolvedValue(findBySlugResult),
     } as unknown as MarketplacePublicationRepository;
-    return new PublicListingsController(repository);
+    return new PublicListingsController(repository, emptyOrganizationsService());
   }
 
   describe('GET /public/listings (list)', () => {
@@ -127,7 +136,7 @@ describe('PublicListingsController — whitelist границы public response'
       const repository = {
         listPublishedByFilterPage: jest.fn().mockResolvedValue({ items: [first, second], total: 4 }),
       } as unknown as MarketplacePublicationRepository;
-      const controller = new PublicListingsController(repository);
+      const controller = new PublicListingsController(repository, emptyOrganizationsService());
       const query = Object.assign(new SearchPublicListingsQueryDto(), { limit: 1, sort: 'price_asc' });
 
       const result = await controller.searchPublicListings(query);
@@ -168,7 +177,7 @@ describe('PublicListingsController — whitelist границы public response'
     it('bbox и polygon одновременно — 400, репозиторий не вызывается', async () => {
       const listPublishedByFilterPage = jest.fn();
       const repository = { listPublishedByFilterPage } as unknown as MarketplacePublicationRepository;
-      const controller = new PublicListingsController(repository);
+      const controller = new PublicListingsController(repository, emptyOrganizationsService());
       const query = Object.assign(new SearchPublicListingsQueryDto(), {
         limit: 20,
         bbox: '44,41,45,42',
@@ -182,7 +191,7 @@ describe('PublicListingsController — whitelist границы public response'
     it('polygon без bbox — парсится и передаётся в репозиторий как GeoJSON Polygon', async () => {
       const listPublishedByFilterPage = jest.fn().mockResolvedValue({ items: [], total: 0 });
       const repository = { listPublishedByFilterPage } as unknown as MarketplacePublicationRepository;
-      const controller = new PublicListingsController(repository);
+      const controller = new PublicListingsController(repository, emptyOrganizationsService());
       const query = Object.assign(new SearchPublicListingsQueryDto(), { limit: 20, polygon: '44,41,45,41,44.5,42' });
 
       await controller.searchPublicListings(query);

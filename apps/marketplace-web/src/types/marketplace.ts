@@ -17,6 +17,19 @@ export interface PublicGeoPoint {
   coordinates: [number, number]
 }
 
+/**
+ * Публикатор объекта: застройщик или агентство.
+ *
+ * Отдельных публичных страниц у них нет (решение владельца от 04.09.2026, как
+ * на действующем baza.sale) — клик по названию ведёт в каталог,
+ * отфильтрованный по `id`. У объектов частных собственников поле пустое.
+ */
+export interface PublicPublisher {
+  id: string
+  name: string
+  type: string
+}
+
 export interface PublicDevelopmentCard {
   slug?: string
   name?: string
@@ -24,6 +37,7 @@ export interface PublicDevelopmentCard {
   classType?: string
   completionDate?: string
   description?: string
+  publisher?: PublicPublisher
   seo?: {
     title?: string
     description?: string
@@ -50,6 +64,8 @@ export interface CatalogueQuery {
   limit?: number
   /** MKT-SCR-005: map viewport filter, serialized as minLng,minLat,maxLng,maxLat. */
   bbox?: BoundingBox
+  /** Фильтр «объекты этого застройщика»: id организации-публикатора. */
+  publisher?: string
   sort?: 'newest'
 }
 
@@ -78,6 +94,7 @@ export interface PublicListingCard {
   characteristics?: PublicListingCharacteristics
   media?: PublicMediaItem[]
   isVerified?: boolean
+  publisher?: PublicPublisher
   seo?: {
     title?: string
     description?: string
@@ -103,5 +120,7 @@ export interface ListingCatalogueQuery {
   limit?: number
   bbox?: BoundingBox
   sort?: PublicListingSort
+  /** Фильтр «объявления этой компании»: id организации-публикатора. */
+  publisher?: string
 }
 

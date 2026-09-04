@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
+import { IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
 import { IsBboxConstraint } from './is-bbox.constraint';
 import { IsPolygonConstraint } from './is-polygon.constraint';
 import { DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT } from './search-public-developments-query.dto';
@@ -58,4 +58,13 @@ export class SearchPublicListingsQueryDto {
   @IsOptional()
   @Validate(IsPolygonConstraint)
   polygon?: string;
+
+  /**
+   * Фильтр «объявления этого агентства или застройщика»: id
+   * организации-публикатора. Обоснование и семантика — в одноимённом поле
+   * SearchPublicDevelopmentsQueryDto.
+   */
+  @IsOptional()
+  @IsMongoId()
+  publisher?: string;
 }

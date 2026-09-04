@@ -1,5 +1,9 @@
 import { BadRequestException, Controller, Get, NotFoundException, Param, Query } from '@nestjs/common';
+import { Types } from 'mongoose';
 import { MarketplacePublicationRepository } from '@baza/publication';
+import type { OwnerScope } from '@baza/tenant-scope';
+import { OrganizationsService } from '../organizations/organizations.service';
+import { resolvePublishers, publisherOf, type PublicPublisher } from './publisher-lookup';
 import { SearchPublicListingsQueryDto } from './dto/search-public-listings-query.dto';
 import { parseBboxOrThrow } from './dto/parse-bbox';
 import { parsePolygonOrThrow } from './dto/parse-polygon';
@@ -12,7 +16,10 @@ import {
 
 @Controller('public/listings')
 export class PublicListingsController {
-  constructor(private readonly publicationRepository: MarketplacePublicationRepository) {}
+  constructor(
+    private readonly publicationRepository: MarketplacePublicationRepository,
+    private readonly organizationsService: OrganizationsService,
+  ) {}
 
   @Get()
   async searchPublicListings(@Query() query: SearchPublicListingsQueryDto) {
@@ -36,6 +43,7 @@ export class PublicListingsController {
       dealType: query.dealType,
       propertyType: query.propertyType,
       commercialSubtype: query.commercialSubtype,
+      publisherOrganizationId: query.publisher ? new Types.ObjectId(query.publisher) : undefined,
       sort,
     });
     const hasMore = page.items.length > query.limit;
@@ -51,8 +59,10 @@ export class PublicListingsController {
           })
       : null;
 
+    const publishers = await resolvePublishers(this.organizationsService, pageItems);
+
     return {
-      items: pageItems.map(toPublicListingCard),
+      items: pageItems.map((item) => toPublicListingCard(item, publishers)),
       nextCursor,
       total: page.total,
     };
@@ -64,7 +74,10 @@ export class PublicListingsController {
     if (!publication || publication.sourceType !== 'listing') {
       throw new NotFoundException('Publication not found');
     }
-    return toPublicListingCard(publication);
+    // Имя агентства или застройщика нужно и на детальной странице: с неё
+    // ведёт ссылка «показать все объекты этой компании».
+    const publishers = await resolvePublishers(this.organizationsService, [publication]);
+    return toPublicListingCard(publication, publishers);
   }
 }
 
@@ -103,12 +116,16 @@ function toPublicSeo(seo: PublicListingSeo | undefined) {
   };
 }
 
-function toPublicListingCard(publication: {
-  slug?: string;
-  denormalizedFields: Record<string, unknown>;
-  searchProjection?: Record<string, unknown>;
-  seo?: { title: string; description: string; canonicalUrl: string; structuredData: Record<string, unknown> };
-}) {
+function toPublicListingCard(
+  publication: {
+    slug?: string;
+    publisherScope?: OwnerScope;
+    denormalizedFields: Record<string, unknown>;
+    searchProjection?: Record<string, unknown>;
+    seo?: { title: string; description: string; canonicalUrl: string; structuredData: Record<string, unknown> };
+  },
+  publishers?: Map<string, PublicPublisher>,
+) {
   const fields = publication.denormalizedFields;
   const location = fields.location as PublicListingLocation | undefined;
   const geo = toPublicGeoPoint(publication.searchProjection?.geo);
@@ -151,6 +168,10 @@ function toPublicListingCard(publication: {
         }
       : undefined,
     media,
+    // Публикатор берётся из publisherScope самой публикации и имени, прочитанного
+    // на этом же запросе, а не из denormalizedFields — whitelist выше он не
+    // обходит: worker в это поле ничего не кладёт и не может.
+    publisher: publisherOf(publication.publisherScope, publishers),
     seo: toPublicSeo(publication.seo),
   };
 }

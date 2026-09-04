@@ -84,6 +84,29 @@ export class OrganizationsService {
   }
 
   /**
+   * Публичные поля организаций пачкой: id, название, тип.
+   *
+   * Нужно публичному каталогу marketplace, который показывает имя застройщика
+   * или агентства рядом с объектом и умеет фильтровать по нему (решение
+   * владельца от 04.09.2026: отдельных страниц компаний не будет, клик по
+   * названию ведёт в отфильтрованный каталог).
+   *
+   * Отдельный метод, а не getOrganizationById в цикле: страница из двадцати
+   * карточек стоила бы двадцать запросов. Тот же boundary-принцип, что у
+   * getOrganizationById — PublicationModule не может импортировать
+   * OrganizationRepository напрямую (ADR-001,
+   * test/architecture/module-boundaries.test.ts).
+   *
+   * Возвращает ровно три поля: публичному контуру документ организации целиком
+   * не нужен и не должен быть доступен.
+   */
+  async listPublicOrganizations(
+    ids: Types.ObjectId[],
+  ): Promise<Array<{ id: Types.ObjectId; name: string; type: OrganizationType }>> {
+    return this.organizationRepository.findPublicByIds(ids);
+  }
+
+  /**
    * D-05B: единственный способ для ДРУГИХ модулей (CrmService.assignLead)
    * проверить, что Position — реальный, tenant-scoped, назначаемый
    * получатель (не чужая организация, не closed) — тот же boundary-принцип,

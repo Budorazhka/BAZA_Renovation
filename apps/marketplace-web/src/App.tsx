@@ -59,6 +59,16 @@ import type {
 /** Маршруты, на которых живёт каталог с фильтрами. */
 const CATALOGUE_ROUTES = ['/newconstructions', '/secondary', '/rent']
 
+/**
+ * Раздел каталога по типу сделки объявления.
+ *
+ * Нужен ссылкам «показать всё этой компании»: аренда живёт в своём разделе, и
+ * ссылка на `/secondary` увела бы в раздел, где арендных объектов заведомо нет.
+ */
+function listingSectionPath(dealType: unknown): string {
+  return dealType === 'rent_long' || dealType === 'rent_short' ? '/rent' : '/secondary'
+}
+
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   // Плавающие кнопки фильтров и карты имеют смысл только в разделах каталога.
@@ -146,6 +156,7 @@ function CataloguePage({
   const sortParam: PublicListingSort = LISTING_SORTS.includes(rawSortParam as PublicListingSort)
     ? (rawSortParam as PublicListingSort)
     : 'newest'
+  const publisherParam = searchParams.get('publisher') || undefined
   const isMapView = searchParams.get('view') === 'map'
   const bboxParam = parseBoundingBox(searchParams.get('bbox'))
 
@@ -159,11 +170,13 @@ function CataloguePage({
   // Queries
   const developmentsQuery = useCatalogue({
     city: cityParam,
+    publisher: publisherParam,
     bbox: isMapView ? bboxParam : undefined,
   })
 
   const listingsQuery = useListingsCatalogue({
     city: cityParam,
+    publisher: publisherParam,
     dealType: dealTypeParam,
     propertyType: propertyTypeParam,
     commercialSubtype: commercialSubtypeParam,
@@ -205,6 +218,7 @@ function CataloguePage({
       propertyType: undefined,
       commercialSubtype: undefined,
       bbox: undefined,
+      publisher: undefined,
     })
   }
 
@@ -249,6 +263,26 @@ function CataloguePage({
           {state.status === 'ready' ? <span>{`Показано: ${state.items.length} из ${state.total}`}</span> : null}
           {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
         </div>
+
+        {/*
+          Активный фильтр по компании. Имя берём из первой карточки выдачи, а не
+          отдельным запросом: все объекты в ней принадлежат этому публикатору по
+          определению фильтра. Пока выдача пустая или ещё грузится, показываем
+          нейтральное «Выбранная компания» — придумывать имя не из чего.
+        */}
+        {publisherParam ? (
+          <div className="active-publisher-filter">
+            <span>
+              Показаны объекты компании:{' '}
+              <strong>
+                {(state.status === 'ready' && state.items[0]?.publisher?.name) || 'выбранная компания'}
+              </strong>
+            </span>
+            <button type="button" className="clear-filter-btn" onClick={() => updateFilters({ publisher: undefined })}>
+              Показать все компании
+            </button>
+          </div>
+        ) : null}
 
         {state.status === 'loading' ? (
           <div className="state-panel" role="status" aria-busy="true">
@@ -437,6 +471,20 @@ function DevelopmentDetailPage() {
                   <span>{developmentAddress(state.item)}</span>
                 </p>
 
+                {/*
+                  Застройщик ведёт в каталог, отфильтрованный по нему: отдельной
+                  страницы компании нет (решение владельца от 04.09.2026, как на
+                  действующем baza.sale).
+                */}
+                {state.item.publisher ? (
+                  <p className="figma-dev-publisher">
+                    Застройщик:{' '}
+                    <Link to={`/newconstructions?publisher=${encodeURIComponent(state.item.publisher.id)}`}>
+                      {state.item.publisher.name}
+                    </Link>
+                  </p>
+                ) : null}
+
                 <div className="figma-dev-pricing-card">
                   <span className="figma-dev-spec-label">Стоимость квартир:</span>
                   <div className="figma-dev-price-main">от $39 000</div>
@@ -589,6 +637,21 @@ function ListingDetailPage() {
                   </svg>
                   <span>{listingAddress(state.item)}</span>
                 </p>
+
+                {/*
+                  Компания-продавец ведёт в каталог, отфильтрованный по ней.
+                  Раздел выбирается по типу сделки, чтобы ссылка не уводила
+                  туда, где этих объектов заведомо нет.
+                */}
+                {state.item.publisher ? (
+                  <p className="figma-listing-publisher">
+                    Компания:{' '}
+                    <Link to={`${listingSectionPath(state.item.dealType)}?publisher=${encodeURIComponent(state.item.publisher.id)}`}>
+                      {state.item.publisher.name}
+                    </Link>
+                  </p>
+                ) : null}
+
                 <div className="detail-price-box figma-listing-pricing-card">
                   <p className="detail-price-main figma-listing-price-main">
                     {listingPrice(state.item)}

@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
+import { IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min, Validate } from 'class-validator';
 import { IsBboxConstraint } from './is-bbox.constraint';
 import { IsPolygonConstraint } from './is-polygon.constraint';
 
@@ -49,4 +49,19 @@ export class SearchPublicDevelopmentsQueryDto {
   @IsOptional()
   @Validate(IsPolygonConstraint)
   polygon?: string;
+
+  /**
+   * Фильтр «объекты этого застройщика»: id организации-публикатора.
+   *
+   * Решение владельца от 04.09.2026: отдельных публичных страниц застройщика и
+   * агентства не будет, клик по названию ведёт в отфильтрованный каталог — так
+   * же, как на действующем baza.sale. Поэтому фильтр, а не новый маршрут.
+   *
+   * Валидируется как ObjectId: невалидная строка должна давать 400, а не
+   * молча пустой список, по которому не отличить «нет такого застройщика» от
+   * «у него ничего не опубликовано».
+   */
+  @IsOptional()
+  @IsMongoId()
+  publisher?: string;
 }

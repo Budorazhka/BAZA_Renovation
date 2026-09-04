@@ -156,6 +156,22 @@ export function ListingCard({
           <span>{address}</span>
         </p>
 
+        {/*
+          Агентство или застройщик ведёт в каталог, отфильтрованный по нему.
+          Раздел выбран по типу сделки: у аренды свой раздел, иначе вторичка —
+          иначе ссылка увела бы в раздел, где этих объектов заведомо нет.
+          У объявлений частных собственников публикатора нет.
+        */}
+        {item.publisher ? (
+          <p className="figma-listing-card__publisher">
+            <Link
+              to={`${isRent ? '/rent' : '/secondary'}?publisher=${encodeURIComponent(item.publisher.id)}`}
+            >
+              {item.publisher.name}
+            </Link>
+          </p>
+        ) : null}
+
         {/* Parameter Chips */}
         <div className="figma-listing-card__chips" aria-label="Параметры объекта">
           {item.characteristics?.rooms ? (

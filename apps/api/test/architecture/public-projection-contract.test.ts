@@ -8,6 +8,16 @@ import { SearchPublicDevelopmentsQueryDto } from '../../src/modules/publication/
 import { SearchPublicListingsQueryDto } from '../../src/modules/publication/dto/search-public-listings-query.dto';
 
 /**
+ * Публикатор карточки читается из organizations на том же запросе
+ * (publisher-lookup.ts). Этот тест проверяет контракт полей, организации в
+ * нём не участвуют: заглушка отдаёт пустой список, publisher остаётся
+ * undefined и в контракт не попадает.
+ */
+function emptyOrganizationsService() {
+  return { listPublicOrganizations: async () => [] } as unknown as never;
+}
+
+/**
  * Публичная карточка отдаёт ровно те поля, которые обещает контракт.
  *
  * ЗАЧЕМ, и почему этого не покрывают существующие тесты. `public.controller.spec`
@@ -148,7 +158,7 @@ describe('Публичная карточка против контракта', 
 
     beforeAll(async () => {
       const publication = developmentPublication();
-      const controller = new PublicController(repositoryReturning([publication], publication));
+      const controller = new PublicController(repositoryReturning([publication], publication), emptyOrganizationsService());
       card = (await controller.getPublicDevelopment('zhk-guard')) as Record<string, unknown>;
     });
 
@@ -178,7 +188,7 @@ describe('Публичная карточка против контракта', 
 
     beforeAll(async () => {
       const publication = listingPublication();
-      const controller = new PublicListingsController(repositoryReturning([publication], publication));
+      const controller = new PublicListingsController(repositoryReturning([publication], publication), emptyOrganizationsService());
       card = (await controller.getPublicListing('listing-guard')) as Record<string, unknown>;
     });
 
@@ -200,7 +210,7 @@ describe('Публичная карточка против контракта', 
   describe('список и карточка описывают одно и то же', () => {
     it('элемент списка ЖК не богаче карточки ЖК', async () => {
       const publication = developmentPublication();
-      const controller = new PublicController(repositoryReturning([publication], publication));
+      const controller = new PublicController(repositoryReturning([publication], publication), emptyOrganizationsService());
       const page = (await controller.searchPublicDevelopments(
         new SearchPublicDevelopmentsQueryDto(),
       )) as { items: Record<string, unknown>[] };
@@ -211,7 +221,7 @@ describe('Публичная карточка против контракта', 
 
     it('элемент списка листингов не богаче карточки листинга', async () => {
       const publication = listingPublication();
-      const controller = new PublicListingsController(repositoryReturning([publication], publication));
+      const controller = new PublicListingsController(repositoryReturning([publication], publication), emptyOrganizationsService());
       const page = (await controller.searchPublicListings(
         new SearchPublicListingsQueryDto(),
       )) as { items: Record<string, unknown>[] };

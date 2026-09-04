@@ -1913,6 +1913,15 @@ paths:
         - name: city
           in: query
           schema: {type: string}
+        - name: publisher
+          in: query
+          description: >-
+            Фильтр «объекты этой компании»: id организации-публикатора
+            (застройщика или агентства). Отдельных публичных страниц компаний
+            нет — клик по названию ведёт в каталог с этим фильтром.
+            Невалидный ObjectId даёт 400, а не пустой список: иначе «нет такой
+            компании» было бы неотличимо от «у неё ничего не опубликовано».
+          schema: {type: string}
         - name: sort
           in: query
           description: "Порядок выдачи. Для ЖК поддерживается только newest."
@@ -5348,6 +5357,13 @@ paths:
         - name: commercialSubtype
           in: query
           schema: {type: string, enum: [office, warehouse, retail, business, free_purpose]}
+        - name: publisher
+          in: query
+          description: >-
+            Фильтр «объявления этой компании»: id организации-публикатора.
+            Семантика та же, что у одноимённого параметра
+            GET /public/developments.
+          schema: {type: string}
         - name: sort
           in: query
           description: "Порядок выдачи: newest, price_asc/desc или area_asc/desc."

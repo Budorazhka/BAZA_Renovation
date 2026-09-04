@@ -158,6 +158,20 @@ export function DevelopmentCard({
           <span>{address}</span>
         </p>
 
+        {/*
+          Застройщик кликабелен и ведёт в каталог, отфильтрованный по нему.
+          Отдельной страницы компании нет намеренно (решение владельца от
+          04.09.2026, как на действующем baza.sale). У объектов частных
+          собственников публикатора нет, и блок не рендерится.
+        */}
+        {item.publisher ? (
+          <p className="figma-card-jk__publisher">
+            <Link to={`/newconstructions?publisher=${encodeURIComponent(item.publisher.id)}`}>
+              {item.publisher.name}
+            </Link>
+          </p>
+        ) : null}
+
         {/* Facilities Chips (Figma Facilities 4747:74174) */}
         <div className="figma-card-jk__facilities" aria-label="Характеристики комплекса">
           <span className="figma-facility-pill">

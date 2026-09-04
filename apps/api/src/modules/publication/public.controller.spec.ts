@@ -1,5 +1,6 @@
 import { Types } from 'mongoose';
 import type { MarketplacePublicationRepository } from '@baza/publication';
+import type { OrganizationsService } from '../organizations/organizations.service';
 import { PublicController } from './public.controller';
 import { SearchPublicDevelopmentsQueryDto } from './dto/search-public-developments-query.dto';
 
@@ -69,12 +70,19 @@ describe('PublicController — whitelist границы public response', () => 
     }
   }
 
+  // Публикатор карточки читается из organizations на том же запросе (см.
+  // publisher-lookup.ts). В этих тестах организации не участвуют, поэтому
+  // заглушка возвращает пустой список: publisher в карточке будет undefined.
+  function makeOrganizationsService() {
+    return { listPublicOrganizations: jest.fn().mockResolvedValue([]) } as unknown as OrganizationsService;
+  }
+
   function makeController(listPublishedResult: unknown[], findBySlugResult: unknown) {
     const repository = {
       listPublishedPage: jest.fn().mockResolvedValue({ items: listPublishedResult, total: listPublishedResult.length }),
       findBySlug: jest.fn().mockResolvedValue(findBySlugResult),
     } as unknown as MarketplacePublicationRepository;
-    return new PublicController(repository);
+    return new PublicController(repository, makeOrganizationsService());
   }
 
   describe('GET /public/developments (list)', () => {
@@ -131,7 +139,7 @@ describe('PublicController — whitelist границы public response', () => 
     it('bbox и polygon одновременно — 400, репозиторий не вызывается', async () => {
       const listPublishedPage = jest.fn();
       const repository = { listPublishedPage } as unknown as MarketplacePublicationRepository;
-      const controller = new PublicController(repository);
+      const controller = new PublicController(repository, makeOrganizationsService());
       const query = Object.assign(new SearchPublicDevelopmentsQueryDto(), {
         limit: 20,
         bbox: '44,41,45,42',
@@ -145,7 +153,7 @@ describe('PublicController — whitelist границы public response', () => 
     it('polygon без bbox — парсится и передаётся в репозиторий как GeoJSON Polygon', async () => {
       const listPublishedPage = jest.fn().mockResolvedValue({ items: [], total: 0 });
       const repository = { listPublishedPage } as unknown as MarketplacePublicationRepository;
-      const controller = new PublicController(repository);
+      const controller = new PublicController(repository, makeOrganizationsService());
       const query = Object.assign(new SearchPublicDevelopmentsQueryDto(), { limit: 20, polygon: '44,41,45,41,44.5,42' });
 
       await controller.searchPublicDevelopments(query);

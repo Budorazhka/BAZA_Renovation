@@ -260,6 +260,7 @@ export class MarketplacePublicationRepository {
     city?: string;
     bbox?: GeoBboxFilter;
     polygon?: GeoPolygonFilter;
+    publisherOrganizationId?: Types.ObjectId;
     sort?: PublicCatalogSort;
   }): Promise<PublicCatalogPage> {
     return this.queryPublicPage({ ...params, sourceType: 'development', sort: params.sort ?? 'newest' });
@@ -275,6 +276,7 @@ export class MarketplacePublicationRepository {
     dealType?: string;
     propertyType?: string;
     commercialSubtype?: string;
+    publisherOrganizationId?: Types.ObjectId;
     sort?: PublicCatalogSort;
   }): Promise<PublicCatalogPage> {
     return this.queryPublicPage({ ...params, sort: params.sort ?? 'newest' });
@@ -290,6 +292,7 @@ export class MarketplacePublicationRepository {
     dealType?: string;
     propertyType?: string;
     commercialSubtype?: string;
+    publisherOrganizationId?: Types.ObjectId;
     sort: PublicCatalogSort;
   }): Promise<PublicCatalogPage> {
     const baseFilter: Record<string, unknown> = { status: 'published', sourceType: params.sourceType };
@@ -297,6 +300,19 @@ export class MarketplacePublicationRepository {
     if (params.dealType) baseFilter['searchProjection.dealType'] = params.dealType;
     if (params.propertyType) baseFilter['searchProjection.propertyType'] = params.propertyType;
     if (params.commercialSubtype) baseFilter['searchProjection.commercialSubtype'] = params.commercialSubtype;
+    if (params.publisherOrganizationId) {
+      // Фильтр по автору публикации: «показать всё этого застройщика или
+      // агентства». Берётся из publisherScope, который и так есть у каждой
+      // публикации, а не из searchProjection — денормализовать сюда ничего не
+      // нужно, и значение не может разойтись с источником.
+      //
+      // Тип проверяется явно: у публикации от частного собственника
+      // (marketplace_account) organizationId отсутствует, и без проверки типа
+      // фильтр по несуществующему полю молча вернул бы пустой список вместо
+      // осмысленного ответа.
+      baseFilter['publisherScope.type'] = 'organization';
+      baseFilter['publisherScope.organizationId'] = params.publisherOrganizationId;
+    }
     const geoFilter = buildGeoFilter(params.bbox, params.polygon);
     if (geoFilter) {
       baseFilter['searchProjection.geo'] = geoFilter;

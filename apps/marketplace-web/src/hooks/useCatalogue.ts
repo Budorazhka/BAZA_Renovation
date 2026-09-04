@@ -19,6 +19,8 @@ export type CatalogueState =
 export interface UseCatalogueQuery {
   city?: string
   bbox?: BoundingBox
+  /** id организации-публикатора: «показать всё этой компании». */
+  publisher?: string
   limit?: number
   sort?: 'newest'
 }
@@ -33,7 +35,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
   const requestIdRef = useRef(0)
   const abortControllerRef = useRef<AbortController | null>(null)
   const loadMoreAbortControllerRef = useRef<AbortController | null>(null)
-  const { city, bbox, limit = 12, sort = 'newest' } = query
+  const { city, bbox, publisher, limit = 12, sort = 'newest' } = query
   const bboxKey = bbox ? `${bbox.minLng},${bbox.minLat},${bbox.maxLng},${bbox.maxLat}` : ''
 
   const loadFirstPage = useCallback(async () => {
@@ -50,7 +52,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
 
     try {
       const response = await marketplaceApi.listDevelopments(
-        { city: city?.trim() || undefined, bbox, limit, sort },
+        { city: city?.trim() || undefined, bbox, publisher, limit, sort },
         { signal: controller.signal },
       )
 
@@ -85,7 +87,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           : 'Не удалось загрузить каталог новостроек. Проверьте соединение и попробуйте снова.'
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, bboxKey, limit, sort])
+  }, [city, bboxKey, publisher, limit, sort])
 
   useEffect(() => {
     void loadFirstPage()
@@ -111,6 +113,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
       .listDevelopments({
         city: city?.trim() || undefined,
         bbox,
+        publisher,
         cursor,
         limit,
         sort,
@@ -149,7 +152,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, bboxKey, limit, sort])
+  }, [city, bboxKey, publisher, limit, sort])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

@@ -102,6 +102,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
         const { minLng, minLat, maxLng, maxLat } = query.bbox
         params.set('bbox', `${minLng},${minLat},${maxLng},${maxLat}`)
       }
+      if (query.publisher) params.set('publisher', query.publisher)
       if (query.cursor) params.set('cursor', query.cursor)
       if (query.limit) params.set('limit', String(query.limit))
       if (query.sort) params.set('sort', query.sort)
@@ -151,6 +152,7 @@ export function createMarketplaceApi({ baseUrl, fetcher = fetch }: { baseUrl: st
         const { minLng, minLat, maxLng, maxLat } = query.bbox
         params.set('bbox', `${minLng},${minLat},${maxLng},${maxLat}`)
       }
+      if (query.publisher) params.set('publisher', query.publisher)
       if (query.cursor) params.set('cursor', query.cursor)
       if (query.limit) params.set('limit', String(query.limit))
       if (query.sort) params.set('sort', query.sort)
