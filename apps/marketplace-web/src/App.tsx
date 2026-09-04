@@ -428,12 +428,18 @@ function DevelopmentDetailPage() {
         }
   )
 
-  const sampleUnits: UnitInfo[] = [
-    { title: 'Студия', area: 32.5, rooms: 1, floor: 4, price: 'от $39 000' },
-    { title: '1-комнатная квартира', area: 48.0, rooms: 1, floor: 7, price: 'от $57 600' },
-    { title: '2-комнатная квартира', area: 72.4, rooms: 2, floor: 10, price: 'от $86 800' },
-    { title: '3-комнатный пентхаус', area: 115.0, rooms: 3, floor: 18, price: 'от $155 000' },
-  ]
+  /**
+   * Планировки комплекса. Сегодня всегда пусто: публикация юнитов не сделана —
+   * воркер помечает каждое событие с sourceType 'unit' как build_failed, и в
+   * публичную проекцию юниты не попадают.
+   *
+   * Раньше здесь лежал захардкоженный массив из четырёх квартир с ценами, и он
+   * показывался на странице ЛЮБОГО ЖК как его собственные планировки. Это не
+   * заглушка вёрстки, а выдуманные цены на публичной странице объекта, которых
+   * застройщик не называл. Пока backend не отдаёт юниты, честный ответ —
+   * сказать, что планировок пока нет.
+   */
+  const units: UnitInfo[] = []
 
   return (
     <Shell>
@@ -501,11 +507,12 @@ function DevelopmentDetailPage() {
                   </p>
                 ) : null}
 
-                <div className="figma-dev-pricing-card">
-                  <span className="figma-dev-spec-label">Стоимость квартир:</span>
-                  <div className="figma-dev-price-main">от $39 000</div>
-                  <div className="figma-dev-price-sqm">от $1 200 / м² · Возможна беспроцентная рассрочка</div>
-                </div>
+                {/*
+                  Блок стоимости убран вместе с выдуманными планировками: цена
+                  «от $39 000», ставка «от $1 200 / м²» и обещание бесплатной
+                  рассрочки были вписаны в код и показывались у каждого ЖК.
+                  Вернуть, когда публичная проекция начнёт отдавать цены.
+                */}
 
                 {slug ? <RevealContactCTA slug={slug} type="development" /> : null}
               </div>
@@ -542,8 +549,13 @@ function DevelopmentDetailPage() {
             {/* Layouts and Units Matrix (Figma 3314:202465) */}
             <section id="units" className="figma-dev-section" aria-label="Планировки и цены">
               <h2 className="figma-dev-section-title">Планировки и цены</h2>
+              {units.length === 0 ? (
+                <p className="figma-dev-description">
+                  Планировки появятся, когда застройщик их опубликует.
+                </p>
+              ) : null}
               <div className="figma-units-matrix">
-                {sampleUnits.map((u, i) => (
+                {units.map((u, i) => (
                   <div key={i} className="figma-unit-card">
                     <h3 className="figma-unit-card__title">{u.title}</h3>
                     <div className="figma-unit-card__meta">

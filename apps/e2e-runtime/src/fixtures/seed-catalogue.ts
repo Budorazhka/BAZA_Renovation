@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { expect, request as apiRequest } from '@playwright/test';
 import { apiUrl } from './env';
 import { registerIdentityOrFail } from './register';
-import { STRONG_TEST_PASSWORD, uniqueAddress, uniqueLogin, uniquePhone } from './test-data';
+import {
+  STRONG_TEST_PASSWORD,
+  uniqueAddress,
+  uniqueDevelopmentName,
+  uniqueLogin,
+  uniquePhone,
+} from './test-data';
 
 /**
  * Засев публичного каталога реальными данными.
@@ -47,7 +53,7 @@ export async function seedPublishedDevelopment(): Promise<string> {
     const developmentResponse = await request.post(apiUrl('/developments'), {
       headers: { 'Idempotency-Key': randomUUID() },
       data: {
-        name: `E2E ЖК ${login}`,
+        name: uniqueDevelopmentName(),
         location: {
           country: 'Georgia',
           city: 'Batumi',

@@ -34,6 +34,18 @@ export function uniqueLogin(prefix: string): string {
   return `${prefix}-${RUN_ID}-${shortId()}@e2e.baza.test`;
 }
 
+/**
+ * Имя ЖК: читаемое и короткое, а не производное от логина.
+ *
+ * Раньше засев называл комплекс `E2E ЖК ${login}`, то есть подставлял в
+ * заголовок целый email. На детальной странице такой заголовок разрывался
+ * посреди слова, и снимок для сверки с Figma переставал что-либо показывать
+ * про типографику заголовка.
+ */
+export function uniqueDevelopmentName(): string {
+  return `ЖК Батуми Резиденс ${shortId()}`;
+}
+
 export function uniquePhone(): string {
   // +995 (Georgia) prefix to match representativePhone/requesterPhone regex
   // (`^\+?[\d\s-]{6,20}$`) and the domain's Georgia-first market context.
