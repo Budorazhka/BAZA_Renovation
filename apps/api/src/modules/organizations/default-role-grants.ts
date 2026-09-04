@@ -165,6 +165,15 @@ export interface DefaultGrant {
  * `administrator`/`marketer` не получают — у них нет вообще ни одного
  * booking.*-гранта (booking-workflow вне их круга обязанностей, тот же
  * принцип, что `calendar_event.*`/`crm_report.read`).
+ *
+ * `dev_selection.*` (04.09.2026, миграция подборок для клиента с localStorage
+ * на backend, модуль `selections`) — тот же паттерн scope, что `booking.*`:
+ * `own` у manager (SelectionsController.ownerFilterForAction сужает до
+ * createdByPositionId === своя Position — агент составляет подборку из
+ * лотов для СВОЕГО клиента, не должен видеть/менять чужие), `organization`
+ * у owner/director/rop/developer (тот же круг, что `installment_plan.*`).
+ * `administrator`/`marketer` не получают — вне их круга обязанностей (тот
+ * же принцип, что `booking.*`/`calendar_event.*`).
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -220,6 +229,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'installment_plan', action: 'create', scope: 'organization' },
     { resource: 'installment_plan', action: 'update', scope: 'organization' },
     { resource: 'installment_plan', action: 'delete', scope: 'organization' },
+    { resource: 'dev_selection', action: 'read', scope: 'organization' },
+    { resource: 'dev_selection', action: 'create', scope: 'organization' },
+    { resource: 'dev_selection', action: 'update', scope: 'organization' },
+    { resource: 'dev_selection', action: 'delete', scope: 'organization' },
   ],
   director: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -274,6 +287,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'installment_plan', action: 'create', scope: 'organization' },
     { resource: 'installment_plan', action: 'update', scope: 'organization' },
     { resource: 'installment_plan', action: 'delete', scope: 'organization' },
+    { resource: 'dev_selection', action: 'read', scope: 'organization' },
+    { resource: 'dev_selection', action: 'create', scope: 'organization' },
+    { resource: 'dev_selection', action: 'update', scope: 'organization' },
+    { resource: 'dev_selection', action: 'delete', scope: 'organization' },
   ],
   rop: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -329,6 +346,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'installment_plan', action: 'create', scope: 'organization' },
     { resource: 'installment_plan', action: 'update', scope: 'organization' },
     { resource: 'installment_plan', action: 'delete', scope: 'organization' },
+    { resource: 'dev_selection', action: 'read', scope: 'organization' },
+    { resource: 'dev_selection', action: 'create', scope: 'organization' },
+    { resource: 'dev_selection', action: 'update', scope: 'organization' },
+    { resource: 'dev_selection', action: 'delete', scope: 'organization' },
   ],
   manager: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -378,6 +399,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'booking', action: 'create', scope: 'own' },
     { resource: 'booking', action: 'read', scope: 'own' },
     { resource: 'booking', action: 'confirm', scope: 'own' },
+    { resource: 'dev_selection', action: 'read', scope: 'own' },
+    { resource: 'dev_selection', action: 'create', scope: 'own' },
+    { resource: 'dev_selection', action: 'update', scope: 'own' },
+    { resource: 'dev_selection', action: 'delete', scope: 'own' },
   ],
   administrator: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -456,5 +481,9 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'installment_plan', action: 'create', scope: 'organization' },
     { resource: 'installment_plan', action: 'update', scope: 'organization' },
     { resource: 'installment_plan', action: 'delete', scope: 'organization' },
+    { resource: 'dev_selection', action: 'read', scope: 'organization' },
+    { resource: 'dev_selection', action: 'create', scope: 'organization' },
+    { resource: 'dev_selection', action: 'update', scope: 'organization' },
+    { resource: 'dev_selection', action: 'delete', scope: 'organization' },
   ],
 };

@@ -94,6 +94,10 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
   'listing-revision.repository.ts#listForAsset':
     'Скоупится propertyAssetId, не organizationId напрямую — PropertyAssetsService.listRevisions вызывает ' +
     'getAsset(assetId, organizationId) до этого запроса, тот же контракт, что mutateMedia выше.',
+  'dev-selection.repository.ts#findByPublicToken':
+    'Публичная сторона (PublicSelectionsController, без TenantGuard) — единственный ключ доступа это сам ' +
+    'publicToken (256 бит случайности, SelectionsService.generatePublicToken), organizationId у анонимного ' +
+    'посетителя ссылки физически нет. Тот же принцип, что invitation.repository.ts#findByTokenHash выше.',
 };
 
 const QUERY = /this\.model\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|countDocuments|aggregate|distinct)\b/;

@@ -746,6 +746,95 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/selections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список подборок (own-scope у manager сужается до созданных им) */
+        get: operations["listSelections"];
+        put?: never;
+        /** Создать подборку лотов для клиента (dev selections). `dev_selection.create` — own-scope у manager, organization-scope у owner/director/rop/developer. Юнит-существование/принадлежность организации и leadId (если передан) проверяются server-side. */
+        post: operations["createSelection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/selections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получить подборку по id */
+        get: operations["getSelection"];
+        put?: never;
+        post?: never;
+        /** Удалить подборку */
+        delete: operations["deleteSelection"];
+        options?: never;
+        head?: never;
+        /** Обновить общие поля подборки (title/clientName/clientPhone/agentNote/leadId/customization) */
+        patch: operations["updateSelection"];
+        trace?: never;
+    };
+    "/selections/{id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Изменить статус подборки (draft/sent/viewed/archived); переход в sent проставляет sentAt */
+        patch: operations["setSelectionStatus"];
+        trace?: never;
+    };
+    "/selections/{id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Добавить лоты в подборку (дедупликация против уже существующих items) */
+        post: operations["addSelectionItems"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/selections/{id}/items/{unitId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удалить лот из подборки */
+        delete: operations["removeSelectionItem"];
+        options?: never;
+        head?: never;
+        /** Заметка агента и/или реакция клиента на конкретный лот подборки */
+        patch: operations["updateSelectionItem"];
+        trace?: never;
+    };
     "/public/developments": {
         parameters: {
             query?: never;
@@ -2296,6 +2385,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/selections/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Публичный просмотр подборки клиентом по ссылке. Единственный публичный эндпоинт подборок — единственный ключ доступа это сам `token` (256 бит случайности, не хешируется на диске, см. DevSelectionDocument докстринг). Side-effect: атомарный инкремент viewCount, lastOpenedAt, и переход status sent->viewed при первом открытии. Проекция whitelist-only (не включает organizationId/createdByPositionId/leadId/ publicToken/version). */
+        get: operations["getPublicSelection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/complaints": {
         parameters: {
             query?: never;
@@ -2495,6 +2601,80 @@ export interface components {
             discountPercent?: number;
             description?: string;
             sortOrder?: number;
+        };
+        SelectionItem: {
+            unitId: string;
+            agentNote?: string | null;
+            /** @enum {string|null} */
+            reaction?: "liked" | "disliked" | "question" | null;
+            /** Format: date-time */
+            viewedAt?: string | null;
+        };
+        Selection: {
+            id: string;
+            organizationId: string;
+            createdByPositionId: string;
+            publicToken: string;
+            title: string;
+            leadId?: string | null;
+            clientName?: string | null;
+            clientPhone?: string | null;
+            agentNote?: string | null;
+            /** @enum {string} */
+            status: "draft" | "sent" | "viewed" | "archived";
+            items: components["schemas"]["SelectionItem"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** Format: date-time */
+            sentAt?: string | null;
+            /** Format: date-time */
+            lastOpenedAt?: string | null;
+            viewCount: number;
+            customization?: {
+                [key: string]: unknown;
+            } | null;
+            version: number;
+        };
+        CreateSelectionRequest: {
+            title: string;
+            unitIds: string[];
+            leadId?: string;
+            clientName?: string;
+            clientPhone?: string;
+            agentNote?: string;
+            customization?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateSelectionRequest: {
+            expectedVersion: number;
+            title?: string;
+            leadId?: string;
+            clientName?: string;
+            clientPhone?: string;
+            agentNote?: string;
+            customization?: {
+                [key: string]: unknown;
+            };
+        };
+        PublicSelection: {
+            title: string;
+            clientName?: string | null;
+            clientPhone?: string | null;
+            agentNote?: string | null;
+            /** @enum {string} */
+            status: "draft" | "sent" | "viewed" | "archived";
+            items: components["schemas"]["SelectionItem"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            sentAt?: string | null;
+            viewCount: number;
+            customization?: {
+                [key: string]: unknown;
+            } | null;
         };
         CreateBuildingRequest: {
             name: string;
@@ -3768,6 +3948,7 @@ export interface components {
         MediaAssetId: string;
         ListingId: string;
         BookingId: string;
+        SelectionId: string;
         /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
         IdempotencyKeyHeader: string;
         /** @description Опционален для reveal-contact (в отличие от ADR-006 publish/book/cancel) — повтор без ключа сохраняет текущую совместимость (всегда новый Lead). С ключом: повторный запрос с тем же (slug, ключ) и тем же телом возвращает сохранённый ответ, не создаёт новый Lead. */
@@ -5309,6 +5490,310 @@ export interface operations {
             /** @description Booking не существует/чужая организация (non-disclosure) */
             404: components["responses"]["Error"];
             /** @description Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    listSelections: {
+        parameters: {
+            query?: {
+                status?: "draft" | "sent" | "viewed" | "archived";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список подборок */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Selection"][];
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createSelection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Подборка создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — один из unitId или leadId не существует/чужой */
+            404: components["responses"]["Error"];
+        };
+    };
+    getSelection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["SelectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Подборка */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — не существует/чужая организация/own-scope не совпал */
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteSelection: {
+        parameters: {
+            query?: {
+                expectedVersion?: number;
+            };
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Подборка удалена */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    updateSelection: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSelectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Подборка обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    setSelectionStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                    /** @enum {string} */
+                    status: "draft" | "sent" | "viewed" | "archived";
+                };
+            };
+        };
+        responses: {
+            /** @description Статус изменён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    addSelectionItems: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                    unitIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Лоты добавлены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — подборка или один из unitId не существует/чужой */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    removeSelectionItem: {
+        parameters: {
+            query?: {
+                expectedVersion?: number;
+            };
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лот удалён из подборки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
+            409: components["responses"]["Error"];
+        };
+    };
+    updateSelectionItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["SelectionId"];
+                unitId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedVersion: number;
+                    agentNote?: string;
+                    /** @enum {string|null} */
+                    reaction?: "liked" | "disliked" | "question" | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Лот подборки обновлён */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Selection"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — подборка не найдена/чужая, либо unitId не в этой подборке */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT */
             409: components["responses"]["Error"];
         };
     };
@@ -8583,6 +9068,30 @@ export interface operations {
             404: components["responses"]["Error"];
             /** @description RATE_LIMITED */
             429: components["responses"]["Error"];
+        };
+    };
+    getPublicSelection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Публичная проекция подборки */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicSelection"];
+                };
+            };
+            /** @description NOT_FOUND — токен не существует */
+            404: components["responses"]["Error"];
         };
     };
     adminListComplaints: {

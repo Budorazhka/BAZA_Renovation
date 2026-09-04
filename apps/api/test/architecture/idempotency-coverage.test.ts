@@ -54,6 +54,13 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /developments/:developmentId/installment-plans': 'создание плана рассрочки — дубль создал бы дублирующий план',
   'PATCH /developments/:developmentId/installment-plans/:id': 'обновление плана рассрочки с Idempotency-Key и expectedVersion',
   'DELETE /developments/:developmentId/installment-plans/:id': 'удаление плана рассрочки с Idempotency-Key и expectedVersion',
+  'POST /selections': 'дубль подборки для клиента — повтор формы создал бы вторую подборку с той же публичной ссылкой-намерением',
+  'PATCH /selections/:id': 'обновление подборки с Idempotency-Key и expectedVersion',
+  'PATCH /selections/:id/status': 'смена статуса подборки с Idempotency-Key и expectedVersion',
+  'DELETE /selections/:id': 'удаление подборки с Idempotency-Key и expectedVersion',
+  'POST /selections/:id/items': 'добавление лотов в подборку с Idempotency-Key и expectedVersion',
+  'DELETE /selections/:id/items/:unitId': 'удаление лота из подборки с Idempotency-Key и expectedVersion',
+  'PATCH /selections/:id/items/:unitId': 'заметка/реакция агента на лот в подборке с Idempotency-Key и expectedVersion',
 };
 
 /**
