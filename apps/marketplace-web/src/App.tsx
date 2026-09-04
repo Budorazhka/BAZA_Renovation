@@ -19,6 +19,9 @@ import { ListingContactForm } from './components/ListingContactForm'
 import { ListingMediaGallery } from './components/ListingMediaGallery'
 import { MarketplaceMap } from './components/MarketplaceMap'
 import { PublishingWizard } from './features/publishing'
+import { Header } from './components/Header'
+import { Footer } from './components/Footer'
+import './styles/header-footer.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
@@ -32,7 +35,6 @@ import type {
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const isCatalogueRoute = location.pathname === '/'
-  const listingsActive = location.search.includes('tab=listings')
   const mapQuery = new URLSearchParams(location.search)
   mapQuery.set('view', 'map')
   mapQuery.delete('cursor')
@@ -46,28 +48,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <a href="#main-content" className="skip-link">
         Перейти к основному содержанию
       </a>
-      <header className="site-header" role="banner">
-        <Link className="wordmark" to="/" aria-label="BAZA, каталог объектов недвижимости">
-          BAZA
-        </Link>
-        <nav className="main-nav" aria-label="Основная навигация">
-          <Link to="/" role="tab" aria-selected={!listingsActive} className={`main-nav__link${listingsActive ? '' : ' is-active'}`}>Новостройки</Link>
-          <Link to="/?tab=listings" role="tab" aria-label="Вторичка и аренда" aria-selected={listingsActive} className={`main-nav__link${listingsActive ? ' is-active' : ''}`}>Вторичка</Link>
-          <Link to="/" className="main-nav__link">Проекты</Link>
-          <Link to="/?tab=listings&dealType=rent_long" className="main-nav__link">Аренда</Link>
-          <Link to="/?tab=listings&propertyType=commercial" className="main-nav__link">Коммерция</Link>
-          <Link to="/" className="main-nav__link">Запросы</Link>
-          <Link to="/" className="main-nav__link">Банки</Link>
-        </nav>
-        <div className="header-actions">
-          <Link className="header-action header-action--primary" to="/publish" data-testid="header-publish-cta">+ Разместить</Link>
-          <Link className="header-action header-action--dark" to="/publish">⌕ Войти</Link>
-          <button className="header-locale" type="button" aria-label="Выбрать язык">RU⌄</button>
-          <button className="header-locale" type="button" aria-label="Выбрать валюту">$⌄</button>
-          <button className="header-location" type="button" aria-label="Выбрать город">● Тбилиси</button>
-          <button className="header-profile" type="button" aria-label="Профиль">◔</button>
-        </div>
-      </header>
+      <Header />
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
@@ -83,22 +64,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
       ) : null}
-      <footer className="site-footer" role="contentinfo">
-        <div className="site-footer__inner">
-          <div className="site-footer__brand">
-            <Link className="site-footer__wordmark" to="/" aria-label="BAZA, каталог объектов недвижимости">BAZA<span>.sale</span></Link>
-            <p>Проверенный каталог недвижимости в Грузии</p>
-          </div>
-          <nav className="site-footer__nav" aria-label="Навигация в подвале">
-            <Link to="/">Новостройки</Link>
-            <Link to="/?tab=listings">Вторичка</Link>
-            <Link to="/?tab=listings&dealType=rent_long">Аренда</Link>
-            <Link to="/?tab=listings&propertyType=commercial">Коммерция</Link>
-            <Link to="/publish">Разместить объект</Link>
-          </nav>
-          <p className="site-footer__copyright">© {new Date().getFullYear()} BAZA.sale</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   )
 }
