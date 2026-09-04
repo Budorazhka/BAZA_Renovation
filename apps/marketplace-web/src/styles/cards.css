@@ -1,0 +1,364 @@
+/* ==========================================================================
+   Figma card ЖК ComponentSet: 4747:74437 & Skeleton (MKT-COMP-002, MKT-SYS-001)
+   Tokens from tokens.css:
+   - Primary forest: #169600
+   - Accent purple: #7065f0
+   - Dark: #151515, Muted: #555454, Soft: #f1f7eb
+   - Radii: 10px (default), 30px (pills), 100px (buttons/circles)
+   ========================================================================== */
+
+.figma-card-jk {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background-white, #ffffff);
+  border: 1px solid var(--color-border-subtle, #e5e7eb);
+  border-radius: var(--radius-card, 10px);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.figma-card-jk:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  border-color: var(--color-border-strong, #d1d5db);
+}
+
+/* Size Variants */
+.figma-card-jk--default {
+  max-width: 382px;
+  width: 100%;
+}
+
+.figma-card-jk--small {
+  max-width: 300px;
+  width: 100%;
+}
+
+.figma-card-jk--wide {
+  max-width: 1084px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 404px 1fr;
+}
+
+@media (max-width: 860px) {
+  .figma-card-jk--wide {
+    display: flex;
+    flex-direction: column;
+    max-width: 100%;
+  }
+}
+
+/* Image Cover (382x300 in Figma) */
+.figma-card-jk__cover {
+  position: relative;
+  width: 100%;
+  height: 240px;
+  background-color: var(--color-background-soft, #f1f7eb);
+  overflow: hidden;
+}
+
+.figma-card-jk--wide .figma-card-jk__cover {
+  height: 100%;
+  min-height: 280px;
+}
+
+.figma-card-jk__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Badges on cover (Figma: 4747:74158, 4747:74161) */
+.figma-card-jk__badges {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.figma-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-button, 30px);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.figma-badge--completed {
+  background-color: var(--color-primary-forest, #169600);
+  color: #ffffff;
+}
+
+.figma-badge--construction {
+  background-color: rgba(21, 21, 21, 0.75);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+}
+
+.figma-badge--discount {
+  background-color: var(--color-status-danger, #c83227);
+  color: #ffffff;
+}
+
+.figma-badge--class {
+  background-color: rgba(255, 255, 255, 0.92);
+  color: var(--color-neutral-primary, #151515);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Action buttons overlay (Share & Favorite, Figma 4747:74083 / 4747:74092) */
+.figma-card-jk__actions-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 6px;
+  z-index: 3;
+}
+
+.figma-card-jk__action-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-neutral-primary, #151515);
+  transition: background-color 0.15s ease, transform 0.15s ease, color 0.15s ease;
+  padding: 0;
+}
+
+.figma-card-jk__action-btn:hover {
+  background: #ffffff;
+  transform: scale(1.06);
+  color: var(--color-primary-forest, #169600);
+}
+
+.figma-card-jk__action-btn.is-active {
+  color: var(--color-status-danger, #c83227);
+  background: #ffffff;
+}
+
+/* Card Body (Figma detales 4747:74072) */
+.figma-card-jk__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Price & Deadline row */
+.figma-card-jk__price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.figma-card-jk__price {
+  font-family: var(--font-brand, 'Comfortaa', sans-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-neutral-primary, #151515);
+  letter-spacing: -0.01em;
+}
+
+.figma-card-jk__price-sqm {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-neutral-secondary, #555454);
+}
+
+/* Title & Address */
+.figma-card-jk__title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-neutral-primary, #151515);
+  line-height: 1.3;
+}
+
+.figma-card-jk__address {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--color-neutral-secondary, #555454);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.figma-card-jk__address-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Facilities Chips / Matrix (Figma Facilities 4747:74174) */
+.figma-card-jk__facilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px;
+  background-color: var(--color-background-soft, #f1f7eb);
+  border-radius: var(--radius-card, 10px);
+}
+
+.figma-facility-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-neutral-primary, #151515);
+}
+
+.figma-facility-pill__icon {
+  opacity: 0.6;
+}
+
+/* Footer Buttons Row (Figma 4747:74118 [small button]) */
+.figma-card-jk__footer {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.figma-card-jk__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: var(--radius-card, 10px);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.figma-card-jk__btn--primary {
+  background-color: var(--color-primary-forest, #169600);
+  color: #ffffff;
+}
+
+.figma-card-jk__btn--primary:hover {
+  background-color: #127900;
+  color: #ffffff;
+}
+
+.figma-card-jk__btn--outline {
+  background-color: transparent;
+  border-color: var(--color-border-subtle, #e5e7eb);
+  color: var(--color-neutral-primary, #151515);
+}
+
+.figma-card-jk__btn--outline:hover {
+  background-color: var(--color-background-soft, #f1f7eb);
+  border-color: var(--color-primary-forest, #169600);
+  color: var(--color-primary-forest, #169600);
+}
+
+/* ==========================================================================
+   Loading Skeleton (MKT-SYS-001)
+   ========================================================================== */
+@keyframes figma-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.figma-skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f2f5 25%,
+    #e6e9ee 37%,
+    #f0f2f5 63%
+  );
+  background-size: 400% 100%;
+  animation: figma-shimmer 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+.figma-card-skeleton {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid var(--color-border-subtle, #e5e7eb);
+  border-radius: var(--radius-card, 10px);
+  overflow: hidden;
+  max-width: 382px;
+  width: 100%;
+}
+
+.figma-card-skeleton__cover {
+  width: 100%;
+  height: 240px;
+}
+
+.figma-card-skeleton__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.figma-card-skeleton__line {
+  height: 16px;
+  border-radius: 4px;
+}
+
+.figma-card-skeleton__line--short {
+  width: 45%;
+  height: 22px;
+}
+
+.figma-card-skeleton__line--title {
+  width: 80%;
+  height: 18px;
+}
+
+.figma-card-skeleton__line--address {
+  width: 65%;
+  height: 14px;
+}
+
+.figma-card-skeleton__facilities {
+  height: 48px;
+  border-radius: var(--radius-card, 10px);
+}
+
+.figma-card-skeleton__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.figma-card-skeleton__btn {
+  height: 42px;
+  border-radius: var(--radius-card, 10px);
+}

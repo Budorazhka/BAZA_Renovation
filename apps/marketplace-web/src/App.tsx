@@ -21,7 +21,10 @@ import { MarketplaceMap } from './components/MarketplaceMap'
 import { PublishingWizard } from './features/publishing'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
+import { DevelopmentCard, BuildingPlaceholder } from './components/DevelopmentCard'
+import { CardSkeleton } from './components/CardSkeleton'
 import './styles/header-footer.css'
+import './styles/cards.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
@@ -66,42 +69,6 @@ function Shell({ children }: { children: React.ReactNode }) {
       ) : null}
       <Footer />
     </div>
-  )
-}
-
-function BuildingPlaceholder() {
-  return (
-    <div className="building-placeholder" aria-hidden="true">
-      <span className="building-placeholder__sun" />
-      <span className="building-placeholder__tower building-placeholder__tower--left" />
-      <span className="building-placeholder__tower building-placeholder__tower--right" />
-      <span className="building-placeholder__ground" />
-    </div>
-  )
-}
-
-function DevelopmentCard({ item }: { item: PublicDevelopmentCard }) {
-  const slug = item.slug
-  const content = (
-    <>
-      <BuildingPlaceholder />
-      <div className="development-card__body">
-        {item.classType ? <p className="meta">{item.classType}</p> : null}
-        <h2>{developmentTitle(item)}</h2>
-        <p className="address">{developmentAddress(item)}</p>
-        <div className="card-footer">
-          <span>{completionLabel(item.completionDate) ?? 'Срок сдачи уточняется'}</span>
-          <span className="arrow" aria-hidden="true">↗</span>
-        </div>
-      </div>
-    </>
-  )
-  return slug ? (
-    <Link className="development-card" to={`/developments/${slug}`} aria-label={`Жилой комплекс ${developmentTitle(item)}`}>
-      {content}
-    </Link>
-  ) : (
-    <article className="development-card">{content}</article>
   )
 }
 
@@ -419,7 +386,10 @@ function CataloguePage() {
 
         {state.status === 'loading' ? (
           <div className="state-panel" role="status" aria-busy="true">
-            Загружаем каталог…
+            <p>Загружаем каталог…</p>
+            <div className="development-grid figma-catalog-grid">
+              <CardSkeleton count={6} />
+            </div>
           </div>
         ) : null}
 
