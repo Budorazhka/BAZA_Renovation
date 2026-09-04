@@ -30,6 +30,10 @@ import { UnitQuickViewModal, type UnitInfo } from './components/UnitQuickViewMod
 import { RealtorsPage } from './pages/RealtorsPage'
 import { RealtorProfilePage } from './pages/RealtorProfilePage'
 import { MyPropertiesPage } from './pages/MyPropertiesPage'
+import { FavoritesPage } from './pages/FavoritesPage'
+import { SelectionsPage } from './pages/SelectionsPage'
+import { SelectionDetailPage } from './pages/SelectionDetailPage'
+import { RequestsPage } from './pages/RequestsPage'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -38,6 +42,8 @@ import './styles/development-detail.css'
 import './styles/listing-detail.css'
 import './styles/realtors.css'
 import './styles/my-properties.css'
+import './styles/favorites-selections.css'
+import './styles/requests.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
@@ -812,6 +818,11 @@ export default function App() {
         <Route path="/listings/:slug" element={<ListingDetailPage />} />
         <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
         <Route path="/realtors/:id" element={<Shell><RealtorProfilePage /></Shell>} />
+        <Route path="/favorites" element={<Shell><FavoritesPage /></Shell>} />
+        <Route path="/account/favorites" element={<Shell><FavoritesPage /></Shell>} />
+        <Route path="/selections" element={<Shell><SelectionsPage /></Shell>} />
+        <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
+        <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
         <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
