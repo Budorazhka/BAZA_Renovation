@@ -23,8 +23,10 @@ import { Header } from './components/Header'
 import { Footer } from './components/Footer'
 import { DevelopmentCard, BuildingPlaceholder } from './components/DevelopmentCard'
 import { CardSkeleton } from './components/CardSkeleton'
+import { FacetFilters } from './components/FacetFilters'
 import './styles/header-footer.css'
 import './styles/cards.css'
+import './styles/filters.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
@@ -297,81 +299,17 @@ function CataloguePage() {
           </section>
         </>
       ) : null}
-      <section className="catalogue-toolbar" aria-labelledby="catalogue-heading">
-        <h2 id="catalogue-heading" className="visually-hidden">Каталог объектов недвижимости</h2>
-        <div className="catalogue-count">
-          <strong>{state.status === 'ready' ? state.items.length.toLocaleString('ru-RU') : '—'}</strong>
-          <span>объектов найдено</span>
-        </div>
-        <div className="catalogue-toolbar__actions">
-          {!isDev ? (
-            <form className="city-form city-form--compact" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-              <label className="visually-hidden" htmlFor="city">Город</label>
-              <input
-                id="city"
-                name="city"
-                type="search"
-                autoComplete="address-level2"
-                value={cityInput}
-                onChange={(event) => setCityInput(event.target.value)}
-                placeholder="Город"
-              />
-              <button type="submit" aria-label="Найти объекты в городе">⌕</button>
-            </form>
-          ) : null}
-          <label className="sort-control" aria-label="Сортировка объектов">
-            <span className="visually-hidden">Сортировка объектов</span>
-            <select
-              value={isDev ? 'newest' : sortParam}
-              onChange={(event) => updateFilters({ sort: event.target.value })}
-            >
-              <option value="newest">Сначала новые</option>
-              {!isDev ? <option value="price_asc">Сначала дешевле</option> : null}
-              {!isDev ? <option value="price_desc">Сначала дороже</option> : null}
-              {!isDev ? <option value="area_asc">Меньше площадь</option> : null}
-              {!isDev ? <option value="area_desc">Больше площадь</option> : null}
-            </select>
-          </label>
-          <div className="view-toggle" role="group" aria-label="Вид каталога">
-            <Link className={`view-toggle__link${isMapView ? '' : ' is-active'}`} to={viewUrl('list')}>Список</Link>
-            <Link className={`view-toggle__link${isMapView ? ' is-active' : ''}`} to={viewUrl('map')}>Карта</Link>
-          </div>
-          {(cityParam || dealTypeParam || propertyTypeParam) ? (
-            <button className="clear-filter clear-filter--compact" type="button" onClick={clearAllFilters}>
-              Сбросить
-            </button>
-          ) : null}
-        </div>
-      </section>
-
-      {tabParam === 'listings' ? (
-        <details id="catalogue-filters" className="filters-drawer" open>
-          <summary>Фильтры и тип объекта</summary>
-          <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
-            <div className="catalogue-subfilters" role="group" aria-label="Тип сделки">
-              {([
-                [undefined, 'Все типы сделок'],
-                ['sale', 'Купить'],
-                ['rent_long', 'Снять длительно'],
-                ['rent_short', 'Посуточно'],
-              ] as const).map(([value, label]) => (
-                <button key={label} type="button" className={`filter-chip${dealTypeParam === value ? ' is-active' : ''}`} onClick={() => updateFilters({ dealType: value })}>{label}</button>
-              ))}
-            </div>
-            <div className="catalogue-subfilters" role="group" aria-label="Тип недвижимости">
-              {([
-                [undefined, 'Все объекты'],
-                ['apartment', 'Квартиры'],
-                ['house', 'Дома и виллы'],
-                ['commercial', 'Коммерческая'],
-                ['land', 'Участки'],
-              ] as const).map(([value, label]) => (
-                <button key={label} type="button" className={`filter-chip${propertyTypeParam === value ? ' is-active' : ''}`} onClick={() => updateFilters({ propertyType: value, commercialSubtype: undefined })}>{label}</button>
-              ))}
-            </div>
-          </div>
-        </details>
-      ) : null}
+      <FacetFilters
+        tabParam={tabParam}
+        cityParam={cityParam}
+        dealTypeParam={dealTypeParam}
+        propertyTypeParam={propertyTypeParam}
+        sortParam={sortParam}
+        isMapView={isMapView}
+        onFilterChange={updateFilters}
+        onClearFilters={clearAllFilters}
+        viewUrl={viewUrl}
+      />
 
       <section className="catalogue-section" aria-live="polite" aria-labelledby="catalogue-results-heading">
         <div className="section-heading">
