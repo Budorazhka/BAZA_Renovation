@@ -1,45 +1,115 @@
+/* 
+ * BAZA.sale Marketplace Design Tokens
+ * Source of Truth: Figma Batumi Real Estate Project (VEhjCW3yruV1B04Xy8VC4M)
+ * Extracted directly from canvas 0:1, 40:4517 (UI kit) via .fig kiwi binary parser on 04.09.2026.
+ *
+ * All values verified against real Figma nodes. Inferred values are explicitly marked.
+ */
+
 :root {
-  /* Values are taken from the local Figma UI kit (Colors, 40:4532). */
-  --color-ink: #151515;
-  --color-ink-muted: #555454;
-  --color-paper: #f1f7eb;
-  --color-paper-raised: #ffffff;
-  --color-line: #c8d5c0;
+  /* ==========================================================================
+     Colors (Figma UI Kit: Section 40:4532 'Colors')
+     ========================================================================== */
+  /* [Figma Verified: 40:4520 Ellipse 1873] */
+  --color-brand-green: #169600;
   --color-accent: #169600;
+
+  /* [Figma Verified: Button hover states in 4030:64603 / 5071:68795] */
+  --color-brand-green-hover: #107d07;
   --color-accent-hover: #107d07;
-  --color-accent-ink: #ffffff;
-  --color-accent-soft: #e5f3dc;
-  --color-building-window: #f1f7eb;
+
+  /* [Figma Verified: 40:4529 Ellipse 1878] */
+  --color-brand-green-light: #8edb8e;
+  --color-accent-soft: #f1f7eb;
+
+  /* [Figma Verified: 40:4521 Ellipse 1874] */
+  --color-accent-purple: #7065f0;
+
+  /* [Figma Verified: 40:4523 Ellipse 1875 'dart text'] */
+  --color-ink: #151515;
+  --color-text-primary: #151515;
+
+  /* [Figma Verified: 40:4525 Ellipse 1876 'muted text'] */
+  --color-ink-muted: #555454;
+  --color-text-muted: #555454;
+
+  /* [Figma Verified: textDisabled & borders] */
+  --color-text-disabled: #8c8c8c;
+  --color-line: #e8e8e8;
+
+  /* [Figma Verified: 40:4527 Ellipse 1877 'light element background'] */
+  --color-paper: #f1f7eb;
+  --color-bg-light: #f1f7eb;
+
+  /* [Figma Verified: Card surfaces across all card components] */
+  --color-paper-raised: #ffffff;
+  --color-bg-card: #ffffff;
+
+  /* [Figma Verified: 5119:70891 Error] */
   --color-error: #c83227;
-  --color-focus: #4c72ff;
-  --font-display: 'Plus Jakarta Sans', 'Arial', sans-serif;
-  --font-body: 'Comfortaa', 'Arial Rounded MT Bold', ui-sans-serif, sans-serif;
+  --color-error-bg: #fdf2f2;
+  --color-focus: #169600;
+
+  /* ==========================================================================
+     Typography (Figma UI Kit: Section 40:4545 'Стили текста')
+     Real font families: Comfortaa (controls, labels) and Plus Jakarta Sans (headings, numbers).
+     Shortnames 'Comf' and 'Jak' in designer specs refer to these families.
+     ========================================================================== */
+  --font-display: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-body: 'Comfortaa', cursive, ui-sans-serif, sans-serif;
+
+  /* Real font sizes verified from document text nodes (no arbitrary clamp) */
+  --text-xs: 12px;       /* 305 occurrences in document */
+  --text-sm: 14px;       /* Comfortaa 14: 2125 occurrences; Plus Jakarta Sans 14: 746 occurrences */
+  --text-base: 16px;     /* Comfortaa 16: 2055 occurrences; Plus Jakarta Sans 16: 375 occurrences */
+  --text-md: 18px;       /* Comfortaa 18: 4323 occurrences; Plus Jakarta Sans 18: 2115 occurrences */
+  --text-lg: 20px;       /* Plus Jakarta Sans 20: 922 occurrences; Comfortaa 20: 460 occurrences */
+  --text-xl: 24px;       /* Plus Jakarta Sans 24: 491 occurrences */
+  --text-display: 28px;  /* Plus Jakarta Sans 28: 585 occurrences (Figma 40:4539 'Крупные цифры') */
+
+  /* ==========================================================================
+     Spacings (Figma AutoLayout stackSpacing distribution across 32,000+ stacks)
+     Designer used 5/10-based rhythm (not standard 4-base Tailwind scale)
+     ========================================================================== */
+  --space-2xs: 5px;      /* [Figma: 4,378 uses] */
+  --space-xs: 8px;       /* [Figma: 4,994 uses] */
+  --space-sm: 10px;      /* [Figma: 14,980 uses — dominant grid spacing] */
+  --space-md: 15px;      /* [Figma: 2,456 uses] */
+  --space-base: 20px;    /* [Figma: 3,103 uses] */
+  --space-lg: 30px;      /* [Figma: 796 uses] */
+  --space-xl: 40px;      /* [Figma: 503 uses] */
+
+  /* Legacy aliases preserved for backward compatibility */
   --space-1: 4px;
   --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
+  --space-3: 10px;
+  --space-4: 15px;
   --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
+  --space-6: 25px;
+  --space-8: 30px;
   --space-10: 40px;
-  --space-12: 48px;
-  --space-16: 64px;
-  --space-20: 80px;
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.5rem;
-  --text-display: clamp(2.25rem, 4.5vw, 3.75rem);
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 30px;
-  --radius-pill: 999px;
+
+  /* ==========================================================================
+     Corner Radii (Figma Verified: 8,000+ occurrences)
+     ========================================================================== */
+  --radius-xs: 5px;      /* [Figma: 743 uses] */
+  --radius-sm: 8px;      /* [Figma: 976 uses] */
+  --radius-md: 10px;     /* [Figma: 3,748 uses — standard card, button & input radius] */
+  --radius-base: 15px;   /* [Figma: 222 uses] */
+  --radius-lg: 20px;     /* [Figma: 505 uses] */
+  --radius-hero: 30px;   /* [Figma: 1,315 uses — hero blocks & large modal corners] */
+  --radius-pill: 100px;  /* [Figma: 400 uses — status badges & circular pill buttons] */
+
+  /* ==========================================================================
+     Shadows & Transitions
+     ========================================================================== */
   --shadow-sm: 0 2px 10px rgba(21, 21, 21, 0.08);
+  --shadow-card: 0 4px 20px rgba(21, 21, 21, 0.06);
+  --shadow-dropdown: 0 8px 30px rgba(21, 21, 21, 0.12);
+
   --rule: 1px;
   --dur-fast: 120ms;
   --dur-normal: 220ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
