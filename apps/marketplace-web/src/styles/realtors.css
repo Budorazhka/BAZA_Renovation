@@ -1,0 +1,328 @@
+/* ==========================================================================
+   Figma Realtors Rating & Profile Styles
+   Source of Truth:
+   - Frame `Рейтинг риелторов` v2: Node ID 3576:53108 (1920x3174)
+   - Frame `Отзывы`: Node ID 3576:53737 (1920x1269)
+   - Mobile `mob_риелторы`: Node ID 3699:60246 (375x4106)
+   ========================================================================== */
+
+.figma-realtors-page {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+  box-sizing: border-box;
+}
+
+/* Header & Filter Bar */
+.figma-realtors-header {
+  margin-bottom: 32px;
+}
+
+.figma-realtors-header__eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-main, #1BA800);
+  margin-bottom: 8px;
+}
+
+.figma-realtors-header__title {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--color-primary-dark, #232323);
+  margin: 0 0 12px;
+}
+
+.figma-realtors-header__subtitle {
+  font-size: 16px;
+  color: var(--color-dark-text-muted, #757575);
+  margin: 0;
+  max-width: 700px;
+}
+
+/* Realtors Search & Filters Row */
+.figma-realtors-toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  background: var(--color-light-element-bg, #F8F9FA);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 16px 20px;
+  flex-wrap: wrap;
+}
+
+.figma-realtors-toolbar__search {
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: 8px;
+  padding: 8px 14px;
+  gap: 8px;
+  flex: 1;
+  min-width: 260px;
+}
+
+.figma-realtors-toolbar__search input {
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 14px;
+  width: 100%;
+}
+
+.figma-realtors-toolbar__tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.figma-realtor-tab-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  background: #FFFFFF;
+  color: var(--color-primary-dark, #232323);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.figma-realtor-tab-btn.is-active {
+  background: var(--color-main, #1BA800);
+  border-color: var(--color-main, #1BA800);
+  color: #FFFFFF;
+}
+
+/* Realtors Grid */
+.figma-realtors-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+/* Single Realtor Card */
+.figma-realtor-card {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-decoration: none;
+  color: var(--color-primary-dark, #232323);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  position: relative;
+}
+
+.figma-realtor-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+  border-color: var(--color-main-hover, #169600);
+}
+
+.figma-realtor-card__top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.figma-realtor-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--color-light-element-bg, #F0F0F0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-main, #1BA800);
+  border: 2px solid var(--color-main, #1BA800);
+  flex-shrink: 0;
+}
+
+.figma-realtor-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-realtor-name {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+  margin: 0;
+}
+
+.figma-realtor-agency {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+}
+
+.figma-realtor-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.figma-realtor-stars {
+  color: #FFB800;
+  letter-spacing: 1px;
+}
+
+.figma-realtor-reviews-count {
+  color: var(--color-dark-text-muted, #757575);
+  font-weight: 400;
+}
+
+.figma-realtor-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.figma-realtor-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--color-light-element-bg, #F8F9FA);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  color: var(--color-primary-dark, #232323);
+}
+
+.figma-realtor-badge--top {
+  background: #FFF8E1;
+  border-color: #FFE082;
+  color: #B78103;
+}
+
+.figma-realtor-metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-light-element-bg, #F8F9FA);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.figma-realtor-metric-value {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+}
+
+.figma-realtor-metric-label {
+  font-size: 11px;
+  color: var(--color-dark-text-muted, #757575);
+  text-transform: uppercase;
+}
+
+.figma-realtor-card__btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--color-main, #1BA800);
+  color: #FFFFFF;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-top: auto;
+}
+
+.figma-realtor-card__btn:hover {
+  background: var(--color-main-hover, #169600);
+}
+
+/* ==========================================================================
+   Realtor Profile & Reviews Page Styles (3576:53737)
+   ========================================================================== */
+
+.figma-realtor-profile-hero {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 32px;
+  margin-bottom: 32px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
+  align-items: center;
+}
+
+@media (max-width: 768px) {
+  .figma-realtor-profile-hero {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+}
+
+.figma-realtor-profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--color-light-element-bg, #F0F0F0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-main, #1BA800);
+  border: 3px solid var(--color-main, #1BA800);
+}
+
+.figma-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.figma-review-item {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.figma-review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.figma-review-author {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+}
+
+.figma-review-date {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+}
+
+.figma-review-text {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #4A4A4A;
+  margin: 0;
+}

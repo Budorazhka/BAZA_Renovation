@@ -77,6 +77,8 @@ Marketplace переписывается по Figma. Цель этого док�
 | Каталог вторички | `MKT-SCR-010` | `3314:195935` | `236:27197` | `3854:62977` (`mob_object` 375x1677) | `4934:69469` (`card квартира вторичка`) | `apps/marketplace-web/src/components/ListingCard.tsx` | **Verified in code** |
 | Каталог аренды | `MKT-SCR-011` | `3314:195935` | `236:27197` | `4182:69880` (`mob_object` 375x5539) | `4942:79685` (`Квартира аренда`) | `apps/marketplace-web/src/components/ListingCard.tsx` | **Verified in code** |
 | Детальная страница вторички | `MKT-SCR-012` | `3314:195935` | `3314:206822` (`квартира во вторичке`) | `4182:60867` (`mob_object` 375x5285) | `3304:57919` (`контакты`) | `apps/marketplace-web/src/App.tsx` | **Verified in code** |
+| Рейтинг риэлторов | `MKT-SCR-014` | `3576:56354` | `3576:53108` (`Рейтинг риелторов` v2 1920x3174) | `3699:60246` (`mob_риелторы` 375x4106) | Карточка риэлтора в `3576:53108` | `apps/marketplace-web/src/pages/RealtorsPage.tsx` | **Verified in code** |
+| Профиль риэлтора и отзывы | `MKT-SCR-015` | `3576:56354` | `3576:53737` (`Отзывы` 1920x1269) + `3576:53923` | `3699:60823` (375x1293) | Форма отзыва в `3576:53923` | `apps/marketplace-web/src/pages/RealtorProfilePage.tsx` | **Verified in code** |
 
 ## Принятые решения владельца (Этап 2)
 
