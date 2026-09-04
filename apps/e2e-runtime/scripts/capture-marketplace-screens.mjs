@@ -71,25 +71,42 @@ const VIEWPORTS = [
  * закрыты `RequireAuth`. Снимок формы входа вместо кабинета — не тот материал,
  * по которому сверяют вёрстку.
  *
- * Возвращает `null`, если войти не удалось (например упёрлись в лимит
- * регистраций — пять в минуту на IP): тогда снимки просто делаются гостем, и
- * это честно записывается в отчёт, а не выдаётся за кабинет.
+ * `POST /auth/register` ограничен пятью запросами в минуту на IP, а съёмка идёт
+ * следом за сквозными сценариями в том же job и с того же адреса — то есть
+ * приходит к уже выеденному бюджету. Первый прогон 04.09.2026 так и завершился:
+ * `signedIn: false` по всем 24 снимкам, кабинет снят формой входа. Поэтому на
+ * 429 ждём окно лимита и повторяем.
+ *
+ * Отдаёт причину отказа, а не просто `null`: снимок кабинета, оказавшийся
+ * логином, надо уметь объяснить по отчёту, не переснимая.
  */
 async function createSignedInState() {
   const login = `capture-${Date.now()}@example.com`;
   const password = 'Correct-Horse-Battery-Staple-1!';
   const api = await apiRequest.newContext({ baseURL: `${API_URL}${API_BASE_PATH}` });
   try {
-    const registered = await api.post('/auth/register', { data: { login, password } });
-    if (registered.status() !== 201) return null;
-    const loggedIn = await api.post('/auth/login', {
-      data: { login, password },
-      headers: { Origin: BASE_URL },
-    });
-    if (loggedIn.status() !== 200 && loggedIn.status() !== 201) return null;
-    return await api.storageState();
-  } catch {
-    return null;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const registered = await api.post('/auth/register', { data: { login, password } });
+      if (registered.status() === 429) {
+        // Окно лимита — 60 секунд; ждём его заметную часть, а не сотни миллисекунд.
+        await new Promise((resolve) => setTimeout(resolve, 20_000));
+        continue;
+      }
+      if (registered.status() !== 201) {
+        return { state: null, reason: `register ${registered.status()}: ${(await registered.text()).slice(0, 200)}` };
+      }
+      const loggedIn = await api.post('/auth/login', {
+        data: { login, password },
+        headers: { Origin: BASE_URL },
+      });
+      if (loggedIn.status() !== 200 && loggedIn.status() !== 201) {
+        return { state: null, reason: `login ${loggedIn.status()}: ${(await loggedIn.text()).slice(0, 200)}` };
+      }
+      return { state: await api.storageState(), reason: null };
+    }
+    return { state: null, reason: 'register 429: лимит не отпустил за четыре попытки' };
+  } catch (err) {
+    return { state: null, reason: String(err).split('\n')[0] };
   } finally {
     await api.dispose();
   }
@@ -97,9 +114,9 @@ async function createSignedInState() {
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
-  const storageState = await createSignedInState();
+  const { state: storageState, reason: signInError } = await createSignedInState();
   if (!storageState) {
-    console.warn('[capture] Войти не удалось — разделы кабинета снимутся как форма входа.');
+    console.warn(`[capture] Войти не удалось (${signInError}) — разделы кабинета снимутся как форма входа.`);
   }
   const browser = await chromium.launch();
   const report = [];
@@ -142,6 +159,7 @@ async function main() {
         data: screen.data,
         file,
         signedIn: Boolean(storageState),
+        signInError,
         navigationError: error,
         consoleErrors: consoleErrors.slice(0, 5),
         failedRequests: failedRequests.slice(0, 5),
