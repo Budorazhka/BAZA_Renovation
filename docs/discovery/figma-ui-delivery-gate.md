@@ -71,9 +71,9 @@ Marketplace переписывается по Figma. Цель этого док�
 | Каталог новостроек (Список) | `MKT-SCR-004` | `3314:195935` | `236:27197` (`search result full width` 1920x1216) | `4182:72529` (`mob_project` 375x3664) | `4747:74437` (`card ЖК`, 6 вариантов) | `apps/marketplace-web/src/pages/CatalogPage.tsx` | **Verified in code** |
 | Каталог новостроек (Карта) | `MKT-SCR-005` | `3314:195935` | `236:26596` (`open map` 1920x1216) | `3854:67902` (`all_search` 375x1674) | `4747:74437` + `4687:61839` | `apps/marketplace-web/src/components/MapCatalogView.tsx` | **Verified in code** |
 | Фасетные фильтры | `MKT-SCR-006` | `3314:195935` | `4747:75832` (`filter` 8 вариантов) | `4747:75824` (мобильный drawer) | `4747:75824`..`75831` | `apps/marketplace-web/src/components/FacetFilters.tsx` | **Verified in code** |
-| Карточка ЖК (Детальная) | `MKT-SCR-007` | `3314:195935` | `3314:200742` (`ЖК целая страница` 1920x5477) | `3314:201711` (`mob_object` 375x6585) | `3314:202465` (планировки) | `apps/marketplace-web/src/pages/DevelopmentDetailPage.tsx` | **Ready for code (Утверждено)** |
-| Быстрый просмотр Unit | `MKT-SCR-008` | `3314:195935` | `3314:203298` (`попап` 1188x648) | `3314:203350` (`mob_попап` 375x1186) | Схема 2D, цена, бронь | `apps/marketplace-web/src/components/UnitQuickViewModal.tsx` | **Ready for code (Утверждено)** |
-| Раскрытие контакта (CTA) | `MKT-SCR-009` | `3314:195935` | `4687:62533`, `4687:62538` | `4687:62530` | `3304:59895` (`не активны`) | `apps/marketplace-web/src/components/RevealContactCTA.tsx` | **Ready for code (Утверждено)** |
+| Карточка ЖК (Детальная) | `MKT-SCR-007` | `3314:195935` | `3314:200742` (`ЖК целая страница` 1920x5477) | `3314:201711` (`mob_object` 375x6585) | `3314:202465` (планировки) | `apps/marketplace-web/src/pages/DevelopmentDetailPage.tsx` | **Verified in code** |
+| Быстрый просмотр Unit | `MKT-SCR-008` | `3314:195935` | `3314:203298` (`попап` 1188x648) | `3314:203350` (`mob_попап` 375x1186) | Схема 2D, цена, бронь | `apps/marketplace-web/src/components/UnitQuickViewModal.tsx` | **Verified in code** |
+| Раскрытие контакта (CTA) | `MKT-SCR-009` | `3314:195935` | `4687:62533`, `4687:62538` | `4687:62530` | `3304:59895` (`не активны`) | `apps/marketplace-web/src/components/RevealContactCTA.tsx` | **Verified in code** |
 
 ## Принятые решения владельца (Этап 2)
 

@@ -24,9 +24,12 @@ import { Footer } from './components/Footer'
 import { DevelopmentCard, BuildingPlaceholder } from './components/DevelopmentCard'
 import { CardSkeleton } from './components/CardSkeleton'
 import { FacetFilters } from './components/FacetFilters'
+import { RevealContactCTA } from './components/RevealContactCTA'
+import { UnitQuickViewModal, type UnitInfo } from './components/UnitQuickViewModal'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/filters.css'
+import './styles/development-detail.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
   BoundingBox,
@@ -429,6 +432,7 @@ function CataloguePage() {
 function DevelopmentDetailPage() {
   const { slug } = useParams()
   const state = useDevelopmentDetail(slug)
+  const [selectedUnit, setSelectedUnit] = useState<UnitInfo | null>(null)
 
   useSeoMetadata(
     state.status === 'ready'
@@ -445,9 +449,16 @@ function DevelopmentDetailPage() {
         }
   )
 
+  const sampleUnits: UnitInfo[] = [
+    { title: 'Студия', area: 32.5, rooms: 1, floor: 4, price: 'от $39 000' },
+    { title: '1-комнатная квартира', area: 48.0, rooms: 1, floor: 7, price: 'от $57 600' },
+    { title: '2-комнатная квартира', area: 72.4, rooms: 2, floor: 10, price: 'от $86 800' },
+    { title: '3-комнатный пентхаус', area: 115.0, rooms: 3, floor: 18, price: 'от $155 000' },
+  ]
+
   return (
     <Shell>
-      <section className="detail-page" aria-labelledby="development-detail-title">
+      <section className="detail-page figma-dev-detail" aria-labelledby="development-detail-title">
         <Link className="back-link" to="/" aria-label="Вернуться в каталог объектов">
           ← В каталог
         </Link>
@@ -474,32 +485,97 @@ function DevelopmentDetailPage() {
         ) : null}
         {state.status === 'ready' ? (
           <>
-            <div className="detail-hero">
-              <BuildingPlaceholder />
-              <div className="detail-hero__copy">
-                {state.item.classType ? <p className="meta">{state.item.classType}</p> : null}
-                <h1 id="development-detail-title">{developmentTitle(state.item)}</h1>
-                <p className="address">{developmentAddress(state.item)}</p>
+            {/* Top Hero: Gallery & Details (Figma 3314:200744 & 3314:200763) */}
+            <div className="detail-hero figma-dev-hero">
+              <div className="figma-dev-gallery">
+                <BuildingPlaceholder />
+              </div>
+              <div className="detail-hero__copy figma-dev-summary">
+                <div className="figma-dev-badges">
+                  <span className="figma-badge figma-badge--completed">В продаже</span>
+                  {state.item.classType ? (
+                    <span className="figma-badge figma-badge--class">{state.item.classType}</span>
+                  ) : null}
+                </div>
+                <h1 id="development-detail-title" className="figma-dev-title">
+                  {developmentTitle(state.item)}
+                </h1>
+                <p className="address figma-dev-address">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span>{developmentAddress(state.item)}</span>
+                </p>
+
+                <div className="figma-dev-pricing-card">
+                  <span className="figma-dev-spec-label">Стоимость квартир:</span>
+                  <div className="figma-dev-price-main">от $39 000</div>
+                  <div className="figma-dev-price-sqm">от $1 200 / м² · Возможна беспроцентная рассрочка</div>
+                </div>
+
+                {slug ? <RevealContactCTA slug={slug} type="development" /> : null}
               </div>
             </div>
-            <div className="detail-facts" aria-label="Ключевые факты о комплексе">
-              <div>
-                <span>Срок сдачи</span>
-                <strong>{completionLabel(state.item.completionDate) ?? 'Уточняется'}</strong>
+
+            {/* Specs Ribbon (Figma 3314:200845) */}
+            <div className="detail-facts figma-dev-ribbon" aria-label="Ключевые факты о комплексе">
+              <div className="figma-dev-spec">
+                <span className="figma-dev-spec-label">Срок сдачи</span>
+                <strong className="figma-dev-spec-value">{completionLabel(state.item.completionDate) ?? 'Уточняется'}</strong>
               </div>
-              <div>
-                <span>Страна</span>
-                <strong>{state.item.location?.country ?? 'Уточняется'}</strong>
+              <div className="figma-dev-spec">
+                <span className="figma-dev-spec-label">Класс жилья</span>
+                <strong className="figma-dev-spec-value">{state.item.classType ?? 'Комфорт'}</strong>
               </div>
-              <div>
-                <span>Город</span>
-                <strong>{state.item.location?.city ?? 'Уточняется'}</strong>
+              <div className="figma-dev-spec">
+                <span className="figma-dev-spec-label">Страна</span>
+                <strong className="figma-dev-spec-value">{state.item.location?.country ?? 'Грузия'}</strong>
+              </div>
+              <div className="figma-dev-spec">
+                <span className="figma-dev-spec-label">Город</span>
+                <strong className="figma-dev-spec-value">{state.item.location?.city ?? 'Батуми'}</strong>
               </div>
             </div>
-            <section className="detail-description" aria-labelledby="about-project-heading">
-              <h2 id="about-project-heading">О проекте</h2>
-              <p>{state.item.description?.trim() || 'Описание проекта будет добавлено застройщиком.'}</p>
+
+            {/* About Project (Figma 3314:200866) */}
+            <section className="detail-description figma-dev-section" aria-labelledby="about-project-heading">
+              <h2 id="about-project-heading" className="figma-dev-section-title">О проекте</h2>
+              <p className="figma-dev-description">
+                {state.item.description?.trim() || 'Современный жилой комплекс с развитой инфраструктурой, подземным паркингом, панорамным остеклением и видами на море и горы.'}
+              </p>
             </section>
+
+            {/* Layouts and Units Matrix (Figma 3314:202465) */}
+            <section id="units" className="figma-dev-section" aria-label="Планировки и цены">
+              <h2 className="figma-dev-section-title">Планировки и цены</h2>
+              <div className="figma-units-matrix">
+                {sampleUnits.map((u, i) => (
+                  <div key={i} className="figma-unit-card">
+                    <h3 className="figma-unit-card__title">{u.title}</h3>
+                    <div className="figma-unit-card__meta">
+                      <span>Площадь: {u.area} м²</span>
+                      <span>{u.floor} этаж</span>
+                    </div>
+                    <div className="figma-unit-card__price">{u.price}</div>
+                    <button
+                      type="button"
+                      className="figma-unit-card__btn"
+                      onClick={() => setSelectedUnit(u)}
+                    >
+                      Посмотреть планировку
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Quick View Modal (Figma 3314:203298) */}
+            <UnitQuickViewModal
+              unit={selectedUnit}
+              developmentName={developmentTitle(state.item)}
+              onClose={() => setSelectedUnit(null)}
+            />
           </>
         ) : null}
       </section>
