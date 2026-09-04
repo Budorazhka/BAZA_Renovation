@@ -20,12 +20,14 @@ import { LeadEventDocument, LeadEventSchema } from './schemas/lead-event.schema'
 import { TaskDocument, TaskSchema } from './schemas/task.schema';
 import { DealDocument, DealSchema } from './schemas/deal.schema';
 import { DealEventDocument, DealEventSchema } from './schemas/deal-event.schema';
+import { CalendarEventDocument, CalendarEventSchema } from './schemas/calendar-event.schema';
 import { ContactRepository } from './repository/contact.repository';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
 import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
+import { CalendarEventRepository } from './repository/calendar-event.repository';
 import { CrmService } from './crm.service';
 import { CrmController } from './crm.controller';
 import { ListingCrmController } from './listing-crm.controller';
@@ -34,6 +36,7 @@ import { LeadController } from './lead.controller';
 import { ContactController } from './contact.controller';
 import { TaskController } from './task.controller';
 import { DealController } from './deal.controller';
+import { CalendarEventController } from './calendar-event.controller';
 import { ExportController } from './export.controller';
 import { ExportService } from './export.service';
 import { LeadImportController } from './lead-import.controller';
@@ -57,6 +60,7 @@ import { OutboxModule } from '../outbox/outbox.module';
       { name: TaskDocument.name, schema: TaskSchema },
       { name: DealDocument.name, schema: DealSchema },
       { name: DealEventDocument.name, schema: DealEventSchema },
+      { name: CalendarEventDocument.name, schema: CalendarEventSchema },
       { name: MarketplacePublicationDocument.name, schema: MarketplacePublicationSchema },
       { name: DevelopmentDocument.name, schema: DevelopmentSchema },
       { name: PropertyAssetDocument.name, schema: PropertyAssetSchema },
@@ -81,6 +85,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     ContactController,
     TaskController,
     DealController,
+    CalendarEventController,
     ExportController,
     LeadImportController,
   ],
@@ -91,6 +96,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     TaskRepository,
     DealRepository,
     DealEventRepository,
+    CalendarEventRepository,
     MarketplacePublicationRepository,
     DevelopmentRepository,
     PropertyAssetRepository,

@@ -22,6 +22,7 @@ import { LeadEventRepository } from './repository/lead-event.repository';
 import { TaskRepository } from './repository/task.repository';
 import { DealRepository } from './repository/deal.repository';
 import { DealEventRepository } from './repository/deal-event.repository';
+import { CalendarEventRepository } from './repository/calendar-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType, RealtorStage, CuratorStage } from './schemas/lead.schema';
 import { firstStageIdForProduct, stageIdsForProduct, LEAD_STAGE_DEFINITIONS } from './lead-stage-definitions';
@@ -35,6 +36,7 @@ import {
   type TaskEntityType,
 } from './schemas/task.schema';
 import type { DealChecklistItem, DealDocument, DealParticipant } from './schemas/deal.schema';
+import type { CalendarEventDocument, CalendarEventType, CalendarEventStatus } from './schemas/calendar-event.schema';
 
 import type { TimelineEventType } from './dto/list-timeline.dto';
 
@@ -214,6 +216,56 @@ export interface CrmTaskReadModel {
 }
 
 /**
+ * GET /calendar/events, /calendar/events/:id — см. CalendarEventDocument
+ * докстринг (schemas/calendar-event.schema.ts) для решений по scope
+ * soft-delete/isRecurring/reminderMinutes.
+ */
+export interface CrmCalendarEventReadModel {
+  id: string;
+  organizationId: string;
+  title: string;
+  description: string | null;
+  startTime: string;
+  endTime: string;
+  type: CalendarEventType;
+  status: CalendarEventStatus;
+  isAllDay: boolean;
+  location: string | null;
+  meetingUrl: string | null;
+  leadId: string | null;
+  dealId: string | null;
+  participants: string[];
+  externalParticipants: string[];
+  /** ХРАНИТСЯ, НЕ ИНТЕРПРЕТИРУЕТСЯ — см. докстринг схемы. */
+  reminderMinutes: number[];
+  isRecurring: boolean;
+  recurringRule: string | null;
+  parentEventId: string | null;
+  createdByPositionId: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+/**
+ * GET /calendar/unified — минимальная read-модель задачи для объединённого
+ * представления календаря (легаси возвращает `{events, tasks}`, где
+ * `tasks` — не CalendarEvent, а отдельная урезанная проекция Task). Форма
+ * подобрана под `CrmTaskReadModel`, но не полна — календарю нужны только
+ * даты и заголовок, не весь Task.
+ */
+export interface CrmUnifiedCalendarTaskReadModel {
+  id: string;
+  title: string;
+  description: string | null;
+  startAt: string | null;
+  dueAt: string | null;
+  status: TaskStatus;
+  assignedPositionId: string | null;
+  leadId: string | null;
+}
+
+/**
  * CRM-003 "активный лид без следующего действия" — мягкое правило
  * (owner-подтверждено 30.08.2026: только read-only флаг, БЕЗ блокировки
  * записи — changeLeadStage/assignLead не знают про Task вообще, эта
@@ -285,6 +337,7 @@ export class CrmService {
     private readonly dealEventRepository: DealEventRepository,
     private readonly outboxService: OutboxService,
     private readonly mediaService: MediaService,
+    private readonly calendarEventRepository: CalendarEventRepository,
   ) {}
 
   /** Tenant-scoped lead lookup for cross-module commands (for example
@@ -3219,6 +3272,437 @@ export class CrmService {
       return toDealReadModel(updated, contactsById.get(updated.contactId.toString()), contactsById);
     });
   }
+
+  /**
+   * GET /calendar/events?startDate=&endDate=&type=&leadId=&dealId= — диапазон
+   * обязателен (см. CalendarEventRepository.listForRange докстринг).
+   * own-scope (manager) — событие видно, если сам participant ИЛИ createdBy
+   * (см. CalendarEventRepository.scopeFilter, задание явно требует ИЛИ, не
+   * равенство одного поля, как у Task/Deal).
+   */
+  async listCalendarEvents(params: {
+    organizationId: Types.ObjectId;
+    startDate: Date;
+    endDate: Date;
+    type?: CalendarEventType;
+    leadId?: Types.ObjectId;
+    dealId?: Types.ObjectId;
+    scopePositionId?: Types.ObjectId;
+  }): Promise<{ items: CrmCalendarEventReadModel[] }> {
+    const rows = await this.calendarEventRepository.listForRange(params.organizationId, {
+      startDate: params.startDate,
+      endDate: params.endDate,
+      type: params.type,
+      leadId: params.leadId,
+      dealId: params.dealId,
+      scopePositionId: params.scopePositionId,
+    });
+    return { items: rows.map(toCalendarEventReadModel) };
+  }
+
+  /**
+   * GET /calendar/events/:id. Tenant и own-scope проверяются до возврата —
+   * чужое событие возвращает NotFoundException (non-disclosure), тот же
+   * принцип, что GET /tasks/:taskId.
+   */
+  async getCalendarEvent(params: {
+    eventId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    scopePositionId?: Types.ObjectId;
+  }): Promise<CrmCalendarEventReadModel> {
+    const event = await this.calendarEventRepository.findByIdForOrganization(
+      params.eventId,
+      params.organizationId,
+      params.scopePositionId,
+    );
+    if (!event) {
+      throw new NotFoundException('Calendar event not found');
+    }
+    return toCalendarEventReadModel(event);
+  }
+
+  /**
+   * POST /calendar/events. leadId/dealId (если заданы) обязаны существовать
+   * в этой организации — тот же принцип non-disclosure/consistency, что
+   * createTask проверяет leadId. participants (Position id) обязаны быть
+   * назначаемыми Position этой организации — переиспользует
+   * OrganizationsService.findAssignablePosition, тот же путь, что
+   * createTask/reassignTask.
+   */
+  async createCalendarEvent(params: {
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    title: string;
+    description?: string;
+    startTime: Date;
+    endTime: Date;
+    type?: CalendarEventType;
+    status?: CalendarEventStatus;
+    isAllDay?: boolean;
+    location?: string;
+    meetingUrl?: string;
+    leadId?: Types.ObjectId;
+    dealId?: Types.ObjectId;
+    participants?: Types.ObjectId[];
+    externalParticipants?: string[];
+    reminderMinutes?: number[];
+    isRecurring?: boolean;
+    recurringRule?: string;
+    parentEventId?: Types.ObjectId;
+    correlationId: string;
+    /** ADR-006: повтор не должен создать дублирующую встречу, тот же принцип, что createTask/createDeal. */
+    idempotencyKey: string;
+    idempotencyRequestBody: Record<string, unknown>;
+  }): Promise<CrmCalendarEventReadModel> {
+    if (params.endTime.getTime() < params.startTime.getTime()) {
+      throw new BadRequestException('endTime must not be before startTime');
+    }
+
+    if (params.leadId) {
+      const lead = await this.leadRepository.findByIdForOrganization(params.leadId, params.organizationId);
+      if (!lead) {
+        throw new NotFoundException('Lead not found');
+      }
+    }
+
+    if (params.dealId) {
+      const deal = await this.dealRepository.findByIdForOrganization(params.dealId, params.organizationId);
+      if (!deal) {
+        throw new NotFoundException('Deal not found');
+      }
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      for (const participantId of params.participants ?? []) {
+        await this.organizationsService.findAssignablePosition(participantId, params.organizationId, session);
+      }
+
+      const event = await this.calendarEventRepository.create(
+        {
+          organizationId: params.organizationId,
+          title: params.title,
+          description: params.description,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          type: params.type,
+          status: params.status,
+          isAllDay: params.isAllDay,
+          location: params.location,
+          meetingUrl: params.meetingUrl,
+          leadId: params.leadId,
+          dealId: params.dealId,
+          participants: params.participants,
+          externalParticipants: params.externalParticipants,
+          reminderMinutes: params.reminderMinutes,
+          isRecurring: params.isRecurring,
+          recurringRule: params.recurringRule,
+          parentEventId: params.parentEventId,
+          createdByPositionId: params.actorPositionId,
+        },
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'calendar_event.create',
+          resource: 'calendar_event',
+          resourceId: event._id,
+          after: {
+            title: event.title,
+            startTime: event.startTime.toISOString(),
+            endTime: event.endTime.toISOString(),
+            type: event.type,
+            leadId: event.leadId?.toString() ?? null,
+            dealId: event.dealId?.toString() ?? null,
+          },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      const readModel = toCalendarEventReadModel(event);
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.actorIdentityId,
+          operation: 'createCalendarEvent',
+          key: params.idempotencyKey,
+          requestBody: params.idempotencyRequestBody,
+          responseStatus: 201,
+          responseBody: readModel as unknown as Record<string, unknown>,
+        },
+        session,
+      );
+
+      return readModel;
+    });
+  }
+
+  /**
+   * PATCH /calendar/events/:id — общие поля, НЕ startTime/endTime (см.
+   * moveCalendarEvent). expectedVersion обязателен (conventions.md разд.5),
+   * тот же паттерн, что updateTask.
+   */
+  async updateCalendarEvent(params: {
+    eventId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    scopePositionId?: Types.ObjectId;
+    expectedVersion: number;
+    title?: string;
+    description?: string | null;
+    type?: CalendarEventType;
+    status?: CalendarEventStatus;
+    isAllDay?: boolean;
+    location?: string | null;
+    meetingUrl?: string | null;
+    leadId?: Types.ObjectId | null;
+    dealId?: Types.ObjectId | null;
+    participants?: Types.ObjectId[];
+    externalParticipants?: string[];
+    reminderMinutes?: number[];
+    isRecurring?: boolean;
+    recurringRule?: string | null;
+    parentEventId?: Types.ObjectId | null;
+    correlationId: string;
+  }): Promise<CrmCalendarEventReadModel> {
+    const existingEvent = await this.calendarEventRepository.findByIdForOrganization(
+      params.eventId,
+      params.organizationId,
+      params.scopePositionId,
+    );
+    if (!existingEvent) {
+      throw new NotFoundException('Calendar event not found');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      for (const participantId of params.participants ?? []) {
+        await this.organizationsService.findAssignablePosition(participantId, params.organizationId, session);
+      }
+
+      const { modifiedCount } = await this.calendarEventRepository.updateEvent(
+        params.eventId,
+        params.organizationId,
+        params.expectedVersion,
+        {
+          title: params.title,
+          description: params.description,
+          type: params.type,
+          status: params.status,
+          isAllDay: params.isAllDay,
+          location: params.location,
+          meetingUrl: params.meetingUrl,
+          leadId: params.leadId,
+          dealId: params.dealId,
+          participants: params.participants,
+          externalParticipants: params.externalParticipants,
+          reminderMinutes: params.reminderMinutes,
+          isRecurring: params.isRecurring,
+          recurringRule: params.recurringRule,
+          parentEventId: params.parentEventId,
+        },
+        session,
+      );
+      if (modifiedCount === 0) {
+        // Tenant/scope уже подтверждены findByIdForOrganization выше —
+        // единственная причина modifiedCount:0 здесь это устаревший
+        // expectedVersion (тот же принцип, что updateTask).
+        throw new ConflictException('Calendar event was modified by another request — refresh and retry');
+      }
+
+      const updated = await this.calendarEventRepository.findByIdForOrganization(
+        params.eventId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'calendar_event.update',
+          resource: 'calendar_event',
+          resourceId: params.eventId,
+          before: { title: existingEvent.title, status: existingEvent.status },
+          after: { title: updated!.title, status: updated!.status },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toCalendarEventReadModel(updated!);
+    });
+  }
+
+  /**
+   * PATCH /calendar/events/:id/move — легаси выделяет "перетащить в
+   * календаре" отдельно от общего PATCH (см. задание). CAS на version, тот
+   * же принцип, что updateCalendarEvent — конкурентное перетаскивание
+   * события двумя людьми не должно тихо перезаписывать друг друга.
+   */
+  async moveCalendarEvent(params: {
+    eventId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    scopePositionId?: Types.ObjectId;
+    expectedVersion: number;
+    newStartTime: Date;
+    newEndTime: Date;
+    correlationId: string;
+  }): Promise<CrmCalendarEventReadModel> {
+    if (params.newEndTime.getTime() < params.newStartTime.getTime()) {
+      throw new BadRequestException('newEndTime must not be before newStartTime');
+    }
+
+    const existingEvent = await this.calendarEventRepository.findByIdForOrganization(
+      params.eventId,
+      params.organizationId,
+      params.scopePositionId,
+    );
+    if (!existingEvent) {
+      throw new NotFoundException('Calendar event not found');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.calendarEventRepository.moveEvent(
+        params.eventId,
+        params.organizationId,
+        params.expectedVersion,
+        params.newStartTime,
+        params.newEndTime,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new ConflictException('Calendar event was modified by another request — refresh and retry');
+      }
+
+      const updated = await this.calendarEventRepository.findByIdForOrganization(
+        params.eventId,
+        params.organizationId,
+        undefined,
+        session,
+      );
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'calendar_event.move',
+          resource: 'calendar_event',
+          resourceId: params.eventId,
+          before: { startTime: existingEvent.startTime.toISOString(), endTime: existingEvent.endTime.toISOString() },
+          after: { startTime: updated!.startTime.toISOString(), endTime: updated!.endTime.toISOString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return toCalendarEventReadModel(updated!);
+    });
+  }
+
+  /**
+   * DELETE /calendar/events/:id — soft delete (см. CalendarEventDocument.
+   * deletedAt докстринг). Без expectedVersion — тот же выбор, что
+   * DELETE /leads/:leadId.
+   */
+  async deleteCalendarEvent(params: {
+    eventId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    scopePositionId?: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ deleted: true }> {
+    const event = await this.calendarEventRepository.findByIdForOrganization(
+      params.eventId,
+      params.organizationId,
+      params.scopePositionId,
+    );
+    if (!event) {
+      throw new NotFoundException('Calendar event not found');
+    }
+
+    const deletedAt = new Date();
+    return runInTransaction(this.connection, async (session) => {
+      const { modifiedCount } = await this.calendarEventRepository.softDelete(
+        params.eventId,
+        params.organizationId,
+        deletedAt,
+        session,
+      );
+      if (modifiedCount === 0) {
+        throw new NotFoundException('Calendar event not found');
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'calendar_event.delete',
+          resource: 'calendar_event',
+          resourceId: params.eventId,
+          before: { deletedAt: null },
+          after: { deletedAt: deletedAt.toISOString() },
+          correlationId: params.correlationId,
+        },
+        session,
+      );
+
+      return { deleted: true as const };
+    });
+  }
+
+  /**
+   * GET /calendar/unified?startDate=&endDate= — объединяет CalendarEvent этой
+   * таблицы с Task'ами, у которых есть срок (dueAt) в этом диапазоне
+   * (задание явно требует переиспользовать существующий листинг задач, не
+   * изобретать новый способ — TaskRepository.listForOrganization уже умеет
+   * dueBefore/dueAfter). scopePositionId (own-scope calendar_event.read)
+   * применяется к ОБЕИМ частям объединения одинаково: то же лицо, что не
+   * видит чужие события, не видит и чужие задачи в этом объединённом виде
+   * (GET /tasks с его собственным task.read правом отдельно и здесь не
+   * подменяется).
+   */
+  async getUnifiedCalendar(params: {
+    organizationId: Types.ObjectId;
+    startDate: Date;
+    endDate: Date;
+    scopePositionId?: Types.ObjectId;
+  }): Promise<{ events: CrmCalendarEventReadModel[]; tasks: CrmUnifiedCalendarTaskReadModel[] }> {
+    const [events, tasks] = await Promise.all([
+      this.calendarEventRepository.listForRange(params.organizationId, {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        scopePositionId: params.scopePositionId,
+      }),
+      this.taskRepository.listForOrganization(params.organizationId, {
+        assignedPositionId: params.scopePositionId,
+        dueAfter: params.startDate,
+        dueBefore: params.endDate,
+        // Практический верхний предел одного запроса объединённого вида —
+        // тот же порядок, что MAX_TASK_LIST_LIMIT, календарь не пагинирует
+        // задачи отдельно.
+        limit: 200,
+      }),
+    ]);
+
+    return {
+      events: events.map(toCalendarEventReadModel),
+      tasks: tasks.map((task) => ({
+        id: task._id.toString(),
+        title: task.title,
+        description: task.description ?? null,
+        startAt: task.startAt ? task.startAt.toISOString() : null,
+        dueAt: task.dueAt ? task.dueAt.toISOString() : null,
+        status: task.status,
+        assignedPositionId: task.assignedPositionId ? task.assignedPositionId.toString() : null,
+        leadId: task.leadId ? task.leadId.toString() : null,
+      })),
+    };
+  }
 }
 
 function extractContactChannels(contact: DevelopmentContact): {
@@ -3456,6 +3940,34 @@ export function toTaskReadModel(task: TaskDocument): CrmTaskReadModel {
       (task.status === 'open' || task.status === 'in_progress') &&
       Boolean(task.dueAt) &&
       task.dueAt!.getTime() < Date.now(),
+  };
+}
+
+export function toCalendarEventReadModel(event: CalendarEventDocument): CrmCalendarEventReadModel {
+  return {
+    id: event._id.toString(),
+    organizationId: event.organizationId.toString(),
+    title: event.title,
+    description: event.description ?? null,
+    startTime: event.startTime.toISOString(),
+    endTime: event.endTime.toISOString(),
+    type: event.type,
+    status: event.status,
+    isAllDay: Boolean(event.isAllDay),
+    location: event.location ?? null,
+    meetingUrl: event.meetingUrl ?? null,
+    leadId: event.leadId ? event.leadId.toString() : null,
+    dealId: event.dealId ? event.dealId.toString() : null,
+    participants: (event.participants ?? []).map((p) => p.toString()),
+    externalParticipants: event.externalParticipants ?? [],
+    reminderMinutes: event.reminderMinutes ?? [],
+    isRecurring: Boolean(event.isRecurring),
+    recurringRule: event.recurringRule ?? null,
+    parentEventId: event.parentEventId ? event.parentEventId.toString() : null,
+    createdByPositionId: event.createdByPositionId.toString(),
+    version: event.version ?? 0,
+    createdAt: event.createdAt ? event.createdAt.toISOString() : new Date().toISOString(),
+    updatedAt: event.updatedAt ? event.updatedAt.toISOString() : null,
   };
 }
 

@@ -1222,6 +1222,77 @@ export interface paths {
         patch: operations["updateDealChecklist"];
         trace?: never;
     };
+    "/calendar/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список событий календаря за диапазон дат (обязателен — не бесконечный список). Событие попадает в выдачу, если пересекается с диапазоном, не только если начинается внутри него. organization-scope (owner/director/rop/developer) видит все события tenant'а; own-scope (manager) — только события, где сам participant ИЛИ createdBy. */
+        get: operations["listCalendarEvents"];
+        put?: never;
+        /** Создание события календаря. `isRecurring`/`recurringRule`/ `parentEventId`/`reminderMinutes` ХРАНЯТСЯ, но НЕ ИНТЕРПРЕТИРУЮТСЯ (осознанно урезанный scope этого прохода) — сервер не разворачивает серию будущих вхождений и не планирует email/push по напоминаниям. */
+        post: operations["createCalendarEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar/unified": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Объединяет события календаря с задачами (Task), у которых есть срок (dueAt) в этом диапазоне — легаси-форма `{events, tasks}`. scopePositionId (own-scope calendar_event.read) применяется одинаково к обеим частям объединения. */
+        get: operations["getUnifiedCalendar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/calendar/events/{eventId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение события по ID. Tenant и own-scope проверяются до чтения — чужое событие возвращает 404 (non-disclosure). */
+        get: operations["getCalendarEvent"];
+        put?: never;
+        post?: never;
+        /** Soft delete события (проставляет deletedAt, НЕ переиспользует поле status — см. CalendarEventDocument докстринг). Без expectedVersion, тот же выбор, что DELETE /leads/{leadId}. */
+        delete: operations["deleteCalendarEvent"];
+        options?: never;
+        head?: never;
+        /** Частичное обновление события — НЕ startTime/endTime (перенос только через PATCH /calendar/events/{eventId}/move). expectedVersion обязателен (conventions.md разд.5 optimistic concurrency). */
+        patch: operations["updateCalendarEvent"];
+        trace?: never;
+    };
+    "/calendar/events/{eventId}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Перенос события (drag&drop в календаре) — легаси отдельно выделяет эту команду от общего PATCH. expectedVersion обязателен — конкурентное перетаскивание события двумя людьми не должно тихо перезаписывать друг друга. */
+        patch: operations["moveCalendarEvent"];
+        trace?: never;
+    };
     "/admin/duplicate-candidates": {
         parameters: {
             query?: never;
@@ -3160,6 +3231,113 @@ export interface components {
         };
         CompleteTaskRequest: {
             expectedVersion: number;
+        };
+        /**
+         * @description Легаси-контракт (apps/erp-web CalendarEvent.EventType) перенесён буквально. Фронтенд-адаптер строит собственную таблицу перевода в 4 легаси-типа CalEvent (showing/meeting/call/signing) — не 1:1.
+         * @enum {string}
+         */
+        CalendarEventType: "meeting" | "call" | "reminder" | "task" | "lead_followup";
+        /** @enum {string} */
+        CalendarEventStatus: "scheduled" | "in_progress" | "completed" | "cancelled" | "no_show";
+        CalendarEventView: {
+            id: string;
+            organizationId: string;
+            title: string;
+            description?: string | null;
+            /** Format: date-time */
+            startTime: string;
+            /** Format: date-time */
+            endTime: string;
+            type: components["schemas"]["CalendarEventType"];
+            status: components["schemas"]["CalendarEventStatus"];
+            isAllDay?: boolean;
+            location?: string | null;
+            meetingUrl?: string | null;
+            leadId?: string | null;
+            dealId?: string | null;
+            /** @description Position id участников — не Contact/Identity */
+            participants?: string[];
+            externalParticipants?: string[];
+            /** @description ХРАНИТСЯ, НЕ ИНТЕРПРЕТИРУЕТСЯ — сервер не планирует email/push */
+            reminderMinutes?: number[];
+            /** @description ХРАНИТСЯ, НЕ ИНТЕРПРЕТИРУЕТСЯ — сервер не генерирует серию будущих вхождений */
+            isRecurring?: boolean;
+            recurringRule?: string | null;
+            parentEventId?: string | null;
+            createdByPositionId: string;
+            /** @description conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/move */
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt?: string | null;
+        };
+        CalendarEventListResponse: {
+            items: components["schemas"]["CalendarEventView"][];
+        };
+        CreateCalendarEventRequest: {
+            title: string;
+            description?: string;
+            /** Format: date-time */
+            startTime: string;
+            /** Format: date-time */
+            endTime: string;
+            type?: components["schemas"]["CalendarEventType"];
+            isAllDay?: boolean;
+            location?: string;
+            meetingUrl?: string;
+            leadId?: string;
+            dealId?: string;
+            participants?: string[];
+            externalParticipants?: string[];
+            reminderMinutes?: number[];
+            isRecurring?: boolean;
+            recurringRule?: string;
+            parentEventId?: string;
+        };
+        /** @description НЕ содержит startTime/endTime — см. PATCH /calendar/events/{eventId}/move. */
+        UpdateCalendarEventRequest: {
+            expectedVersion: number;
+            title?: string;
+            description?: string | null;
+            type?: components["schemas"]["CalendarEventType"];
+            status?: components["schemas"]["CalendarEventStatus"];
+            isAllDay?: boolean;
+            location?: string | null;
+            meetingUrl?: string | null;
+            leadId?: string | null;
+            dealId?: string | null;
+            participants?: string[];
+            externalParticipants?: string[];
+            reminderMinutes?: number[];
+            isRecurring?: boolean;
+            recurringRule?: string | null;
+            parentEventId?: string | null;
+        };
+        MoveCalendarEventRequest: {
+            expectedVersion: number;
+            /** Format: date-time */
+            newStartTime: string;
+            /** Format: date-time */
+            newEndTime: string;
+        };
+        /** @description Минимальная проекция Task для объединённого вида календаря — не полный TaskView. */
+        CalendarUnifiedTaskView: {
+            id: string;
+            title: string;
+            description?: string | null;
+            /** Format: date-time */
+            startAt?: string | null;
+            /** Format: date-time */
+            dueAt?: string | null;
+            /** @enum {string} */
+            status: "open" | "in_progress" | "completed" | "cancelled";
+            assignedPositionId?: string | null;
+            leadId?: string | null;
+        };
+        CalendarUnifiedResponse: {
+            events: components["schemas"]["CalendarEventView"][];
+            tasks: components["schemas"]["CalendarUnifiedTaskView"][];
         };
         TimelineEventItem: {
             id: string;
@@ -6025,6 +6203,234 @@ export interface operations {
             /** @description NOT_FOUND */
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — сделка была изменена параллельным запросом */
+            409: components["responses"]["Error"];
+        };
+    };
+    listCalendarEvents: {
+        parameters: {
+            query: {
+                startDate: string;
+                endDate: string;
+                type?: components["schemas"]["CalendarEventType"];
+                leadId?: string;
+                dealId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description События текущего tenant/scope за диапазон, по возрастанию startTime */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventListResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    createCalendarEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCalendarEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Событие создано */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.create */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — указанный leadId, dealId или participant (Position) не найден */
+            404: components["responses"]["Error"];
+        };
+    };
+    getUnifiedCalendar: {
+        parameters: {
+            query: {
+                startDate: string;
+                endDate: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Объединённое представление календаря */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarUnifiedResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    getCalendarEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Событие */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteCalendarEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Событие удалено (soft delete) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        deleted: boolean;
+                    };
+                };
+            };
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.delete */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCalendarEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCalendarEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Событие обновлено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
+            409: components["responses"]["Error"];
+        };
+    };
+    moveCalendarEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveCalendarEventRequest"];
+            };
+        };
+        responses: {
+            /** @description Событие перенесено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarEventView"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет calendar_event.update */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND */
+            404: components["responses"]["Error"];
+            /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
             409: components["responses"]["Error"];
         };
     };

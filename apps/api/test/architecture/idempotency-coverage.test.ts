@@ -39,6 +39,7 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
     'стадия лида напрямую участвует в отчётах по воронке и метриках менеджеров — повтор (клиентский таймаут+ретрай) не должен применить смену дважды и задвоить историю переходов',
   'POST /deals': 'дубль сделки удваивает ожидаемую комиссию в отчётах',
   'POST /tasks': 'дубль задачи засоряет список следующих действий менеджера',
+  'POST /calendar/events': 'дубль встречи/звонка в календаре — тот же класс риска, что дубль задачи (ADR-006)',
   'POST /marketplace/property-assets': 'дубль объекта в мастере публикации — клиент шлёт стабильный ключ на повтор шага',
   'POST /marketplace/property-assets/:assetId/listings': 'дубль листинга на том же объекте',
   'POST /property-assets': 'дубль объекта в ERP — клиент шлёт стабильный ключ на повтор формы',
@@ -163,6 +164,9 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'PATCH /tasks/:taskId': 'expectedVersion (CAS)',
   'PATCH /tasks/:taskId/reassign': 'expectedVersion (CAS)',
   'POST /tasks/:taskId/complete': 'повторное завершение намеренно идемпотентно',
+  'PATCH /calendar/events/:eventId': 'expectedVersion (CAS)',
+  'PATCH /calendar/events/:eventId/move': 'expectedVersion (CAS)',
+  'DELETE /calendar/events/:eventId': 'soft delete по id идемпотентно, тот же принцип, что DELETE /leads/:leadId',
 
   // --- Публичный контур ---
   'POST /public/developments/:slug/reveal-contact':

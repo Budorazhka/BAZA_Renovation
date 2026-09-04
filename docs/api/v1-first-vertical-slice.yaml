@@ -2890,6 +2890,271 @@ paths:
           description: VERSION_CONFLICT — сделка была изменена параллельным запросом
           $ref: '#/components/responses/Error'
 
+  /calendar/events:
+    get:
+      operationId: listCalendarEvents
+      summary: >
+        Список событий календаря за диапазон дат (обязателен — не бесконечный
+        список). Событие попадает в выдачу, если пересекается с диапазоном, не
+        только если начинается внутри него. organization-scope
+        (owner/director/rop/developer) видит все события tenant'а; own-scope
+        (manager) — только события, где сам participant ИЛИ createdBy.
+      tags: [erp-crm]
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: endDate
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/CalendarEventType'
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: dealId
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: События текущего tenant/scope за диапазон, по возрастанию startTime
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventListResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.read
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: createCalendarEvent
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      summary: >
+        Создание события календаря. `isRecurring`/`recurringRule`/
+        `parentEventId`/`reminderMinutes` ХРАНЯТСЯ, но НЕ ИНТЕРПРЕТИРУЮТСЯ
+        (осознанно урезанный scope этого прохода) — сервер не разворачивает
+        серию будущих вхождений и не планирует email/push по напоминаниям.
+      tags: [erp-crm]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCalendarEventRequest'
+      responses:
+        '201':
+          description: Событие создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.create
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — указанный leadId, dealId или participant (Position) не найден
+          $ref: '#/components/responses/Error'
+
+  /calendar/unified:
+    get:
+      operationId: getUnifiedCalendar
+      summary: >
+        Объединяет события календаря с задачами (Task), у которых есть срок
+        (dueAt) в этом диапазоне — легаси-форма `{events, tasks}`.
+        scopePositionId (own-scope calendar_event.read) применяется одинаково
+        к обеим частям объединения.
+      tags: [erp-crm]
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+        - name: endDate
+          in: query
+          required: true
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Объединённое представление календаря
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarUnifiedResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.read
+          $ref: '#/components/responses/Error'
+
+  /calendar/events/{eventId}:
+    get:
+      operationId: getCalendarEvent
+      summary: >
+        Получение события по ID. Tenant и own-scope проверяются до чтения —
+        чужое событие возвращает 404 (non-disclosure).
+      tags: [erp-crm]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Событие
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+    patch:
+      operationId: updateCalendarEvent
+      summary: >
+        Частичное обновление события — НЕ startTime/endTime (перенос только
+        через PATCH /calendar/events/{eventId}/move). expectedVersion
+        обязателен (conventions.md разд.5 optimistic concurrency).
+      tags: [erp-crm]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCalendarEventRequest'
+      responses:
+        '200':
+          description: Событие обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion устарел, обновите и повторите
+          $ref: '#/components/responses/Error'
+
+    delete:
+      operationId: deleteCalendarEvent
+      summary: >
+        Soft delete события (проставляет deletedAt, НЕ переиспользует поле
+        status — см. CalendarEventDocument докстринг). Без expectedVersion,
+        тот же выбор, что DELETE /leads/{leadId}.
+      tags: [erp-crm]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Событие удалено (soft delete)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [deleted]
+                properties:
+                  deleted: {type: boolean}
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.delete
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+
+  /calendar/events/{eventId}/move:
+    patch:
+      operationId: moveCalendarEvent
+      summary: >
+        Перенос события (drag&drop в календаре) — легаси отдельно выделяет
+        эту команду от общего PATCH. expectedVersion обязателен —
+        конкурентное перетаскивание события двумя людьми не должно тихо
+        перезаписывать друг друга.
+      tags: [erp-crm]
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveCalendarEventRequest'
+      responses:
+        '200':
+          description: Событие перенесено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarEventView'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет calendar_event.update
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND
+          $ref: '#/components/responses/Error'
+        '409':
+          description: VERSION_CONFLICT — expectedVersion устарел, обновите и повторите
+          $ref: '#/components/responses/Error'
+
   /admin/duplicate-candidates:
     get:
       operationId: adminListDuplicateCandidates
@@ -6083,6 +6348,166 @@ components:
       required: [expectedVersion]
       properties:
         expectedVersion: {type: integer, minimum: 0}
+
+    CalendarEventType:
+      type: string
+      enum: [meeting, call, reminder, task, lead_followup]
+      description: >
+        Легаси-контракт (apps/erp-web CalendarEvent.EventType) перенесён
+        буквально. Фронтенд-адаптер строит собственную таблицу перевода в
+        4 легаси-типа CalEvent (showing/meeting/call/signing) — не 1:1.
+
+    CalendarEventStatus:
+      type: string
+      enum: [scheduled, in_progress, completed, cancelled, no_show]
+
+    CalendarEventView:
+      type: object
+      required: [id, organizationId, title, startTime, endTime, type, status, version, createdByPositionId, createdAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        startTime: {type: string, format: date-time}
+        endTime: {type: string, format: date-time}
+        type:
+          $ref: '#/components/schemas/CalendarEventType'
+        status:
+          $ref: '#/components/schemas/CalendarEventStatus'
+        isAllDay: {type: boolean}
+        location: {type: string, nullable: true}
+        meetingUrl: {type: string, nullable: true}
+        leadId: {type: string, nullable: true}
+        dealId: {type: string, nullable: true}
+        participants:
+          type: array
+          description: "Position id участников — не Contact/Identity"
+          items: {type: string}
+        externalParticipants:
+          type: array
+          items: {type: string}
+        reminderMinutes:
+          type: array
+          description: "ХРАНИТСЯ, НЕ ИНТЕРПРЕТИРУЕТСЯ — сервер не планирует email/push"
+          items: {type: integer}
+        isRecurring: {type: boolean, description: "ХРАНИТСЯ, НЕ ИНТЕРПРЕТИРУЕТСЯ — сервер не генерирует серию будущих вхождений"}
+        recurringRule: {type: string, nullable: true}
+        parentEventId: {type: string, nullable: true}
+        createdByPositionId: {type: string}
+        version: {type: integer, description: "conventions.md разд.5 optimistic concurrency — передать как expectedVersion в следующий PATCH/move"}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time, nullable: true}
+
+    CalendarEventListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarEventView'
+
+    CreateCalendarEventRequest:
+      type: object
+      required: [title, startTime, endTime]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        startTime: {type: string, format: date-time}
+        endTime: {type: string, format: date-time}
+        type:
+          $ref: '#/components/schemas/CalendarEventType'
+        isAllDay: {type: boolean}
+        location: {type: string, maxLength: 500}
+        meetingUrl: {type: string, maxLength: 2000}
+        leadId: {type: string}
+        dealId: {type: string}
+        participants:
+          type: array
+          maxItems: 50
+          items: {type: string}
+        externalParticipants:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 255}
+        reminderMinutes:
+          type: array
+          maxItems: 10
+          items: {type: integer, minimum: 0}
+        isRecurring: {type: boolean}
+        recurringRule: {type: string, maxLength: 500}
+        parentEventId: {type: string}
+
+    UpdateCalendarEventRequest:
+      type: object
+      description: "НЕ содержит startTime/endTime — см. PATCH /calendar/events/{eventId}/move."
+      required: [expectedVersion]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000, nullable: true}
+        type:
+          $ref: '#/components/schemas/CalendarEventType'
+        status:
+          $ref: '#/components/schemas/CalendarEventStatus'
+        isAllDay: {type: boolean}
+        location: {type: string, maxLength: 500, nullable: true}
+        meetingUrl: {type: string, maxLength: 2000, nullable: true}
+        leadId: {type: string, nullable: true}
+        dealId: {type: string, nullable: true}
+        participants:
+          type: array
+          maxItems: 50
+          items: {type: string}
+        externalParticipants:
+          type: array
+          maxItems: 50
+          items: {type: string, maxLength: 255}
+        reminderMinutes:
+          type: array
+          maxItems: 10
+          items: {type: integer, minimum: 0}
+        isRecurring: {type: boolean}
+        recurringRule: {type: string, maxLength: 500, nullable: true}
+        parentEventId: {type: string, nullable: true}
+
+    MoveCalendarEventRequest:
+      type: object
+      required: [expectedVersion, newStartTime, newEndTime]
+      properties:
+        expectedVersion: {type: integer, minimum: 0}
+        newStartTime: {type: string, format: date-time}
+        newEndTime: {type: string, format: date-time}
+
+    CalendarUnifiedTaskView:
+      type: object
+      required: [id, title, status]
+      description: "Минимальная проекция Task для объединённого вида календаря — не полный TaskView."
+      properties:
+        id: {type: string}
+        title: {type: string}
+        description: {type: string, nullable: true}
+        startAt: {type: string, format: date-time, nullable: true}
+        dueAt: {type: string, format: date-time, nullable: true}
+        status:
+          type: string
+          enum: [open, in_progress, completed, cancelled]
+        assignedPositionId: {type: string, nullable: true}
+        leadId: {type: string, nullable: true}
+
+    CalendarUnifiedResponse:
+      type: object
+      required: [events, tasks]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarEventView'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarUnifiedTaskView'
 
     TimelineEventItem:
       type: object

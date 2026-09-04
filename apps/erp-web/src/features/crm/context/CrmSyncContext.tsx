@@ -8,6 +8,9 @@ import type { Task, TaskPriority, TaskStatus } from '@/types/tasks';
 import type { DashboardNotifPreview } from '@/data/home-workspace-mock';
 import type { Reminder, NewsArticle } from '@/data/info-mock';
 import type { CalEvent } from '@/data/calendar-events-mock';
+import { calendarApiV2 } from '@/services/calendarApiV2';
+import { mapCalendarEventV2ToLegacy, mapUnifiedTaskV2ToLegacy } from '@/lib/calendar-v2-legacy-adapter';
+import { teamApi } from '@/services/teamApi';
 
 interface CrmSyncContextValue {
   tasks: Task[];
@@ -133,15 +136,21 @@ export function CrmSyncProvider({ children }: { children: React.ReactNode }) {
       const startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const endDate = new Date(today.getFullYear(), today.getMonth() + 2, 0);
 
-      const [tasksRes, notifsRes, calendarRes] = await Promise.all([
+      // Календарь — на реальном backend (apps/api, /api/v1/calendar/*), не
+      // на легаси api-crm.baza.sale. Ростер команды (teamApi.list()) нужен
+      // только для резолва agentName по createdByPositionId/assignedPositionId
+      // (тот же приём, что DealsContext/LeadsContext) — здесь запрашивается
+      // отдельно, а не через LeadsContext.leadManagers, потому что
+      // CrmSyncProvider монтируется СНАРУЖИ LeadsProvider (main.tsx) и не
+      // имеет доступа к его контексту.
+      const [tasksRes, notifsRes, calendarRes, teamRoster] = await Promise.all([
         apiService.getTasks({ page: 1, limit: 100 }),
         apiService.getNotifications({ page: 1, limit: 40 }),
-        apiService.getCalendarUnified({
+        calendarApiV2.getUnified({
           startDate: startDate.toISOString(),
           endDate: endDate.toISOString(),
-          userId: crmUser.id,
-          userRole: crmUser.role as any,
-        })
+        }),
+        teamApi.list().catch(() => []),
       ]);
 
       if (tasksRes.success && tasksRes.data) {
@@ -176,41 +185,36 @@ export function CrmSyncProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      if (calendarRes.success && calendarRes.data) {
-        const crmEvents = calendarRes.data.events || [];
-        const crmTasks = calendarRes.data.tasks || [];
-        
-        // Преобразуем задачи в формат событий, если у них есть дата начала
-        const taskEvents = crmTasks
-          .filter(t => t.startDate)
-          .map(t => {
-            const task = t as unknown as CrmTask;
-            return {
-              _id: task._id,
-              title: task.title,
-              description: task.description,
-              startTime: task.startDate!,
-              endTime: task.endDate || task.startDate!,
-              type: 'task',
-              status: task.status as any,
-              createdBy: typeof task.createdBy === 'object' ? task.createdBy._id : task.createdBy,
-              leadId: typeof task.leadId === 'object' ? task.leadId?._id : task.leadId,
-            } as any as CrmCalendarEvent;
-          });
+      {
+        const agentNameById = new Map<string, string>();
+        for (const member of teamRoster) {
+          if (member.vacant) continue;
+          agentNameById.set(member.positionId ?? member.id, member.name || member.position || 'Без имени');
+        }
 
-        const allMappedEvents = [...crmEvents, ...taskEvents].map(mapCrmEvent);
-        setCalendarEvents(allMappedEvents);
+        const mappedEvents = calendarRes.events.map((e) => mapCalendarEventV2ToLegacy(e, agentNameById));
+        const mappedTasks = calendarRes.tasks
+          .map((t) => mapUnifiedTaskV2ToLegacy(t, agentNameById))
+          .filter((e): e is CalEvent => e !== null);
+        setCalendarEvents([...mappedEvents, ...mappedTasks]);
 
-        setReminders(crmEvents
-          .filter(e => e.type === 'reminder')
-          .map(e => ({
-            id: e._id,
+        // Напоминания выводятся из СЫРЫХ CalendarEventV2 (type:'reminder'),
+        // ДО перевода через легаси-таблицу типов — таблица схлопывает
+        // 'reminder' в 'call' для отображения на календаре, и после
+        // перевода отличить напоминание от звонка было бы уже нечем.
+        setReminders(calendarRes.events
+          .filter((e) => e.type === 'reminder')
+          .map((e) => ({
+            id: e.id,
             title: e.title,
-            body: e.description,
+            body: e.description ?? undefined,
             dueAt: e.startTime,
             done: false,
             priority: 'medium' as const,
-            entityLabel: (e.taskId as any)?.title || 'Задача',
+            // Честный пробел: CalendarEventV2 не ссылается на Task (см.
+            // CalendarEventDocument докстринг — календарь и задачи разные
+            // сущности), денормализованного заголовка задачи здесь нет.
+            entityLabel: 'Задача',
           }))
         );
       }

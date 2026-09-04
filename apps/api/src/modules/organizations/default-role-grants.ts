@@ -109,6 +109,21 @@ export interface DefaultGrant {
  * за один запрос вместо ручной формы по одному. `marketer` не получает —
  * у него нет lead.create.
  *
+ * `calendar_event.*` (04.09.2026, CalendarEventController расширяет CRM-модуль)
+ * — тот же принцип, что `task.*`: own-scope у manager (событие видно/
+ * редактируемо, если сам participant ИЛИ createdBy — см.
+ * CalendarEventRepository.scopeFilter), organization-scope у
+ * owner/director/rop/developer. В отличие от Task (без DELETE-эндпоинта
+ * вовсе) и Lead (`lead.delete` только organization, БЕЗ manager — удаление
+ * лида разрушительно для общей воронки), `calendar_event.delete` выдан
+ * И manager'у own-scope: календарное событие — личный инструмент
+ * координации создателя/участника, не общий pipeline-ресурс, удаление
+ * своей же встречи/звонка не требует эскалации до руководителя (тот же
+ * принцип, что легаси `deleteCalendarEvent` не ограничивал по роли, только
+ * по `userId` вызывающего). `administrator`/`marketer` не получают — тот
+ * же круг, что `deal.*` (администратор ведёт задачи, но не CRM-воронку и
+ * не расписание встреч; маркетолог не работает с CRM вовсе).
+ *
  * `lead.update`/`lead.delete` (`[phase 3 — 03.09.2026]`, детальная карточка
  * лида, backend-часть) — тот же прецедент, что `lead.changeStage` (D-05B):
  * PATCH /leads/:leadId (сопутствующие поля — city/notes/tags/dealValue/
@@ -143,6 +158,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
     { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
+    { resource: 'calendar_event', action: 'read', scope: 'organization' },
+    { resource: 'calendar_event', action: 'create', scope: 'organization' },
+    { resource: 'calendar_event', action: 'update', scope: 'organization' },
+    { resource: 'calendar_event', action: 'delete', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
@@ -188,6 +207,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
     { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
+    { resource: 'calendar_event', action: 'read', scope: 'organization' },
+    { resource: 'calendar_event', action: 'create', scope: 'organization' },
+    { resource: 'calendar_event', action: 'update', scope: 'organization' },
+    { resource: 'calendar_event', action: 'delete', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
@@ -239,6 +262,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     // (30.08.2026) — team для task отложен до появления модели команды.
     { resource: 'task', action: 'reassign', scope: 'organization' },
     { resource: 'client', action: 'reassign', scope: 'organization' },
+    { resource: 'calendar_event', action: 'read', scope: 'organization' },
+    { resource: 'calendar_event', action: 'create', scope: 'organization' },
+    { resource: 'calendar_event', action: 'update', scope: 'organization' },
+    { resource: 'calendar_event', action: 'delete', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
@@ -286,6 +313,14 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'create', scope: 'organization' },
     { resource: 'deal', action: 'edit', scope: 'own' },
     { resource: 'deal', action: 'changeStage', scope: 'own' },
+    // own-scope: событие видно/редактируемо, если сам participant ИЛИ
+    // createdBy (см. default-role-grants.ts докстринг `calendar_event.*`
+    // выше и CalendarEventRepository.scopeFilter) — не равенство одного
+    // поля, как у task/deal own-scope.
+    { resource: 'calendar_event', action: 'read', scope: 'own' },
+    { resource: 'calendar_event', action: 'create', scope: 'own' },
+    { resource: 'calendar_event', action: 'update', scope: 'own' },
+    { resource: 'calendar_event', action: 'delete', scope: 'own' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
     { resource: 'property_asset', action: 'create', scope: 'organization' },
@@ -341,6 +376,10 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'deal', action: 'edit', scope: 'organization' },
     { resource: 'deal', action: 'changeStage', scope: 'organization' },
     { resource: 'task', action: 'reassign', scope: 'organization' },
+    { resource: 'calendar_event', action: 'read', scope: 'organization' },
+    { resource: 'calendar_event', action: 'create', scope: 'organization' },
+    { resource: 'calendar_event', action: 'update', scope: 'organization' },
+    { resource: 'calendar_event', action: 'delete', scope: 'organization' },
     { resource: 'development', action: 'read', scope: 'organization' },
     { resource: 'development', action: 'edit', scope: 'organization' },
     { resource: 'property_asset', action: 'read', scope: 'organization' },
