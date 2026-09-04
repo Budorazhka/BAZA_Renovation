@@ -11,9 +11,14 @@ import { pathToFileURL } from 'node:url';
  * BLOCKED_INFRASTRUCTURE reporting with remediation commands, and the thing
  * Playwright's globalSetup actually imports) see scripts/runtime/preflight.mjs.
  *
- * ADMIN_WEB replaces the previous stale ERP_WEB entry — apps/erp-web does
- * not exist in this worktree; infrastructure/compose/compose.runtime.yml's
- * fourth app service is now `admin-web` (see infrastructure/docker/Dockerfile.admin-web).
+ * ADMIN_WEB replaces the previous stale ERP_WEB entry.
+ *
+ * Оговорка «apps/erp-web не существует в этом worktree» устарела: 02.09.2026
+ * ERP-клиент стал вендоренной копией внутри монорепо, а 04.09.2026 сервис
+ * erp-web вернулся в compose.runtime.yml (порт 4175). Здесь он намеренно НЕ
+ * проверяется: этот скрипт — быстрая проверка руками, а готовность самого
+ * контейнера уже гарантирует healthcheck в compose, без которого `runtime:up`
+ * не завершится.
  */
 const DEFAULTS = {
   api: 'http://localhost:3000',
