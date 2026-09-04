@@ -74,6 +74,9 @@ Marketplace переписывается по Figma. Цель этого док�
 | Карточка ЖК (Детальная) | `MKT-SCR-007` | `3314:195935` | `3314:200742` (`ЖК целая страница` 1920x5477) | `3314:201711` (`mob_object` 375x6585) | `3314:202465` (планировки) | `apps/marketplace-web/src/pages/DevelopmentDetailPage.tsx` | **Verified in code** |
 | Быстрый просмотр Unit | `MKT-SCR-008` | `3314:195935` | `3314:203298` (`попап` 1188x648) | `3314:203350` (`mob_попап` 375x1186) | Схема 2D, цена, бронь | `apps/marketplace-web/src/components/UnitQuickViewModal.tsx` | **Verified in code** |
 | Раскрытие контакта (CTA) | `MKT-SCR-009` | `3314:195935` | `4687:62533`, `4687:62538` | `4687:62530` | `3304:59895` (`не активны`) | `apps/marketplace-web/src/components/RevealContactCTA.tsx` | **Verified in code** |
+| Каталог вторички | `MKT-SCR-010` | `3314:195935` | `236:27197` | `3854:62977` (`mob_object` 375x1677) | `4934:69469` (`card квартира вторичка`) | `apps/marketplace-web/src/components/ListingCard.tsx` | **Verified in code** |
+| Каталог аренды | `MKT-SCR-011` | `3314:195935` | `236:27197` | `4182:69880` (`mob_object` 375x5539) | `4942:79685` (`Квартира аренда`) | `apps/marketplace-web/src/components/ListingCard.tsx` | **Verified in code** |
+| Детальная страница вторички | `MKT-SCR-012` | `3314:195935` | `3314:206822` (`квартира во вторичке`) | `4182:60867` (`mob_object` 375x5285) | `3304:57919` (`контакты`) | `apps/marketplace-web/src/App.tsx` | **Verified in code** |
 
 ## Принятые решения владельца (Этап 2)
 

@@ -77,6 +77,7 @@ export interface PublicListingCard {
   location?: PublicLocation
   characteristics?: PublicListingCharacteristics
   media?: PublicMediaItem[]
+  isVerified?: boolean
   seo?: {
     title?: string
     description?: string

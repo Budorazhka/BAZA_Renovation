@@ -1,0 +1,234 @@
+﻿/* ==========================================================================
+   Figma Listing Detail Page Styles (Secondary & Rent)
+   Source of Truth:
+   - Frame квартира во вторичке средняя карточка: Node ID 3314:206822 (1920x4722)
+   - Frame mob_object: Node ID 4182:60867 (375x5285)
+   - Frame контакты: Node ID 3304:57919 (729x1528)
+   ========================================================================== */
+
+.figma-listing-detail {
+  max-width: var(--container-max-width, 1400px);
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+  box-sizing: border-box;
+}
+
+/* Back navigation */
+.figma-listing-detail .back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-dark-text-muted, #757575);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 24px;
+  transition: color 0.2s ease;
+}
+
+.figma-listing-detail .back-link:hover {
+  color: var(--color-main, #1BA800);
+}
+
+/* Top Hero Grid */
+.figma-listing-hero {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 32px;
+  align-items: start;
+  margin-bottom: 40px;
+}
+
+@media (max-width: 960px) {
+  .figma-listing-hero {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+/* Summary / Pricing Sidebar */
+.figma-listing-summary {
+  background: var(--color-white, #FFFFFF);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+}
+
+.figma-listing-summary__badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.figma-listing-title {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--color-primary-dark, #232323);
+  margin: 0;
+}
+
+.figma-listing-address {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-dark-text-muted, #757575);
+  margin: 0;
+}
+
+.figma-listing-address svg {
+  color: var(--color-main, #1BA800);
+  flex-shrink: 0;
+}
+
+/* Pricing Card Box */
+.figma-listing-pricing-card {
+  background: var(--color-light-element-bg, #F8F9FA);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.figma-listing-price-main {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--color-primary-dark, #232323);
+  letter-spacing: -0.02em;
+}
+
+.figma-listing-price-sub {
+  font-size: 14px;
+  color: var(--color-dark-text-muted, #757575);
+  font-weight: 500;
+}
+
+/* Facts / Specifications Ribbon */
+.figma-listing-ribbon {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+  background: var(--color-light-element-bg, #F8F9FA);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 24px;
+}
+
+.figma-listing-spec {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.figma-listing-spec-label {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.figma-listing-spec-value {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+}
+
+/* Sections (Description, Lead Form) */
+.figma-listing-section {
+  background: var(--color-white, #FFFFFF);
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 32px;
+  margin-bottom: 32px;
+}
+
+.figma-listing-section-title {
+  font-family: var(--font-primary, 'Plus Jakarta Sans', sans-serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+  margin: 0 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-element-stroke, #EAEAEA);
+}
+
+.figma-listing-description {
+  font-size: 15px;
+  line-height: 1.65;
+  color: #4A4A4A;
+  white-space: pre-line;
+  margin: 0;
+}
+
+/* Contacts Box (Node 3304:57919) */
+.figma-listing-contacts {
+  background: #FFFFFF;
+  border: 1px solid var(--color-element-stroke, #EAEAEA);
+  border-radius: var(--radius-card, 12px);
+  padding: 32px;
+  margin-top: 32px;
+}
+
+.figma-listing-contacts__inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 800px) {
+  .figma-listing-contacts__inner {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+
+.figma-listing-contacts__info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.figma-listing-contacts__agent {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.figma-listing-contacts__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-light-grey, #F0F0F0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-main, #1BA800);
+}
+
+.figma-listing-contacts__name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--color-primary-dark, #232323);
+  margin: 0 0 4px;
+}
+
+.figma-listing-contacts__role {
+  font-size: 13px;
+  color: var(--color-dark-text-muted, #757575);
+  margin: 0;
+}

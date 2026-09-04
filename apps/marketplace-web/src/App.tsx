@@ -22,14 +22,17 @@ import { PublishingWizard } from './features/publishing'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
 import { DevelopmentCard, BuildingPlaceholder } from './components/DevelopmentCard'
+import { ListingCard } from './components/ListingCard'
 import { CardSkeleton } from './components/CardSkeleton'
 import { FacetFilters } from './components/FacetFilters'
 import { RevealContactCTA } from './components/RevealContactCTA'
 import { UnitQuickViewModal, type UnitInfo } from './components/UnitQuickViewModal'
 import './styles/header-footer.css'
 import './styles/cards.css'
+import './styles/listing-card.css'
 import './styles/filters.css'
 import './styles/development-detail.css'
+import './styles/listing-detail.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
@@ -75,74 +78,6 @@ function Shell({ children }: { children: React.ReactNode }) {
       ) : null}
       <Footer />
     </div>
-  )
-}
-
-function ListingCardItem({ item }: { item: PublicListingCard }) {
-  const slug = item.slug
-  const coverItem = item.media?.find((m) => m.role === 'cover') || item.media?.[0]
-  const [imgError, setImgError] = useState(false)
-
-  const mediaDisplay =
-    coverItem && !imgError ? (
-      <div className="listing-card-media">
-        <img
-          src={coverItem.url}
-          alt={coverItem.alt || listingTitle(item)}
-          className="listing-card-media__img"
-          loading="lazy"
-          onError={() => setImgError(true)}
-        />
-      </div>
-    ) : (
-      <BuildingPlaceholder />
-    )
-
-  const content = (
-    <>
-      {mediaDisplay}
-      <div className="listing-card__body">
-        <span className="listing-badge">✦ {item.dealType === 'sale' ? 'Срочная продажа' : listingDealTypeLabel(item.dealType)}</span>
-        <p className="listing-card-price">{listingPrice(item)}</p>
-        <div className="listing-card__title-row">
-          <h2>{listingTitle(item)}</h2>
-          <span className="listing-card__actions" aria-hidden="true">♧ <span>♥</span></span>
-        </div>
-        <p className="address"><span className="address__pin" aria-hidden="true">●</span>{listingAddress(item)}</p>
-        {item.location?.country ? (
-          <p className="address address--country"><span aria-hidden="true">✚</span>{item.location.country}{item.location.city ? `, ${item.location.city}` : ''}</p>
-        ) : null}
-        <div className="listing-chips" aria-label="Характеристики объекта">
-          {item.characteristics?.rooms ? (
-            <span className="listing-chip">{item.characteristics.rooms} комн.</span>
-          ) : null}
-          {item.characteristics?.area ? (
-            <span className="listing-chip">{item.characteristics.area} м²</span>
-          ) : null}
-          {item.characteristics?.floor ? (
-            <span className="listing-chip">
-              {item.characteristics.floor}
-              {item.characteristics.totalFloors ? ` / ${item.characteristics.totalFloors}` : ''} эт.
-            </span>
-          ) : null}
-        </div>
-        <div className="listing-card__contact-actions" aria-hidden="true">
-          <span>Позвонить</span>
-          <span>Написать</span>
-        </div>
-        <div className="card-footer listing-card__footer">
-          <span className="listing-card__property">{listingPropertyTypeLabel(item.propertyType, item.commercialSubtype)}</span>
-          <span className="arrow" aria-hidden="true">↗</span>
-        </div>
-      </div>
-    </>
-  )
-  return slug ? (
-    <Link className="listing-card" to={`/listings/${slug}`} aria-label={`Объявление: ${listingTitle(item)}`}>
-      {content}
-    </Link>
-  ) : (
-    <article className="listing-card">{content}</article>
   )
 }
 
@@ -482,7 +417,11 @@ function CataloguePage() {
                           />
                         ))
                       : (state.items as PublicListingCard[]).map((item, index) => (
-                          <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                          <ListingCard
+                            key={item.slug ?? `listing-${index}`}
+                            item={item}
+                            size="small"
+                          />
                         ))}
                   </div>
                 </aside>
@@ -494,13 +433,13 @@ function CataloguePage() {
                 </div>
               </div>
             ) : (
-              <div className="development-grid">
+              <div className="development-grid figma-catalog-grid">
                 {isDev
                   ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
                       <DevelopmentCard key={item.slug ?? `${item.name}-${index}`} item={item} />
                     ))
                   : (state.items as PublicListingCard[]).map((item, index) => (
-                      <ListingCardItem key={item.slug ?? `listing-${index}`} item={item} />
+                      <ListingCard key={item.slug ?? `listing-${index}`} item={item} />
                     ))}
               </div>
             )}
@@ -720,7 +659,7 @@ function ListingDetailPage() {
 
   return (
     <Shell>
-      <section className="detail-page" aria-labelledby="listing-detail-title">
+      <section className="detail-page figma-listing-detail" aria-labelledby="listing-detail-title">
         <Link className="back-link" to="/?tab=listings" aria-label="Вернуться в каталог вторички и аренды">
           ← В каталог
         </Link>
@@ -747,58 +686,95 @@ function ListingDetailPage() {
         ) : null}
         {state.status === 'ready' ? (
           <>
-            <div className="detail-hero detail-hero--listing">
-              <ListingMediaGallery media={state.item.media} title={listingTitle(state.item)} />
-              <div className="detail-hero__copy">
-                <span className="listing-badge">{listingDealTypeLabel(state.item.dealType)}</span>
-                <h1 id="listing-detail-title">{listingTitle(state.item)}</h1>
-                <p className="address">{listingAddress(state.item)}</p>
-                <div className="detail-price-box">
-                  <p className="detail-price-main">{listingPrice(state.item)}</p>
-                  <p className="meta">
+            {/* Top Hero: Gallery & Details (Figma 3314:206822) */}
+            <div className="detail-hero detail-hero--listing figma-listing-hero">
+              <div className="figma-listing-gallery">
+                <ListingMediaGallery media={state.item.media} title={listingTitle(state.item)} />
+              </div>
+              <div className="detail-hero__copy figma-listing-summary">
+                <div className="figma-listing-summary__badges">
+                  <span className="listing-badge figma-listing-card__badge figma-listing-card__badge--deal">
+                    {listingDealTypeLabel(state.item.dealType)}
+                  </span>
+                  {state.item.isVerified ? (
+                    <span className="figma-listing-card__badge figma-listing-card__badge--verified">
+                      ✓ Проверено
+                    </span>
+                  ) : null}
+                </div>
+                <h1 id="listing-detail-title" className="figma-listing-title">
+                  {listingTitle(state.item)}
+                </h1>
+                <p className="address figma-listing-address">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                  <span>{listingAddress(state.item)}</span>
+                </p>
+                <div className="detail-price-box figma-listing-pricing-card">
+                  <p className="detail-price-main figma-listing-price-main">
+                    {listingPrice(state.item)}
+                    {state.item.dealType === 'rent_short' ? (
+                      <span className="figma-listing-price-sub"> / сутки</span>
+                    ) : state.item.dealType === 'rent_long' ? (
+                      <span className="figma-listing-price-sub"> / мес</span>
+                    ) : null}
+                  </p>
+                  <p className="meta figma-listing-price-sub">
                     {listingPropertyTypeLabel(state.item.propertyType, state.item.commercialSubtype)}
                   </p>
                 </div>
+                {slug ? <RevealContactCTA slug={slug} type="listing" /> : null}
               </div>
             </div>
-            <div className="detail-facts" aria-label="Характеристики объекта">
-              <div>
-                <span>Тип сделки</span>
-                <strong>{listingDealTypeLabel(state.item.dealType)}</strong>
+
+            {/* Facts / Specifications Ribbon */}
+            <div className="detail-facts figma-listing-ribbon" aria-label="Характеристики объекта">
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Тип сделки</span>
+                <strong className="figma-listing-spec-value">{listingDealTypeLabel(state.item.dealType)}</strong>
               </div>
-              <div>
-                <span>Площадь</span>
-                <strong>
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Площадь</span>
+                <strong className="figma-listing-spec-value">
                   {state.item.characteristics?.area ? `${state.item.characteristics.area} м²` : '—'}
                 </strong>
               </div>
-              <div>
-                <span>Комнат</span>
-                <strong>{state.item.characteristics?.rooms ?? '—'}</strong>
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Комнат</span>
+                <strong className="figma-listing-spec-value">{state.item.characteristics?.rooms ?? '—'}</strong>
               </div>
-              <div>
-                <span>Этаж</span>
-                <strong>
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Этаж</span>
+                <strong className="figma-listing-spec-value">
                   {state.item.characteristics?.floor
                     ? `${state.item.characteristics.floor}${state.item.characteristics.totalFloors ? ` / ${state.item.characteristics.totalFloors}` : ''}`
                     : '—'}
                 </strong>
               </div>
-              <div>
-                <span>Город</span>
-                <strong>{state.item.location?.city ?? 'Уточняется'}</strong>
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Город</span>
+                <strong className="figma-listing-spec-value">{state.item.location?.city ?? 'Уточняется'}</strong>
               </div>
-              <div>
-                <span>Страна</span>
-                <strong>{state.item.location?.country ?? 'Уточняется'}</strong>
+              <div className="figma-listing-spec">
+                <span className="figma-listing-spec-label">Страна</span>
+                <strong className="figma-listing-spec-value">{state.item.location?.country ?? 'Уточняется'}</strong>
               </div>
             </div>
-            <section className="detail-description" aria-labelledby="listing-description-heading">
-              <h2 id="listing-description-heading">Описание</h2>
-              <p>
+
+            {/* Description Section */}
+            <section className="detail-description figma-listing-section" aria-labelledby="listing-description-heading">
+              <h2 id="listing-description-heading" className="figma-listing-section-title">Описание</h2>
+              <p className="figma-listing-description">
                 {state.item.seo?.description?.trim() ||
                   'Объект проверен и опубликован через систему управления недвижимостью BAZA.'}
               </p>
+            </section>
+
+            {/* Contacts & Lead Generation Section (Figma 3304:57919) */}
+            <section className="figma-listing-contacts" id="contacts" aria-labelledby="contacts-heading">
+              <h2 id="contacts-heading" className="figma-listing-section-title">Связаться с риелтором</h2>
               <ListingContactForm slug={slug!} />
             </section>
           </>
