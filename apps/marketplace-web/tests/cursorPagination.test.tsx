@@ -52,7 +52,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
       })
 
     render(
-      <MemoryRouter initialEntries={['/?tab=listings']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings']}>
         <App />
       </MemoryRouter>,
     )
@@ -96,7 +96,7 @@ describe('Cursor Pagination & Deduplication Acceptance', () => {
       })
 
     render(
-      <MemoryRouter initialEntries={['/?tab=listings']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings']}>
         <App />
       </MemoryRouter>,
     )

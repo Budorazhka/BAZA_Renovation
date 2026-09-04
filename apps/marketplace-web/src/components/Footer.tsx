@@ -43,7 +43,7 @@ export function Footer() {
             <div className="figma-footer__col">
               <h3 className="figma-footer__col-title">Новостройки</h3>
               <ul className="figma-footer__link-list">
-                <li><Link to="/">Жилые комплексы</Link></li>
+                <li><Link to="/newconstructions">Жилые комплексы</Link></li>
                 <li><Link to="/?type=villas">Виллы</Link></li>
                 <li><Link to="/?type=townhouses">Таунхаусы</Link></li>
                 <li><Link to="/?promo=discounts">Акции и скидки</Link></li>
@@ -54,10 +54,10 @@ export function Footer() {
             <div className="figma-footer__col">
               <h3 className="figma-footer__col-title">Вторичка</h3>
               <ul className="figma-footer__link-list">
-                <li><Link to="/?tab=listings">Квартиры</Link></li>
-                <li><Link to="/?tab=listings&propertyType=house">Дома и коттеджи</Link></li>
-                <li><Link to="/?tab=listings&propertyType=land">Земельные участки</Link></li>
-                <li><Link to="/?tab=listings&urgent=true">Срочная продажа</Link></li>
+                <li><Link to="/secondary">Квартиры</Link></li>
+                <li><Link to="/secondary?propertyType=house">Дома и коттеджи</Link></li>
+                <li><Link to="/secondary?propertyType=land">Земельные участки</Link></li>
+                <li><Link to="/secondary?urgent=true">Срочная продажа</Link></li>
               </ul>
             </div>
 
@@ -65,10 +65,10 @@ export function Footer() {
             <div className="figma-footer__col">
               <h3 className="figma-footer__col-title">Проекты</h3>
               <ul className="figma-footer__link-list">
-                <li><Link to="/?tab=projects">На этапе проекта</Link></li>
-                <li><Link to="/?tab=projects&stage=construction">Строящиеся</Link></li>
-                <li><Link to="/?tab=projects&stage=ready">Готовые <span className="figma-footer__badge">New</span></Link></li>
-                <li><Link to="/?tab=projects&featured=true">Интересное</Link></li>
+                <li><Link to="/newconstructions">На этапе проекта</Link></li>
+                <li><Link to="/newconstructions?stage=construction">Строящиеся</Link></li>
+                <li><Link to="/newconstructions?stage=ready">Готовые <span className="figma-footer__badge">New</span></Link></li>
+                <li><Link to="/newconstructions?featured=true">Интересное</Link></li>
               </ul>
             </div>
 
@@ -76,9 +76,9 @@ export function Footer() {
             <div className="figma-footer__col">
               <h3 className="figma-footer__col-title">Аренда</h3>
               <ul className="figma-footer__link-list">
-                <li><Link to="/?tab=listings&dealType=rent_long">Долгосрочная</Link></li>
-                <li><Link to="/?tab=listings&dealType=rent_short">Посуточная</Link></li>
-                <li><Link to="/?tab=listings&dealType=rent_long&popular=true">Популярное</Link></li>
+                <li><Link to="/rent">Долгосрочная</Link></li>
+                <li><Link to="/rent?dealType=rent_short">Посуточная</Link></li>
+                <li><Link to="/rent?popular=true">Популярное</Link></li>
               </ul>
             </div>
 
@@ -86,9 +86,9 @@ export function Footer() {
             <div className="figma-footer__col">
               <h3 className="figma-footer__col-title">Коммерция</h3>
               <ul className="figma-footer__link-list">
-                <li><Link to="/?tab=listings&propertyType=commercial&dealType=sale">Продажа</Link></li>
-                <li><Link to="/?tab=listings&propertyType=commercial&dealType=rent_long">Аренда</Link></li>
-                <li><Link to="/?tab=listings&propertyType=commercial&hot=true">Горячие предложения</Link></li>
+                <li><Link to="/secondary?propertyType=commercial">Продажа</Link></li>
+                <li><Link to="/rent?propertyType=commercial">Аренда</Link></li>
+                <li><Link to="/secondary?propertyType=commercial&hot=true">Горячие предложения</Link></li>
               </ul>
             </div>
           </div>

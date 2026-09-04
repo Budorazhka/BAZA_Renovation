@@ -52,7 +52,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('initializes tab and filters from URL search params', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=listings&city=Batumi&dealType=sale&propertyType=apartment']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings&city=Batumi&dealType=sale&propertyType=apartment']}>
         <App />
       </MemoryRouter>,
     )
@@ -75,7 +75,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('switching tabs updates active tab and re-queries catalog', async () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/newconstructions']}>
         <App />
       </MemoryRouter>,
     )
@@ -94,7 +94,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('selecting dealType and propertyType filter chips triggers query with updated filters', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=listings']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings']}>
         <App />
       </MemoryRouter>,
     )
@@ -126,7 +126,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('submitting city search form updates filter and re-queries', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=listings']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings']}>
         <App />
       </MemoryRouter>,
     )
@@ -151,7 +151,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('clearing filters resets query params and reloads all listings', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=listings&city=Batumi&dealType=sale']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings&city=Batumi&dealType=sale']}>
         <App />
       </MemoryRouter>,
     )
@@ -176,7 +176,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('parses bbox parameter and passes it to API when view=map', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=listings&view=map&bbox=41.60000,41.60000,41.70000,41.70000']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings&view=map&bbox=41.60000,41.60000,41.70000,41.70000']}>
         <App />
       </MemoryRouter>,
     )
@@ -193,7 +193,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
 
   it('does not send bbox to API when view is list (default)', async () => {
     render(
-      <MemoryRouter initialEntries={['/?tab=developments&bbox=41.60000,41.60000,41.70000,41.70000']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=developments&bbox=41.60000,41.60000,41.70000,41.70000']}>
         <App />
       </MemoryRouter>,
     )

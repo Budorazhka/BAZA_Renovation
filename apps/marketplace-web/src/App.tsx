@@ -34,9 +34,7 @@ import { FavoritesPage } from './pages/FavoritesPage'
 import { SelectionsPage } from './pages/SelectionsPage'
 import { SelectionDetailPage } from './pages/SelectionDetailPage'
 import { RequestsPage } from './pages/RequestsPage'
-import { CrmKanbanPage } from './pages/CrmKanbanPage'
-import { CrmTasksPage } from './pages/CrmTasksPage'
-import { CrmCalendarPage } from './pages/CrmCalendarPage'
+import { HomePage } from './pages/HomePage'
 import './styles/header-footer.css'
 import './styles/cards.css'
 import './styles/listing-card.css'
@@ -47,7 +45,6 @@ import './styles/realtors.css'
 import './styles/my-properties.css'
 import './styles/favorites-selections.css'
 import './styles/requests.css'
-import './styles/crm.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import type {
@@ -59,9 +56,14 @@ import type {
   PublicListingSort,
 } from './types/marketplace'
 
+/** Маршруты, на которых живёт каталог с фильтрами. */
+const CATALOGUE_ROUTES = ['/newconstructions', '/secondary', '/rent']
+
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const isCatalogueRoute = location.pathname === '/'
+  // Плавающие кнопки фильтров и карты имеют смысл только в разделах каталога.
+  // Раньше признаком был путь '/', но каталог переехал из корня в разделы.
+  const isCatalogueRoute = CATALOGUE_ROUTES.includes(location.pathname)
   const mapQuery = new URLSearchParams(location.search)
   mapQuery.set('view', 'map')
   mapQuery.delete('cursor')
@@ -83,7 +85,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         <div className="floating-controls" aria-label="Инструменты каталога">
           <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
           <Link
-            to={`/?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
+            to={`${location.pathname}?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
             className="floating-control floating-control--map"
             aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
           >
@@ -114,15 +116,30 @@ function serializeBoundingBox(bbox: BoundingBox): string {
   return [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat].map((value) => value.toFixed(5)).join(',')
 }
 
-function CataloguePage() {
+/**
+ * Раздел каталога: фильтры, сортировка, список или карта.
+ *
+ * Раздел задаёт маршрут (`/newconstructions`, `/secondary`, `/rent`), а не
+ * query-параметр: главная информационная и каталога не содержит (решение
+ * владельца от 04.09.2026, по образцу действующего baza.sale). Значения из
+ * query по-прежнему сильнее — так работают переходы по ссылкам с фильтрами
+ * внутри раздела.
+ */
+function CataloguePage({
+  defaultTab = 'developments',
+  defaultDealType,
+}: {
+  defaultTab?: CatalogueTab
+  defaultDealType?: ListingDealType
+} = {}) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [, startTransition] = useTransition()
 
   // Read URL parameters
-  const tabParam = (searchParams.get('tab') as CatalogueTab) || 'developments'
+  const tabParam = (searchParams.get('tab') as CatalogueTab) || defaultTab
   const cityParam = searchParams.get('city') || ''
-  const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || undefined
+  const dealTypeParam = (searchParams.get('dealType') as ListingDealType) || defaultDealType
   const propertyTypeParam = (searchParams.get('propertyType') as ListingPropertyType) || undefined
   const commercialSubtypeParam = searchParams.get('commercialSubtype') || undefined
   const rawSortParam = searchParams.get('sort')
@@ -210,161 +227,6 @@ function CataloguePage() {
 
   return (
     <Shell>
-      {isDev ? (
-        <div className="figma-home">
-          {/* Section 1: Hero Block (Figma 1035:16926 / 3851:56175) */}
-          <section className="home-hero figma-home-hero" aria-labelledby="home-hero-title">
-            <div className="figma-home-hero__bg-pattern" aria-hidden="true" />
-            <div className="home-hero__copy" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <p className="home-hero__eyebrow figma-home-hero__eyebrow">
-                <span aria-hidden="true">✦</span> Проверенная недвижимость в Грузии
-              </p>
-              <h1 id="home-hero-title" className="figma-home-hero__title">
-                ПОИСК НЕДВИЖИМОСТИ <span>В ГРУЗИИ</span>
-              </h1>
-              <p className="figma-home-hero__subtitle">
-                Единая база проверенных жилых комплексов, квартир и коммерческих объектов без скрытых комиссий
-              </p>
-
-              {/* Search Card */}
-              <div className="home-hero__search-card figma-home-search-box">
-                <div className="home-hero__tabs figma-home-search-tabs" role="tablist" aria-label="Тип операции">
-                  <Link className="home-hero__tab figma-home-search-tab is-active" role="tab" aria-selected="true" to="/">
-                    Новостройки
-                  </Link>
-                  <Link className="home-hero__tab figma-home-search-tab" role="tab" aria-selected="false" to="/?tab=listings">
-                    Купить вторичку
-                  </Link>
-                  <Link className="home-hero__tab figma-home-search-tab" role="tab" aria-selected="false" to="/?tab=listings&dealType=rent_long">
-                    Снять
-                  </Link>
-                </div>
-                <form className="home-search figma-home-search-bar" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-                  <label htmlFor="city" className="visually-hidden">Город</label>
-                  <input
-                    id="city"
-                    name="city"
-                    type="search"
-                    autoComplete="address-level2"
-                    value={cityInput}
-                    onChange={(event) => setCityInput(event.target.value)}
-                    placeholder="Например, Батуми, Тбилиси или название ЖК"
-                  />
-                  <button type="submit" className="figma-home-search-btn" aria-label="Найти объекты в городе">
-                    Найти
-                  </button>
-                </form>
-              </div>
-            </div>
-          </section>
-
-          {/* Section 2: Category Matrix (Figma 3428:55271 & 3854:69048) */}
-          <section className="figma-home-container" aria-label="Категории недвижимости">
-            <div className="figma-home-categories-grid">
-              <Link to="/" className="figma-category-card">
-                <div className="figma-category-card__icon" aria-hidden="true">🏢</div>
-                <div>
-                  <h2 className="figma-category-card__title">Новостройки</h2>
-                  <span className="figma-category-card__count">Жилые комплексы от застройщиков</span>
-                </div>
-                <span className="figma-category-card__arrow">Смотреть ЖК →</span>
-              </Link>
-
-              <Link to="/?tab=listings" className="figma-category-card">
-                <div className="figma-category-card__icon" aria-hidden="true">🔑</div>
-                <div>
-                  <h2 className="figma-category-card__title">Вторичка</h2>
-                  <span className="figma-category-card__count">Квартиры с готовым ремонтом</span>
-                </div>
-                <span className="figma-category-card__arrow">Смотреть квартиры →</span>
-              </Link>
-
-              <Link to="/?tab=listings&propertyType=house" className="figma-category-card">
-                <div className="figma-category-card__icon" aria-hidden="true">🏡</div>
-                <div>
-                  <h2 className="figma-category-card__title">Дома и виллы</h2>
-                  <span className="figma-category-card__count">Частные резиденции и таунхаусы</span>
-                </div>
-                <span className="figma-category-card__arrow">Смотреть дома →</span>
-              </Link>
-
-              <Link to="/?tab=listings&propertyType=commercial" className="figma-category-card">
-                <div className="figma-category-card__icon" aria-hidden="true">🏬</div>
-                <div>
-                  <h2 className="figma-category-card__title">Коммерция</h2>
-                  <span className="figma-category-card__count">Офисы, торговые площади, склады</span>
-                </div>
-                <span className="figma-category-card__arrow">Смотреть коммерцию →</span>
-              </Link>
-
-              <Link to="/?tab=listings&propertyType=land" className="figma-category-card">
-                <div className="figma-category-card__icon" aria-hidden="true">🌄</div>
-                <div>
-                  <h2 className="figma-category-card__title">Земельные участки</h2>
-                  <span className="figma-category-card__count">Участки под застройку и инвестиции</span>
-                </div>
-                <span className="figma-category-card__arrow">Смотреть участки →</span>
-              </Link>
-            </div>
-          </section>
-
-          {/* Section 3: Ecosystem Highlights (Figma 3428:55292) */}
-          <section className="figma-home-container" aria-label="Преимущества платформы">
-            <div className="figma-home-metrics">
-              <div className="figma-metric-item">
-                <div className="figma-metric-item__icon" aria-hidden="true">✓</div>
-                <div>
-                  <div className="figma-metric-item__value">0% комиссия</div>
-                  <p className="figma-metric-item__desc">Покупка новостроек напрямую по официальным ценам застройщиков</p>
-                </div>
-              </div>
-
-              <div className="figma-metric-item">
-                <div className="figma-metric-item__icon" aria-hidden="true">★</div>
-                <div>
-                  <div className="figma-metric-item__value">100% проверка</div>
-                  <p className="figma-metric-item__desc">Юридическая проверка документации и разрешений на строительство</p>
-                </div>
-              </div>
-
-              <div className="figma-metric-item">
-                <div className="figma-metric-item__icon" aria-hidden="true">⚡</div>
-                <div>
-                  <div className="figma-metric-item__value">Экосистема BAZA</div>
-                  <p className="figma-metric-item__desc">Прямой контакт с отделами продаж застройщиков и проверенными риэлторами</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Section 4: Partner Promos (Figma 3428:56103) */}
-          <section className="figma-home-container home-hero__promos" aria-label="Возможности BAZA">
-            <div className="figma-home-promos">
-              <Link className="figma-home-banner" to="/publish">
-                <div>
-                  <span className="figma-home-banner__badge">Для собственников и риэлторов</span>
-                  <h2 className="figma-home-banner__title">Хотите продать квартиру, дом или участок?</h2>
-                  <p className="figma-home-banner__text">
-                    Бесплатно разместите свое объявление на BAZA и найдите покупателей среди тысяч пользователей.
-                  </p>
-                </div>
-                <span className="figma-home-banner__cta">Разместить объект →</span>
-              </Link>
-
-              <Link className="figma-home-banner figma-home-banner--green" to="/?tab=listings">
-                <div>
-                  <span className="figma-home-banner__badge">Для партнеров</span>
-                  <h2 className="figma-home-banner__title">Эксклюзивные предложения от BAZA</h2>
-                  <p className="figma-home-banner__text">
-                    Уникальные условия инвестирования, скидки от застройщиков и партнерские комиссии.
-                  </p>
-                </div>
-                <span className="figma-home-banner__cta">Смотреть предложения →</span>
-              </Link>
-            </div>
-          </section>
-        </div>
-      ) : null}
       <FacetFilters
         tabParam={tabParam}
         cityParam={cityParam}
@@ -675,7 +537,7 @@ function ListingDetailPage() {
   return (
     <Shell>
       <section className="detail-page figma-listing-detail" aria-labelledby="listing-detail-title">
-        <Link className="back-link" to="/?tab=listings" aria-label="Вернуться в каталог вторички и аренды">
+        <Link className="back-link" to="/secondary" aria-label="Вернуться в каталог вторички и аренды">
           ← В каталог
         </Link>
         {state.status === 'loading' ? (
@@ -686,7 +548,7 @@ function ListingDetailPage() {
         {state.status === 'not-found' ? (
           <div className="state-panel state-panel--error" role="alert">
             <p>Объявление не найдено или было снято с публикации.</p>
-            <Link to="/?tab=listings" className="back-to-catalogue-btn">
+            <Link to="/secondary" className="back-to-catalogue-btn">
               Вернуться в каталог
             </Link>
           </div>
@@ -817,7 +679,15 @@ export default function App() {
   return (
     <RouteErrorBoundary>
       <Routes>
-        <Route path="/" element={<CataloguePage />} />
+        <Route path="/" element={<Shell><HomePage /></Shell>} />
+        {/*
+          Разделы каталога. Маршрут задаёт раздел, query — фильтры внутри него.
+          Пути совпадают с действующим baza.sale, чтобы не ломать внешние ссылки
+          и SEO-инвентарь.
+        */}
+        <Route path="/newconstructions" element={<CataloguePage defaultTab="developments" />} />
+        <Route path="/secondary" element={<CataloguePage defaultTab="listings" defaultDealType="sale" />} />
+        <Route path="/rent" element={<CataloguePage defaultTab="listings" defaultDealType="rent_long" />} />
         <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
         <Route path="/listings/:slug" element={<ListingDetailPage />} />
         <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
@@ -828,12 +698,9 @@ export default function App() {
         <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
         <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
         <Route path="/account/properties" element={<Shell><MyPropertiesPage /></Shell>} />
-        <Route path="/account/crm" element={<Shell><CrmKanbanPage /></Shell>} />
-        <Route path="/account/tasks" element={<Shell><CrmTasksPage /></Shell>} />
-        <Route path="/account/calendar" element={<Shell><CrmCalendarPage /></Shell>} />
         <Route path="/account" element={<Shell><MyPropertiesPage /></Shell>} />
         <Route path="/publish" element={<PublishingWizardPage />} />
-        <Route path="*" element={<CataloguePage />} />
+        <Route path="*" element={<Shell><HomePage /></Shell>} />
       </Routes>
     </RouteErrorBoundary>
   )

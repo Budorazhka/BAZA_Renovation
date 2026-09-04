@@ -31,10 +31,11 @@ const OUT_DIR = process.env.OUT_DIR ?? resolve(HERE, '../../../docs/discovery/sc
  * это меняет смысл скриншота (см. README рядом со снимками).
  */
 const SCREENS = [
-  { id: 'MKT-SCR-004', name: 'Каталог новостроек (список)', path: '/', figmaFrame: '236:27197 / 4182:72529', data: 'api' },
-  { id: 'MKT-SCR-005', name: 'Каталог новостроек (карта)', path: '/?view=map', figmaFrame: '236:26596 / 3854:67902', data: 'api' },
-  { id: 'MKT-SCR-010', name: 'Каталог вторички', path: '/?tab=listings&dealType=sale', figmaFrame: '236:27197 / 3854:62977', data: 'api' },
-  { id: 'MKT-SCR-011', name: 'Каталог аренды', path: '/?tab=listings&dealType=rent_long', figmaFrame: '236:27197 / 4182:69880', data: 'api' },
+  { id: 'MKT-SCR-001', name: 'Главная (информационная)', path: '/', figmaFrame: '3428:55239 / 1035:18101', data: 'static' },
+  { id: 'MKT-SCR-004', name: 'Каталог новостроек (список)', path: '/newconstructions', figmaFrame: '236:27197 / 4182:72529', data: 'api' },
+  { id: 'MKT-SCR-005', name: 'Каталог новостроек (карта)', path: '/newconstructions?view=map', figmaFrame: '236:26596 / 3854:67902', data: 'api' },
+  { id: 'MKT-SCR-010', name: 'Каталог вторички', path: '/secondary', figmaFrame: '236:27197 / 3854:62977', data: 'api' },
+  { id: 'MKT-SCR-011', name: 'Каталог аренды', path: '/rent', figmaFrame: '236:27197 / 4182:69880', data: 'api' },
   { id: 'MKT-SCR-014', name: 'Рейтинг риэлторов', path: '/realtors', figmaFrame: '3576:53108 / 3699:60246', data: 'fixture' },
   { id: 'MKT-SCR-015', name: 'Профиль риэлтора', path: '/realtors/1', figmaFrame: '3576:53737 / 3699:60823', data: 'fixture' },
   { id: 'MKT-SCR-016', name: 'Запросы клиентов', path: '/requests', figmaFrame: '2287:34150', data: 'fixture' },
@@ -42,9 +43,6 @@ const SCREENS = [
   { id: 'MKT-SCR-018', name: 'Подборки объектов', path: '/selections', figmaFrame: '1311:18621 / 1311:18671', data: 'fixture' },
   { id: 'MKT-SCR-019', name: 'Кабинет: мои объекты', path: '/account/properties', figmaFrame: '5071:68119 / 5071:68253', data: 'fixture' },
   { id: 'MKT-SCR-020', name: 'Мастер публикации', path: '/publish', figmaFrame: 'не назначен', data: 'api' },
-  { id: 'MKT-SCR-022', name: 'CRM: воронка сделок', path: '/account/crm', figmaFrame: '3760:57807', data: 'fixture' },
-  { id: 'MKT-SCR-023', name: 'CRM: задачи и заметки', path: '/account/tasks', figmaFrame: '3927:57386', data: 'fixture' },
-  { id: 'MKT-SCR-024', name: 'CRM: календарь показов', path: '/account/calendar', figmaFrame: '3929:57331', data: 'fixture' },
 ];
 
 /** Ровно два брейкпоинта Figma: промежуточного tablet в файле нет. */
@@ -80,9 +78,8 @@ async function main() {
       try {
         await page.goto(`${BASE_URL}${screen.path}`, { waitUntil: 'networkidle', timeout: 30_000 });
       } catch (err) {
-        // networkidle не наступает, если на странице висит незавершённый
-        // запрос к недоступному API. Это само по себе факт для отчёта, а не
-        // повод не снимать экран.
+        // networkidle не наступает, если на странице висит незавершённый запрос
+        // к недоступному API. Это факт для отчёта, а не повод не снимать экран.
         error = String(err).split('\n')[0];
         await page.waitForTimeout(2000);
       }

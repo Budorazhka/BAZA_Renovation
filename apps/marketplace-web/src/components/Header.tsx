@@ -59,7 +59,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
         {/* Center: Main Navigation tabs (Figma 1452:18596 [917x27]) */}
         <nav className="main-nav figma-header__nav" aria-label="Основная навигация">
           <Link
-            to="/"
+            to="/newconstructions"
             role="tab"
             aria-selected={isDevelopments}
             className={`main-nav__link figma-header__tab${isDevelopments ? ' is-active' : ''}`}
@@ -67,7 +67,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             Новостройки
           </Link>
           <Link
-            to="/?tab=listings"
+            to="/secondary"
             role="tab"
             aria-label="Вторичка и аренда"
             aria-selected={isSecondary}
@@ -76,19 +76,19 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             Вторичка
           </Link>
           <Link
-            to="/?tab=projects"
+            to="/newconstructions"
             className="main-nav__link figma-header__tab"
           >
             Проекты
           </Link>
           <Link
-            to="/?tab=listings&dealType=rent_long"
+            to="/rent"
             className={`main-nav__link figma-header__tab${isRent ? ' is-active' : ''}`}
           >
             Аренда
           </Link>
           <Link
-            to="/?tab=listings&propertyType=commercial"
+            to="/secondary?propertyType=commercial"
             className={`main-nav__link figma-header__tab${isCommercial ? ' is-active' : ''}`}
           >
             Коммерция
@@ -219,11 +219,11 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
       {mobileMenuOpen && (
         <div className="figma-header__mobile-drawer" role="dialog" aria-label="Мобильное меню">
           <div className="figma-header__mobile-links">
-            <Link to="/" onClick={() => setMobileMenuOpen(false)}>Новостройки</Link>
-            <Link to="/?tab=listings" onClick={() => setMobileMenuOpen(false)}>Вторичка</Link>
-            <Link to="/?tab=projects" onClick={() => setMobileMenuOpen(false)}>Проекты</Link>
-            <Link to="/?tab=listings&dealType=rent_long" onClick={() => setMobileMenuOpen(false)}>Аренда</Link>
-            <Link to="/?tab=listings&propertyType=commercial" onClick={() => setMobileMenuOpen(false)}>Коммерция</Link>
+            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>Новостройки</Link>
+            <Link to="/secondary" onClick={() => setMobileMenuOpen(false)}>Вторичка</Link>
+            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>Проекты</Link>
+            <Link to="/rent" onClick={() => setMobileMenuOpen(false)}>Аренда</Link>
+            <Link to="/secondary?propertyType=commercial" onClick={() => setMobileMenuOpen(false)}>Коммерция</Link>
             <Link to="/requests" onClick={() => setMobileMenuOpen(false)}>Запросы</Link>
             <Link to="/banks" onClick={() => setMobileMenuOpen(false)}>Банки</Link>
             <hr className="figma-header__drawer-divider" />

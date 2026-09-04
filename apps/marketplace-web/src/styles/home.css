@@ -151,7 +151,14 @@
   cursor: pointer;
 }
 
-.figma-home-search-tab.is-active {
+/*
+ * Селектор нарочно длиннее необходимого. Тот же элемент несёт класс
+ * `home-hero__tab`, а в app.css правило `.home-hero__tab.is-active` красит
+ * текст в зелёный — при равной специфичности выигрывало оно, потому что
+ * app.css подключается позже. Активная вкладка получалась зелёным по зелёному:
+ * плашка есть, надписи не видно.
+ */
+.figma-home-search-tabs .figma-home-search-tab.is-active {
   background: var(--color-primary-forest, #169600);
   color: #ffffff;
 }

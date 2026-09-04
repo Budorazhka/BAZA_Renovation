@@ -91,7 +91,7 @@ describe('Production Error & Empty States Acceptance', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/?tab=listings&city=NonExistentCity']}>
+      <MemoryRouter initialEntries={['/newconstructions?tab=listings&city=NonExistentCity']}>
         <App />
       </MemoryRouter>,
     )
