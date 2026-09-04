@@ -41,6 +41,14 @@ export interface OwnerListing {
   updatedAt?: string
 }
 
+export type FavoriteTargetType = 'development' | 'listing'
+
+export interface FavoriteEntry {
+  targetType: FavoriteTargetType
+  slug: string
+  createdAt: string
+}
+
 export class PublishingApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
@@ -135,6 +143,28 @@ export const publishingApi = {
         body: JSON.stringify(payload),
       },
     )
+  },
+
+  /**
+   * Избранное текущего пользователя. Требует сессии: 401 здесь означает «войдите»,
+   * а не «избранного нет» — вызывающий код обязан их различать.
+   */
+  async listFavorites(): Promise<FavoriteEntry[]> {
+    return request<FavoriteEntry[]>('/marketplace/favorites')
+  },
+
+  async addFavorite(target: { targetType: FavoriteTargetType; slug: string }): Promise<FavoriteEntry> {
+    return request<FavoriteEntry>('/marketplace/favorites', {
+      method: 'POST',
+      body: JSON.stringify(target),
+    })
+  },
+
+  async removeFavorite(target: { targetType: FavoriteTargetType; slug: string }): Promise<{ removed: boolean }> {
+    return request<{ removed: boolean }>('/marketplace/favorites', {
+      method: 'DELETE',
+      body: JSON.stringify(target),
+    })
   },
 
   /** Объекты текущего владельца. Кабинет «Мои объекты» и экран редактирования. */

@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useFavorites } from '../features/favorites/useFavorites'
 import {
   listingAddress,
   listingDealTypeLabel,
@@ -34,7 +35,9 @@ export function ListingCard({
   const address = listingAddress(item)
   const coverItem = item.media?.find((m) => m.role === 'cover') || item.media?.[0]
   const [imgError, setImgError] = useState(false)
-  const [isFavorite, setIsFavorite] = useState(false)
+  const navigate = useNavigate()
+  // Избранное на сервере, см. комментарий в DevelopmentCard.
+  const favorites = useFavorites()
   const [copied, setCopied] = useState(false)
 
   const isRent = item.dealType === 'rent_long' || item.dealType === 'rent_short'
@@ -52,10 +55,16 @@ export function ListingCard({
     }
   }
 
-  const handleFavorite = (e: React.MouseEvent) => {
+  const isFavorite = slug ? favorites.isFavorite({ targetType: 'listing', slug }) : false
+
+  const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsFavorite((prev) => !prev)
+    if (!slug) return
+    const result = await favorites.toggle({ targetType: 'listing', slug })
+    if (result.requiresAuth) {
+      navigate(`/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+    }
   }
 
   const cardContent = (
@@ -111,7 +120,7 @@ export function ListingCard({
           <button
             type="button"
             className="figma-listing-card__action-btn"
-            onClick={handleFavorite}
+            onClick={(event) => void handleFavorite(event)}
             aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
             style={{ color: isFavorite ? '#E53935' : undefined }}
           >

@@ -18,6 +18,7 @@ import { MarketplaceAccountContextMiddleware } from './shared/marketplace-accoun
 import { PropertyAssetsModule } from './modules/property-assets/property-assets.module';
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { SelectionsModule } from './modules/selections/selections.module';
+import { FavoritesModule } from './modules/favorites/favorites.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { SelectionsModule } from './modules/selections/selections.module';
     PropertyAssetsModule,
     BookingsModule,
     SelectionsModule,
+    FavoritesModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы

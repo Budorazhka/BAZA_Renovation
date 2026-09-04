@@ -85,6 +85,13 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
     'Докстринг метода фиксирует контракт: id уже проверен на владение вызывающим, ретраи перечитывают по _id, ' +
     'потому что владение не может смениться посреди операции. Проверено: все 10 мест вызова получают asset ' +
     'через getAsset(assetId, organizationId) либо getAsset(assetId, identityId).',
+  'favorite.repository.ts#listForIdentity':
+    'Избранное принадлежит человеку, а не организации: фильтр по identityId — это и есть его скоуп. ' +
+    'organizationId здесь не существует как понятие (покупатель может вообще не состоять ни в какой ' +
+    'организации), тот же принцип, что publisherScope.marketplace_account у объявлений владельцев-физлиц.',
+  'favorite.repository.ts#remove':
+    'То же: удаление всегда идёт по паре identityId + slug из сессии вызывающего, чужую запись этот фильтр ' +
+    'достать не может.',
   'complaint.repository.ts#findById':
     'Скоуп проверяется вызывающим (ComplaintService/AdminComplaintService) — admin-резолюция сверяет ' +
     'complaint.scopeCity против грантов complaint.resolve.city(X), не organizationId ответчика.',

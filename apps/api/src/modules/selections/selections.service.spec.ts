@@ -235,7 +235,7 @@ describe('SelectionsService', () => {
 
     it('подставляет данные объектов: без них клиенту нечего смотреть', async () => {
       const doc = makeDoc();
-      const unitId = doc.items[0].unitId;
+      const unitId = doc.items[0]!.unitId;
       const service = makeService({
         repository: { markViewedByPublicToken: jest.fn().mockResolvedValue(doc) },
         developmentsService: {
@@ -282,7 +282,7 @@ describe('SelectionsService', () => {
       // Подборка показывается, объект просто без данных: ронять страницу
       // клиента из-за одной удалённой квартиры — худший вариант.
       expect(result.title).toBe(doc.title);
-      expect(result.items[0].unit).toBeUndefined();
+      expect(result.items[0]!.unit).toBeUndefined();
     });
 
     it('объекты резолвятся организацией подборки, а не контекстом запроса', async () => {

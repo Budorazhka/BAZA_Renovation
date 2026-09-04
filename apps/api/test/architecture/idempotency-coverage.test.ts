@@ -133,6 +133,11 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   // --- Объекты и листинги (marketplace-поток, те же правила) ---
   'POST /marketplace/property-assets/:assetId/listings/:listingId/unpublish':
     'условный update: modifiedCount === 0 → 409',
+  'POST /marketplace/favorites':
+    'добавление в избранное идемпотентно по построению: уникальный индекс {identityId, targetType, slug} ' +
+    'плюс upsert, повторное нажатие сердечка не создаёт вторую запись и не считается ошибкой',
+  'DELETE /marketplace/favorites':
+    'снятие уже снятого даёт тот же итог; ключ защищал бы от дубля ресурса, а дубля тут возникнуть не может',
   'PATCH /marketplace/property-assets/:assetId/listings/:listingId':
     'правка объявления: повтор с тем же телом приводит объявление в то же состояние, дубля ресурса ' +
     'не создаёт. От гонки двух правок защищает не ключ, а CAS по version — второй запрос со ' +

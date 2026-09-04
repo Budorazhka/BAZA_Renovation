@@ -7,6 +7,21 @@ import { FavoritesPage } from '../src/pages/FavoritesPage'
 import { SelectionsPage } from '../src/pages/SelectionsPage'
 import { SelectionDetailPage } from '../src/pages/SelectionDetailPage'
 import { marketplaceApi } from '../src/api/marketplace-api'
+import { publishingApi } from '../src/features/publishing/api/publishing-api'
+
+vi.mock('../src/features/publishing/api/publishing-api', async () => {
+  const actual = await vi.importActual<typeof import('../src/features/publishing/api/publishing-api')>(
+    '../src/features/publishing/api/publishing-api',
+  )
+  return {
+    ...actual,
+    publishingApi: {
+      listFavorites: vi.fn(),
+      addFavorite: vi.fn(),
+      removeFavorite: vi.fn(),
+    },
+  }
+})
 
 vi.mock('../src/api/marketplace-api', () => ({
   marketplaceApi: {
@@ -36,64 +51,72 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
     cleanup()
   })
 
-  it('renders favorites page with counter and saved items', () => {
-    render(
-      <MemoryRouter>
-        <FavoritesPage />
-      </MemoryRouter>,
-    )
+  /**
+   * Избранное снято с фикстур 04.09.2026. До этого страница показывала
+   * захардкоженный список, никак не связанный с тем, что человек нажимал на
+   * карточках: сердечко было локальным useState(false) и ничего не сохраняло.
+   */
+  describe('Избранное покупателя (MKT-SCR-017)', () => {
+    const ENTRIES = [
+      { targetType: 'listing' as const, slug: 'kvartira-more', createdAt: '2026-09-02T10:00:00.000Z' },
+    ]
 
-    expect(screen.getByRole('heading', { level: 1, name: /Избранное/i })).toBeDefined()
-    expect(screen.getByTestId('favorites-count-badge')).toBeDefined()
-    expect(screen.getByText('2-комн. апартаменты с панорамным видом на море')).toBeDefined()
-    expect(screen.getByText('Студия под ключ в Orbi City')).toBeDefined()
-  })
+    const LISTING = {
+      slug: 'kvartira-more',
+      dealType: 'sale' as const,
+      propertyType: 'apartment' as const,
+      price: { amountMinorUnits: 8_500_000, currency: 'USD' },
+      characteristics: { rooms: 2, area: 65, floor: 12, totalFloors: 24 },
+      location: { city: 'Батуми', address: 'ул. Химшиашвили, 15' },
+    }
 
-  it('filters favorites by deal type tabs and text search', () => {
-    render(
-      <MemoryRouter>
-        <FavoritesPage />
-      </MemoryRouter>,
-    )
+    it('показывает то, что пользователь действительно сохранил', async () => {
+      ;(publishingApi.listFavorites as any).mockResolvedValue(ENTRIES)
+      ;(marketplaceApi.getListing as any).mockResolvedValue(LISTING)
 
-    const longRentTab = screen.getByRole('tab', { name: /Долгосрок/i })
-    fireEvent.click(longRentTab)
+      render(
+        <MemoryRouter>
+          <FavoritesPage />
+        </MemoryRouter>,
+      )
 
-    expect(screen.getByText('Просторная 3-комнатная квартира в Ваке')).toBeDefined()
-    expect(screen.queryByText('Студия под ключ в Orbi City')).toBeNull()
+      expect(await screen.findByText(/Химшиашвили/)).toBeDefined()
+      expect((publishingApi.listFavorites as any)).toHaveBeenCalled()
+    })
 
-    const searchInput = screen.getByRole('searchbox', { name: /Поиск по избранному/i })
-    fireEvent.change(searchInput, { target: { value: 'Ваке' } })
-    expect(screen.getByText('Просторная 3-комнатная квартира в Ваке')).toBeDefined()
-  })
+    it('удаление уходит на сервер, а не только из локального списка', async () => {
+      ;(publishingApi.listFavorites as any).mockResolvedValue(ENTRIES)
+      ;(marketplaceApi.getListing as any).mockResolvedValue(LISTING)
+      ;(publishingApi.removeFavorite as any).mockResolvedValue({ removed: true })
 
-  it('removes item from favorites when clicking heart/remove button', () => {
-    render(
-      <MemoryRouter>
-        <FavoritesPage />
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter>
+          <FavoritesPage />
+        </MemoryRouter>,
+      )
 
-    const removeBtns = screen.getAllByRole('button', { name: /Удалить/i })
-    fireEvent.click(removeBtns[0])
+      await screen.findByText(/Химшиашвили/)
+      fireEvent.click(screen.getAllByRole('button', { name: /Удалить/i })[0])
 
-    expect(screen.queryByText('2-комн. апартаменты с панорамным видом на море')).toBeNull()
-  })
+      expect(publishingApi.removeFavorite).toHaveBeenCalledWith({
+        targetType: 'listing',
+        slug: 'kvartira-more',
+      })
+    })
 
-  it('renders selections page with collection cards and creates new collection', () => {
-    render(
-      <MemoryRouter>
-        <SelectionsPage />
-      </MemoryRouter>,
-    )
+    it('снятый с публикации объект пропускается, страница не падает', async () => {
+      ;(publishingApi.listFavorites as any).mockResolvedValue(ENTRIES)
+      ;(marketplaceApi.getListing as any).mockRejectedValue(new Error('404'))
 
-    expect(screen.getByRole('heading', { level: 1, name: /Мои подборки/i })).toBeDefined()
-    expect(screen.getByDisplayValue('Подборка для инвестора (Батуми у моря)')).toBeDefined()
+      render(
+        <MemoryRouter>
+          <FavoritesPage />
+        </MemoryRouter>,
+      )
 
-    const newBtn = screen.getByTestId('new-collection-btn')
-    fireEvent.click(newBtn)
-
-    expect(screen.getByDisplayValue(/Новая подборка/i)).toBeDefined()
+      expect(await screen.findByRole('heading', { level: 1, name: /Избранное/i })).toBeDefined()
+      expect(screen.queryByText(/Химшиашвили/)).toBeNull()
+    })
   })
 
   /**

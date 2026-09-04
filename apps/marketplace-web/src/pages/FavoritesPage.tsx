@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import { BuildingPlaceholder } from '../components/DevelopmentCard'
+import { publishingApi, PublishingApiError, type FavoriteEntry } from '../features/publishing/api/publishing-api'
+import { marketplaceApi } from '../api/marketplace-api'
+import { listingAddress, listingPrice, listingTitle, developmentAddress, developmentTitle } from '../lib/format'
 
 export interface FavoriteItem {
   id: string
   slug: string
+  targetType: 'development' | 'listing'
   title: string
   dealType: 'sale' | 'rent_short' | 'rent_long'
   propertyType: string
@@ -19,52 +23,59 @@ export interface FavoriteItem {
   imageUrl?: string
 }
 
-const INITIAL_FAVORITES: FavoriteItem[] = [
-  {
-    id: 'fav-1',
-    slug: 'batumi-flat-sea-view',
-    title: '2-комн. апартаменты с панорамным видом на море',
-    dealType: 'sale',
-    propertyType: 'Квартира',
-    price: '$85 000',
-    pricePerSqm: '$1 307 / м²',
-    address: 'ул. Шерифа Химшиашвили, 15',
-    city: 'Батуми',
-    rooms: 2,
-    area: 65,
-    floor: 12,
-  },
-  {
-    id: 'fav-2',
-    slug: 'batumi-studio-orbi',
-    title: 'Студия под ключ в Orbi City',
-    dealType: 'sale',
-    propertyType: 'Апартаменты',
-    price: '$48 000',
-    pricePerSqm: '$1 454 / м²',
-    address: 'ул. Пиросмани, 8',
-    city: 'Батуми',
-    rooms: 1,
-    area: 33,
-    floor: 18,
-  },
-  {
-    id: 'fav-3',
-    slug: 'tbilisi-vake-3room',
-    title: 'Просторная 3-комнатная квартира в Ваке',
-    dealType: 'rent_long',
-    propertyType: 'Квартира',
-    price: '$1 200 / мес',
-    address: 'просп. Чавчавадзе, 42',
-    city: 'Тбилиси',
-    rooms: 3,
-    area: 110,
-    floor: 5,
-  },
-]
+
+/**
+ * Запись избранного -> карточка страницы.
+ *
+ * Карточки дочитываются публичными эндпоинтами каталога по slug: избранное
+ * хранит только ссылку, а не копию объекта, поэтому цена и адрес здесь всегда
+ * те же, что в каталоге, и разойтись с ним не могут.
+ */
+async function resolveFavorite(entry: FavoriteEntry): Promise<FavoriteItem | null> {
+  try {
+    if (entry.targetType === 'listing') {
+      const card = await marketplaceApi.getListing(entry.slug)
+      return {
+        id: `listing:${entry.slug}`,
+        slug: entry.slug,
+        targetType: 'listing',
+        title: listingTitle(card),
+        dealType: card.dealType ?? 'sale',
+        propertyType: card.propertyType ?? '',
+        price: listingPrice(card),
+        address: listingAddress(card),
+        city: card.location?.city ?? '',
+        rooms: card.characteristics?.rooms ?? 0,
+        area: card.characteristics?.area ?? 0,
+        floor: card.characteristics?.floor ?? 0,
+      }
+    }
+    const card = await marketplaceApi.getDevelopment(entry.slug)
+    return {
+      id: `development:${entry.slug}`,
+      slug: entry.slug,
+      targetType: 'development',
+      title: developmentTitle(card),
+      dealType: 'sale',
+      propertyType: card.classType ?? '',
+      price: '',
+      address: developmentAddress(card),
+      city: card.location?.city ?? '',
+      rooms: 0,
+      area: 0,
+      floor: 0,
+    }
+  } catch {
+    // Объект снят с публикации или удалён: пропускаем его, а не роняем всю
+    // страницу. Запись избранного при этом остаётся — объект может вернуться.
+    return null
+  }
+}
 
 export function FavoritesPage() {
-  const [favorites, setFavorites] = useState<FavoriteItem[]>(INITIAL_FAVORITES)
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [requiresAuth, setRequiresAuth] = useState(false)
   const [dealFilter, setDealFilter] = useState<'all' | 'sale' | 'rent_long' | 'rent_short'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortOrder, setSortOrder] = useState<'default' | 'price_asc' | 'price_desc'>('default')
@@ -75,8 +86,39 @@ export function FavoritesPage() {
     description: 'Сохраненные объекты недвижимости, квартиры и апартаменты в Батуми и Тбилиси.',
   })
 
+  const load = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const entries = await publishingApi.listFavorites()
+      const resolved = await Promise.all(entries.map(resolveFavorite))
+      setFavorites(resolved.filter((item): item is FavoriteItem => item !== null))
+      setRequiresAuth(false)
+    } catch (error) {
+      if (error instanceof PublishingApiError && (error.status === 401 || error.status === 403)) {
+        setRequiresAuth(true)
+      }
+      setFavorites([])
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
   const handleRemove = (id: string) => {
-    setFavorites((prev) => prev.filter((item) => item.id !== id))
+    const item = favorites.find((candidate) => candidate.id === id)
+    if (!item) return
+    // Убираем из списка сразу, но отправляем на сервер: иначе объект вернулся бы
+    // после перезагрузки, и человек решил бы, что кнопка не работает.
+    setFavorites((prev) => prev.filter((candidate) => candidate.id !== id))
+    void publishingApi
+      .removeFavorite({ targetType: item.targetType, slug: item.slug })
+      .catch(() => {
+        // Не удалось — возвращаем на место, чтобы список не врал.
+        setFavorites((prev) => [item, ...prev])
+      })
   }
 
   const handleCreateSelection = () => {

@@ -4783,6 +4783,85 @@ paths:
           description: Listing не существует/чужой ИЛИ публикация никогда не запускалась (единый non-disclosure код)
           $ref: '#/components/responses/Error'
 
+  /marketplace/favorites:
+    get:
+      operationId: listFavorites
+      summary: Избранное покупателя
+      description: >-
+        Требует сессии: избранное принадлежит человеку, а не организации. Отдаёт только тип и slug —
+        карточки страница дочитывает публичными эндпоинтами каталога, поэтому избранное не дублирует
+        проекцию публикации и не может разойтись с ней в цене или адресе.
+      tags: [marketplace-favorites]
+      responses:
+        '200':
+          description: Список избранного, новые сверху
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Favorite'
+        '401':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: addFavorite
+      summary: Добавить объект в избранное
+      description: >-
+        Идемпотентно по построению: уникальный индекс {identityId, targetType, slug} плюс upsert.
+        Повторное нажатие сердечка не создаёт вторую запись и не считается ошибкой, поэтому
+        Idempotency-Key не требуется.
+
+
+        Существование объекта не проверяется намеренно: публичные карточки и так читаются по slug без
+        аутентификации, проверка ничего не защищала бы, зато стоила бы лишнего запроса на каждое
+        нажатие и ломала бы добавление, пока объект временно снят с публикации.
+      tags: [marketplace-favorites]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteTarget'
+      responses:
+        '201':
+          description: Объект в избранном
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Favorite'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: removeFavorite
+      summary: Убрать объект из избранного
+      description: >-
+        Идемпотентно: снятие уже снятого возвращает тот же результат с `removed: false`.
+      tags: [marketplace-favorites]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FavoriteTarget'
+      responses:
+        '200':
+          description: Результат удаления
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [removed]
+                properties:
+                  removed:
+                    type: boolean
+                    description: Была ли запись; false означает, что её уже не было
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+
   /marketplace/property-assets:
     post:
       operationId: marketplaceCreatePropertyAsset
@@ -7611,6 +7690,23 @@ components:
         scope: {type: string, enum: [own, position, team, organization, global, city, domain, project, assigned]}
         scopeValue: {type: string}
 
+    FavoriteTarget:
+      type: object
+      required: [targetType, slug]
+      properties:
+        targetType: {type: string, enum: [development, listing]}
+        slug:
+          type: string
+          maxLength: 200
+          pattern: '^[a-z0-9-]+$'
+          description: Slug публикации — тот же, по которому карточка читается публично
+    Favorite:
+      type: object
+      required: [targetType, slug, createdAt]
+      properties:
+        targetType: {type: string, enum: [development, listing]}
+        slug: {type: string}
+        createdAt: {type: string, format: date-time}
     ErpMeResponse:
       type: object
       required: [identity, organization, position, permissions]

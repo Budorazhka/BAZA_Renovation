@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useFavorites } from '../features/favorites/useFavorites'
 import { completionLabel, developmentAddress, developmentTitle } from '../lib/format'
 import type { PublicDevelopmentCard } from '../types/marketplace'
 
@@ -38,7 +39,10 @@ export function DevelopmentCard({
   onQuickView,
   className = '',
 }: DevelopmentCardProps) {
-  const [isFavorite, setIsFavorite] = useState(false)
+  const navigate = useNavigate()
+  // Избранное хранится на сервере: до 04.09.2026 здесь стоял useState(false),
+  // который сбрасывался при переходе на другую страницу и ничего не сохранял.
+  const favorites = useFavorites()
   const [copied, setCopied] = useState(false)
 
   const slug = item.slug
@@ -63,10 +67,18 @@ export function DevelopmentCard({
     }
   }
 
-  const handleFavorite = (e: React.MouseEvent) => {
+  const isFavorite = slug ? favorites.isFavorite({ targetType: 'development', slug }) : false
+
+  const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsFavorite(!isFavorite)
+    if (!slug) return
+    const result = await favorites.toggle({ targetType: 'development', slug })
+    // Гостю нечего показывать «сохранено»: сервер требует сессию. Ведём на вход
+    // и возвращаем обратно, а не оставляем кнопку молча неработающей.
+    if (result.requiresAuth) {
+      navigate(`/auth/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+    }
   }
 
   const handleQuickViewClick = (e: React.MouseEvent) => {
@@ -125,7 +137,7 @@ export function DevelopmentCard({
           <button
             type="button"
             className={`figma-card-jk__action-btn ${isFavorite ? 'is-active' : ''}`}
-            onClick={handleFavorite}
+            onClick={(event) => void handleFavorite(event)}
             aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
             aria-pressed={isFavorite}
           >
