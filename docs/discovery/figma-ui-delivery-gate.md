@@ -65,7 +65,7 @@ Marketplace переписывается по Figma. Цель этого док�
 
 | Route / feature | Screen ID | Figma URL + node ID | Desktop Frame | Mobile Frame | ComponentSet / Variants | Целевые файлы | Статус готовности к коду |
 |---|---|---|---|---|---|---|---|
-| Главная страница | `MKT-SCR-001` | `1035:18100` | `3428:55239` (`Home page` full 1920x5544) | `1035:18101` (`mob_home` 375x3461) | `3854:69048` (`Категория`) | `apps/marketplace-web/src/pages/HomePage.tsx` | **Ready for code (Утверждено)** |
+| Главная страница | `MKT-SCR-001` | `1035:18100` | `3428:55239` (`Home page` full 1920x5544) | `1035:18101` (`mob_home` 375x3461) | `3854:69048` (`Категория`) | `apps/marketplace-web/src/pages/HomePage.tsx` | **Verified in code** |
 | Header (Верхнее меню) | `MKT-SCR-002` | `824:17647` | `314:7642` (базовый) + `314:8375`, `314:9153`, `314:9931` | `314:7642` (мобильный бургер) | `314:7645`, `445:11844` (дропдауны) | `apps/marketplace-web/src/components/Header.tsx` | **Verified in code** |
 | Footer (Нижняя навигация) | `MKT-SCR-003` | `3067:73633` | `3067:73634` (`footer 1` 1920x640) | Интегрирован в `mob_*` | `3067:73634` (единый сквозной) | `apps/marketplace-web/src/components/Footer.tsx` | **Verified in code** |
 | Каталог новостроек (Список) | `MKT-SCR-004` | `3314:195935` | `236:27197` (`search result full width` 1920x1216) | `4182:72529` (`mob_project` 375x3664) | `4747:74437` (`card ЖК`, 6 вариантов) | `apps/marketplace-web/src/pages/CatalogPage.tsx` | **Verified in code** |
