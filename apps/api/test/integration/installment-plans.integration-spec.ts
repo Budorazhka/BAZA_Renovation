@@ -135,7 +135,6 @@ describe('InstallmentPlans — integration tests (real MongoDB & transactions)',
       const orgA = new Types.ObjectId();
       const orgB = new Types.ObjectId();
       const devA = await seedDevelopment(orgA);
-      const devB = await seedDevelopment(orgB);
 
       await developmentsService.createInstallmentPlan({
         developmentId: devA._id,
