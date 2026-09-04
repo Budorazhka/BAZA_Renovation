@@ -275,7 +275,9 @@ function CataloguePage({
               Показано: <strong>{state.items.length}</strong> из {state.total}
             </span>
           ) : null}
-          {state.status === 'empty' ? <span>Пока нет объектов</span> : null}
+          {state.status === 'empty' ? (
+            <span data-testid="catalogue-empty-note">Пока нет объектов</span>
+          ) : null}
         </div>
 
         {/*
