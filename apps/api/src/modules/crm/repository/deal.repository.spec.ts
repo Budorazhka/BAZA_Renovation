@@ -266,4 +266,55 @@ describe('DealRepository', () => {
       );
     });
   });
+
+  describe('aggregateByOwnerPosition', () => {
+    it('без from/to — match содержит только organizationId, группировка по (ownerPositionId, stage, currency)', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new DealRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateByOwnerPosition(organizationId, {});
+
+      expect(aggregateSpy).toHaveBeenCalledWith([
+        { $match: { organizationId } },
+        {
+          $group: {
+            _id: {
+              ownerPositionId: '$ownerPositionId',
+              stage: '$stage',
+              currency: { $ifNull: ['$expectedCommission.currency', null] },
+            },
+            count: { $sum: 1 },
+            commissionAmountMinorUnits: { $sum: { $ifNull: ['$expectedCommission.amountMinorUnits', 0] } },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            ownerPositionId: '$_id.ownerPositionId',
+            stage: '$_id.stage',
+            currency: '$_id.currency',
+            count: 1,
+            commissionAmountMinorUnits: 1,
+          },
+        },
+      ]);
+    });
+
+    it('from/to собираются в один $match.createdAt', async () => {
+      const organizationId = new Types.ObjectId();
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-02-01T00:00:00.000Z');
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new DealRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateByOwnerPosition(organizationId, { from, to });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([{ $match: { organizationId, createdAt: { $gte: from, $lte: to } } }]),
+      );
+    });
+  });
 });

@@ -21,6 +21,20 @@ export const LEAD_PRODUCT_TYPES_V2 = ['sales', 'network', 'owner', 'agent'] as c
 
 export type LeadProductTypeV2 = (typeof LEAD_PRODUCT_TYPES_V2)[number]
 
+/**
+ * GET /leads/stage-definitions (apps/api/src/modules/crm/lead-stage-definitions.controller.ts)
+ * — справочник стадий воронки по продукту, зеркалит backend 1:1
+ * (LeadStageDefinition в apps/api/src/modules/crm/lead-stage-definitions.ts).
+ */
+export interface LeadStageDefinitionV2 {
+  id: string
+  name: string
+  order: number
+  column: 'rejection' | 'in_progress' | 'success'
+}
+
+export type LeadStageDefinitionsV2Response = Record<LeadProductTypeV2, LeadStageDefinitionV2[]>
+
 export interface LeadSourceV2 {
   route: string
   publicationId?: string

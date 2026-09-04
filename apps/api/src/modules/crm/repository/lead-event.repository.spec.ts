@@ -51,4 +51,45 @@ describe('LeadEventRepository', () => {
       expect(findSpy).toHaveBeenCalledWith({ leadId, organizationId, _id: { $lt: cursor } });
     });
   });
+
+  describe('aggregateStageFunnel', () => {
+    it('без stages/from/to — match содержит только organizationId, пайплайн схлопывает повторы по (leadId, stage) до подсчёта', async () => {
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadEventRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateStageFunnel(organizationId, {});
+
+      expect(aggregateSpy).toHaveBeenCalledWith([
+        { $match: { organizationId } },
+        { $group: { _id: { leadId: '$leadId', stage: '$stage' } } },
+        { $group: { _id: '$_id.stage', leadCount: { $sum: 1 } } },
+        { $project: { _id: 0, stage: '$_id', leadCount: 1 } },
+      ]);
+    });
+
+    it('stages фильтрует по $in, from/to собираются в один $match.changedAt', async () => {
+      const organizationId = new Types.ObjectId();
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-02-01T00:00:00.000Z');
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const aggregateSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new LeadEventRepository({ aggregate: aggregateSpy } as never);
+
+      await repository.aggregateStageFunnel(organizationId, { stages: ['new', 'contacted'], from, to });
+
+      expect(aggregateSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          {
+            $match: {
+              organizationId,
+              stage: { $in: ['new', 'contacted'] },
+              changedAt: { $gte: from, $lte: to },
+            },
+          },
+        ]),
+      );
+    });
+  });
 });

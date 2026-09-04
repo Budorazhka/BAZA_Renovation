@@ -72,4 +72,46 @@ export class LeadEventRepository {
     if (leadIds.length === 0) return [];
     return this.model.find({ organizationId, leadId: { $in: leadIds } }).sort({ _id: -1 }).exec();
   }
+
+  /**
+   * Воронка лидов за период (GET /crm/reports/lead-funnel) — считает, СКОЛЬКО
+   * РАЗНЫХ лидов побывало в каждой стадии за диапазон `changedAt`, не
+   * количество событий. Лид, переходивший в одну и ту же стадию несколько
+   * раз (например `callback` → `objections` → `callback`), обязан быть
+   * посчитан в `callback` РОВНО ОДИН РАЗ — иначе конверсия по стадии была бы
+   * задвоена количеством повторных заходов, а не количеством уникальных
+   * лидов (owner decision этого прохода, зафиксировано в задаче: "учти, что
+   * лид может проходить одну стадию много раз — важно не задвоить
+   * конверсию"). Первый `$group` по паре (leadId, stage) схлопывает повторы
+   * ДО подсчёта, второй `$group` считает уникальных лидов на стадию.
+   *
+   * `stages` — опциональный фильтр (см. stageIdsForProduct) для сужения на
+   * стадии конкретного productType; без него считаются вообще все события
+   * организации за период (продуктовая свобода воронки решается вызывающим
+   * сервисом, не этим методом).
+   */
+  async aggregateStageFunnel(
+    organizationId: Types.ObjectId,
+    params: { stages?: string[]; from?: Date; to?: Date },
+  ): Promise<Array<{ stage: string; leadCount: number }>> {
+    const match: Record<string, unknown> = { organizationId };
+    if (params.stages) {
+      match.stage = { $in: params.stages };
+    }
+    if (params.from || params.to) {
+      const changedAt: Record<string, Date> = {};
+      if (params.from) changedAt.$gte = params.from;
+      if (params.to) changedAt.$lte = params.to;
+      match.changedAt = changedAt;
+    }
+
+    return this.model
+      .aggregate<{ stage: string; leadCount: number }>([
+        { $match: match },
+        { $group: { _id: { leadId: '$leadId', stage: '$stage' } } },
+        { $group: { _id: '$_id.stage', leadCount: { $sum: 1 } } },
+        { $project: { _id: 0, stage: '$_id', leadCount: 1 } },
+      ])
+      .exec();
+  }
 }

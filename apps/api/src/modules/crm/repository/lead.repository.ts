@@ -430,4 +430,47 @@ export class LeadRepository {
     const [doc] = await this.model.create([{ ...params }], { session });
     return doc!;
   }
+
+  /**
+   * GET /crm/reports/positions — количество лидов на позицию (ownerPositionId)
+   * за период (`createdAt`), с разбивкой по текущей стадии. Текущее
+   * состояние Lead, НЕ событийная история (в отличие от
+   * LeadEventRepository.aggregateStageFunnel) — отчёт по позиции отвечает
+   * на вопрос "сколько лидов сейчас в работе у сотрудника и на каком этапе
+   * они СЕЙЧАС", не "через какие стадии они проходили". `ownerPositionId:
+   * null` группирует ещё не назначенные лиды отдельной строкой — CrmService
+   * решает, показывать её вызывающему или отбросить.
+   */
+  async aggregateByOwnerPosition(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date },
+  ): Promise<Array<{ ownerPositionId: Types.ObjectId | null; stage: LeadStage; count: number }>> {
+    const match: Record<string, unknown> = { organizationId, status: { $ne: 'deleted' } };
+    if (params.from || params.to) {
+      const createdAt: Record<string, Date> = {};
+      if (params.from) createdAt.$gte = params.from;
+      if (params.to) createdAt.$lte = params.to;
+      match.createdAt = createdAt;
+    }
+
+    return this.model
+      .aggregate<{ ownerPositionId: Types.ObjectId | null; stage: LeadStage; count: number }>([
+        { $match: match },
+        {
+          $group: {
+            _id: { ownerPositionId: { $ifNull: ['$ownerPositionId', null] }, stage: '$stage' },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            ownerPositionId: '$_id.ownerPositionId',
+            stage: '$_id.stage',
+            count: 1,
+          },
+        },
+      ])
+      .exec();
+  }
 }

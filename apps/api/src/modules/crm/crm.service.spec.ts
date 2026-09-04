@@ -3108,3 +3108,139 @@ describe('CRM-004: Task outbox events', () => {
     });
   });
 });
+
+describe('CrmService.getLeadFunnelReport', () => {
+  it('без productType — не передаёт stages в репозиторий (агрегируются все продукты вперемешку)', async () => {
+    const aggregateStageFunnel = jest.fn().mockResolvedValue([]);
+    const service = createTestCrmService({ leadEventRepository: { aggregateStageFunnel } });
+    const organizationId = new Types.ObjectId();
+
+    await service.getLeadFunnelReport({ organizationId });
+
+    expect(aggregateStageFunnel).toHaveBeenCalledWith(organizationId, {
+      stages: undefined,
+      from: undefined,
+      to: undefined,
+    });
+  });
+
+  it('с productType — сужает stages через stageIdsForProduct(productType)', async () => {
+    const aggregateStageFunnel = jest.fn().mockResolvedValue([]);
+    const service = createTestCrmService({ leadEventRepository: { aggregateStageFunnel } });
+    const organizationId = new Types.ObjectId();
+    const from = new Date('2026-01-01T00:00:00.000Z');
+    const to = new Date('2026-02-01T00:00:00.000Z');
+
+    await service.getLeadFunnelReport({ organizationId, productType: 'network', from, to });
+
+    const call = aggregateStageFunnel.mock.calls[0]!;
+    expect(call[0]).toBe(organizationId);
+    expect(call[1].from).toBe(from);
+    expect(call[1].to).toBe(to);
+    expect(call[1].stages).toEqual(expect.arrayContaining(['network_new_lead', 'network_work_started']));
+    expect(call[1].stages).not.toContain('new');
+  });
+
+  it('прокидывает результат репозитория как {stages: [{stage, leadCount}]}', async () => {
+    const aggregateStageFunnel = jest
+      .fn()
+      .mockResolvedValue([{ stage: 'new', leadCount: 3 }, { stage: 'contacted', leadCount: 1 }]);
+    const service = createTestCrmService({ leadEventRepository: { aggregateStageFunnel } });
+
+    const result = await service.getLeadFunnelReport({ organizationId: new Types.ObjectId() });
+
+    expect(result).toEqual({
+      stages: [
+        { stage: 'new', leadCount: 3 },
+        { stage: 'contacted', leadCount: 1 },
+      ],
+    });
+  });
+});
+
+describe('CrmService.getPositionsReport', () => {
+  it('лид и сделка одной и той же позиции схлопываются в одну строку отчёта', async () => {
+    const positionId = new Types.ObjectId();
+    const aggregateLeadsByOwnerPosition = jest
+      .fn()
+      .mockResolvedValue([{ ownerPositionId: positionId, stage: 'new', count: 2 }]);
+    const aggregateDealsByOwnerPosition = jest.fn().mockResolvedValue([
+      { ownerPositionId: positionId, stage: 'showing', currency: 'USD', count: 1, commissionAmountMinorUnits: 50000 },
+    ]);
+    const service = createTestCrmService({
+      leadRepository: { aggregateByOwnerPosition: aggregateLeadsByOwnerPosition },
+      dealRepository: { aggregateByOwnerPosition: aggregateDealsByOwnerPosition },
+    });
+
+    const result = await service.getPositionsReport({ organizationId: new Types.ObjectId() });
+
+    expect(result.positions).toEqual([
+      {
+        positionId: positionId.toString(),
+        leadsTotal: 2,
+        leadsByStage: { new: 2 },
+        dealsTotal: 1,
+        dealsByStage: { showing: 1 },
+        dealsCommission: [{ currency: 'USD', amountMinorUnits: 50000 }],
+      },
+    ]);
+  });
+
+  it('лид без ownerPositionId группируется отдельной строкой positionId:null', async () => {
+    const aggregateLeadsByOwnerPosition = jest.fn().mockResolvedValue([{ ownerPositionId: null, stage: 'new', count: 5 }]);
+    const service = createTestCrmService({
+      leadRepository: { aggregateByOwnerPosition: aggregateLeadsByOwnerPosition },
+      dealRepository: { aggregateByOwnerPosition: jest.fn().mockResolvedValue([]) },
+    });
+
+    const result = await service.getPositionsReport({ organizationId: new Types.ObjectId() });
+
+    expect(result.positions).toEqual([
+      { positionId: null, leadsTotal: 5, leadsByStage: { new: 5 }, dealsTotal: 0, dealsByStage: {}, dealsCommission: [] },
+    ]);
+  });
+
+  it('сделки без expectedCommission (currency:null) не попадают в dealsCommission', async () => {
+    const positionId = new Types.ObjectId();
+    const aggregateDealsByOwnerPosition = jest
+      .fn()
+      .mockResolvedValue([{ ownerPositionId: positionId, stage: 'showing', currency: null, count: 3, commissionAmountMinorUnits: 0 }]);
+    const service = createTestCrmService({
+      leadRepository: { aggregateByOwnerPosition: jest.fn().mockResolvedValue([]) },
+      dealRepository: { aggregateByOwnerPosition: aggregateDealsByOwnerPosition },
+    });
+
+    const result = await service.getPositionsReport({ organizationId: new Types.ObjectId() });
+
+    expect(result.positions[0]!.dealsCommission).toEqual([]);
+    expect(result.positions[0]!.dealsByStage).toEqual({ showing: 3 });
+  });
+
+  it('несколько сделок одной валюты на одну позицию суммируются в одну запись dealsCommission', async () => {
+    const positionId = new Types.ObjectId();
+    const aggregateDealsByOwnerPosition = jest.fn().mockResolvedValue([
+      { ownerPositionId: positionId, stage: 'showing', currency: 'USD', count: 1, commissionAmountMinorUnits: 10000 },
+      { ownerPositionId: positionId, stage: 'deal', currency: 'USD', count: 1, commissionAmountMinorUnits: 20000 },
+    ]);
+    const service = createTestCrmService({
+      leadRepository: { aggregateByOwnerPosition: jest.fn().mockResolvedValue([]) },
+      dealRepository: { aggregateByOwnerPosition: aggregateDealsByOwnerPosition },
+    });
+
+    const result = await service.getPositionsReport({ organizationId: new Types.ObjectId() });
+
+    expect(result.positions[0]!.dealsCommission).toEqual([{ currency: 'USD', amountMinorUnits: 30000 }]);
+    expect(result.positions[0]!.dealsTotal).toBe(2);
+  });
+
+  it('пустой период без данных — возвращает пустой массив positions', async () => {
+    const service = createTestCrmService({
+      leadRepository: { aggregateByOwnerPosition: jest.fn().mockResolvedValue([]) },
+      dealRepository: { aggregateByOwnerPosition: jest.fn().mockResolvedValue([]) },
+    });
+
+    const result = await service.getPositionsReport({ organizationId: new Types.ObjectId() });
+
+    expect(result.positions).toEqual([]);
+  });
+});
