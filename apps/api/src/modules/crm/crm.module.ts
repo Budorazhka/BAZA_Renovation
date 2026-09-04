@@ -37,6 +37,7 @@ import { ContactController } from './contact.controller';
 import { TaskController } from './task.controller';
 import { DealController } from './deal.controller';
 import { CalendarEventController } from './calendar-event.controller';
+import { CrmReportController } from './crm-report.controller';
 import { ExportController } from './export.controller';
 import { ExportService } from './export.service';
 import { LeadImportController } from './lead-import.controller';
@@ -86,6 +87,7 @@ import { OutboxModule } from '../outbox/outbox.module';
     TaskController,
     DealController,
     CalendarEventController,
+    CrmReportController,
     ExportController,
     LeadImportController,
   ],

@@ -261,4 +261,67 @@ export class DealRepository {
       )
       .exec();
   }
+
+  /**
+   * GET /crm/reports/positions — количество сделок на позицию за период
+   * (`createdAt`), с разбивкой по текущей стадии и суммой ожидаемой
+   * комиссии (`expectedCommission`), сгруппированной по валюте (сделки без
+   * `expectedCommission` попадают в группу `currency: null`, CrmService
+   * отбрасывает её при построении суммы). `ownerPositionId` у Deal
+   * обязателен (см. DealDocument.ownerPositionId) — в отличие от
+   * LeadRepository.aggregateByOwnerPosition, здесь нет null-группы.
+   */
+  async aggregateByOwnerPosition(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date },
+  ): Promise<
+    Array<{
+      ownerPositionId: Types.ObjectId;
+      stage: DealStage;
+      currency: string | null;
+      count: number;
+      commissionAmountMinorUnits: number;
+    }>
+  > {
+    const match: Record<string, unknown> = { organizationId };
+    if (params.from || params.to) {
+      const createdAt: Record<string, Date> = {};
+      if (params.from) createdAt.$gte = params.from;
+      if (params.to) createdAt.$lte = params.to;
+      match.createdAt = createdAt;
+    }
+
+    return this.model
+      .aggregate<{
+        ownerPositionId: Types.ObjectId;
+        stage: DealStage;
+        currency: string | null;
+        count: number;
+        commissionAmountMinorUnits: number;
+      }>([
+        { $match: match },
+        {
+          $group: {
+            _id: {
+              ownerPositionId: '$ownerPositionId',
+              stage: '$stage',
+              currency: { $ifNull: ['$expectedCommission.currency', null] },
+            },
+            count: { $sum: 1 },
+            commissionAmountMinorUnits: { $sum: { $ifNull: ['$expectedCommission.amountMinorUnits', 0] } },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            ownerPositionId: '$_id.ownerPositionId',
+            stage: '$_id.stage',
+            currency: '$_id.currency',
+            count: 1,
+            commissionAmountMinorUnits: 1,
+          },
+        },
+      ])
+      .exec();
+  }
 }

@@ -1293,6 +1293,40 @@ export interface paths {
         patch: operations["moveCalendarEvent"];
         trace?: never;
     };
+    "/crm/reports/lead-funnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Воронка лидов ПО ИСТОРИИ переходов (коллекция lead_events), не по текущему снимку `Lead.stage` — заменяет легаси `GET /crm/analytics/leads-by-stage`, который считал только "сколько лидов сейчас на этой стадии". Каждый лид учитывается в стадии не больше одного раза за период, даже если проходил её несколько раз (owner decision "продуктовые воронки лида", 04.09.2026: конверсия считается по уникальным лидам, достигшим стадии, а не по количеству событий смены стадии). `productType` сужает на стадии конкретного продукта (см. GET /leads/stage-definitions); без него агрегируются события любого продукта вперемешку. Требует `crm_report.read` (organization scope — owner/director/rop/developer). */
+        get: operations["getLeadFunnelReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/crm/reports/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Сводка по позициям (менеджерам) за период `createdAt` — количество лидов/сделок на `ownerPositionId` с разбивкой по ТЕКУЩЕЙ стадии (не событийная история, в отличие от GET /crm/reports/lead-funnel) и сумма `expectedCommission` сделок по валюте. `positionId: null` — строка ещё не назначенных лидов/сделок. Бэкенд намеренно НЕ считает единую "конверсию" (нет универсального понятия успешной стадии независимо от productType/DealStage) — вызывающий код строит её из `leadsByStage`/`dealsByStage` сам. Требует `crm_report.read` (organization scope — owner/director/rop/developer). */
+        get: operations["getPositionsReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/duplicate-candidates": {
         parameters: {
             query?: never;
@@ -2747,6 +2781,34 @@ export interface components {
         LeadEventListResponse: {
             items: components["schemas"]["LeadEvent"][];
             nextCursor: string | null;
+        };
+        LeadFunnelStage: {
+            stage: string;
+            /** @description Число РАЗНЫХ лидов, достигших этой стадии за период — не число событий. */
+            leadCount: number;
+        };
+        LeadFunnelReportResponse: {
+            stages: components["schemas"]["LeadFunnelStage"][];
+        };
+        MoneyAmountSum: {
+            currency: string;
+            amountMinorUnits: number;
+        };
+        PositionReport: {
+            /** @description null — ещё не назначенные лиды/сделки (ownerPositionId отсутствует). */
+            positionId: string | null;
+            leadsTotal: number;
+            leadsByStage: {
+                [key: string]: number;
+            };
+            dealsTotal: number;
+            dealsByStage: {
+                [key: string]: number;
+            };
+            dealsCommission: components["schemas"]["MoneyAmountSum"][];
+        };
+        PositionsReportResponse: {
+            positions: components["schemas"]["PositionReport"][];
         };
         /** @description GET /contacts, GET /contacts/{contactId} item shape (CrmService.CrmContactReadModel) — явная whitelist-проекция (ContactDocument.roles, служебные поля НЕ включены), никогда session/password/internal-поля. */
         ContactView: {
@@ -6432,6 +6494,65 @@ export interface operations {
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
             409: components["responses"]["Error"];
+        };
+    };
+    getLeadFunnelReport: {
+        parameters: {
+            query?: {
+                productType?: "sales" | "network" | "owner" | "agent";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Разрез по стадиям за период */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeadFunnelReportResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет crm_report.read */
+            403: components["responses"]["Error"];
+        };
+    };
+    getPositionsReport: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Разрез по позициям за период */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PositionsReportResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет crm_report.read */
+            403: components["responses"]["Error"];
         };
     };
     adminListDuplicateCandidates: {

@@ -3155,6 +3155,87 @@ paths:
           description: VERSION_CONFLICT — expectedVersion устарел, обновите и повторите
           $ref: '#/components/responses/Error'
 
+  /crm/reports/lead-funnel:
+    get:
+      operationId: getLeadFunnelReport
+      summary: >
+        Воронка лидов ПО ИСТОРИИ переходов (коллекция lead_events), не по
+        текущему снимку `Lead.stage` — заменяет легаси
+        `GET /crm/analytics/leads-by-stage`, который считал только "сколько
+        лидов сейчас на этой стадии". Каждый лид учитывается в стадии не
+        больше одного раза за период, даже если проходил её несколько раз
+        (owner decision "продуктовые воронки лида", 04.09.2026: конверсия
+        считается по уникальным лидам, достигшим стадии, а не по количеству
+        событий смены стадии). `productType` сужает на стадии конкретного
+        продукта (см. GET /leads/stage-definitions); без него агрегируются
+        события любого продукта вперемешку. Требует `crm_report.read`
+        (organization scope — owner/director/rop/developer).
+      tags: [erp-crm]
+      parameters:
+        - name: productType
+          in: query
+          schema: {type: string, enum: [sales, network, owner, agent]}
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Разрез по стадиям за период
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeadFunnelReportResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет crm_report.read
+          $ref: '#/components/responses/Error'
+
+  /crm/reports/positions:
+    get:
+      operationId: getPositionsReport
+      summary: >
+        Сводка по позициям (менеджерам) за период `createdAt` — количество
+        лидов/сделок на `ownerPositionId` с разбивкой по ТЕКУЩЕЙ стадии (не
+        событийная история, в отличие от GET /crm/reports/lead-funnel) и
+        сумма `expectedCommission` сделок по валюте. `positionId: null` —
+        строка ещё не назначенных лидов/сделок. Бэкенд намеренно НЕ считает
+        единую "конверсию" (нет универсального понятия успешной стадии
+        независимо от productType/DealStage) — вызывающий код строит её из
+        `leadsByStage`/`dealsByStage` сам. Требует `crm_report.read`
+        (organization scope — owner/director/rop/developer).
+      tags: [erp-crm]
+      parameters:
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Разрез по позициям за период
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PositionsReportResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет crm_report.read
+          $ref: '#/components/responses/Error'
+
   /admin/duplicate-candidates:
     get:
       operationId: adminListDuplicateCandidates
@@ -5685,6 +5766,58 @@ components:
           items:
             $ref: '#/components/schemas/LeadEvent'
         nextCursor: {type: string, nullable: true}
+
+    LeadFunnelStage:
+      type: object
+      required: [stage, leadCount]
+      properties:
+        stage: {type: string}
+        leadCount:
+          type: integer
+          description: Число РАЗНЫХ лидов, достигших этой стадии за период — не число событий.
+
+    LeadFunnelReportResponse:
+      type: object
+      required: [stages]
+      properties:
+        stages:
+          type: array
+          items: {$ref: '#/components/schemas/LeadFunnelStage'}
+
+    MoneyAmountSum:
+      type: object
+      required: [currency, amountMinorUnits]
+      properties:
+        currency: {type: string}
+        amountMinorUnits: {type: integer}
+
+    PositionReport:
+      type: object
+      required: [positionId, leadsTotal, leadsByStage, dealsTotal, dealsByStage, dealsCommission]
+      properties:
+        positionId:
+          type: string
+          nullable: true
+          description: "null — ещё не назначенные лиды/сделки (ownerPositionId отсутствует)."
+        leadsTotal: {type: integer}
+        leadsByStage:
+          type: object
+          additionalProperties: {type: integer}
+        dealsTotal: {type: integer}
+        dealsByStage:
+          type: object
+          additionalProperties: {type: integer}
+        dealsCommission:
+          type: array
+          items: {$ref: '#/components/schemas/MoneyAmountSum'}
+
+    PositionsReportResponse:
+      type: object
+      required: [positions]
+      properties:
+        positions:
+          type: array
+          items: {$ref: '#/components/schemas/PositionReport'}
 
     ContactView:
       type: object

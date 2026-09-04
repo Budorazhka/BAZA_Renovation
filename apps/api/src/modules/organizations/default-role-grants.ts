@@ -137,6 +137,18 @@ export interface DefaultGrant {
  * разрушительнее правки полей), тот же круг ролей, что `lead.assign`
  * (owner/director/rop/developer, organization-wide, БЕЗ manager — менеджер
  * не должен мочь удалить лид из воронки, только вести его).
+ *
+ * `crm_report.read` (04.09.2026, GET /crm/reports/lead-funnel, GET
+ * /crm/reports/positions — CrmReportController расширяет CRM-модуль) —
+ * новый resource, отдельный от `lead.read`/`deal.read`: агрегирующий отчёт
+ * по ВСЕЙ организации (в том числе по позициям других сотрудников), только
+ * `organization` scope, только тем ролям, у которых уже есть
+ * organization-wide `deal.read` (owner/director/rop/developer) — тот же
+ * круг, что `deal.*`. `manager` НЕ получает: у него `lead.read`/`deal.read`
+ * только со scope `own`, отчёт по чужим позициям ему видеть не положено (и
+ * это не пересекается с TEAM-001/MyReportPage — та работа отложена отдельным
+ * эпиком, см. её докстринг). `administrator`/`marketer` не получают —
+ * тот же круг, что `calendar_event.*`.
  */
 export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
   owner: [
@@ -186,6 +198,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'manual_ledger', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
+    { resource: 'crm_report', action: 'read', scope: 'organization' },
   ],
   director: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -234,6 +247,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'finance', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
+    { resource: 'crm_report', action: 'read', scope: 'organization' },
   ],
   rop: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -283,6 +297,7 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'booking', action: 'extend', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
+    { resource: 'crm_report', action: 'read', scope: 'organization' },
   ],
   manager: [
     { resource: 'position', action: 'read', scope: 'organization' },
@@ -403,5 +418,6 @@ export const DEFAULT_ROLE_GRANTS: Record<FixedRole, DefaultGrant[]> = {
     { resource: 'finance', action: 'read', scope: 'organization' },
     { resource: 'export', action: 'run', scope: 'organization' },
     { resource: 'import', action: 'run', scope: 'organization' },
+    { resource: 'crm_report', action: 'read', scope: 'organization' },
   ],
 };

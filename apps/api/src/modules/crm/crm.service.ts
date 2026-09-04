@@ -25,7 +25,7 @@ import { DealEventRepository } from './repository/deal-event.repository';
 import { CalendarEventRepository } from './repository/calendar-event.repository';
 import { DEAL_STAGE_TRANSITIONS, type DealStage } from './deal-stage';
 import type { LeadDocument, LeadStage, GenericLeadStage, LeadProductType, RealtorStage, CuratorStage } from './schemas/lead.schema';
-import { firstStageIdForProduct, stageIdsForProduct, LEAD_STAGE_DEFINITIONS } from './lead-stage-definitions';
+import { firstStageIdForProduct, stageIdsForProduct, LEAD_STAGE_DEFINITIONS, type ProductType } from './lead-stage-definitions';
 import { REALTOR_STAGE_VALUES, CURATOR_STAGE_VALUES } from './lead-stage';
 import {
   priorityFromFlags,
@@ -263,6 +263,29 @@ export interface CrmUnifiedCalendarTaskReadModel {
   status: TaskStatus;
   assignedPositionId: string | null;
   leadId: string | null;
+}
+
+/** GET /crm/reports/lead-funnel — см. CrmService.getLeadFunnelReport докстринг. */
+export interface CrmLeadFunnelStageReadModel {
+  stage: string;
+  leadCount: number;
+}
+
+/**
+ * GET /crm/reports/positions — одна строка на позицию (или `positionId:
+ * null` для ещё не назначенных лидов/сделок — см. CrmService.getPositionsReport
+ * докстринг). `dealsCommission` — сумма `expectedCommission` УСПЕШНЫХ И
+ * активных сделок вперемешку, БЕЗ разбивки по стадии (см. докстринг
+ * getPositionsReport про "успех" как продуктовое допущение) — только по
+ * валюте, поскольку суммировать разные валюты в одно число нельзя.
+ */
+export interface CrmPositionReportReadModel {
+  positionId: string | null;
+  leadsTotal: number;
+  leadsByStage: Record<string, number>;
+  dealsTotal: number;
+  dealsByStage: Record<string, number>;
+  dealsCommission: Array<{ currency: string; amountMinorUnits: number }>;
 }
 
 /**
@@ -3702,6 +3725,106 @@ export class CrmService {
         leadId: task.leadId ? task.leadId.toString() : null,
       })),
     };
+  }
+
+  /**
+   * GET /crm/reports/lead-funnel — воронка лидов ПО ИСТОРИИ переходов
+   * (lead_events), не по текущему снимку `Lead.stage` (в отличие от
+   * легаси `GET /crm/analytics/leads-by-stage`, который считал только
+   * "сколько лидов сейчас на этой стадии"). Каждый лид учитывается в
+   * стадии не больше одного раза за период, даже если проходил её
+   * несколько раз (см. LeadEventRepository.aggregateStageFunnel докстринг) —
+   * owner decision этого прохода: "конверсия" считается по уникальным
+   * лидам, достигшим стадии, а не по количеству событий.
+   *
+   * `productType` сужает на стадии конкретного продукта (см.
+   * stageIdsForProduct) — без него агрегируются события ЛЮБОГО продукта
+   * вперемешку (сравнимо только если organization реально ведёт один
+   * продукт).
+   */
+  async getLeadFunnelReport(params: {
+    organizationId: Types.ObjectId;
+    productType?: ProductType;
+    from?: Date;
+    to?: Date;
+  }): Promise<{ stages: CrmLeadFunnelStageReadModel[] }> {
+    const rows = await this.leadEventRepository.aggregateStageFunnel(params.organizationId, {
+      stages: params.productType ? stageIdsForProduct(params.productType) : undefined,
+      from: params.from,
+      to: params.to,
+    });
+
+    return { stages: rows.map((row) => ({ stage: row.stage, leadCount: row.leadCount })) };
+  }
+
+  /**
+   * GET /crm/reports/positions — сводка ПО ТЕКУЩЕМУ состоянию Lead/Deal
+   * (не событийная история, см. LeadRepository.aggregateByOwnerPosition и
+   * DealRepository.aggregateByOwnerPosition докстринги), сгруппированная по
+   * `ownerPositionId`, за диапазон `createdAt`.
+   *
+   * `[owner decision needed — принято технически на время этого прохода]`:
+   * "конверсия по стадиям" из задания намеренно НЕ вычисляется здесь как
+   * единое число — на бэкенде нет универсального понятия "успешная стадия"
+   * (LEAD_STAGE_DEFINITIONS.column различается по productType, а Lead в
+   * этом отчёте не фильтруется по одному productType; DealStage свой набор
+   * "успеха" — см. apps/erp-web/src/types/deals.ts::SUCCESS_DEAL_STAGE_SET,
+   * тоже не переносимый в бэкенд без owner-подтверждения). Вместо этого
+   * отчёт отдаёт СЫРОЙ разрез по стадиям (`leadsByStage`/`dealsByStage`) —
+   * конверсию из него вызывающий код считает сам, зная свой productType.
+   * Подлежит сверке с владельцем продукта.
+   */
+  async getPositionsReport(params: {
+    organizationId: Types.ObjectId;
+    from?: Date;
+    to?: Date;
+  }): Promise<{ positions: CrmPositionReportReadModel[] }> {
+    const [leadRows, dealRows] = await Promise.all([
+      this.leadRepository.aggregateByOwnerPosition(params.organizationId, { from: params.from, to: params.to }),
+      this.dealRepository.aggregateByOwnerPosition(params.organizationId, { from: params.from, to: params.to }),
+    ]);
+
+    const byPosition = new Map<string, CrmPositionReportReadModel>();
+    const keyFor = (positionId: Types.ObjectId | null) => (positionId ? positionId.toString() : 'unassigned');
+
+    const entryFor = (positionId: Types.ObjectId | null): CrmPositionReportReadModel => {
+      const key = keyFor(positionId);
+      let entry = byPosition.get(key);
+      if (!entry) {
+        entry = {
+          positionId: positionId ? positionId.toString() : null,
+          leadsTotal: 0,
+          leadsByStage: {},
+          dealsTotal: 0,
+          dealsByStage: {},
+          dealsCommission: [],
+        };
+        byPosition.set(key, entry);
+      }
+      return entry;
+    };
+
+    for (const row of leadRows) {
+      const entry = entryFor(row.ownerPositionId);
+      entry.leadsTotal += row.count;
+      entry.leadsByStage[row.stage] = (entry.leadsByStage[row.stage] ?? 0) + row.count;
+    }
+
+    for (const row of dealRows) {
+      const entry = entryFor(row.ownerPositionId);
+      entry.dealsTotal += row.count;
+      entry.dealsByStage[row.stage] = (entry.dealsByStage[row.stage] ?? 0) + row.count;
+      if (row.currency && row.commissionAmountMinorUnits > 0) {
+        const existing = entry.dealsCommission.find((c) => c.currency === row.currency);
+        if (existing) {
+          existing.amountMinorUnits += row.commissionAmountMinorUnits;
+        } else {
+          entry.dealsCommission.push({ currency: row.currency, amountMinorUnits: row.commissionAmountMinorUnits });
+        }
+      }
+    }
+
+    return { positions: [...byPosition.values()] };
   }
 }
 
