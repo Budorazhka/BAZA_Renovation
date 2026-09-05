@@ -17,7 +17,7 @@ import { useAuthSession } from '../features/auth/model/useAuthSession'
 export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { isAuthenticated, isChecking, error, login, registerAndLogin, checkStatus } = useAuthSession()
+  const { isAuthenticated, isChecking, error, login, registerAndLogin } = useAuthSession()
 
   /**
    * Куда вернуть после входа. Значение берётся только из `?next=` и только если
@@ -40,16 +40,13 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
         isLoading={isChecking}
         error={error}
         onClearError={() => {}}
-        onLogin={async (loginStr, password) => {
-          const result = await login(loginStr, password)
-          await checkStatus()
-          return result
-        }}
-        onRegister={async (loginStr, password) => {
-          const result = await registerAndLogin(loginStr, password)
-          await checkStatus()
-          return result
-        }}
+        // Перепроверять сессию здесь больше не нужно: `login` и
+        // `registerAndLogin` сами перечитывают её с сервера и не считают вход
+        // состоявшимся по ответу. Раньше страница вызывала `checkStatus`
+        // следом — лишний третий запрос и разделённая между двумя местами
+        // ответственность за один и тот же вывод.
+        onLogin={login}
+        onRegister={registerAndLogin}
       />
     </div>
   )

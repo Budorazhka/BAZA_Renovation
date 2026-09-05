@@ -7,8 +7,8 @@
     "figmaFrame": "3428:55239 / 1035:18101",
     "data": "static",
     "file": "MKT-SCR-001-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -21,8 +21,8 @@
     "figmaFrame": "236:27197 / 4182:72529",
     "data": "api",
     "file": "MKT-SCR-004-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -35,8 +35,8 @@
     "figmaFrame": "236:26596 / 3854:67902",
     "data": "api",
     "file": "MKT-SCR-005-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -49,12 +49,12 @@
     "figmaFrame": "236:27197 / 3854:62977",
     "data": "api",
     "file": "MKT-SCR-010-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": [
-      "GET http://localhost:9000/baza-public/6a9b54599ba8ba9e15be5454/card/1.webp"
+      "GET http://localhost:9000/baza-public/6a9bc956ae6230aa1685950b/card/1.webp"
     ]
   },
   {
@@ -65,8 +65,8 @@
     "figmaFrame": "236:27197 / 4182:69880",
     "data": "api",
     "file": "MKT-SCR-011-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -79,12 +79,10 @@
     "figmaFrame": "Figma gap — фрейма нет",
     "data": "static",
     "file": "MKT-SCR-013-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -95,8 +93,8 @@
     "figmaFrame": "3576:53108 / 3699:60246",
     "data": "fixture",
     "file": "MKT-SCR-014-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -109,8 +107,8 @@
     "figmaFrame": "3576:53737 / 3699:60823",
     "data": "fixture",
     "file": "MKT-SCR-015-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -123,8 +121,8 @@
     "figmaFrame": "2287:34150",
     "data": "fixture",
     "file": "MKT-SCR-016-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -137,8 +135,8 @@
     "figmaFrame": "1376:19390 / 1376:19776",
     "data": "api",
     "file": "MKT-SCR-017-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -151,8 +149,8 @@
     "figmaFrame": "1311:18621 / 1311:18671",
     "data": "fixture",
     "file": "MKT-SCR-018-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -165,13 +163,10 @@
     "figmaFrame": "5071:68119 / 5071:68253",
     "data": "api",
     "file": "MKT-SCR-019-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -182,12 +177,10 @@
     "figmaFrame": "не назначен",
     "data": "api",
     "file": "MKT-SCR-020-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -198,8 +191,8 @@
     "figmaFrame": "Figma gap — фрейма нет",
     "data": "static",
     "file": "MKT-SCR-027-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -208,12 +201,12 @@
     "screen": "MKT-SCR-007",
     "name": "Карточка ЖК (детальная)",
     "viewport": "desktop",
-    "path": "/developments/zhk-batumi-rezidens-f8795481-batumi",
+    "path": "/developments/zhk-batumi-rezidens-7b7f2a74-batumi",
     "figmaFrame": "3314:200742 / 3314:201711",
     "data": "api",
     "file": "MKT-SCR-007-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -226,8 +219,8 @@
     "figmaFrame": "3314:206822 / 4182:60867",
     "data": "api",
     "file": "MKT-SCR-012-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -236,17 +229,14 @@
     "screen": "MKT-SCR-021",
     "name": "Редактирование объявления",
     "viewport": "desktop",
-    "path": "/account/properties/6a9b54649ba8ba9e15be555a/listings/6a9b54649ba8ba9e15be5565/edit",
+    "path": "/account/properties/6a9bc98bae6230aa16859640/listings/6a9bc98bae6230aa1685964b/edit",
     "figmaFrame": "3304:56602 / 3304:56098",
     "data": "api",
     "file": "MKT-SCR-021-desktop.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -257,8 +247,8 @@
     "figmaFrame": "3428:55239 / 1035:18101",
     "data": "static",
     "file": "MKT-SCR-001-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -271,8 +261,8 @@
     "figmaFrame": "236:27197 / 4182:72529",
     "data": "api",
     "file": "MKT-SCR-004-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -285,8 +275,8 @@
     "figmaFrame": "236:26596 / 3854:67902",
     "data": "api",
     "file": "MKT-SCR-005-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -299,12 +289,12 @@
     "figmaFrame": "236:27197 / 3854:62977",
     "data": "api",
     "file": "MKT-SCR-010-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": [
-      "GET http://localhost:9000/baza-public/6a9b54599ba8ba9e15be5454/card/1.webp"
+      "GET http://localhost:9000/baza-public/6a9bc956ae6230aa1685950b/card/1.webp"
     ]
   },
   {
@@ -315,8 +305,8 @@
     "figmaFrame": "236:27197 / 4182:69880",
     "data": "api",
     "file": "MKT-SCR-011-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -329,12 +319,10 @@
     "figmaFrame": "Figma gap — фрейма нет",
     "data": "static",
     "file": "MKT-SCR-013-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -345,8 +333,8 @@
     "figmaFrame": "3576:53108 / 3699:60246",
     "data": "fixture",
     "file": "MKT-SCR-014-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -359,8 +347,8 @@
     "figmaFrame": "3576:53737 / 3699:60823",
     "data": "fixture",
     "file": "MKT-SCR-015-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -373,8 +361,8 @@
     "figmaFrame": "2287:34150",
     "data": "fixture",
     "file": "MKT-SCR-016-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -387,8 +375,8 @@
     "figmaFrame": "1376:19390 / 1376:19776",
     "data": "api",
     "file": "MKT-SCR-017-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -401,8 +389,8 @@
     "figmaFrame": "1311:18621 / 1311:18671",
     "data": "fixture",
     "file": "MKT-SCR-018-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -415,13 +403,10 @@
     "figmaFrame": "5071:68119 / 5071:68253",
     "data": "api",
     "file": "MKT-SCR-019-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -432,12 +417,10 @@
     "figmaFrame": "не назначен",
     "data": "api",
     "file": "MKT-SCR-020-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   },
   {
@@ -448,8 +431,8 @@
     "figmaFrame": "Figma gap — фрейма нет",
     "data": "static",
     "file": "MKT-SCR-027-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -458,12 +441,12 @@
     "screen": "MKT-SCR-007",
     "name": "Карточка ЖК (детальная)",
     "viewport": "mobile",
-    "path": "/developments/zhk-batumi-rezidens-f8795481-batumi",
+    "path": "/developments/zhk-batumi-rezidens-7b7f2a74-batumi",
     "figmaFrame": "3314:200742 / 3314:201711",
     "data": "api",
     "file": "MKT-SCR-007-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -476,8 +459,8 @@
     "figmaFrame": "3314:206822 / 4182:60867",
     "data": "api",
     "file": "MKT-SCR-012-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
     "consoleErrors": [],
     "failedRequests": []
@@ -486,17 +469,14 @@
     "screen": "MKT-SCR-021",
     "name": "Редактирование объявления",
     "viewport": "mobile",
-    "path": "/account/properties/6a9b54649ba8ba9e15be555a/listings/6a9b54649ba8ba9e15be5565/edit",
+    "path": "/account/properties/6a9bc99dae6230aa168596e0/listings/6a9bc99dae6230aa168596ef/edit",
     "figmaFrame": "3304:56602 / 3304:56098",
     "data": "api",
     "file": "MKT-SCR-021-mobile.png",
-    "signedIn": false,
-    "signInError": "вход через форму: TimeoutError: locator.waitFor: Timeout 30000ms exceeded.",
+    "signedIn": true,
+    "signInError": null,
     "navigationError": null,
-    "consoleErrors": [
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
-      "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
-    ],
+    "consoleErrors": [],
     "failedRequests": []
   }
 ]

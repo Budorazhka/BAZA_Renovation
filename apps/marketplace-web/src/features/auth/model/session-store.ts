@@ -32,6 +32,7 @@ export interface SessionState {
 let state: SessionState = { isAuthenticated: false, isChecking: true, error: null }
 const subscribers = new Set<(next: SessionState) => void>()
 let inFlight: Promise<void> | null = null
+let hasLoaded = false
 
 function publish(next: SessionState) {
   state = next
@@ -50,21 +51,33 @@ export function subscribeToSession(listener: (next: SessionState) => void): () =
 }
 
 /**
- * Спрашивает сервер, жива ли сессия. Параллельные вызовы делят один запрос:
- * три хука, смонтированных одновременно, дают одну сетевую операцию.
+ * Спрашивает сервер, жива ли сессия.
+ *
+ * Один запрос на загрузку приложения, а не на монтирование хука: параллельные
+ * вызовы делят текущий, а поздние — переход в закрытый раздел, открытие мастера
+ * — берут уже известный ответ. Иначе каждая навигация внутрь `RequireAuth`
+ * стоила бы лишнего обращения к серверу.
+ *
+ * Перепроверить принудительно можно через `force` — так делает вход и так
+ * работает `checkStatus` в хуке. Истечение сессии на сервере интерфейс узнает
+ * из первого же отказа настоящего запроса: `RequireAuth` — гейт интерфейса, а
+ * не граница безопасности, решает всегда сервер.
  */
 export function refreshSession(force = false): Promise<void> {
-  if (inFlight && !force) return inFlight
+  if (inFlight) return force ? inFlight.then(() => refreshSession(true)) : inFlight
+  if (hasLoaded && !force) return Promise.resolve()
 
   publish({ ...state, isChecking: true, error: null })
   inFlight = (async () => {
     try {
       const authenticated = await authApi.checkSession()
+      hasLoaded = true
       publish({ isAuthenticated: authenticated, isChecking: false, error: null })
     } catch (err) {
       // `checkSession` сам гасит ошибки и отдаёт false, поэтому сюда попадают
       // только неожиданные сбои. Считать их «гостем» правильно: не пускать
       // безопаснее, чем пустить по неизвестному состоянию.
+      hasLoaded = true
       publish({
         isAuthenticated: false,
         isChecking: false,
@@ -139,5 +152,6 @@ export async function signOut() {
 export function resetSessionStoreForTests() {
   state = { isAuthenticated: false, isChecking: true, error: null }
   inFlight = null
+  hasLoaded = false
   subscribers.clear()
 }
