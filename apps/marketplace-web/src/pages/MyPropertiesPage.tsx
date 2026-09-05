@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { publishingApi, type OwnerListing, type OwnerPropertyAsset } from '../features/publishing/api/publishing-api'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
+import { listingPropertyTypeLabel } from '../lib/format'
 import {
   SaleStatusBadge,
   ActualityBadge,
@@ -58,7 +59,10 @@ function toItem(asset: OwnerPropertyAsset, listing: OwnerListing): MyPropertyIte
     id: listing._id,
     assetId: asset._id,
     listingId: listing._id,
-    title: `${asset.propertyType}, ${asset.location.address}`,
+    // Тип объекта — человеку, а не как в API: в заголовке стояло сырое
+    // `apartment`. Тот же переводчик, что на публичных страницах, чтобы кабинет
+    // и каталог называли одно и то же одинаково.
+    title: `${listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype)}, ${asset.location.address}`,
     dealType: listing.dealType,
     propertyType: asset.propertyType,
     priceFormatted: `${amount.toLocaleString('ru-RU')} ${price.currency}`,

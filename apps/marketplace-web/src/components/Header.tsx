@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useAuthSession } from '../features/auth/model/useAuthSession'
 
 interface HeaderProps {
   onCityChange?: (city: string) => void
@@ -14,7 +15,10 @@ interface HeaderProps {
  */
 export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: HeaderProps) {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { isAuthenticated, isChecking, logout } = useAuthSession()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [currentCity, setCurrentCity] = useState('Тбилиси')
   const [currentCurrency, setCurrentCurrency] = useState('USD')
   const [currentLang, setCurrentLang] = useState('RU')
@@ -196,14 +200,77 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             Кнопка «Войти» вела на /publish — то есть в мастер публикации, где
             вход был лишь первым шагом. Человек, которому нужен кабинет, попадал
             в форму размещения объекта. Теперь ведёт на страницу входа.
+
+            И шапка знает про сессию. Раньше не знала: вошедшему всё равно
+            предлагалось войти — видно на снимке кабинета MKT-SCR-019 от
+            05.09.2026, где страница показывает объекты человека, а справа висит
+            «Войти». Выйти из аккаунта при этом было негде, кроме мастера
+            публикации.
+
+            Разделы кабинета собраны в выпадающий список, а не выложены рядом
+            новыми кнопками: тот же приём, что уже применён здесь к городу,
+            валюте и языку, и он есть в макете (дропдауны 314:7645, 445:11844).
           */}
-          <Link
-            className="header-action header-action--dark figma-header__cabinet-btn"
-            to="/auth/login"
-          >
-            <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
-            <span>Войти</span>
-          </Link>
+          {isChecking ? (
+            // Пока сессия проверяется, не утверждаем ни того, ни другого:
+            // показать «Войти» вошедшему на долю секунды — та же неправда,
+            // просто короткая. Место сохраняется, чтобы шапку не дёргало.
+            <span
+              className="header-action header-action--dark figma-header__cabinet-btn"
+              aria-label="Проверяем сессию"
+              aria-busy="true"
+            />
+          ) : isAuthenticated ? (
+            <div className="figma-header__dropdown-wrap">
+              <button
+                className="header-action header-action--dark figma-header__cabinet-btn"
+                type="button"
+                aria-label="Меню аккаунта"
+                aria-expanded={accountDropdownOpen}
+                data-testid="header-account-btn"
+                onClick={() => {
+                  setAccountDropdownOpen(!accountDropdownOpen)
+                  setCityDropdownOpen(false)
+                  setCurrencyDropdownOpen(false)
+                  setLangDropdownOpen(false)
+                }}
+              >
+                <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
+                <span>Кабинет</span>
+              </button>
+              {accountDropdownOpen && (
+                <div className="figma-header__dropdown-menu" role="menu">
+                  <Link role="menuitem" to="/account/properties" onClick={() => setAccountDropdownOpen(false)}>
+                    Мои объекты
+                  </Link>
+                  <Link role="menuitem" to="/account/favorites" onClick={() => setAccountDropdownOpen(false)}>
+                    Избранное
+                  </Link>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="header-logout-btn"
+                    onClick={async () => {
+                      setAccountDropdownOpen(false)
+                      await logout()
+                      navigate('/')
+                    }}
+                  >
+                    Выйти
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <Link
+              className="header-action header-action--dark figma-header__cabinet-btn"
+              to="/auth/login"
+              data-testid="header-login-link"
+            >
+              <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
+              <span>Войти</span>
+            </Link>
+          )}
 
           {/* Mobile hamburger button */}
           <button
@@ -232,6 +299,27 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             <Link to="/requests" onClick={() => setMobileMenuOpen(false)}>Запросы</Link>
             <Link to="/banks" onClick={() => setMobileMenuOpen(false)}>Банки</Link>
             <hr className="figma-header__drawer-divider" />
+            {/* В мобильном меню входа не было вовсе: попасть в кабинет с
+                телефона можно было только по прямому адресу. */}
+            {isAuthenticated ? (
+              <>
+                <Link to="/account/properties" onClick={() => setMobileMenuOpen(false)}>Мои объекты</Link>
+                <Link to="/account/favorites" onClick={() => setMobileMenuOpen(false)}>Избранное</Link>
+                <button
+                  type="button"
+                  className="figma-header__mobile-logout"
+                  onClick={async () => {
+                    setMobileMenuOpen(false)
+                    await logout()
+                    navigate('/')
+                  }}
+                >
+                  Выйти
+                </button>
+              </>
+            ) : (
+              <Link to="/auth/login" onClick={() => setMobileMenuOpen(false)}>Войти</Link>
+            )}
             <Link to="/publish" className="figma-header__mobile-cta" onClick={() => setMobileMenuOpen(false)}>
               + Разместить объект
             </Link>

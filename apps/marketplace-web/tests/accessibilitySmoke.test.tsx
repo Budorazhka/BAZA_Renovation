@@ -50,7 +50,12 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
     expect(screen.getByText('Перейти к основному содержанию')).toBeDefined()
     // До 04.09.2026 «Войти» вело на /publish: человек, которому нужен кабинет,
     // попадал в мастер размещения объекта, где вход был лишь первым шагом.
-    expect(screen.getByRole('link', { name: /Войти/ }).getAttribute('href')).toBe('/auth/login')
+    //
+    // `findBy`, а не `getBy`: с 05.09.2026 шапка знает про сессию и до ответа
+    // сервера не утверждает ни «Войти», ни «Кабинет» — показать вошедшему
+    // «Войти» на долю секунды это та же неправда, просто короткая.
+    const loginLink = await screen.findByRole('link', { name: /Войти/ })
+    expect(loginLink.getAttribute('href')).toBe('/auth/login')
   })
 
   it('has proper heading hierarchy with h1 and section h2', async () => {

@@ -19,9 +19,15 @@ vi.mock('../src/features/publishing/api/publishing-api', async () => {
   }
 })
 
+/*
+ * `propertyType` — ровно то, что отдаёт API: 'apartment', 'house' и так далее.
+ * Раньше в фикстурах стояло русское «Квартира», и тесты проходили при том, что
+ * кабинет подставлял значение в заголовок как есть: на живых данных там было
+ * «apartment, Capture address …». Фикстура прятала дефект, а не проверяла его.
+ */
 const SEA_VIEW = {
   _id: 'asset-1',
-  propertyType: 'Квартира',
+  propertyType: 'apartment',
   location: { country: 'GE', city: 'Батуми', address: 'ул. Химшиашвили, 15' },
   characteristics: { area: 65, rooms: 2, floor: 12, totalFloors: 24 },
   representativePhone: '+995500000001',
@@ -30,7 +36,7 @@ const SEA_VIEW = {
 
 const VAKE = {
   _id: 'asset-2',
-  propertyType: 'Апартаменты',
+  propertyType: 'house',
   location: { country: 'GE', city: 'Тбилиси', address: 'Ваке, ул. Абашидзе 7' },
   characteristics: { area: 95, rooms: 3, floor: 4, totalFloors: 9 },
   representativePhone: '+995500000002',
@@ -82,7 +88,7 @@ describe('MyProperties Page Acceptance (MKT-SCR-019)', () => {
     renderPage()
 
     expect(await screen.findByText('Квартира, ул. Химшиашвили, 15')).toBeDefined()
-    expect(screen.getByText('Апартаменты, Ваке, ул. Абашидзе 7')).toBeDefined()
+    expect(screen.getByText('Дом / Коттедж, Ваке, ул. Абашидзе 7')).toBeDefined()
     expect(screen.getByRole('heading', { level: 1, name: /Мои объекты/i })).toBeDefined()
     expect(screen.getByTestId('account-add-property-cta')).toBeDefined()
   })
@@ -116,7 +122,7 @@ describe('MyProperties Page Acceptance (MKT-SCR-019)', () => {
     const searchInput = screen.getByRole('searchbox', { name: /Поиск по моим объектам/i })
     fireEvent.change(searchInput, { target: { value: 'Ваке' } })
 
-    expect(screen.getByText('Апартаменты, Ваке, ул. Абашидзе 7')).toBeDefined()
+    expect(screen.getByText('Дом / Коттедж, Ваке, ул. Абашидзе 7')).toBeDefined()
     expect(screen.queryByText('Квартира, ул. Химшиашвили, 15')).toBeNull()
   })
 

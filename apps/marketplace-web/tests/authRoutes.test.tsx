@@ -139,6 +139,53 @@ describe('Авторизация и доступ в кабинет', () => {
     expect(screen.queryByTestId('auth-page')).toBeNull()
   })
 
+  /**
+   * Регрессия 05.09.2026, найдена на снимке кабинета MKT-SCR-019: страница
+   * показывает объекты вошедшего человека, а в шапке справа висит «Войти».
+   * Шапка про сессию не знала вовсе, и выйти из аккаунта было негде, кроме
+   * мастера публикации.
+   */
+  it('шапка предлагает войти гостю и кабинет вошедшему', async () => {
+    ;(authApi.checkSession as any).mockResolvedValue(false)
+
+    const guest = render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('header-login-link')).toBeTruthy()
+    expect(screen.queryByTestId('header-account-btn')).toBeNull()
+    guest.unmount()
+
+    resetSessionStoreForTests()
+    ;(authApi.checkSession as any).mockResolvedValue(true)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('header-account-btn')).toBeTruthy()
+    expect(screen.queryByTestId('header-login-link')).toBeNull()
+  })
+
+  it('выход из шапки завершает сессию и возвращает к гостевому виду', async () => {
+    ;(authApi.checkSession as any).mockResolvedValue(true)
+    ;(authApi.logout as any).mockResolvedValue({ loggedOut: true })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(await screen.findByTestId('header-account-btn'))
+    fireEvent.click(screen.getByTestId('header-logout-btn'))
+
+    await waitFor(() => expect(authApi.logout).toHaveBeenCalled())
+    expect(await screen.findByTestId('header-login-link')).toBeTruthy()
+  })
+
   it('вход перепроверяет сессию, а гейт маршрута не спрашивает сервер заново', async () => {
     ;(authApi.checkSession as any).mockResolvedValueOnce(false).mockResolvedValue(true)
     ;(authApi.login as any).mockResolvedValue({ identityId: 'id-1', requires2fa: false })

@@ -150,7 +150,13 @@
   flex-direction: column;
 }
 
-.figma-header__dropdown-menu button {
+/*
+  И ссылки тоже: в меню аккаунта «Мои объекты» и «Избранное» — переходы, а
+  «Выйти» — действие. Правило было только для кнопок, потому что до появления
+  этого меню в дропдаунах шапки (город, валюта, язык) ссылок не было.
+*/
+.figma-header__dropdown-menu button,
+.figma-header__dropdown-menu a {
   padding: 8px 12px;
   font-family: var(--font-body);
   font-size: var(--text-xs);
@@ -159,10 +165,12 @@
   background: none;
   cursor: pointer;
   color: var(--color-ink);
+  text-decoration: none;
   transition: background 0.15s ease;
 }
 
-.figma-header__dropdown-menu button:hover {
+.figma-header__dropdown-menu button:hover,
+.figma-header__dropdown-menu a:hover {
   background-color: var(--color-accent-soft);
   color: var(--color-brand-green);
 }
@@ -257,6 +265,23 @@
     color: var(--color-ink);
     text-decoration: none;
     padding: 8px 0;
+  }
+
+  /*
+    «Выйти» в мобильном меню — кнопка, а не ссылка: это действие, а не переход.
+    Оформление берётся от соседних пунктов меню, чтобы список читался единым,
+    поэтому правило дублирует `.figma-header__mobile-links a`, а не полагается
+    на него.
+  */
+  .figma-header__mobile-logout {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    color: var(--color-ink);
+    background: none;
+    border: none;
+    padding: 8px 0;
+    text-align: left;
+    cursor: pointer;
   }
 
   .figma-header__drawer-divider {
