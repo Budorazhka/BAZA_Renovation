@@ -106,20 +106,22 @@ const VIEWPORTS = [
 ];
 
 /**
- * Заводит объект и объявление от лица уже вошедшей сессии.
+ * Заводит объект и объявление от лица уже вошедшего браузера.
  *
- * Без этого кабинет («мои объекты») снимается пустым состоянием, а страницу
- * редактирования снять нельзя вовсе: её адрес состоит из идентификаторов
- * объекта, которого у свежего аккаунта нет. Пустой кабинет — тоже состояние и
- * его надо сверять, но не вместо основного.
+ * Запросы идут через `context.request`, который делит хранилище cookie с
+ * браузерным контекстом: отдельный вход не нужен и не делается. `Origin`
+ * обязателен — аудитория продукта резолвится из него (ADR-004), а
+ * `context.request` сам его не проставляет; без заголовка сессия не находится
+ * и приходит 401.
  *
- * Регистрация здесь не нужна: объект заводится существующей сессией, лимит
- * `/auth/register` не тратится.
+ * Без объекта кабинет снимается пустым состоянием, а страницу редактирования
+ * снять нельзя вовсе: её адрес состоит из идентификаторов объекта.
  */
-async function seedOwnerListing(api) {
+async function seedOwnerListing(context) {
+  const headers = { Origin: BASE_URL };
   try {
-    const asset = await api.post(apiUrl('/marketplace/property-assets'), {
-      headers: { 'Idempotency-Key': randomUUID() },
+    const asset = await context.request.post(apiUrl('/marketplace/property-assets'), {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         propertyType: 'apartment',
         location: {
@@ -135,15 +137,15 @@ async function seedOwnerListing(api) {
     if (asset.status() !== 201) return null;
     const assetId = (await asset.json())._id;
 
-    const listing = await api.post(apiUrl(`/marketplace/property-assets/${assetId}/listings`), {
-      headers: { 'Idempotency-Key': randomUUID() },
+    const listing = await context.request.post(apiUrl(`/marketplace/property-assets/${assetId}/listings`), {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: { dealType: 'sale', price: { amountMinorUnits: 9_200_000, currency: 'USD' } },
     });
     if (listing.status() !== 201) return null;
 
     return { assetId, listingId: (await listing.json())._id };
   } catch {
-    // Съёмка не должна падать из-за засева: без объекта просто снимутся пустые
+    // Съёмка не должна падать из-за засева: без объекта снимутся пустые
     // состояния, и это видно по отчёту.
     return null;
   }
@@ -176,25 +178,23 @@ async function resolvePublicSlugs() {
 }
 
 /**
- * Заводит аккаунт для съёмки и объект у него.
+ * Регистрирует аккаунт для съёмки. Вход НЕ делает.
  *
- * Не отдаёт `storageState`: перенос cookie из HTTP-контекста в браузер
- * оказался нерабочим. Прогон 05.09.2026 показал это прямо — регистрация и
- * вход по API прошли (`signedIn: true`), объект завёлся, адрес страницы
- * редактирования собрался с настоящими идентификаторами, а кабинет всё равно
- * снялся формой входа: перенесённая cookie до запросов из страницы не дошла.
- * Поэтому браузер входит сам, через форму, и получает cookie на общих
- * основаниях (см. `signInThroughUi`).
+ * Это принципиально. Пока съёмка логинилась по API, а потом ещё раз в
+ * браузере, разделы кабинета снимались формой входа — четыре прогона подряд, в
+ * трёх разных вариантах передачи сессии. Сквозной сценарий мастера публикации
+ * при этом держит сессию в браузере и проходит; отличался он ровно одним:
+ * там вход в браузере был для аккаунта ПЕРВЫМ.
  *
- * До этого была ещё одна причина того же снимка, уже исправленная: контекст
- * создавался с `baseURL`, оканчивающимся на `/api/v1`, а Playwright резолвит
- * относительные пути через `new URL()` — префикс версии отбрасывался, и
- * регистрация уходила мимо API. Отсюда `apiUrl`.
+ * Почему второй вход даёт сессию, которая не работает, я не выяснил — это
+ * открытый вопрос к самому входу, а не к съёмке. Съёмке достаточно не создавать
+ * второй: `POST /auth/register` сессию не создаёт (см. auth.controller.ts), так
+ * что единственным входом остаётся браузерный.
  *
- * Ожидание на 429 оставлено: лимит в пять регистраций в минуту на IP общий,
+ * Ожидание на 429 нужно: лимит в пять регистраций в минуту на IP общий, а
  * съёмка идёт следом за сквозными сценариями с того же адреса.
  */
-async function createCaptureAccount() {
+async function registerCaptureAccount() {
   const login = `capture-${Date.now()}@example.com`;
   const password = 'Correct-Horse-Battery-Staple-1!';
   const api = await apiRequest.newContext();
@@ -207,21 +207,13 @@ async function createCaptureAccount() {
         continue;
       }
       if (registered.status() !== 201) {
-        return { login: null, password: null, ownerListing: null, reason: `register ${registered.status()}: ${(await registered.text()).slice(0, 200)}` };
+        return { login: null, password: null, reason: `register ${registered.status()}: ${(await registered.text()).slice(0, 200)}` };
       }
-      const loggedIn = await api.post(apiUrl('/auth/login'), {
-        data: { login, password },
-        headers: { Origin: BASE_URL },
-      });
-      if (loggedIn.status() !== 200 && loggedIn.status() !== 201) {
-        return { login: null, password: null, ownerListing: null, reason: `login ${loggedIn.status()}: ${(await loggedIn.text()).slice(0, 200)}` };
-      }
-      const ownerListing = await seedOwnerListing(api);
-      return { login, password, ownerListing, reason: ownerListing ? null : 'объект сессии не завёлся' };
+      return { login, password, reason: null };
     }
-    return { login: null, password: null, ownerListing: null, reason: 'register 429: лимит не отпустил за четыре попытки' };
+    return { login: null, password: null, reason: 'register 429: лимит не отпустил за четыре попытки' };
   } catch (err) {
-    return { login: null, password: null, ownerListing: null, reason: String(err).split('\n')[0] };
+    return { login: null, password: null, reason: String(err).split('\n')[0] };
   } finally {
     await api.dispose();
   }
@@ -230,9 +222,9 @@ async function createCaptureAccount() {
 /**
  * Вход через форму, в том же браузерном контексте, в котором потом снимаем.
  *
- * Cookie ставит сам браузер, поэтому все её атрибуты (домен, путь, SameSite)
- * заведомо те, с которыми она работает в жизни. Разделы кабинета закрыты
- * `RequireAuth`, и без этого шага половина списка снимается формой входа.
+ * Cookie ставит сам браузер, поэтому её атрибуты заведомо те, с которыми она
+ * работает в жизни. Разделы кабинета закрыты `RequireAuth`, и без этого шага
+ * половина списка снимается формой входа.
  */
 async function signInThroughUi(context, credentials) {
   const page = await context.newPage();
@@ -241,9 +233,9 @@ async function signInThroughUi(context, credentials) {
     await page.getByTestId('auth-input-login').fill(credentials.login);
     await page.getByTestId('auth-input-password').fill(credentials.password);
 
-    // `/auth/login` ограничен десятью запросами в минуту на IP. Съёмка тратит
-    // два входа (API-контекст и браузер) поверх тех, что сделал набор
-    // сценариев, и приходит к остатку бюджета — на 429 ждём и жмём снова.
+    // `/auth/login` ограничен десятью запросами в минуту на IP, и съёмка идёт
+    // следом за сквозными сценариями с того же адреса — на 429 ждём и жмём
+    // снова, а не считаем отказом.
     let loginResponse = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const loginResponsePromise = page.waitForResponse(
@@ -267,7 +259,6 @@ async function signInThroughUi(context, credentials) {
       .catch(() => null);
     try {
       await page.getByTestId('auth-page').waitFor({ state: 'detached', timeout: 20_000 });
-      return null;
     } catch {
       const shownError = await page
         .getByTestId('auth-error')
@@ -279,6 +270,18 @@ async function signInThroughUi(context, credentials) {
         : 'GET /auth/session не наблюдался';
       return `форма входа не исчезла; ${sessionPart}; на экране: ${shownError?.trim() || 'ошибки нет'}`;
     }
+
+    // Форма исчезла — но этого мало. На прогоне 2886aeb она исчезла, а снимки
+    // всё равно вышли гостевыми: сессия жила только до конца этой страницы.
+    // Поэтому спрашиваем ещё раз, уже от контекста, и с `Origin`: без него
+    // аудитория продукта не резолвится и придёт 401 даже при живой сессии.
+    const check = await context.request
+      .get(apiUrl('/auth/session'), { headers: { Origin: BASE_URL } })
+      .catch(() => null);
+    if (!check || check.status() !== 200) {
+      return `форма исчезла, но сессия в контексте не живёт: GET /auth/session -> ${check ? check.status() : 'нет ответа'}`;
+    }
+    return null;
   } catch (err) {
     return String(err).split('\n')[0];
   } finally {
@@ -303,39 +306,39 @@ async function main() {
     });
 
     /*
-     * Свой аккаунт на каждый брейкпоинт.
+     * Свой аккаунт на каждый брейкпоинт, и ровно один вход у каждого.
      *
-     * Так пришлось прийти через два неудачных подхода. Перенос сессии из
-     * HTTP-клиента в браузер не работает (прогон 5d4943a), перенос из одного
-     * браузерного контекста в другой — тоже (прогон 66ea5f9, кабинет снялся
-     * формой входа в обоих). Вход по разу на контекст работал только для
-     * первого: на 2886aeb десктоп вошёл, а мобильный на тех же данных остался
-     * на форме, хотя POST /auth/login ответил успехом.
+     * Порядок здесь важен и выстрадан. Регистрация сессии не создаёт, поэтому
+     * браузерный вход оказывается для аккаунта первым и единственным. Объект
+     * заводится уже после входа, через `context.request`, который делит cookie
+     * с браузером, — то есть второй вход не нужен нигде.
      *
-     * Единственное, чем второй контекст отличался от первого, — повторный вход
-     * тем же аккаунтом. Эту переменную и убираем: у каждого контекста свой
-     * аккаунт и свой объект. Заодно адрес страницы редактирования становится
-     * своим для каждого брейкпоинта, а не общим.
-     *
-     * Почему повторный вход не давал сессии, я не выяснил. Это остаётся
-     * открытым вопросом, но не к съёмке.
+     * Что не сработало до этого: перенос cookie из HTTP-клиента в браузер
+     * (5d4943a), перенос состояния между браузерными контекстами (66ea5f9),
+     * вход по разу на контекст поверх входа по API (2886aeb и cff2ed6). Во всех
+     * случаях кабинет снимался формой входа. Общим у них был лишний вход по
+     * API перед браузерным; сквозной сценарий мастера публикации, который
+     * сессию держит, обходится без него.
      */
-    const account = await createCaptureAccount();
+    const account = await registerCaptureAccount();
     let signInError = account.login ? null : account.reason;
+    let ownerListing = null;
     if (!account.login) {
       console.warn(`[capture] ${viewport.key}: аккаунт не завёлся (${account.reason}) — кабинет снимется формой входа.`);
     } else {
-      if (!account.ownerListing) {
-        console.warn(`[capture] ${viewport.key}: объект сессии не завёлся — кабинет снимется пустым.`);
-      }
       const uiError = await signInThroughUi(context, account);
       if (uiError) {
         signInError = `вход через форму: ${uiError}`;
         console.warn(`[capture] ${viewport.key}: ${signInError}`);
+      } else {
+        ownerListing = await seedOwnerListing(context);
+        if (!ownerListing) {
+          console.warn(`[capture] ${viewport.key}: объект сессии не завёлся — кабинет снимется пустым.`);
+        }
       }
     }
 
-    const screens = buildScreens({ developmentSlug, listingSlug, ownerListing: account.ownerListing });
+    const screens = buildScreens({ developmentSlug, listingSlug, ownerListing });
 
     for (const screen of screens) {
       const page = await context.newPage();
