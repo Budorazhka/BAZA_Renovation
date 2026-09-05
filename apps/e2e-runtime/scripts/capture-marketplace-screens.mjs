@@ -240,17 +240,45 @@ async function signInThroughUi(context, credentials) {
     await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await page.getByTestId('auth-input-login').fill(credentials.login);
     await page.getByTestId('auth-input-password').fill(credentials.password);
-    await Promise.all([
-      page.waitForResponse(
+
+    // `/auth/login` ограничен десятью запросами в минуту на IP. Съёмка тратит
+    // два входа (API-контекст и браузер) поверх тех, что сделал набор
+    // сценариев, и приходит к остатку бюджета — на 429 ждём и жмём снова.
+    let loginResponse = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const loginResponsePromise = page.waitForResponse(
         (res) => res.url().includes('/auth/login') && res.request().method() === 'POST',
         { timeout: 30_000 },
-      ),
-      page.getByTestId('auth-submit-btn').click(),
-    ]);
-    // Форма входа исчезает только когда сессия принята: пока она на экране,
-    // считать вход состоявшимся нельзя.
-    await page.getByTestId('auth-page').waitFor({ state: 'detached', timeout: 30_000 });
-    return null;
+      );
+      await page.getByTestId('auth-submit-btn').click();
+      loginResponse = await loginResponsePromise;
+      if (loginResponse.status() !== 429) break;
+      await page.waitForTimeout(20_000);
+    }
+    if (loginResponse.status() !== 200 && loginResponse.status() !== 201) {
+      return `POST /auth/login -> ${loginResponse.status()}: ${(await loginResponse.text()).slice(0, 200)}`;
+    }
+
+    // Форма исчезает только когда сессия принята. Если не исчезла, причина
+    // почти всегда видна на самой странице или в проверке сессии, поэтому
+    // ждём и то, и другое, а не один таймаут без объяснения.
+    const sessionResponsePromise = page
+      .waitForResponse((res) => res.url().includes('/auth/session'), { timeout: 20_000 })
+      .catch(() => null);
+    try {
+      await page.getByTestId('auth-page').waitFor({ state: 'detached', timeout: 20_000 });
+      return null;
+    } catch {
+      const shownError = await page
+        .getByTestId('auth-error')
+        .textContent({ timeout: 1_000 })
+        .catch(() => null);
+      const sessionResponse = await sessionResponsePromise;
+      const sessionPart = sessionResponse
+        ? `GET /auth/session -> ${sessionResponse.status()}`
+        : 'GET /auth/session не наблюдался';
+      return `форма входа не исчезла; ${sessionPart}; на экране: ${shownError?.trim() || 'ошибки нет'}`;
+    }
   } catch (err) {
     return String(err).split('\n')[0];
   } finally {
