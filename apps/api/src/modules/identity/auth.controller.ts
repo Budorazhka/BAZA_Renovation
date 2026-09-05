@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Post, Req, Res, UseGuards } from '@nes
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthService } from './auth.service';
 import { SessionService } from './session.service';
-import { resolveProductAudienceFromOrigin } from './resolve-product-audience';
+import { resolveProductAudienceFromHeaders, resolveProductAudienceFromOrigin } from './resolve-product-audience';
 import { LoginRequestDto } from './dto/login-request.dto';
 import { RegisterRequestDto } from './dto/register-request.dto';
 import { IpRateLimitGuard } from '../../shared/rate-limit/ip-rate-limit.guard';
@@ -79,15 +79,23 @@ export class AuthController {
   }
 
   /**
-   * Read-only session probe for product clients. Audience is still resolved
-   * exclusively from the configured Origin (ADR-004); a missing, expired,
+   * Read-only session probe for product clients. Audience is resolved from the
+   * configured origin (ADR-004) — из Origin, а при его отсутствии из хоста
+   * запроса; a missing, expired,
    * revoked, or wrong-audience cookie is intentionally indistinguishable from
    * a guest and returns the same `{ authenticated: false }` body.
    */
   @Get('session')
   @HttpCode(200)
   async checkSession(@Req() req: FastifyRequest): Promise<{ authenticated: boolean }> {
-    const audience = resolveProductAudienceFromOrigin(req.headers.origin);
+    // Единственный маршрут, куда браузер приходит same-origin GET, то есть без
+    // Origin: фронт по умолчанию ходит в API через свой же прокси. Отсюда и
+    // резолв по хосту, см. resolve-product-audience.ts.
+    const audience = resolveProductAudienceFromHeaders({
+      origin: req.headers.origin,
+      host: req.headers.host,
+      forwardedProto: req.headers['x-forwarded-proto'] as string | undefined,
+    });
     const session = await this.sessionService.getActiveSessionFromRequest(req, audience);
     return { authenticated: session !== null };
   }
