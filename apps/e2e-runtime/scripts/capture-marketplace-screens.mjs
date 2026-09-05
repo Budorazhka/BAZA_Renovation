@@ -288,68 +288,54 @@ async function signInThroughUi(context, credentials) {
 
 async function main() {
   await mkdir(OUT_DIR, { recursive: true });
-  const account = await createCaptureAccount();
-  if (!account.login) {
-    console.warn(`[capture] Аккаунт не завёлся (${account.reason}) — разделы кабинета снимутся как форма входа.`);
-  } else if (!account.ownerListing) {
-    console.warn('[capture] Объект сессии не завёлся — кабинет снимется пустым, редактирование не снимется.');
-  }
-  const accountError = account.login ? null : account.reason;
 
   const { developmentSlug, listingSlug } = await resolvePublicSlugs();
   if (!developmentSlug) console.warn('[capture] В каталоге нет опубликованного ЖК — MKT-SCR-007 не снимается.');
   if (!listingSlug) console.warn('[capture] В каталоге нет опубликованного объявления — MKT-SCR-012 не снимается.');
 
-  const screens = buildScreens({ developmentSlug, listingSlug, ownerListing: account.ownerListing });
   const browser = await chromium.launch();
   const report = [];
-
-  /*
-   * Входим ОДИН раз и переносим состояние браузера в оба брейкпоинта.
-   *
-   * Прогон 2886aeb показал, почему не по разу на контекст: десктоп вошёл, а
-   * мобильный на тех же данных остался на форме, при том что `POST /auth/login`
-   * ответил успехом. Отчёт назвал `GET /auth/session -> 401`, но это может быть
-   * и гостевая проверка, стартовавшая до входа, — то есть причина второго входа
-   * так и не установлена. Съёмке она и не нужна: одного входа достаточно, а
-   * проверка сессии в каждом контексте ниже покажет расхождение точно.
-   *
-   * Перенос именно из браузерного контекста, а не из HTTP-клиента: cookie,
-   * которую поставил сам браузер, лежит в его хранилище с рабочими атрибутами.
-   * Попытка перенести её из `apiRequest`-контекста (прогон 5d4943a) не сработала.
-   */
-  let signedInState = null;
-  let accountSignInError = accountError;
-  if (account.login) {
-    const signInContext = await browser.newContext();
-    const uiError = await signInThroughUi(signInContext, account);
-    if (uiError) {
-      accountSignInError = `вход через форму: ${uiError}`;
-      console.warn(`[capture] ${accountSignInError}`);
-    } else {
-      signedInState = await signInContext.storageState();
-    }
-    await signInContext.close();
-  }
 
   for (const viewport of VIEWPORTS) {
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
-      ...(signedInState ? { storageState: signedInState } : {}),
     });
 
-    // Проверяем сессию в самом контексте, а не полагаемся на перенос: снимок
-    // кабинета, который на деле оказался формой входа, должен быть виден по
-    // отчёту, а не только глазами.
-    let signInError = accountSignInError;
-    if (signedInState) {
-      const session = await context.request.get(apiUrl('/auth/session')).catch(() => null);
-      if (!session || session.status() !== 200) {
-        signInError = `сессия не перенеслась в контекст ${viewport.key}: GET /auth/session -> ${session ? session.status() : 'нет ответа'}`;
-        console.warn(`[capture] ${signInError}`);
+    /*
+     * Свой аккаунт на каждый брейкпоинт.
+     *
+     * Так пришлось прийти через два неудачных подхода. Перенос сессии из
+     * HTTP-клиента в браузер не работает (прогон 5d4943a), перенос из одного
+     * браузерного контекста в другой — тоже (прогон 66ea5f9, кабинет снялся
+     * формой входа в обоих). Вход по разу на контекст работал только для
+     * первого: на 2886aeb десктоп вошёл, а мобильный на тех же данных остался
+     * на форме, хотя POST /auth/login ответил успехом.
+     *
+     * Единственное, чем второй контекст отличался от первого, — повторный вход
+     * тем же аккаунтом. Эту переменную и убираем: у каждого контекста свой
+     * аккаунт и свой объект. Заодно адрес страницы редактирования становится
+     * своим для каждого брейкпоинта, а не общим.
+     *
+     * Почему повторный вход не давал сессии, я не выяснил. Это остаётся
+     * открытым вопросом, но не к съёмке.
+     */
+    const account = await createCaptureAccount();
+    let signInError = account.login ? null : account.reason;
+    if (!account.login) {
+      console.warn(`[capture] ${viewport.key}: аккаунт не завёлся (${account.reason}) — кабинет снимется формой входа.`);
+    } else {
+      if (!account.ownerListing) {
+        console.warn(`[capture] ${viewport.key}: объект сессии не завёлся — кабинет снимется пустым.`);
+      }
+      const uiError = await signInThroughUi(context, account);
+      if (uiError) {
+        signInError = `вход через форму: ${uiError}`;
+        console.warn(`[capture] ${viewport.key}: ${signInError}`);
       }
     }
+
+    const screens = buildScreens({ developmentSlug, listingSlug, ownerListing: account.ownerListing });
 
     for (const screen of screens) {
       const page = await context.newPage();
@@ -381,7 +367,7 @@ async function main() {
         figmaFrame: screen.figmaFrame,
         data: screen.data,
         file,
-        signedIn: Boolean(signedInState) && !signInError,
+        signedIn: Boolean(account.login) && !signInError,
         signInError,
         navigationError: error,
         consoleErrors: consoleErrors.slice(0, 5),
