@@ -88,4 +88,12 @@ describe('resolveProductAudienceFromHeaders', () => {
   it('без Origin и без Host отказывает', () => {
     expect(() => resolveProductAudienceFromHeaders({})).toThrow(AppException);
   });
+
+  it('в тексте отказа виден собранный origin — иначе потерянный порт не отличить', () => {
+    // Ровно этот случай и был: nginx отдавал `$host` без порта, API получал
+    // «localhost» вместо «localhost:4173», и отказ ничего не объяснял.
+    expect(() => resolveProductAudienceFromHeaders({ host: 'localhost', forwardedProto: 'http' })).toThrow(
+      expect.objectContaining({ message: expect.stringContaining('http://localhost') }),
+    );
+  });
 });

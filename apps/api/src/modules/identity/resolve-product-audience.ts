@@ -74,12 +74,23 @@ export function resolveProductAudienceFromHeaders(headers: {
   if (headers.host) {
     // Заголовок может нести список, если по пути несколько прокси.
     const proto = (headers.forwardedProto ?? 'http').split(',')[0]!.trim();
-    const audience = matchConfiguredOrigin(`${proto}://${headers.host}`);
+    const derived = `${proto}://${headers.host}`;
+    const audience = matchConfiguredOrigin(derived);
     if (audience) return audience;
+
+    // Собранный origin — в тексте отказа намеренно. Первая версия писала просто
+    // «ни Origin, ни Host», и на отладку ушёл целый прогон с разбором трассы
+    // Playwright: причиной оказался потерянный порт (nginx отдавал `$host`, а он
+    // нормализованный, без порта). По строке «http://localhost» это было бы
+    // видно сразу.
+    throw new AppException(
+      ErrorCode.AUTH_AUDIENCE_MISMATCH,
+      `Origin header missing; host "${derived}" is not a recognized product origin`,
+    );
   }
 
   throw new AppException(
     ErrorCode.AUTH_AUDIENCE_MISMATCH,
-    'Neither Origin nor a recognized Host — cannot determine product audience',
+    'Neither Origin nor Host — cannot determine product audience',
   );
 }
