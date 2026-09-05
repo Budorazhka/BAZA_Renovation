@@ -304,21 +304,50 @@ async function main() {
   const browser = await chromium.launch();
   const report = [];
 
+  /*
+   * Входим ОДИН раз и переносим состояние браузера в оба брейкпоинта.
+   *
+   * Прогон 2886aeb показал, почему не по разу на контекст: десктоп вошёл, а
+   * мобильный на тех же данных остался на форме, при том что `POST /auth/login`
+   * ответил успехом. Отчёт назвал `GET /auth/session -> 401`, но это может быть
+   * и гостевая проверка, стартовавшая до входа, — то есть причина второго входа
+   * так и не установлена. Съёмке она и не нужна: одного входа достаточно, а
+   * проверка сессии в каждом контексте ниже покажет расхождение точно.
+   *
+   * Перенос именно из браузерного контекста, а не из HTTP-клиента: cookie,
+   * которую поставил сам браузер, лежит в его хранилище с рабочими атрибутами.
+   * Попытка перенести её из `apiRequest`-контекста (прогон 5d4943a) не сработала.
+   */
+  let signedInState = null;
+  let accountSignInError = accountError;
+  if (account.login) {
+    const signInContext = await browser.newContext();
+    const uiError = await signInThroughUi(signInContext, account);
+    if (uiError) {
+      accountSignInError = `вход через форму: ${uiError}`;
+      console.warn(`[capture] ${accountSignInError}`);
+    } else {
+      signedInState = await signInContext.storageState();
+    }
+    await signInContext.close();
+  }
+
   for (const viewport of VIEWPORTS) {
     const context = await browser.newContext({
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
+      ...(signedInState ? { storageState: signedInState } : {}),
     });
 
-    // Вход делается в каждом контексте отдельно: контексты изолированы, и
-    // сессия из десктопного в мобильный сама не попадёт. Отказ пишется на свой
-    // брейкпоинт, а не на оба: они снимаются независимо.
-    let signInError = accountError;
-    if (account.login) {
-      const uiError = await signInThroughUi(context, account);
-      if (uiError) {
-        signInError = `вход через форму: ${uiError}`;
-        console.warn(`[capture] ${viewport.key}: ${signInError}`);
+    // Проверяем сессию в самом контексте, а не полагаемся на перенос: снимок
+    // кабинета, который на деле оказался формой входа, должен быть виден по
+    // отчёту, а не только глазами.
+    let signInError = accountSignInError;
+    if (signedInState) {
+      const session = await context.request.get(apiUrl('/auth/session')).catch(() => null);
+      if (!session || session.status() !== 200) {
+        signInError = `сессия не перенеслась в контекст ${viewport.key}: GET /auth/session -> ${session ? session.status() : 'нет ответа'}`;
+        console.warn(`[capture] ${signInError}`);
       }
     }
 
@@ -352,7 +381,7 @@ async function main() {
         figmaFrame: screen.figmaFrame,
         data: screen.data,
         file,
-        signedIn: Boolean(account.login) && !signInError,
+        signedIn: Boolean(signedInState) && !signInError,
         signInError,
         navigationError: error,
         consoleErrors: consoleErrors.slice(0, 5),
