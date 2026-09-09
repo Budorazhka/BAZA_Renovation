@@ -6552,6 +6552,323 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /lms/items:
+    get:
+      operationId: listLmsItems
+      summary: Список материалов обучающей библиотеки
+      tags: [lms]
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema: {type: string}
+        - name: type
+          in: query
+          required: false
+          schema: {type: string, enum: [article, video, script, quiz, presentation, pdf]}
+      responses:
+        '200':
+          description: Список материалов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsItemListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createLmsItem
+      summary: Создание обучающего материала в библиотеке
+      tags: [lms]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLmsItemRequest'
+      responses:
+        '201':
+          description: Материал создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsItemResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /lms/items/{id}:
+    get:
+      operationId: getLmsItem
+      summary: Получение материала по ID
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Материал найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsItemResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateLmsItem
+      summary: Обновление обучающего материала
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLmsItemRequest'
+      responses:
+        '200':
+          description: Материал обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsItemResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteLmsItem
+      summary: Удаление обучающего материала
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Материал удален
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsDeleteResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /lms/courses:
+    get:
+      operationId: listLmsCourses
+      summary: Список курсов онбординга и обучения
+      tags: [lms]
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        '200':
+          description: Список курсов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsCourseListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createLmsCourse
+      summary: Создание нового обучающего курса
+      tags: [lms]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLmsCourseRequest'
+      responses:
+        '201':
+          description: Курс создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsCourseResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /lms/courses/{id}:
+    get:
+      operationId: getLmsCourse
+      summary: Получение курса по ID
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Курс найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsCourseResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateLmsCourse
+      summary: Обновление курса
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLmsCourseRequest'
+      responses:
+        '200':
+          description: Курс обновлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsCourseResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteLmsCourse
+      summary: Удаление курса
+      tags: [lms]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Курс удален
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsDeleteResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /lms/progress:
+    get:
+      operationId: getLmsProgress
+      summary: Получение прогресса текущего сотрудника по всем курсам
+      tags: [lms]
+      responses:
+        '200':
+          description: Карта прогресса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsProgressMapResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /lms/progress/{courseId}:
+    put:
+      operationId: putLmsProgress
+      summary: Сохранение/обновление прогресса по курсу
+      tags: [lms]
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertLmsProgressRequest'
+      responses:
+        '200':
+          description: Прогресс сохранен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsProgressResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteLmsProgress
+      summary: Сброс прогресса по курсу
+      tags: [lms]
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Прогресс сброшен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LmsDeleteResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     cookieAuth:
@@ -9083,3 +9400,202 @@ components:
         dueAt: {type: string, format: date-time}
         isUrgent: {type: boolean}
         isImportant: {type: boolean}
+
+    LmsItem:
+      type: object
+      required: [id, type, title, description, targetRole, content, isSystem]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [article, video, script, quiz, presentation, pdf]}
+        title: {type: string}
+        description: {type: string}
+        targetRole: {type: string, enum: [all, manager, rop, director]}
+        readTime: {type: string}
+        tags:
+          type: array
+          items: {type: string}
+        content:
+          type: object
+        isSystem: {type: boolean}
+
+    LmsItemListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LmsItem'
+
+    LmsItemResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          $ref: '#/components/schemas/LmsItem'
+
+    CreateLmsItemRequest:
+      type: object
+      required: [type, title, description, content]
+      properties:
+        itemId: {type: string, maxLength: 100}
+        type: {type: string, enum: [article, video, script, quiz, presentation, pdf]}
+        title: {type: string, minLength: 1, maxLength: 300}
+        description: {type: string, minLength: 1, maxLength: 2000}
+        targetRole: {type: string, enum: [all, manager, rop, director]}
+        readTime: {type: string, maxLength: 50}
+        tags:
+          type: array
+          items: {type: string}
+        content:
+          type: object
+
+    UpdateLmsItemRequest:
+      type: object
+      properties:
+        type: {type: string, enum: [article, video, script, quiz, presentation, pdf]}
+        title: {type: string, maxLength: 300}
+        description: {type: string, maxLength: 2000}
+        targetRole: {type: string, enum: [all, manager, rop, director]}
+        readTime: {type: string, maxLength: 50}
+        tags:
+          type: array
+          items: {type: string}
+        content:
+          type: object
+
+    LmsCourseFinalQuiz:
+      type: object
+      required: [passingScore, questions]
+      properties:
+        passingScore: {type: integer, minimum: 0, maximum: 100}
+        questions:
+          type: array
+          items:
+            type: object
+            required: [question, options, correct]
+            properties:
+              question: {type: string}
+              options:
+                type: array
+                items: {type: string}
+              correct: {type: integer}
+
+    LmsCourse:
+      type: object
+      required: [id, title, description, targetRoles, emoji, itemIds, isSystem]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        description: {type: string}
+        targetRoles:
+          type: array
+          items: {type: string}
+        emoji: {type: string}
+        itemIds:
+          type: array
+          items: {type: string}
+        finalQuiz:
+          $ref: '#/components/schemas/LmsCourseFinalQuiz'
+        isSystem: {type: boolean}
+
+    LmsCourseListResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/LmsCourse'
+
+    LmsCourseResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          $ref: '#/components/schemas/LmsCourse'
+
+    CreateLmsCourseRequest:
+      type: object
+      required: [title, description, itemIds]
+      properties:
+        courseId: {type: string, maxLength: 100}
+        title: {type: string, minLength: 1, maxLength: 300}
+        description: {type: string, minLength: 1, maxLength: 2000}
+        targetRoles:
+          type: array
+          items: {type: string}
+        emoji: {type: string, maxLength: 10}
+        itemIds:
+          type: array
+          items: {type: string}
+        finalQuiz:
+          $ref: '#/components/schemas/LmsCourseFinalQuiz'
+
+    UpdateLmsCourseRequest:
+      type: object
+      properties:
+        title: {type: string, maxLength: 300}
+        description: {type: string, maxLength: 2000}
+        targetRoles:
+          type: array
+          items: {type: string}
+        emoji: {type: string, maxLength: 10}
+        itemIds:
+          type: array
+          items: {type: string}
+        finalQuiz:
+          $ref: '#/components/schemas/LmsCourseFinalQuiz'
+
+    LmsProgressEntry:
+      type: object
+      required: [completedItems]
+      properties:
+        completedItems:
+          type: array
+          items: {type: string}
+        finalQuizPassed: {type: boolean}
+        finalQuizScore: {type: integer}
+
+    LmsProgressResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          $ref: '#/components/schemas/LmsProgressEntry'
+
+    LmsProgressMapResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/LmsProgressEntry'
+
+    UpsertLmsProgressRequest:
+      type: object
+      required: [completedItems]
+      properties:
+        completedItems:
+          type: array
+          items: {type: string}
+        finalQuizPassed: {type: boolean}
+        finalQuizScore: {type: integer, minimum: 0, maximum: 100}
+
+    LmsDeleteResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success: {type: boolean}
+        data:
+          type: object
+          required: [deleted]
+          properties:
+            deleted: {type: boolean}

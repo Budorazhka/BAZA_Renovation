@@ -2918,6 +2918,115 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/lms/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список материалов обучающей библиотеки */
+        get: operations["listLmsItems"];
+        put?: never;
+        /** Создание обучающего материала в библиотеке */
+        post: operations["createLmsItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lms/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение материала по ID */
+        get: operations["getLmsItem"];
+        put?: never;
+        post?: never;
+        /** Удаление обучающего материала */
+        delete: operations["deleteLmsItem"];
+        options?: never;
+        head?: never;
+        /** Обновление обучающего материала */
+        patch: operations["updateLmsItem"];
+        trace?: never;
+    };
+    "/lms/courses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список курсов онбординга и обучения */
+        get: operations["listLmsCourses"];
+        put?: never;
+        /** Создание нового обучающего курса */
+        post: operations["createLmsCourse"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lms/courses/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение курса по ID */
+        get: operations["getLmsCourse"];
+        put?: never;
+        post?: never;
+        /** Удаление курса */
+        delete: operations["deleteLmsCourse"];
+        options?: never;
+        head?: never;
+        /** Обновление курса */
+        patch: operations["updateLmsCourse"];
+        trace?: never;
+    };
+    "/lms/progress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение прогресса текущего сотрудника по всем курсам */
+        get: operations["getLmsProgress"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/lms/progress/{courseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Сохранение/обновление прогресса по курсу */
+        put: operations["putLmsProgress"];
+        post?: never;
+        /** Сброс прогресса по курсу */
+        delete: operations["deleteLmsProgress"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4684,6 +4793,119 @@ export interface components {
             dueAt?: string;
             isUrgent?: boolean;
             isImportant?: boolean;
+        };
+        LmsItem: {
+            id: string;
+            /** @enum {string} */
+            type: "article" | "video" | "script" | "quiz" | "presentation" | "pdf";
+            title: string;
+            description: string;
+            /** @enum {string} */
+            targetRole: "all" | "manager" | "rop" | "director";
+            readTime?: string;
+            tags?: string[];
+            content: Record<string, never>;
+            isSystem: boolean;
+        };
+        LmsItemListResponse: {
+            success: boolean;
+            data: components["schemas"]["LmsItem"][];
+        };
+        LmsItemResponse: {
+            success: boolean;
+            data: components["schemas"]["LmsItem"];
+        };
+        CreateLmsItemRequest: {
+            itemId?: string;
+            /** @enum {string} */
+            type: "article" | "video" | "script" | "quiz" | "presentation" | "pdf";
+            title: string;
+            description: string;
+            /** @enum {string} */
+            targetRole?: "all" | "manager" | "rop" | "director";
+            readTime?: string;
+            tags?: string[];
+            content: Record<string, never>;
+        };
+        UpdateLmsItemRequest: {
+            /** @enum {string} */
+            type?: "article" | "video" | "script" | "quiz" | "presentation" | "pdf";
+            title?: string;
+            description?: string;
+            /** @enum {string} */
+            targetRole?: "all" | "manager" | "rop" | "director";
+            readTime?: string;
+            tags?: string[];
+            content?: Record<string, never>;
+        };
+        LmsCourseFinalQuiz: {
+            passingScore: number;
+            questions: {
+                question: string;
+                options: string[];
+                correct: number;
+            }[];
+        };
+        LmsCourse: {
+            id: string;
+            title: string;
+            description: string;
+            targetRoles: string[];
+            emoji: string;
+            itemIds: string[];
+            finalQuiz?: components["schemas"]["LmsCourseFinalQuiz"];
+            isSystem: boolean;
+        };
+        LmsCourseListResponse: {
+            success: boolean;
+            data: components["schemas"]["LmsCourse"][];
+        };
+        LmsCourseResponse: {
+            success: boolean;
+            data: components["schemas"]["LmsCourse"];
+        };
+        CreateLmsCourseRequest: {
+            courseId?: string;
+            title: string;
+            description: string;
+            targetRoles?: string[];
+            emoji?: string;
+            itemIds: string[];
+            finalQuiz?: components["schemas"]["LmsCourseFinalQuiz"];
+        };
+        UpdateLmsCourseRequest: {
+            title?: string;
+            description?: string;
+            targetRoles?: string[];
+            emoji?: string;
+            itemIds?: string[];
+            finalQuiz?: components["schemas"]["LmsCourseFinalQuiz"];
+        };
+        LmsProgressEntry: {
+            completedItems: string[];
+            finalQuizPassed?: boolean;
+            finalQuizScore?: number;
+        };
+        LmsProgressResponse: {
+            success: boolean;
+            data: components["schemas"]["LmsProgressEntry"];
+        };
+        LmsProgressMapResponse: {
+            success: boolean;
+            data: {
+                [key: string]: components["schemas"]["LmsProgressEntry"];
+            };
+        };
+        UpsertLmsProgressRequest: {
+            completedItems: string[];
+            finalQuizPassed?: boolean;
+            finalQuizScore?: number;
+        };
+        LmsDeleteResponse: {
+            success: boolean;
+            data: {
+                deleted: boolean;
+            };
         };
     };
     responses: {
@@ -10847,6 +11069,350 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+        };
+    };
+    listLmsItems: {
+        parameters: {
+            query?: {
+                role?: string;
+                type?: "article" | "video" | "script" | "quiz" | "presentation" | "pdf";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список материалов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsItemListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createLmsItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLmsItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Материал создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsItemResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getLmsItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Материал найден */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsItemResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteLmsItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Материал удален */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateLmsItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLmsItemRequest"];
+            };
+        };
+        responses: {
+            /** @description Материал обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsItemResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listLmsCourses: {
+        parameters: {
+            query?: {
+                role?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список курсов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsCourseListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createLmsCourse: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLmsCourseRequest"];
+            };
+        };
+        responses: {
+            /** @description Курс создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsCourseResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getLmsCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Курс найден */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsCourseResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteLmsCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Курс удален */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateLmsCourse: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateLmsCourseRequest"];
+            };
+        };
+        responses: {
+            /** @description Курс обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsCourseResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    getLmsProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Карта прогресса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsProgressMapResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    putLmsProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                courseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpsertLmsProgressRequest"];
+            };
+        };
+        responses: {
+            /** @description Прогресс сохранен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsProgressResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    deleteLmsProgress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                courseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Прогресс сброшен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LmsDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
         };
     };
 }

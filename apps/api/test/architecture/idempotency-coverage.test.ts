@@ -70,6 +70,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /messenger/dialogs/:dialogId/messages': 'отправка сообщения — дубль отправил бы клиенту два одинаковых сообщения',
   'POST /messenger/dialogs/:dialogId/messages/media': 'отправка медиа сообщения — дубль отправил бы клиенту два одинаковых файла',
   'POST /messenger/dialogs/:dialogId/create-task': 'создание задачи из диалога — дубль создал бы дублирующую задачу в CRM',
+  'POST /lms/items': 'создание обучающего материала библиотеки — дубль создал бы дубликат статьи/скрипта',
+  'POST /lms/courses': 'создание обучающего курса — повтор создал бы дубликат курса',
 };
 
 /**
@@ -220,6 +222,14 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'DELETE /messenger/accounts/:accountId': 'удаление аккаунта мессенджера по id идемпотентно',
   'POST /messenger/dialogs/:dialogId/read': 'отметка прочтения диалога идемпотентна по природе (unreadCount -> 0)',
   'POST /messenger/dialogs/:dialogId/link-crm': 'связывание диалога с CRM-сущностями (leadId/contactId/dealId) идемпотентно перезаписывает ссылки',
+
+  // --- LMS & База знаний ---
+  'PATCH /lms/items/:id': 'обновление материала библиотеки по уникальному id',
+  'DELETE /lms/items/:id': 'удаление материала библиотеки по id',
+  'PATCH /lms/courses/:id': 'обновление курса по уникальному id',
+  'DELETE /lms/courses/:id': 'удаление курса по id',
+  'PUT /lms/progress/:courseId': 'upsert прогресса обучения ученика — идемпотентен по courseId',
+  'DELETE /lms/progress/:courseId': 'сброс прогресса курса — повтор не меняет состояние',
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */

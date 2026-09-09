@@ -21,6 +21,7 @@ import { SelectionsModule } from './modules/selections/selections.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { MessengerModule } from './modules/messenger/messenger.module';
+import { LmsModule } from './modules/lms/lms.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { MessengerModule } from './modules/messenger/messenger.module';
     FavoritesModule,
     BillingModule,
     MessengerModule,
+    LmsModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы

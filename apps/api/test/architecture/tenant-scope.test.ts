@@ -109,6 +109,10 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
   'unit.repository.ts#listByBuildingIds':
     'Worker-side вызов для сборки публичной проекции ЖК (PublicationRequestedHandler): ' +
     'buildingIds получены из уже загруженного Development, worker работает как system actor вне tenant-контекста.',
+  'lms-item.repository.ts#seedSystemItemsIfEmpty':
+    'Системный сид базовых материалов платформы (isSystem: true, organizationId: null) — выполняется при старте модуля.',
+  'lms-course.repository.ts#seedSystemCoursesIfEmpty':
+    'Системный сид базовых курсов платформы (isSystem: true, organizationId: null) — выполняется при старте модуля.',
 };
 
 const QUERY = /this\.model\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|countDocuments|aggregate|distinct)\b/;
