@@ -3027,6 +3027,283 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/community/sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список разделов сообщества */
+        get: operations["getCommunitySections"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/sections/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение раздела сообщества по ID */
+        get: operations["getCommunitySection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/threads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Пагинированный список тем (тредов) форума */
+        get: operations["listCommunityThreads"];
+        put?: never;
+        /** Создание новой темы (треда) форума */
+        post: operations["createCommunityThread"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/threads/{threadId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Детальная карточка темы */
+        get: operations["getCommunityThread"];
+        put?: never;
+        post?: never;
+        /** Удаление темы */
+        delete: operations["deleteCommunityThread"];
+        options?: never;
+        head?: never;
+        /** Редактирование темы */
+        patch: operations["updateCommunityThread"];
+        trace?: never;
+    };
+    "/community/threads/{threadId}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Лайк / снятие лайка темы */
+        post: operations["toggleCommunityThreadReaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/threads/{threadId}/pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Закрепление / открепление темы */
+        patch: operations["pinCommunityThread"];
+        trace?: never;
+    };
+    "/community/threads/{threadId}/replies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Пагинированный список ответов в теме */
+        get: operations["listCommunityReplies"];
+        put?: never;
+        /** Публикация ответа в теме */
+        post: operations["createCommunityReply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/replies/{replyId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Удаление ответа */
+        delete: operations["deleteCommunityReply"];
+        options?: never;
+        head?: never;
+        /** Редактирование ответа */
+        patch: operations["updateCommunityReply"];
+        trace?: never;
+    };
+    "/community/replies/{replyId}/like": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Лайк / снятие лайка ответа */
+        post: operations["toggleCommunityReplyReaction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/replies/{replyId}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Принятие ответа как правильного решения */
+        patch: operations["acceptCommunityReply"];
+        trace?: never;
+    };
+    "/community/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список сделок биржи MLS */
+        get: operations["listCommunityExchangeDeals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/exchange/{threadId}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Смена статуса сделки MLS */
+        patch: operations["updateCommunityExchangeStatus"];
+        trace?: never;
+    };
+    "/community/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список мероприятий сообщества */
+        get: operations["listCommunityEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/events/{eventId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Детальная карточка мероприятия */
+        get: operations["getCommunityEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/events/{eventId}/attend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Регистрация / отмена участия в мероприятии */
+        post: operations["toggleCommunityEventAttendance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/community/leaderboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Таблица лидеров сообщества */
+        get: operations["getCommunityLeaderboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4906,6 +5183,189 @@ export interface components {
             data: {
                 deleted: boolean;
             };
+        };
+        CommunityAuthorSnapshot: {
+            id?: string;
+            name: string;
+            role: string;
+            avatarUrl?: string;
+            organizationName?: string;
+            badge?: string;
+            dealsCount?: number;
+            rating?: number;
+        };
+        CommunitySectionView: {
+            sectionId: string;
+            name: string;
+            kind: string;
+            group: string;
+            icon?: string;
+            description?: string;
+            threadCount: number;
+            order: number;
+        };
+        CommunitySectionResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunitySectionView"];
+        };
+        CommunitySectionsResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunitySectionView"][];
+        };
+        CommunityExchangeInfo: {
+            intent: string;
+            side: string;
+            dealKind?: string;
+            location?: string;
+            amount?: number;
+            commission?: number;
+            deadline?: string;
+            status: string;
+        };
+        CommunityThreadView: {
+            threadId: string;
+            type: string;
+            sectionId: string;
+            title: string;
+            excerpt: string;
+            body: string;
+            authorIdentityId: string;
+            authorPositionId?: string;
+            organizationId?: string;
+            authorSnapshot?: components["schemas"]["CommunityAuthorSnapshot"];
+            views: number;
+            reactions: number;
+            replyCount: number;
+            tags?: string[];
+            pinned: boolean;
+            solved: boolean;
+            locked: boolean;
+            exchange?: components["schemas"]["CommunityExchangeInfo"];
+            createdAt: string;
+            updatedAt: string;
+        };
+        CommunityThreadResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityThreadView"];
+        };
+        CommunityThreadsPaginatedData: {
+            items: components["schemas"]["CommunityThreadView"][];
+            total: number;
+            page: number;
+            pageSize: number;
+            hasMore: boolean;
+        };
+        CommunityThreadsPaginatedResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityThreadsPaginatedData"];
+        };
+        CreateCommunityThreadRequest: {
+            type: string;
+            sectionId: string;
+            title: string;
+            excerpt: string;
+            body: string;
+            tags?: string[];
+            exchange?: components["schemas"]["CommunityExchangeInfo"];
+        };
+        UpdateCommunityThreadRequest: {
+            title?: string;
+            excerpt?: string;
+            body?: string;
+            tags?: string[];
+            pinned?: boolean;
+            solved?: boolean;
+            locked?: boolean;
+        };
+        CommunityReplyView: {
+            replyId: string;
+            threadId: string;
+            authorIdentityId: string;
+            authorPositionId?: string;
+            organizationId?: string;
+            authorSnapshot?: components["schemas"]["CommunityAuthorSnapshot"];
+            body: string;
+            reactions: number;
+            isBest: boolean;
+            createdAt: string;
+            updatedAt: string;
+        };
+        CommunityReplyResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityReplyView"];
+        };
+        CommunityRepliesPaginatedData: {
+            items: components["schemas"]["CommunityReplyView"][];
+            total: number;
+            page: number;
+            pageSize: number;
+            hasMore: boolean;
+        };
+        CommunityRepliesPaginatedResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityRepliesPaginatedData"];
+        };
+        CreateCommunityReplyRequest: {
+            body: string;
+        };
+        UpdateCommunityReplyRequest: {
+            body: string;
+        };
+        AcceptCommunityReplyRequest: {
+            threadId: string;
+        };
+        UpdateCommunityExchangeStatusRequest: {
+            /** @enum {string} */
+            status: "open" | "in_progress" | "closed" | "cancelled";
+        };
+        CommunityEventView: {
+            eventId: string;
+            title: string;
+            description: string;
+            date: string;
+            location: string;
+            format: string;
+            attendeeCount: number;
+            isAttending: boolean;
+        };
+        CommunityEventResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityEventView"];
+        };
+        CommunityEventsResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityEventView"][];
+        };
+        CommunityLeaderboardEntry: {
+            identityId: string;
+            name: string;
+            role: string;
+            avatarUrl?: string;
+            organizationName?: string;
+            badge?: string;
+            postsCount: number;
+            solutionsCount: number;
+            rating: number;
+        };
+        CommunityLeaderboardResponse: {
+            success: boolean;
+            data: components["schemas"]["CommunityLeaderboardEntry"][];
+        };
+        CommunityDeleteResponse: {
+            success: boolean;
+            data: {
+                deleted: boolean;
+            };
+        };
+        CommunityReactionResponse: {
+            success: boolean;
+            data: {
+                reactions: number;
+                hasLiked: boolean;
+            };
+        };
+        CommunityPinRequest: {
+            pinned: boolean;
         };
     };
     responses: {
@@ -11409,6 +11869,571 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LmsDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getCommunitySections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список разделов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunitySectionsResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getCommunitySection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Раздел сообщества */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunitySectionResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listCommunityThreads: {
+        parameters: {
+            query?: {
+                sectionId?: string;
+                type?: string;
+                tag?: string;
+                search?: string;
+                sort?: "active" | "new" | "unanswered";
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список тем */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadsPaginatedResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createCommunityThread: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCommunityThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Тема создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getCommunityThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Тема форума */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteCommunityThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Тема удалена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCommunityThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCommunityThreadRequest"];
+            };
+        };
+        responses: {
+            /** @description Тема обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    toggleCommunityThreadReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Результат переключения реакции */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityReactionResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    pinCommunityThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityPinRequest"];
+            };
+        };
+        responses: {
+            /** @description Тема обновлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listCommunityReplies: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список ответов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityRepliesPaginatedResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    createCommunityReply: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCommunityReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Ответ создан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityReplyResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    deleteCommunityReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ответ удален */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityDeleteResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    updateCommunityReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCommunityReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Ответ обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityReplyResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    toggleCommunityReplyReaction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Результат переключения реакции */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityReactionResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    acceptCommunityReply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                replyId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptCommunityReplyRequest"];
+            };
+        };
+        responses: {
+            /** @description Ответ принят как лучшее решение */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityReplyResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listCommunityExchangeDeals: {
+        parameters: {
+            query?: {
+                intent?: string;
+                side?: string;
+                status?: string;
+                search?: string;
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список сделок */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadsPaginatedResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    updateCommunityExchangeStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCommunityExchangeStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Статус сделки обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityThreadResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listCommunityEvents: {
+        parameters: {
+            query?: {
+                format?: "all" | "online" | "offline";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список мероприятий */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityEventsResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getCommunityEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Мероприятие сообщества */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityEventResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    toggleCommunityEventAttendance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Статус участия обновлен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityEventResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    getCommunityLeaderboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Лидерборд */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommunityLeaderboardResponse"];
                 };
             };
             401: components["responses"]["Error"];

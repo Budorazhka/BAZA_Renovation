@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CRM_API_BASE_URL } from '@/config/backend';
+import { PLATFORM_API_BASE_URL } from '@/config/backend';
 import {
   EVENTS,
   MEMBERS,
@@ -21,10 +21,18 @@ import {
 // ─── Axios client ─────────────────────────────────────────────────────────────
 
 const api = axios.create({
-  baseURL: CRM_API_BASE_URL,
+  baseURL: PLATFORM_API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 });
+
+export function newIdempotencyKey(): string {
+  const globalCrypto = typeof window !== 'undefined' ? window.crypto : (globalThis as unknown as { crypto?: Crypto }).crypto;
+  if (globalCrypto && typeof globalCrypto.randomUUID === 'function') {
+    return globalCrypto.randomUUID();
+  }
+  return `community-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,7 +58,7 @@ let _apiAvailable: boolean | null = null;
 async function checkApiAvailable(): Promise<boolean> {
   if (_apiAvailable !== null) return _apiAvailable;
   try {
-    const resp = await api.get('/api/community/sections', { timeout: 5000 });
+    const resp = await api.get('/api/v1/community/sections', { timeout: 5000 });
     _apiAvailable = resp.status >= 200 && resp.status < 300;
   } catch {
     _apiAvailable = false;
@@ -84,13 +92,26 @@ function paginate<T>(items: T[], page: number, pageSize: number): PaginatedData<
 export const communityApi = {
   getSections: () =>
     withFallback(
-      () => api.get<ApiResponse<ForumSection[]>>('/api/community/sections').then((r) => r.data.data),
+      () =>
+        api
+          .get<ApiResponse<{ sections: ForumSection[]; groups: unknown[] } | ForumSection[]>>(
+            '/api/v1/community/sections',
+          )
+          .then((r) => {
+            const data = r.data.data;
+            if (Array.isArray(data)) return data;
+            if (data && 'sections' in data && Array.isArray(data.sections)) return data.sections;
+            return SECTIONS;
+          }),
       SECTIONS,
     ).then((s) => (Array.isArray(s) ? s : SECTIONS)),
 
   getSectionById: (id: string) =>
     withFallback(
-      () => api.get<ApiResponse<ForumSection>>(`/api/community/sections/${id}`).then((r) => r.data.data),
+      () =>
+        api
+          .get<ApiResponse<ForumSection>>(`/api/v1/community/sections/${id}`)
+          .then((r) => r.data.data),
       SECTIONS.find((s) => s.id === id) ?? null,
     ),
 
@@ -108,7 +129,16 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/community/threads', { params })
+          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+            params: {
+              sectionId: params?.section,
+              type: params?.type,
+              search: params?.search,
+              sort: params?.sort,
+              page: params?.page,
+              pageSize: params?.pageSize,
+            },
+          })
           .then((r) => r.data.data),
       (() => {
         let items = [...THREADS];
@@ -131,30 +161,37 @@ export const communityApi = {
   getThreadById: (id: string) =>
     withFallback(
       () =>
-        api.get<ApiResponse<ForumThread>>(`/api/community/threads/${id}`).then((r) => r.data.data),
+        api
+          .get<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`)
+          .then((r) => r.data.data),
       THREADS.find((t) => t.id === id) ?? null,
     ),
 
-  createThread: (data: {
-    type: ThreadType;
-    sectionId: string;
-    title: string;
-    body: string;
-    tags?: string[];
-    exchange?: {
-      intent: ExchangeIntent;
-      side: ExchangeSide;
-      dealKind: string;
-      location: string;
-      amount: string;
-      commission?: string;
-      deadline?: string;
-    };
-  }) =>
+  createThread: (
+    data: {
+      type: ThreadType;
+      sectionId: string;
+      title: string;
+      body: string;
+      tags?: string[];
+      exchange?: {
+        intent: ExchangeIntent;
+        side: ExchangeSide;
+        dealKind: string;
+        location: string;
+        amount: string;
+        commission?: string;
+        deadline?: string;
+      };
+    },
+    idempotencyKey?: string,
+  ) =>
     withFallback(
       () =>
         api
-          .post<ApiResponse<ForumThread>>('/api/community/threads', data)
+          .post<ApiResponse<ForumThread>>('/api/v1/community/threads', data, {
+            headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() },
+          })
           .then((r) => r.data.data),
       // Optimistic mock — return a local thread
       (() => {
@@ -187,7 +224,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .patch<ApiResponse<ForumThread>>(`/api/community/threads/${id}`, data)
+          .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`, data)
           .then((r) => r.data.data),
       (() => {
         const t = THREADS.find((t) => t.id === id);
@@ -200,7 +237,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .delete<ApiResponse<{ success: boolean }>>(`/api/community/threads/${id}`)
+          .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/threads/${id}`)
           .then((r) => r.data.data),
       (() => {
         const idx = THREADS.findIndex((t) => t.id === id);
@@ -213,7 +250,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .patch<ApiResponse<ForumThread>>(`/api/community/threads/${id}`, { pinned })
+          .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}/pin`, { pinned })
           .then((r) => r.data.data),
       (() => {
         const t = THREADS.find((t) => t.id === id);
@@ -228,7 +265,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumReply>>>(`/api/community/threads/${threadId}/replies`, { params })
+          .get<ApiResponse<PaginatedData<ForumReply>>>(`/api/v1/community/threads/${threadId}/replies`, { params })
           .then((r) => r.data.data),
       (() => {
         let items = REPLIES.filter((r) => r.threadId === threadId);
@@ -239,11 +276,15 @@ export const communityApi = {
       })(),
     ),
 
-  createReply: (threadId: string, body: string) =>
+  createReply: (threadId: string, body: string, idempotencyKey?: string) =>
     withFallback(
       () =>
         api
-          .post<ApiResponse<ForumReply>>(`/api/community/threads/${threadId}/replies`, { body })
+          .post<ApiResponse<ForumReply>>(
+            `/api/v1/community/threads/${threadId}/replies`,
+            { body },
+            { headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() } },
+          )
           .then((r) => r.data.data),
       (() => {
         const reply: ForumReply = {
@@ -265,7 +306,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .patch<ApiResponse<ForumReply>>(`/api/community/replies/${id}`, { body })
+          .patch<ApiResponse<ForumReply>>(`/api/v1/community/replies/${id}`, { body })
           .then((r) => r.data.data),
       (() => {
         const r = REPLIES.find((r) => r.id === id);
@@ -278,7 +319,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .delete<ApiResponse<{ success: boolean }>>(`/api/community/replies/${id}`)
+          .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/replies/${id}`)
           .then((r) => r.data.data),
       (() => {
         const idx = REPLIES.findIndex((r) => r.id === id);
@@ -296,11 +337,18 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .patch<ApiResponse<{ replyId: string; isBest: boolean; threadSolved: boolean }>>(
-            `/api/community/threads/${threadId}/best-reply`,
-            { replyId },
+          .patch<ApiResponse<ForumReply>>(
+            `/api/v1/community/replies/${replyId}/accept`,
+            { threadId },
           )
-          .then((r) => r.data.data),
+          .then((r) => {
+            const reply = r.data.data;
+            return {
+              replyId,
+              isBest: reply?.isBest ?? true,
+              threadSolved: true,
+            };
+          }),
       (() => {
         const thread = THREADS.find((t) => t.id === threadId);
         const replies = REPLIES.filter((r) => r.threadId === threadId);
@@ -326,11 +374,15 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .post<ApiResponse<{ reacted: boolean; reactionCount: number }>>(
-            `/api/community/threads/${threadId}/reactions`,
-            { type: 'like' },
+          .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
+            `/api/v1/community/threads/${threadId}/like`,
           )
-          .then((r) => r.data.data),
+          .then((r) => {
+            const data = r.data.data;
+            const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
+            const reacted = data?.reacted ?? data?.hasLiked ?? false;
+            return { reacted, reactionCount };
+          }),
       (() => {
         const t = THREADS.find((t) => t.id === threadId);
         if (!t) return { reacted: false, reactionCount: 0 };
@@ -343,11 +395,15 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .post<ApiResponse<{ reacted: boolean; reactionCount: number }>>(
-            `/api/community/replies/${replyId}/reactions`,
-            { type: 'like' },
+          .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
+            `/api/v1/community/replies/${replyId}/like`,
           )
-          .then((r) => r.data.data),
+          .then((r) => {
+            const data = r.data.data;
+            const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
+            const reacted = data?.reacted ?? data?.hasLiked ?? false;
+            return { reacted, reactionCount };
+          }),
       (() => {
         const r = REPLIES.find((r) => r.id === replyId);
         if (!r) return { reacted: false, reactionCount: 0 };
@@ -370,8 +426,8 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumMember>>>('/api/community/members', { params })
-          .then((r) => r.data.data),
+          .get<ApiResponse<ForumMember[]>>('/api/v1/community/leaderboard')
+          .then((r) => paginate(r.data.data, params?.page ?? 1, params?.pageSize ?? 20)),
       (() => {
         let items = [...MEMBERS];
         if (params?.segment) items = items.filter((m) => m.segment === params.segment);
@@ -390,7 +446,10 @@ export const communityApi = {
   getMemberById: (id: string) =>
     withFallback(
       () =>
-        api.get<ApiResponse<ForumMember>>(`/api/community/members/${id}`).then((r) => r.data.data),
+        api.get<ApiResponse<ForumMember>>(`/api/v1/community/leaderboard`).then((r) => {
+          const members = r.data.data as unknown as ForumMember[];
+          return members.find((m) => m.id === id) ?? MEMBERS.find((m) => m.id === id) ?? null;
+        }),
       MEMBERS.find((m) => m.id === id) ?? null,
     ),
 
@@ -398,7 +457,9 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>(`/api/community/members/${memberId}/threads`, { params })
+          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+            params: { authorIdentityId: memberId, ...params },
+          })
           .then((r) => r.data.data),
       (() => {
         const items = THREADS.filter((t) => t.authorId === memberId);
@@ -412,8 +473,16 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<ForumEvent[]>>('/api/community/events', { params })
-          .then((r) => r.data.data),
+          .get<ApiResponse<{ items: ForumEvent[]; total: number } | ForumEvent[]>>(
+            '/api/v1/community/events',
+            { params },
+          )
+          .then((r) => {
+            const data = r.data.data;
+            if (Array.isArray(data)) return data;
+            if (data && 'items' in data && Array.isArray(data.items)) return data.items;
+            return EVENTS;
+          }),
       (() => {
         const items = [...EVENTS];
         return items;
@@ -424,10 +493,13 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .post<ApiResponse<{ registered: boolean; attendees: number }>>(
-            `/api/community/events/${eventId}/register`,
+          .post<ApiResponse<{ attending: boolean; attendeeCount: number }>>(
+            `/api/v1/community/events/${eventId}/attend`,
           )
-          .then((r) => r.data.data),
+          .then((r) => ({
+            registered: r.data.data.attending,
+            attendees: r.data.data.attendeeCount,
+          })),
       { registered: true, attendees: 0 },
     ),
 
@@ -437,7 +509,7 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<Array<{ tag: string; count: number }>>>('/api/community/tags/trending', {
+          .get<ApiResponse<Array<{ tag: string; count: number }>>>('/api/v1/community/tags/trending', {
             params: { limit },
           })
           .then((r) => r.data.data),
@@ -453,11 +525,16 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<{ demand: ForumThread[]; supply: ForumThread[]; total: number }>>(
-            '/api/community/exchange/board',
+          .get<ApiResponse<PaginatedData<ForumThread>>>(
+            '/api/v1/community/exchange',
             { params },
           )
-          .then((r) => r.data.data),
+          .then((r) => {
+            const items = r.data.data?.items ?? [];
+            const demand = items.filter((t) => t.exchange?.side === 'demand');
+            const supply = items.filter((t) => t.exchange?.side === 'supply');
+            return { demand, supply, total: r.data.data?.total ?? items.length };
+          }),
       (() => {
         const GROUP_OF: Record<ExchangeIntent, string> = {
           buy_seek: 'sale',
@@ -495,11 +572,11 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .patch<ApiResponse<{ status: ExchangeStatus }>>(
-            `/api/community/threads/${threadId}/exchange/status`,
+          .patch<ApiResponse<ForumThread>>(
+            `/api/v1/community/exchange/${threadId}/status`,
             { status },
           )
-          .then((r) => r.data.data),
+          .then((r) => ({ status: (r.data.data?.exchange?.status as ExchangeStatus) ?? status })),
       (() => {
         const t = THREADS.find((t) => t.id === threadId);
         if (t?.exchange) t.exchange.status = status;
@@ -513,11 +590,15 @@ export const communityApi = {
     withFallback(
       () =>
         api
-          .get<ApiResponse<{ threads: ForumThread[]; members: ForumMember[]; total: number }>>(
-            '/api/community/search',
-            { params: { q, ...params } },
+          .get<ApiResponse<PaginatedData<ForumThread>>>(
+            '/api/v1/community/threads',
+            { params: { search: q, ...params } },
           )
-          .then((r) => r.data.data),
+          .then((r) => ({
+            threads: r.data.data?.items ?? [],
+            members: [],
+            total: r.data.data?.total ?? 0,
+          })),
       (() => {
         const ql = q.toLowerCase();
         const threads = THREADS.filter(
@@ -543,7 +624,7 @@ export const communityApi = {
             totalThreads: number;
             totalReplies: number;
             solvedQuestions: number;
-          }>>('/api/community/stats')
+          }>>('/api/v1/community/stats')
           .then((r) => r.data.data),
       {
         totalMembers: MEMBERS.length,
@@ -560,10 +641,13 @@ export const communityApi = {
   // ─── Current user ───────────────────────────────────────────────────────────
 
   getCurrentUser: () => {
-    const userId = localStorage.getItem('userId') || 'm5';
+    const userId = typeof localStorage !== 'undefined' ? localStorage.getItem('userId') || 'm5' : 'm5';
     return withFallback(
       () =>
-        api.get<ApiResponse<ForumMember>>(`/api/community/members/${userId}`).then((r) => r.data.data),
+        api.get<ApiResponse<ForumMember>>(`/api/v1/community/leaderboard`).then((r) => {
+          const members = r.data.data as unknown as ForumMember[];
+          return members.find((m) => m.id === userId) ?? MEMBERS.find((m) => m.id === 'm5')!;
+        }),
       MEMBERS.find((m) => m.id === userId) ?? MEMBERS.find((m) => m.id === 'm5')!,
     );
   },

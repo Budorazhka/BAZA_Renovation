@@ -59,6 +59,9 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
   'BookingConvertedToDeal',
   'MessengerMessageSent',
   'LmsCourseCompleted',
+  'CommunityThreadCreated',
+  'CommunityReplyCreated',
+  'ExchangeDealStatusChanged',
 ] as const;
 
 /**

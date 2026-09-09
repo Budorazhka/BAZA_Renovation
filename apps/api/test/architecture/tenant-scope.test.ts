@@ -43,6 +43,10 @@ const NON_TENANT_REPOSITORIES = [
   'marketplace-publication',
   'booking-lock',
   'subscription-plan',
+  'community-section',
+  'community-thread',
+  'community-reply',
+  'community-event',
 ];
 
 /** `<файл>#<метод>` → почему запрос без organizationId здесь корректен. */

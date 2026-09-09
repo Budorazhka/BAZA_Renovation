@@ -72,6 +72,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /messenger/dialogs/:dialogId/create-task': 'создание задачи из диалога — дубль создал бы дублирующую задачу в CRM',
   'POST /lms/items': 'создание обучающего материала библиотеки — дубль создал бы дубликат статьи/скрипта',
   'POST /lms/courses': 'создание обучающего курса — повтор создал бы дубликат курса',
+  'POST /community/threads': 'создание темы форума — повтор создал бы дубликат обсуждения',
+  'POST /community/threads/:threadId/replies': 'создание ответа в треде — повтор создал бы дублирующий ответ',
 };
 
 /**
@@ -230,6 +232,18 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'DELETE /lms/courses/:id': 'удаление курса по id',
   'PUT /lms/progress/:courseId': 'upsert прогресса обучения ученика — идемпотентен по courseId',
   'DELETE /lms/progress/:courseId': 'сброс прогресса курса — повтор не меняет состояние',
+
+  // --- Сообщество, форум и MLS биржа ---
+  'PATCH /community/threads/:threadId': 'обновление темы по уникальному id треда',
+  'DELETE /community/threads/:threadId': 'удаление темы по уникальному id треда',
+  'POST /community/threads/:threadId/like': 'toggle реакции на тред идемпотентен по identityId',
+  'PATCH /community/threads/:threadId/pin': 'закрепление темы по уникальному id треда',
+  'PATCH /community/replies/:replyId': 'обновление ответа по уникальному id',
+  'DELETE /community/replies/:replyId': 'удаление ответа по уникальному id',
+  'POST /community/replies/:replyId/like': 'toggle реакции на ответ идемпотентен по identityId',
+  'PATCH /community/replies/:replyId/accept': 'принятие ответа как решения идемпотентно перезаписывает isBest',
+  'PATCH /community/exchange/:threadId/status': 'смена статуса заявки биржи MLS по уникальному id треда',
+  'POST /community/events/:eventId/attend': 'toggle участия в мероприятии идемпотентен по identityId',
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */
