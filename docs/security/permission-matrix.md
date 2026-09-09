@@ -80,6 +80,19 @@ Deny-by-default: отсутствие явного grant означает отк
 
 **`import.organization` (03.09.2026, POST /leads/import)** — CSV/XLSX импорт лидов построчным отчётом об ошибках, `[technical decision]` по прямой аналогии с `export.organization`: сам грант не даёт права заводить лиды, дополнительно требуется `lead.create` (та же двухступенчатая проверка, что у export/read — см. раздел 1.5 выше и докстринг `ExportService.buildExport`). Выдан ровно тем ролям, у которых уже есть `lead.create.organization` (owner/director/rop/manager/administrator), включая `manager`, у которого нет `export.organization` — импорт не расширяет реальных возможностей роли, только даёт завести много лидов одним файлом вместо ручной формы по одному. `marketer` не получает — нет `lead.create`.
 
+### 1.6. Messenger & Communications (Этап 10)
+
+| Permission | owner | director | rop | manager | administrator | marketer |
+|---|---|---|---|---|---|---|
+| `messenger_account.read.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `messenger_account.manage.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `messenger_dialog.read.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `messenger_dialog.read.organization` | ✓ | ✓ | ✓ | — | ✓ | — |
+| `messenger_dialog.link_crm.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `messenger_dialog.link_crm.organization` | ✓ | ✓ | ✓ | — | — | — |
+| `messenger_message.send.own` | ✓ | ✓ | ✓ | ✓ | — | — |
+| `messenger_message.send.organization` | ✓ | ✓ | ✓ | — | — | — |
+
 ---
 
 ## 2. Системные admin actors

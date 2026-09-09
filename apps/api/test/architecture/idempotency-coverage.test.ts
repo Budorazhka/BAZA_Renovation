@@ -65,6 +65,11 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /selections/:id/items': 'добавление лотов в подборку с Idempotency-Key и expectedVersion',
   'DELETE /selections/:id/items/:unitId': 'удаление лота из подборки с Idempotency-Key и expectedVersion',
   'PATCH /selections/:id/items/:unitId': 'заметка/реакция агента на лот в подборке с Idempotency-Key и expectedVersion',
+  'POST /messenger/accounts/telegram/bot': 'создание бота в организации — дубль создал бы дубликат канала',
+  'POST /messenger/accounts/whatsapp': 'создание WA аккаунта — дубль создал бы дубликат канала',
+  'POST /messenger/dialogs/:dialogId/messages': 'отправка сообщения — дубль отправил бы клиенту два одинаковых сообщения',
+  'POST /messenger/dialogs/:dialogId/messages/media': 'отправка медиа сообщения — дубль отправил бы клиенту два одинаковых файла',
+  'POST /messenger/dialogs/:dialogId/create-task': 'создание задачи из диалога — дубль создал бы дублирующую задачу в CRM',
 };
 
 /**
@@ -210,6 +215,11 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /admin/organizations/:organizationId/unfreeze': 'условный update по статусу (разморозка организации)',
   'POST /admin/organizations/:organizationId/billing/activate':
     'ручная активация/продление тарифа администратором с обязательным аудитом, транзакцией и обоснованием (reason >= 10)',
+
+  // --- Мессенджеры и чаты ---
+  'DELETE /messenger/accounts/:accountId': 'удаление аккаунта мессенджера по id идемпотентно',
+  'POST /messenger/dialogs/:dialogId/read': 'отметка прочтения диалога идемпотентна по природе (unreadCount -> 0)',
+  'POST /messenger/dialogs/:dialogId/link-crm': 'связывание диалога с CRM-сущностями (leadId/contactId/dealId) идемпотентно перезаписывает ссылки',
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */

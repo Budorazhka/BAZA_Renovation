@@ -2730,6 +2730,194 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/messenger/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список подключенных аккаунтов мессенджеров (Telegram bot, WhatsApp) */
+        get: operations["listMessengerAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/accounts/telegram/bot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подключение Telegram-бота организации */
+        post: operations["addTelegramBotAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/accounts/whatsapp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Подключение WhatsApp-аккаунта организации */
+        post: operations["addWhatsAppAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Отключение / удаление аккаунта мессенджера */
+        delete: operations["deleteMessengerAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список клиентских диалогов с фильтрацией по CRM и аккаунтам */
+        get: operations["listMessengerDialogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение детальной информации о диалоге */
+        get: operations["getMessengerDialog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** История сообщений в диалоге, newest-first с курсором */
+        get: operations["listMessengerMessages"];
+        put?: never;
+        /** Отправка исходящего текстового сообщения клиенту */
+        post: operations["sendMessengerTextMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}/messages/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Отправка медиафайла/документа в диалог */
+        post: operations["sendMessengerMediaMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Сброс счетчика непрочитанных сообщений в диалоге */
+        post: operations["markMessengerDialogRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}/link-crm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Привязка диалога к сущностям CRM (лид, контакт, сделка) */
+        post: operations["linkMessengerDialogToCrm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/messenger/dialogs/{dialogId}/create-task": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Создание CRM-задачи из контекста диалога */
+        post: operations["createTaskFromMessengerDialog"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4379,6 +4567,123 @@ export interface components {
             summary: components["schemas"]["TeamPerformanceSummary"];
             positions: components["schemas"]["TeamPerformancePositionItem"][];
             timeseries: components["schemas"]["TeamPerformanceTimeseriesPoint"][];
+        };
+        MessengerAccount: {
+            id: string;
+            organizationId: string;
+            assignedPositionId?: string | null;
+            /** @enum {string} */
+            platform: "telegram" | "whatsapp";
+            /** @enum {string} */
+            accountType: "bot" | "user";
+            name: string;
+            telegramBotUsername?: string | null;
+            phoneNumber?: string | null;
+            /** @enum {string} */
+            authStatus: "pending" | "authenticated" | "disconnected";
+            isActive: boolean;
+            /** Format: date-time */
+            lastSyncAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AddTelegramBotAccountRequest: {
+            name: string;
+            botToken: string;
+        };
+        AddWhatsAppAccountRequest: {
+            name: string;
+            phoneNumber?: string;
+        };
+        DialogLastMessage: {
+            text: string;
+            /** Format: date-time */
+            sentAt: string;
+            fromMe: boolean;
+            /** @enum {string} */
+            author: "client" | "agent";
+        };
+        MessengerDialog: {
+            id: string;
+            organizationId: string;
+            accountId: string;
+            assignedPositionId?: string | null;
+            /** @enum {string} */
+            platform: "telegram" | "whatsapp";
+            externalChatId: string;
+            name: string;
+            clientPhone?: string | null;
+            clientHandle?: string | null;
+            clientCity?: string | null;
+            avatarUrl?: string | null;
+            unreadCount: number;
+            pinned: boolean;
+            lastMessage?: components["schemas"]["DialogLastMessage"] | null;
+            leadId?: string | null;
+            contactId?: string | null;
+            dealId?: string | null;
+            tags: string[];
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        MessengerDialogListResponse: {
+            items: components["schemas"]["MessengerDialog"][];
+            nextCursor?: string | null;
+        };
+        MessageMedia: {
+            assetId?: string | null;
+            url?: string | null;
+            mimeType?: string | null;
+            fileName?: string | null;
+        };
+        MessengerMessage: {
+            id: string;
+            organizationId: string;
+            dialogId: string;
+            externalMessageId?: string | null;
+            /** @enum {string} */
+            author: "client" | "agent";
+            senderPositionId?: string | null;
+            text: string;
+            /** @enum {string} */
+            messageType: "text" | "photo" | "video" | "document" | "audio";
+            /** @enum {string} */
+            status: "sent" | "delivered" | "read";
+            /** Format: date-time */
+            sentAt: string;
+            media?: components["schemas"]["MessageMedia"] | null;
+        };
+        MessengerMessageListResponse: {
+            items: components["schemas"]["MessengerMessage"][];
+            nextCursor?: string | null;
+        };
+        SendMessengerTextMessageRequest: {
+            text: string;
+        };
+        SendMessengerMediaMessageRequest: {
+            text?: string;
+            /** @enum {string} */
+            messageType?: "text" | "photo" | "video" | "document" | "audio";
+            assetId?: string;
+            url?: string;
+            fileName?: string;
+            mimeType?: string;
+        };
+        LinkMessengerDialogCrmRequest: {
+            leadId?: string;
+            contactId?: string;
+            dealId?: string;
+        };
+        CreateTaskFromMessengerDialogRequest: {
+            title: string;
+            description?: string;
+            /** Format: date-time */
+            dueAt?: string;
+            isUrgent?: boolean;
+            isImportant?: boolean;
         };
     };
     responses: {
@@ -10183,6 +10488,359 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationSubscription"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listMessengerAccounts: {
+        parameters: {
+            query?: {
+                platform?: "telegram" | "whatsapp";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список аккаунтов мессенджеров организации */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerAccount"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    addTelegramBotAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddTelegramBotAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Telegram-бот успешно зарегистрирован */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerAccount"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    addWhatsAppAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddWhatsAppAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description WhatsApp-аккаунт зарегистрирован */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerAccount"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    deleteMessengerAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Аккаунт мессенджера отключен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listMessengerDialogs: {
+        parameters: {
+            query?: {
+                accountId?: string;
+                platform?: "telegram" | "whatsapp";
+                leadId?: string;
+                contactId?: string;
+                dealId?: string;
+                search?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список диалогов с курсорной пагинацией */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerDialogListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    getMessengerDialog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Карточка диалога */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerDialog"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    listMessengerMessages: {
+        parameters: {
+            query?: {
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список сообщений */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerMessageListResponse"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    sendMessengerTextMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessengerTextMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Сообщение успешно отправлено */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerMessage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    sendMessengerMediaMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendMessengerMediaMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Медиасообщение отправлено */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerMessage"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    markMessengerDialogRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Диалог помечен как прочитанный */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        success: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    linkMessengerDialogToCrm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkMessengerDialogCrmRequest"];
+            };
+        };
+        responses: {
+            /** @description Диалог привязан к CRM */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessengerDialog"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    createTaskFromMessengerDialog: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                dialogId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTaskFromMessengerDialogRequest"];
+            };
+        };
+        responses: {
+            /** @description Задача создана */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskView"];
                 };
             };
             400: components["responses"]["Error"];

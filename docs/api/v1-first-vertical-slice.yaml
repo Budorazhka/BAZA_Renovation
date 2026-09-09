@@ -6203,6 +6203,355 @@ paths:
         '404':
           $ref: '#/components/responses/Error'
 
+  /messenger/accounts:
+    get:
+      operationId: listMessengerAccounts
+      summary: Список подключенных аккаунтов мессенджеров (Telegram bot, WhatsApp)
+      tags: [messenger]
+      parameters:
+        - name: platform
+          in: query
+          schema: {type: string, enum: [telegram, whatsapp]}
+      responses:
+        '200':
+          description: Список аккаунтов мессенджеров организации
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessengerAccount'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /messenger/accounts/telegram/bot:
+    post:
+      operationId: addTelegramBotAccount
+      summary: Подключение Telegram-бота организации
+      tags: [messenger]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTelegramBotAccountRequest'
+      responses:
+        '201':
+          description: Telegram-бот успешно зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerAccount'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /messenger/accounts/whatsapp:
+    post:
+      operationId: addWhatsAppAccount
+      summary: Подключение WhatsApp-аккаунта организации
+      tags: [messenger]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddWhatsAppAccountRequest'
+      responses:
+        '201':
+          description: WhatsApp-аккаунт зарегистрирован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerAccount'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /messenger/accounts/{accountId}:
+    delete:
+      operationId: deleteMessengerAccount
+      summary: Отключение / удаление аккаунта мессенджера
+      tags: [messenger]
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Аккаунт мессенджера отключен
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: {type: boolean}
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs:
+    get:
+      operationId: listMessengerDialogs
+      summary: Список клиентских диалогов с фильтрацией по CRM и аккаунтам
+      tags: [messenger]
+      parameters:
+        - name: accountId
+          in: query
+          schema: {type: string}
+        - name: platform
+          in: query
+          schema: {type: string, enum: [telegram, whatsapp]}
+        - name: leadId
+          in: query
+          schema: {type: string}
+        - name: contactId
+          in: query
+          schema: {type: string}
+        - name: dealId
+          in: query
+          schema: {type: string}
+        - name: search
+          in: query
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список диалогов с курсорной пагинацией
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerDialogListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}:
+    get:
+      operationId: getMessengerDialog
+      summary: Получение детальной информации о диалоге
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Карточка диалога
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerDialog'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}/messages:
+    get:
+      operationId: listMessengerMessages
+      summary: История сообщений в диалоге, newest-first с курсором
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список сообщений
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerMessageListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+    post:
+      operationId: sendMessengerTextMessage
+      summary: Отправка исходящего текстового сообщения клиенту
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessengerTextMessageRequest'
+      responses:
+        '201':
+          description: Сообщение успешно отправлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerMessage'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}/messages/media:
+    post:
+      operationId: sendMessengerMediaMessage
+      summary: Отправка медиафайла/документа в диалог
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessengerMediaMessageRequest'
+      responses:
+        '201':
+          description: Медиасообщение отправлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerMessage'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}/read:
+    post:
+      operationId: markMessengerDialogRead
+      summary: Сброс счетчика непрочитанных сообщений в диалоге
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Диалог помечен как прочитанный
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success]
+                properties:
+                  success: {type: boolean}
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}/link-crm:
+    post:
+      operationId: linkMessengerDialogToCrm
+      summary: Привязка диалога к сущностям CRM (лид, контакт, сделка)
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkMessengerDialogCrmRequest'
+      responses:
+        '200':
+          description: Диалог привязан к CRM
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessengerDialog'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /messenger/dialogs/{dialogId}/create-task:
+    post:
+      operationId: createTaskFromMessengerDialog
+      summary: Создание CRM-задачи из контекста диалога
+      tags: [messenger]
+      parameters:
+        - name: dialogId
+          in: path
+          required: true
+          schema: {type: string}
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskFromMessengerDialogRequest'
+      responses:
+        '201':
+          description: Задача создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskView'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
 components:
   securitySchemes:
     cookieAuth:
@@ -8584,3 +8933,153 @@ components:
           items:
             $ref: '#/components/schemas/TeamPerformanceTimeseriesPoint'
 
+    MessengerAccount:
+      type: object
+      required: [id, organizationId, platform, accountType, name, authStatus, isActive, createdAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        assignedPositionId: {type: string, nullable: true}
+        platform: {type: string, enum: [telegram, whatsapp]}
+        accountType: {type: string, enum: [bot, user]}
+        name: {type: string}
+        telegramBotUsername: {type: string, nullable: true}
+        phoneNumber: {type: string, nullable: true}
+        authStatus: {type: string, enum: [pending, authenticated, disconnected]}
+        isActive: {type: boolean}
+        lastSyncAt: {type: string, format: date-time, nullable: true}
+        createdAt: {type: string, format: date-time}
+
+    AddTelegramBotAccountRequest:
+      type: object
+      required: [name, botToken]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        botToken: {type: string, minLength: 10, maxLength: 120}
+
+    AddWhatsAppAccountRequest:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        phoneNumber: {type: string, maxLength: 30}
+
+    DialogLastMessage:
+      type: object
+      required: [text, sentAt, fromMe, author]
+      properties:
+        text: {type: string}
+        sentAt: {type: string, format: date-time}
+        fromMe: {type: boolean}
+        author: {type: string, enum: [client, agent]}
+
+    MessengerDialog:
+      type: object
+      required: [id, organizationId, accountId, platform, externalChatId, name, unreadCount, pinned, tags, version, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        accountId: {type: string}
+        assignedPositionId: {type: string, nullable: true}
+        platform: {type: string, enum: [telegram, whatsapp]}
+        externalChatId: {type: string}
+        name: {type: string}
+        clientPhone: {type: string, nullable: true}
+        clientHandle: {type: string, nullable: true}
+        clientCity: {type: string, nullable: true}
+        avatarUrl: {type: string, nullable: true}
+        unreadCount: {type: integer, minimum: 0}
+        pinned: {type: boolean}
+        lastMessage:
+          allOf:
+            - $ref: '#/components/schemas/DialogLastMessage'
+          nullable: true
+        leadId: {type: string, nullable: true}
+        contactId: {type: string, nullable: true}
+        dealId: {type: string, nullable: true}
+        tags:
+          type: array
+          items: {type: string}
+        version: {type: integer}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    MessengerDialogListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessengerDialog'
+        nextCursor: {type: string, nullable: true}
+
+    MessageMedia:
+      type: object
+      properties:
+        assetId: {type: string, nullable: true}
+        url: {type: string, nullable: true}
+        mimeType: {type: string, nullable: true}
+        fileName: {type: string, nullable: true}
+
+    MessengerMessage:
+      type: object
+      required: [id, organizationId, dialogId, author, text, messageType, status, sentAt]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        dialogId: {type: string}
+        externalMessageId: {type: string, nullable: true}
+        author: {type: string, enum: [client, agent]}
+        senderPositionId: {type: string, nullable: true}
+        text: {type: string}
+        messageType: {type: string, enum: [text, photo, video, document, audio]}
+        status: {type: string, enum: [sent, delivered, read]}
+        sentAt: {type: string, format: date-time}
+        media:
+          allOf:
+            - $ref: '#/components/schemas/MessageMedia'
+          nullable: true
+
+    MessengerMessageListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MessengerMessage'
+        nextCursor: {type: string, nullable: true}
+
+    SendMessengerTextMessageRequest:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 4000}
+
+    SendMessengerMediaMessageRequest:
+      type: object
+      properties:
+        text: {type: string, maxLength: 1000}
+        messageType: {type: string, enum: [text, photo, video, document, audio]}
+        assetId: {type: string}
+        url: {type: string}
+        fileName: {type: string, maxLength: 255}
+        mimeType: {type: string, maxLength: 100}
+
+    LinkMessengerDialogCrmRequest:
+      type: object
+      properties:
+        leadId: {type: string}
+        contactId: {type: string}
+        dealId: {type: string}
+
+    CreateTaskFromMessengerDialogRequest:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 255}
+        description: {type: string, maxLength: 2000}
+        dueAt: {type: string, format: date-time}
+        isUrgent: {type: boolean}
+        isImportant: {type: boolean}

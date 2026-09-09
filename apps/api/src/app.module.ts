@@ -20,6 +20,7 @@ import { BookingsModule } from './modules/bookings/bookings.module';
 import { SelectionsModule } from './modules/selections/selections.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
 import { BillingModule } from './modules/billing/billing.module';
+import { MessengerModule } from './modules/messenger/messenger.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { BillingModule } from './modules/billing/billing.module';
     SelectionsModule,
     FavoritesModule,
     BillingModule,
+    MessengerModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы

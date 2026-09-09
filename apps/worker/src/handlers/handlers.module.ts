@@ -57,6 +57,7 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
   'TaskReassigned',
   'UnpublicationRequested',
   'BookingConvertedToDeal',
+  'MessengerMessageSent',
 ] as const;
 
 /**
