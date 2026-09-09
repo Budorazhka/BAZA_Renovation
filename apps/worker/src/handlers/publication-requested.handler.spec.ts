@@ -1,6 +1,14 @@
 import { Types } from 'mongoose';
 import { PublicationRequestedHandler } from './publication-requested.handler';
-import type { DevelopmentRepository } from '@baza/development';
+import type {
+  DevelopmentRepository,
+  BuildingRepository,
+  UnitRepository,
+  FloorPlanRepository,
+  DevelopmentDocument,
+  BuildingDocument,
+  UnitDocument,
+} from '@baza/development';
 import type { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import type { MarketplacePublicationRepository } from '@baza/publication';
 import type { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
@@ -9,13 +17,39 @@ function makeEvent(payload: Record<string, unknown>) {
   return { aggregateId: new Types.ObjectId(), payload } as never;
 }
 
-function makeDevelopment(overrides: Partial<Record<string, unknown>> = {}) {
+function makeDevelopment(overrides: Partial<Record<string, unknown>> = {}): DevelopmentDocument {
   return {
+    _id: new Types.ObjectId(),
     name: 'Malibu Residence',
     location: { country: 'Georgia', city: 'Batumi', address: 'x', geo: { type: 'Point', coordinates: [1, 2] } },
     classType: 'business',
     ...overrides,
-  } as never;
+  } as unknown as DevelopmentDocument;
+}
+
+function makeBuilding(overrides: Partial<Record<string, unknown>> = {}): BuildingDocument {
+  return {
+    _id: new Types.ObjectId(),
+    developmentId: new Types.ObjectId(),
+    name: 'Block A',
+    floorsCount: 16,
+    ...overrides,
+  } as unknown as BuildingDocument;
+}
+
+function makeUnit(overrides: Partial<Record<string, unknown>> = {}): UnitDocument {
+  return {
+    _id: new Types.ObjectId(),
+    buildingId: new Types.ObjectId(),
+    floorId: new Types.ObjectId(),
+    number: '101',
+    kind: 'apartment',
+    rooms: 2,
+    area: 54.5,
+    price: { amountMinorUnits: 65_000_00, currency: 'USD' },
+    status: 'available',
+    ...overrides,
+  } as unknown as UnitDocument;
 }
 
 function makeListing(overrides: Partial<Record<string, unknown>> = {}) {
@@ -43,6 +77,9 @@ function makeHandler(overrides: {
   propertyAssetRepository?: Partial<PropertyAssetRepository>;
   mediaAssetRepository?: Partial<MediaAssetRepository>;
   storage?: Partial<MediaStorageService>;
+  buildingRepository?: Partial<BuildingRepository>;
+  unitRepository?: Partial<UnitRepository>;
+  floorPlanRepository?: Partial<FloorPlanRepository>;
 } = {}) {
   return new PublicationRequestedHandler(
     (overrides.publicationRepository ?? {}) as MarketplacePublicationRepository,
@@ -51,6 +88,9 @@ function makeHandler(overrides: {
     (overrides.propertyAssetRepository ?? { findById: jest.fn() }) as PropertyAssetRepository,
     (overrides.mediaAssetRepository ?? { findByIds: jest.fn().mockResolvedValue([]) }) as MediaAssetRepository,
     (overrides.storage ?? { getPublicUrl: jest.fn((k: string) => `https://cdn.example.com/${k}`) }) as unknown as MediaStorageService,
+    overrides.buildingRepository as BuildingRepository | undefined,
+    overrides.unitRepository as UnitRepository | undefined,
+    overrides.floorPlanRepository as FloorPlanRepository | undefined,
   );
 }
 
@@ -508,6 +548,152 @@ describe('PublicationRequestedHandler', () => {
         }),
       }),
     );
+  });
+
+  it('успешно публикует Unit с планировкой и изображением: planImageUrl разрешается через storage', async () => {
+    const publicationId = new Types.ObjectId();
+    const dev = makeDevelopment({ name: 'Sunrise Bay' });
+    const building = makeBuilding({ developmentId: dev._id, name: 'Tower 1' });
+    const floorPlanId = new Types.ObjectId();
+    const imageAssetId = new Types.ObjectId();
+    const unit = makeUnit({ buildingId: building._id, number: '42', floorPlanId });
+
+    const floorPlan = {
+      _id: floorPlanId,
+      name: '2-Room Layout A',
+      isEuro: true,
+      imageAssetId,
+    };
+
+    const mediaDoc = {
+      _id: imageAssetId,
+      status: 'verified',
+      bucket: 'public',
+      variants: [{ type: 'card', assetPath: 'plans/layout-a-card.webp' }],
+    };
+
+    const markPublishedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
+    const handler = makeHandler({
+      publicationRepository: {
+        isSlugTaken: jest.fn().mockResolvedValue(false),
+        markPublished: markPublishedSpy,
+      },
+      unitRepository: { findById: jest.fn().mockResolvedValue(unit) },
+      buildingRepository: { findById: jest.fn().mockResolvedValue(building) },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(dev) },
+      floorPlanRepository: { findById: jest.fn().mockResolvedValue(floorPlan) },
+      mediaAssetRepository: { findById: jest.fn().mockResolvedValue(mediaDoc) },
+      storage: { getPublicUrl: jest.fn((p) => `https://cdn.example.com/${p}`) },
+    });
+
+    await handler.handle(
+      makeEvent({
+        publicationId: publicationId.toString(),
+        sourceType: 'unit',
+        sourceId: unit._id.toString(),
+        version: 1,
+      }),
+    );
+
+    const [, params] = markPublishedSpy.mock.calls[0];
+    expect(params.denormalizedFields.floorPlan).toEqual({
+      name: '2-Room Layout A',
+      isEuro: true,
+      imageUrl: 'https://cdn.example.com/plans/layout-a-card.webp',
+    });
+  });
+
+  it('успешно публикует Unit при отсутствии планировки: floorPlan не попадает в denormalizedFields', async () => {
+    const publicationId = new Types.ObjectId();
+    const dev = makeDevelopment({ name: 'Sunrise Bay' });
+    const building = makeBuilding({ developmentId: dev._id, name: 'Tower 1' });
+    const unit = makeUnit({ buildingId: building._id, number: '43', floorPlanId: undefined });
+
+    const markPublishedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
+    const handler = makeHandler({
+      publicationRepository: {
+        isSlugTaken: jest.fn().mockResolvedValue(false),
+        markPublished: markPublishedSpy,
+      },
+      unitRepository: { findById: jest.fn().mockResolvedValue(unit) },
+      buildingRepository: { findById: jest.fn().mockResolvedValue(building) },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(dev) },
+    });
+
+    await handler.handle(
+      makeEvent({
+        publicationId: publicationId.toString(),
+        sourceType: 'unit',
+        sourceId: unit._id.toString(),
+        version: 1,
+      }),
+    );
+
+    const [, params] = markPublishedSpy.mock.calls[0];
+    expect(params.denormalizedFields).not.toHaveProperty('floorPlan');
+  });
+
+  it('при публикации Development со смешанными валютами не выставляет единый priceFrom в проекциях', async () => {
+    const publicationId = new Types.ObjectId();
+    const devId = new Types.ObjectId();
+    const b1 = makeBuilding({ _id: new Types.ObjectId(), developmentId: devId, name: 'Block A' });
+    const u1 = makeUnit({ buildingId: b1._id, number: '10', price: { amountMinorUnits: 70_000_00, currency: 'USD' } });
+    const u2 = makeUnit({ buildingId: b1._id, number: '11', price: { amountMinorUnits: 150_000_00, currency: 'GEL' } });
+
+    const markPublishedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
+    const handler = makeHandler({
+      publicationRepository: { isSlugTaken: jest.fn().mockResolvedValue(false), markPublished: markPublishedSpy },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(makeDevelopment({ _id: devId })) },
+      buildingRepository: { listByDevelopmentId: jest.fn().mockResolvedValue([b1]) },
+      unitRepository: { listByBuildingIds: jest.fn().mockResolvedValue([u1, u2]) },
+    });
+
+    await handler.handle(
+      makeEvent({
+        publicationId: publicationId.toString(),
+        sourceType: 'development',
+        sourceId: devId.toString(),
+        version: 1,
+      }),
+    );
+
+    const [, params] = markPublishedSpy.mock.calls[0];
+    expect(params.denormalizedFields).not.toHaveProperty('priceFrom');
+    expect(params.searchProjection).not.toHaveProperty('priceAmountMinorUnits');
+    expect(params.searchProjection).not.toHaveProperty('priceCurrency');
+    expect(params.denormalizedFields.units).toHaveLength(2);
+  });
+
+  it('при публикации Development с 0 доступных юнитов не выставляет priceFrom', async () => {
+    const publicationId = new Types.ObjectId();
+    const devId = new Types.ObjectId();
+    const b1 = makeBuilding({ _id: new Types.ObjectId(), developmentId: devId, name: 'Block A' });
+
+    const markPublishedSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+
+    const handler = makeHandler({
+      publicationRepository: { isSlugTaken: jest.fn().mockResolvedValue(false), markPublished: markPublishedSpy },
+      developmentRepository: { findById: jest.fn().mockResolvedValue(makeDevelopment({ _id: devId })) },
+      buildingRepository: { listByDevelopmentId: jest.fn().mockResolvedValue([b1]) },
+      unitRepository: { listByBuildingIds: jest.fn().mockResolvedValue([]) },
+    });
+
+    await handler.handle(
+      makeEvent({
+        publicationId: publicationId.toString(),
+        sourceType: 'development',
+        sourceId: devId.toString(),
+        version: 1,
+      }),
+    );
+
+    const [, params] = markPublishedSpy.mock.calls[0];
+    expect(params.denormalizedFields).not.toHaveProperty('priceFrom');
+    expect(params.searchProjection).not.toHaveProperty('priceAmountMinorUnits');
+    expect(params.searchProjection).not.toHaveProperty('priceCurrency');
   });
 
 });

@@ -1,6 +1,7 @@
 import React, { FormEvent, useState } from 'react'
 import type { LocationFormData } from '../../model/types'
 import { PublishingMapPicker } from '../PublishingMapPicker'
+import { AddressAutocomplete, type AddressSuggestion } from '../AddressAutocomplete'
 
 interface LocationStepProps {
   data: LocationFormData
@@ -16,6 +17,18 @@ const CITY_PRESETS = [
 
 export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
   const [validationError, setValidationError] = useState<string | null>(null)
+
+  const handleAddressSelect = (suggestion: AddressSuggestion) => {
+    onChange({
+      address: suggestion.formattedAddress,
+      ...(suggestion.city ? { city: suggestion.city } : {}),
+      ...(suggestion.country ? { country: suggestion.country } : {}),
+      geo: {
+        type: 'Point',
+        coordinates: suggestion.coordinates,
+      },
+    })
+  }
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -119,14 +132,14 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
 
         <div className="wizard-field">
           <label htmlFor="loc-address">Улица и номер дома *</label>
-          <input
-            id="loc-address"
-            type="text"
+          <AddressAutocomplete
             value={data.address}
-            onChange={(e) => onChange({ address: e.target.value })}
+            cityContext={data.city}
+            onChange={(address) => onChange({ address })}
+            onSelect={handleAddressSelect}
             placeholder="Например, ул. Руставели 15"
             required
-            data-testid="location-input-address"
+            dataTestId="location-input-address"
           />
         </div>
 

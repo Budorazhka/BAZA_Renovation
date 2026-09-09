@@ -36,8 +36,6 @@ const SRC_ROOT = join(__dirname, '../../src');
 const INTENTIONALLY_UNIMPLEMENTED: Record<string, string> = {
   'finance.read':
     'Финансового модуля нет вообще — ни таблиц, ни эндпоинтов. Грант описывает будущий раздел.',
-  'manual_ledger.read':
-    'То же: ручных проводок как сущности не существует, реализация не начиналась.',
   'lead.reassign':
     'Функционально полностью перекрыт POST /leads/:leadId/assign (lead.assign), который меняет ' +
     'ownerPositionId независимо от текущего значения. Отдельный эндпоинт добавил бы дублирующую ' +

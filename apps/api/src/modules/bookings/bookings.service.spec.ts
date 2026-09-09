@@ -27,12 +27,31 @@ function makeService(overrides: Partial<{
   outboxService: OutboxService;
   idempotencyService: IdempotencyService;
 }> = {}) {
+  const defaultDevelopmentsService = {
+    getUnitForOrganization: jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId(),
+      status: 'available',
+      version: 0,
+      buildingId: new Types.ObjectId(),
+      number: '101',
+    }),
+    updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    getBuildingForOrganization: jest.fn().mockResolvedValue({
+      _id: new Types.ObjectId(),
+      developmentId: new Types.ObjectId(),
+    }),
+  };
+  const defaultCrmService = {
+    getLeadForOrganization: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+    getContactForOrganization: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+    createDealInSession: jest.fn().mockResolvedValue({ _id: new Types.ObjectId() }),
+  };
   return new BookingsService(
     makeConnection() as never,
     (overrides.bookingRepository ?? {}) as BookingRepository,
     (overrides.bookingLockRepository ?? {}) as BookingLockRepository,
-    (overrides.developmentsService ?? {}) as DevelopmentsService,
-    (overrides.crmService ?? {}) as CrmService,
+    (overrides.developmentsService ?? defaultDevelopmentsService) as DevelopmentsService,
+    (overrides.crmService ?? defaultCrmService) as CrmService,
     (overrides.auditService ?? { append: jest.fn().mockResolvedValue(undefined) }) as AuditService,
     (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as OutboxService,
     (overrides.idempotencyService ?? {
@@ -781,5 +800,194 @@ describe('BookingsService.listBookings', () => {
       organizationId,
       expect.objectContaining({ unitId: undefined, unitIds: undefined, managerPositionId, status: 'pending', limit: 20 }),
     );
+  });
+});
+
+describe('BookingsService.convertToDeal', () => {
+  const organizationId = new Types.ObjectId();
+  const bookingId = new Types.ObjectId();
+  const unitId = new Types.ObjectId();
+  const buildingId = new Types.ObjectId();
+  const developmentId = new Types.ObjectId();
+  const leadId = new Types.ObjectId();
+  const contactId = new Types.ObjectId();
+  const manager = new Types.ObjectId();
+  const identityId = new Types.ObjectId();
+
+  function params() {
+    return {
+      bookingId,
+      organizationId,
+      actorIdentityId: identityId,
+      managerPositionId: manager,
+      title: 'Deal 1',
+      contactId,
+      idempotencyKey: 'conv-1',
+      correlationId: 'corr-1',
+    };
+  }
+
+  it('конвертирует active booking в deal: переводит booking в paid, unit в sold, создаёт deal и публикует события', async () => {
+    const booking = {
+      _id: bookingId,
+      unitId,
+      organizationId,
+      leadId,
+      manager,
+      dateRange: { startsAt: new Date('2026-09-01'), expiresAt: new Date(Date.now() + 86400000) },
+      status: 'booked',
+      createdAt: new Date('2026-08-31'),
+    };
+    const paidBooking = { ...booking, status: 'paid' };
+    const unit = {
+      _id: unitId,
+      buildingId,
+      status: 'reserved',
+      version: 1,
+      number: '42',
+    };
+    const building = { _id: buildingId, developmentId };
+    const deal = { _id: new Types.ObjectId() };
+
+    const markPaidSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const updateUnitStatusSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const createDealSpy = jest.fn().mockResolvedValue(deal);
+    const outboxSpy = jest.fn().mockResolvedValue(undefined);
+    const auditSpy = jest.fn().mockResolvedValue(undefined);
+    const recordSpy = jest.fn().mockResolvedValue(undefined);
+
+    const service = makeService({
+      bookingRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValue(booking).mockResolvedValueOnce(booking).mockResolvedValueOnce(paidBooking),
+        markPaidIfActive: markPaidSpy,
+      } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue(unit),
+        getBuildingForOrganization: jest.fn().mockResolvedValue(building),
+        updateUnitStatusInSession: updateUnitStatusSpy,
+      } as never,
+      crmService: {
+        getContactForOrganization: jest.fn().mockResolvedValue({ _id: contactId }),
+        createDealInSession: createDealSpy,
+      } as never,
+      outboxService: { publish: outboxSpy } as never,
+      auditService: { append: auditSpy } as never,
+      idempotencyService: { checkReplay: jest.fn().mockResolvedValue(null), record: recordSpy } as never,
+    });
+
+    const result = await service.convertToDeal(params());
+    expect('booking' in result).toBe(true);
+    if ('booking' in result) {
+      expect(result.booking.status).toBe('paid');
+      expect(result.deal).toBe(deal);
+    }
+    expect(markPaidSpy).toHaveBeenCalledWith(bookingId, organizationId, expect.anything());
+    expect(updateUnitStatusSpy).toHaveBeenCalledWith(
+      unitId,
+      organizationId,
+      1,
+      'sold',
+      ['available', 'reserved'],
+      expect.anything(),
+    );
+    expect(createDealSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId,
+        contactId,
+        unitId,
+        developmentId,
+        ownerPositionId: manager,
+      }),
+      expect.anything(),
+    );
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'BookingConvertedToDeal',
+        aggregateId: bookingId,
+      }),
+      expect.anything(),
+    );
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'UnitStatusChanged',
+        aggregateId: unitId,
+        payload: expect.objectContaining({ newStatus: 'sold' }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('бросает BOOKING_NOT_FOUND если бронь не найдена', async () => {
+    const service = makeService({
+      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as never,
+    });
+
+    await expect(service.convertToDeal(params())).rejects.toMatchObject({
+      code: ErrorCode.BOOKING_NOT_FOUND,
+    });
+  });
+
+  it('бросает BOOKING_INVALID_STATE_TRANSITION если бронь уже paid/rejected', async () => {
+    const booking = {
+      _id: bookingId,
+      unitId,
+      organizationId,
+      status: 'rejected',
+    };
+    const service = makeService({
+      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+    });
+
+    await expect(service.convertToDeal(params())).rejects.toMatchObject({
+      code: ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+    });
+  });
+
+  it('бросает UNIT_INVALID_STATUS_TRANSITION если юнит уже sold', async () => {
+    const booking = {
+      _id: bookingId,
+      unitId,
+      organizationId,
+      status: 'booked',
+    };
+    const service = makeService({
+      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue({ _id: unitId, status: 'sold' }),
+      } as never,
+    });
+
+    await expect(service.convertToDeal(params())).rejects.toMatchObject({
+      code: ErrorCode.UNIT_INVALID_STATUS_TRANSITION,
+    });
+  });
+
+  it('бросает BOOKING_INVALID_STATE_TRANSITION если бронь просрочена (expiresAt в прошлом)', async () => {
+    const booking = {
+      _id: bookingId,
+      unitId,
+      organizationId,
+      status: 'booked',
+      dateRange: { startsAt: new Date(Date.now() - 100000), expiresAt: new Date(Date.now() - 1000) },
+    };
+    const service = makeService({
+      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+    });
+
+    await expect(service.convertToDeal(params())).rejects.toMatchObject({
+      code: ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+    });
+  });
+
+  it('возвращает сохранённый replay при ранней проверке checkReplay', async () => {
+    const replay = { responseStatus: 201, responseBody: { dealId: 'saved-deal' } };
+    const service = makeService({
+      idempotencyService: {
+        checkReplay: jest.fn().mockResolvedValue(replay),
+      } as never,
+    });
+
+    const result = await service.convertToDeal(params());
+    expect(result).toEqual({ replay });
   });
 });

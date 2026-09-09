@@ -30,6 +30,21 @@ export interface PublicPublisher {
   type: string
 }
 
+export interface PublicDevelopmentUnit {
+  id?: string
+  number?: string
+  kind?: string
+  rooms?: number
+  area?: number
+  floor?: number
+  buildingName?: string
+  price?: {
+    amountMinorUnits: number
+    currency: string
+  }
+  planImageUrl?: string
+}
+
 export interface PublicDevelopmentCard {
   slug?: string
   name?: string
@@ -38,6 +53,11 @@ export interface PublicDevelopmentCard {
   completionDate?: string
   description?: string
   publisher?: PublicPublisher
+  priceFrom?: {
+    amountMinorUnits: number
+    currency: string
+  }
+  units?: PublicDevelopmentUnit[]
   seo?: {
     title?: string
     description?: string
@@ -94,6 +114,7 @@ export interface PublicListingCard {
   characteristics?: PublicListingCharacteristics
   media?: PublicMediaItem[]
   isVerified?: boolean
+  isMls?: boolean
   publisher?: PublicPublisher
   seo?: {
     title?: string

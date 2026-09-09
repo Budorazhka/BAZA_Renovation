@@ -16,7 +16,9 @@ import {
 import { ConversionFunnelCard } from '@/components/clients/ConversionFunnelCard'
 import { CreateClientModal } from '@/components/clients/CreateClientModal'
 import { DashboardShell } from '@/components/layout/DashboardShell'
+import { ExportButton } from '@/components/common/ExportButton'
 import { CLIENTS_MOCK, SEGMENT_LABELS } from '@/data/clients-mock'
+
 import { persistSessionClient } from '@/lib/session-client'
 import type { Client, ClientSegment } from '@/types/clients'
 import { useI18n } from "@/i18n";
@@ -171,9 +173,13 @@ export function ClientsListPage() {
             <p style={{ fontSize: 12, color: 'var(--hub-desc)', margin: '4px 0 0' }}>
               {t('clients.clientsListPage.единая_база_физлиц_и')}{totalFmt} {t('clients.clientsListPage.записей')}</p>
           </div>
-          <button type="button" className="alphabase-section-primary" onClick={() => setCreateOpen(true)}>
-            {t('clients.clientsListPage.новый_клиент')}</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ExportButton entity="contacts" label="Экспорт в Excel" />
+            <button type="button" className="alphabase-section-primary" onClick={() => setCreateOpen(true)}>
+              {t('clients.clientsListPage.новый_клиент')}</button>
+          </div>
         </div>
+
 
         <CreateClientModal
           open={createOpen}

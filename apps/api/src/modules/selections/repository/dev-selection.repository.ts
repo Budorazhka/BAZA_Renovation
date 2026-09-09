@@ -227,7 +227,7 @@ export class DevSelectionRepository {
   async markViewedByPublicToken(publicToken: string): Promise<DevSelectionDocument | null> {
     return this.model
       .findOneAndUpdate(
-        { publicToken },
+        { publicToken, status: { $ne: 'archived' } },
         [
           {
             $set: {

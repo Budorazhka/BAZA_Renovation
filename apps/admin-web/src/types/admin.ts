@@ -195,3 +195,121 @@ export interface ConfirmDuplicateResult {
   status: 'confirmed_duplicate'
 }
 
+// Organizations
+export type AdminOrganizationType = 'agency' | 'developer' | 'independent_realtor'
+export type AdminOrganizationStatus = 'active' | 'frozen' | 'archived'
+
+export interface AdminOrganizationPosition {
+  id: string
+  role: string
+  status: string
+}
+
+export interface AdminOrganizationListItem {
+  id: string
+  name: string
+  type: AdminOrganizationType
+  status: AdminOrganizationStatus
+  createdAt: string
+  positionsCount?: number
+}
+
+export interface AdminOrganizationList {
+  items: AdminOrganizationListItem[]
+  nextCursor: string | null
+}
+
+export interface AdminOrganizationListQuery {
+  type?: AdminOrganizationType
+  status?: AdminOrganizationStatus
+  search?: string
+  cursor?: string
+  limit?: number
+}
+
+export interface AdminOrganizationDetail {
+  id: string
+  name: string
+  type: AdminOrganizationType
+  status: AdminOrganizationStatus
+  createdAt: string
+  positionsCount: number
+  positions: AdminOrganizationPosition[]
+}
+
+export interface FreezeOrganizationResult {
+  id: string
+  status: 'frozen'
+}
+
+export interface UnfreezeOrganizationResult {
+  id: string
+  status: 'active'
+}
+
+// Billing
+export interface PlanLimits {
+  maxActiveListings: number
+  maxTeamPositions: number
+  crmAccess: boolean
+  chessboardAccess: boolean
+  landingAccess: boolean
+}
+
+export interface PricePerMonth {
+  amountMinorUnits: number
+  currency: string
+}
+
+export interface SubscriptionPlan {
+  code: string
+  name: string
+  targetAudience: 'developer' | 'agency' | 'independent_realtor'
+  limits: PlanLimits
+  pricePerMonth: PricePerMonth
+  isActive: boolean
+}
+
+export interface ResourceUsage {
+  activeListings: number
+  teamPositions: number
+}
+
+export interface OrganizationSubscription {
+  organizationId: string
+  planCode: string
+  status: 'trial' | 'active' | 'grace_period' | 'frozen' | 'cancelled'
+  startedAt: string
+  expiresAt: string
+  gracePeriodEndsAt?: string | null
+  customLimits?: PlanLimits | null
+  currentUsage: ResourceUsage
+}
+
+export interface BillingLedgerEntry {
+  id: string
+  organizationId: string
+  action: 'plan_activated' | 'plan_renewed' | 'plan_changed' | 'limit_adjusted' | 'payment_recorded' | 'frozen' | string
+  amountMinorUnits: number
+  currency: string
+  planCode: string
+  periodDays: number
+  reason: string
+  recordedBy?: string
+  createdAt: string
+}
+
+export interface AdminBillingOverview {
+  subscription: OrganizationSubscription
+  plan: SubscriptionPlan | null
+  effectiveLimits: PlanLimits
+  ledger: BillingLedgerEntry[]
+}
+
+export interface ActivateSubscriptionParams {
+  planCode: string
+  periodDays?: number
+  amountMinorUnits?: number
+  currency?: string
+  reason: string
+}

@@ -71,6 +71,13 @@ export function RealtorProfilePage() {
 
   return (
     <div className="figma-realtors-page">
+      <div className="demo-notice-banner" role="note">
+        <span className="demo-notice-banner__icon" aria-hidden="true">ℹ️</span>
+        <div className="demo-notice-banner__text">
+          <strong>Демонстрационный профиль:</strong> Страница эксперта и отзывы отображаются в ознакомительном режиме. Сбор реальных отзывов станет доступен после официальной аттестации агентств.
+        </div>
+      </div>
+
       <Link className="back-link" to="/realtors" aria-label="Вернуться в рейтинг риелторов" style={{ display: 'inline-flex', marginBottom: '24px', color: '#757575', textDecoration: 'none' }}>
         ← Все риелторы
       </Link>
@@ -82,6 +89,7 @@ export function RealtorProfilePage() {
         </div>
         <div>
           <div className="figma-realtor-badges" style={{ marginBottom: '8px' }}>
+            <span className="figma-realtor-badge figma-realtor-badge--demo">Демо-профиль</span>
             {realtor.badges.map((b, i) => (
               <span key={i} className="figma-realtor-badge figma-realtor-badge--top">{b}</span>
             ))}
@@ -92,7 +100,7 @@ export function RealtorProfilePage() {
           </p>
           <div className="figma-realtor-rating-row" style={{ fontSize: '15px' }}>
             <span className="figma-realtor-stars">★ {realtor.rating.toFixed(1)}</span>
-            <span>({reviews.length} подтвержденных отзывов)</span>
+            <span>({reviews.length} отзывов в демо-режиме)</span>
           </div>
         </div>
 
@@ -137,7 +145,7 @@ export function RealtorProfilePage() {
         <h2 id="add-review-heading" className="figma-listing-section-title">Оставить отзыв о риелторе</h2>
         {formSubmitted ? (
           <div style={{ padding: '16px', background: '#F0FFF0', border: '1px solid #1BA800', borderRadius: '8px', color: '#1BA800', fontWeight: 600 }}>
-            ✓ Спасибо! Ваш отзыв успешно добавлен и опубликован.
+            ✓ Спасибо! Ваш отзыв успешно добавлен (демонстрационный режим).
           </div>
         ) : (
           <form onSubmit={handleSubmitReview} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

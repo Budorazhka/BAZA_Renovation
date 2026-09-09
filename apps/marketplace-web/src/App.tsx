@@ -9,6 +9,7 @@ import {
   listingPrice,
   listingDealTypeLabel,
   listingPropertyTypeLabel,
+  formatMoneyAmount,
 } from './lib/format'
 import { useCatalogue } from './hooks/useCatalogue'
 import { useDevelopmentDetail } from './hooks/useDevelopmentDetail'
@@ -51,6 +52,7 @@ import './styles/favorites-selections.css'
 import './styles/requests.css'
 import './styles/home.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
+import { I18nProvider } from './i18n'
 import type {
   BoundingBox,
   PublicDevelopmentCard,
@@ -250,6 +252,7 @@ function CataloguePage({
         cityParam={cityParam}
         dealTypeParam={dealTypeParam}
         propertyTypeParam={propertyTypeParam}
+        commercialSubtypeParam={commercialSubtypeParam}
         sortParam={sortParam}
         isMapView={isMapView}
         onFilterChange={updateFilters}
@@ -429,17 +432,18 @@ function DevelopmentDetailPage() {
   )
 
   /**
-   * Планировки комплекса. Сегодня всегда пусто: публикация юнитов не сделана —
-   * воркер помечает каждое событие с sourceType 'unit' как build_failed, и в
-   * публичную проекцию юниты не попадают.
-   *
-   * Раньше здесь лежал захардкоженный массив из четырёх квартир с ценами, и он
-   * показывался на странице ЛЮБОГО ЖК как его собственные планировки. Это не
-   * заглушка вёрстки, а выдуманные цены на публичной странице объекта, которых
-   * застройщик не называл. Пока backend не отдаёт юниты, честный ответ —
-   * сказать, что планировок пока нет.
+   * Планировки комплекса из публичной проекции (MarketplacePublication.denormalizedFields.units).
+   * Если застройщик опубликовал квартиры в этом ЖК, они отображаются здесь с реальными
+   * ценами и площадями; если нет — честное сообщение об отсутствии опубликованных планировок.
    */
-  const units: UnitInfo[] = []
+  const units: UnitInfo[] = (state.status === 'ready' && state.item.units ? state.item.units : []).map((u) => ({
+    title: u.number ? `Квартира №${u.number}` : (u.kind === 'apartment' ? 'Квартира' : 'Помещение'),
+    area: u.area ?? 0,
+    rooms: u.rooms,
+    floor: u.floor,
+    price: formatMoneyAmount(u.price) ?? undefined,
+    planImageUrl: u.planImageUrl,
+  }))
 
   return (
     <Shell>
@@ -507,12 +511,14 @@ function DevelopmentDetailPage() {
                   </p>
                 ) : null}
 
-                {/*
-                  Блок стоимости убран вместе с выдуманными планировками: цена
-                  «от $39 000», ставка «от $1 200 / м²» и обещание бесплатной
-                  рассрочки были вписаны в код и показывались у каждого ЖК.
-                  Вернуть, когда публичная проекция начнёт отдавать цены.
-                */}
+                {state.item.priceFrom ? (
+                  <div className="figma-dev-pricing-card">
+                    <span className="figma-dev-spec-label">Стоимость квартир</span>
+                    <div className="figma-dev-price-main">
+                      от {formatMoneyAmount(state.item.priceFrom)}
+                    </div>
+                  </div>
+                ) : null}
 
                 {slug ? <RevealContactCTA slug={slug} type="development" /> : null}
               </div>
@@ -768,41 +774,43 @@ function PublishingWizardPage() {
 
 export default function App() {
   return (
-    <RouteErrorBoundary>
-      <Routes>
-        <Route path="/" element={<Shell><HomePage /></Shell>} />
-        {/*
-          Разделы каталога. Маршрут задаёт раздел, query — фильтры внутри него.
-          Пути совпадают с действующим baza.sale, чтобы не ломать внешние ссылки
-          и SEO-инвентарь.
-        */}
-        <Route path="/newconstructions" element={<CataloguePage defaultTab="developments" />} />
-        <Route path="/secondary" element={<CataloguePage defaultTab="listings" defaultDealType="sale" />} />
-        <Route path="/rent" element={<CataloguePage defaultTab="listings" defaultDealType="rent_long" />} />
-        <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
-        <Route path="/listings/:slug" element={<ListingDetailPage />} />
-        <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
-        <Route path="/realtors/:id" element={<Shell><RealtorProfilePage /></Shell>} />
-        <Route path="/favorites" element={<Shell><FavoritesPage /></Shell>} />
-        <Route path="/account/favorites" element={<Shell><RequireAuth><FavoritesPage /></RequireAuth></Shell>} />
-        <Route path="/selections" element={<Shell><SelectionsPage /></Shell>} />
-        <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
-        <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
-        <Route path="/account/properties" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
-        <Route
-          path="/account/properties/:assetId/listings/:listingId/edit"
-          element={<Shell><RequireAuth><EditListingPage /></RequireAuth></Shell>}
-        />
-        <Route path="/account" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
-        <Route path="/auth/login" element={<Shell><AuthPage mode="login" /></Shell>} />
-        <Route path="/auth/register" element={<Shell><AuthPage mode="register" /></Shell>} />
-        <Route path="/publish" element={<PublishingWizardPage />} />
-        {/*
-          Неизвестный адрес отдаёт 404, а не главную: иначе битая ссылка выглядит
-          как рабочая страница, и человек не понимает, что ошибся адресом.
-        */}
-        <Route path="*" element={<Shell><NotFoundPage /></Shell>} />
-      </Routes>
-    </RouteErrorBoundary>
+    <I18nProvider>
+      <RouteErrorBoundary>
+        <Routes>
+          <Route path="/" element={<Shell><HomePage /></Shell>} />
+          {/*
+            Разделы каталога. Маршрут задаёт раздел, query — фильтры внутри него.
+            Пути совпадают с действующим baza.sale, чтобы не ломать внешние ссылки
+            и SEO-инвентарь.
+          */}
+          <Route path="/newconstructions" element={<CataloguePage defaultTab="developments" />} />
+          <Route path="/secondary" element={<CataloguePage defaultTab="listings" defaultDealType="sale" />} />
+          <Route path="/rent" element={<CataloguePage defaultTab="listings" defaultDealType="rent_long" />} />
+          <Route path="/developments/:slug" element={<DevelopmentDetailPage />} />
+          <Route path="/listings/:slug" element={<ListingDetailPage />} />
+          <Route path="/realtors" element={<Shell><RealtorsPage /></Shell>} />
+          <Route path="/realtors/:id" element={<Shell><RealtorProfilePage /></Shell>} />
+          <Route path="/favorites" element={<Shell><FavoritesPage /></Shell>} />
+          <Route path="/account/favorites" element={<Shell><RequireAuth><FavoritesPage /></RequireAuth></Shell>} />
+          <Route path="/selections" element={<Shell><SelectionsPage /></Shell>} />
+          <Route path="/selections/:slug" element={<Shell><SelectionDetailPage /></Shell>} />
+          <Route path="/requests" element={<Shell><RequestsPage /></Shell>} />
+          <Route path="/account/properties" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
+          <Route
+            path="/account/properties/:assetId/listings/:listingId/edit"
+            element={<Shell><RequireAuth><EditListingPage /></RequireAuth></Shell>}
+          />
+          <Route path="/account" element={<Shell><RequireAuth><MyPropertiesPage /></RequireAuth></Shell>} />
+          <Route path="/auth/login" element={<Shell><AuthPage mode="login" /></Shell>} />
+          <Route path="/auth/register" element={<Shell><AuthPage mode="register" /></Shell>} />
+          <Route path="/publish" element={<PublishingWizardPage />} />
+          {/*
+            Неизвестный адрес отдаёт 404, а не главную: иначе битая ссылка выглядит
+            как рабочая страница, и человек не понимает, что ошибся адресом.
+          */}
+          <Route path="*" element={<Shell><NotFoundPage /></Shell>} />
+        </Routes>
+      </RouteErrorBoundary>
+    </I18nProvider>
   )
 }

@@ -1,4 +1,4 @@
-﻿/* ==========================================================================
+/* ==========================================================================
    Figma Listing Card Styles (Secondary & Rent)
    Source of Truth:
    - ComponentSet card квартира вторичка: Node ID 4934:69469 (4934:69468, 4934:69467, 4934:69466)
@@ -107,6 +107,11 @@
 .figma-listing-card__badge--verified {
   background: rgba(35, 35, 35, 0.85);
   backdrop-filter: blur(4px);
+  color: #FFFFFF;
+}
+
+.figma-listing-card__badge--mls {
+  background: #1565C0;
   color: #FFFFFF;
 }
 

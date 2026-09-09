@@ -775,4 +775,162 @@ export class OrganizationsService {
       throw new ConflictException('Only a vacant position can be closed — vacate it first');
     }
   }
+
+  /**
+   * ADMIN-ORG: Список организаций для админ-панели с пагинацией и фильтрами.
+   */
+  async adminListOrganizations(params: {
+    type?: OrganizationType;
+    status?: string;
+    search?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<{
+    items: Array<{
+      id: string;
+      name: string;
+      type: OrganizationType;
+      status: OrganizationDocument['status'];
+      createdAt: string;
+      positionsCount?: number;
+    }>;
+    nextCursor?: string;
+  }> {
+    const limit = Math.max(1, Math.min(params.limit ?? 20, 100));
+    const cursorId = params.cursor && Types.ObjectId.isValid(params.cursor)
+      ? new Types.ObjectId(params.cursor)
+      : undefined;
+
+    const docs = await this.organizationRepository.list({
+      type: params.type,
+      status: params.status,
+      search: params.search,
+      cursor: cursorId,
+      limit: limit + 1,
+    });
+
+    const hasMore = docs.length > limit;
+    const pageDocs = hasMore ? docs.slice(0, limit) : docs;
+    const nextCursor = hasMore ? pageDocs[pageDocs.length - 1]?._id.toString() : undefined;
+
+    const items = await Promise.all(
+      pageDocs.map(async (doc) => {
+        const positions = await this.positionRepository.findAllByOrganization(doc._id);
+        return {
+          id: doc._id.toString(),
+          name: doc.name,
+          type: doc.type,
+          status: doc.status,
+          createdAt: doc.createdAt ? doc.createdAt.toISOString() : new Date().toISOString(),
+          positionsCount: positions.length,
+        };
+      }),
+    );
+
+    return { items, nextCursor };
+  }
+
+  /**
+   * ADMIN-ORG: Получение детальной карточки организации.
+   */
+  async adminGetOrganization(id: Types.ObjectId): Promise<{
+    id: string;
+    name: string;
+    type: OrganizationType;
+    status: OrganizationDocument['status'];
+    createdAt: string;
+    positionsCount: number;
+    positions: Array<{ id: string; role: FixedRole; status: string }>;
+  }> {
+    const org = await this.organizationRepository.findById(id);
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const positions = await this.positionRepository.findAllByOrganization(org._id);
+
+    return {
+      id: org._id.toString(),
+      name: org.name,
+      type: org.type,
+      status: org.status,
+      createdAt: org.createdAt ? org.createdAt.toISOString() : new Date().toISOString(),
+      positionsCount: positions.length,
+      positions: positions.map((p) => ({
+        id: p._id.toString(),
+        role: p.fixedRole,
+        status: p.status,
+      })),
+    };
+  }
+
+  /**
+   * ADMIN-ORG: Заморозка организации при окончании подписки или нарушении.
+   */
+  async adminFreezeOrganization(params: {
+    id: Types.ObjectId;
+    reason: string;
+    actorId: Types.ObjectId;
+    correlationId?: string;
+  }): Promise<{ id: string; status: 'frozen' }> {
+    const org = await this.organizationRepository.findById(params.id);
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const previousStatus = org.status;
+    await runInTransaction(this.connection, async (session) => {
+      await this.organizationRepository.updateStatus(params.id, 'frozen', session);
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: params.actorId },
+          action: 'organization.freeze',
+          resource: 'organization',
+          resourceId: params.id,
+          reason: params.reason,
+          before: { status: previousStatus },
+          after: { status: 'frozen' },
+          correlationId: params.correlationId ?? '',
+        },
+        session,
+      );
+    });
+
+    return { id: params.id.toString(), status: 'frozen' };
+  }
+
+  /**
+   * ADMIN-ORG: Разморозка организации.
+   */
+  async adminUnfreezeOrganization(params: {
+    id: Types.ObjectId;
+    reason: string;
+    actorId: Types.ObjectId;
+    correlationId?: string;
+  }): Promise<{ id: string; status: 'active' }> {
+    const org = await this.organizationRepository.findById(params.id);
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const previousStatus = org.status;
+    await runInTransaction(this.connection, async (session) => {
+      await this.organizationRepository.updateStatus(params.id, 'active', session);
+      await this.auditService.append(
+        {
+          actor: { type: 'admin_account', id: params.actorId },
+          action: 'organization.unfreeze',
+          resource: 'organization',
+          resourceId: params.id,
+          reason: params.reason,
+          before: { status: previousStatus },
+          after: { status: 'active' },
+          correlationId: params.correlationId ?? '',
+        },
+        session,
+      );
+    });
+
+    return { id: params.id.toString(), status: 'active' };
+  }
 }

@@ -1,7 +1,20 @@
 import { Module, OnModuleInit } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { MediaAssetDocument, MediaAssetSchema, MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
-import { DevelopmentDocument, DevelopmentSchema, DevelopmentRepository } from '@baza/development';
+import {
+  DevelopmentDocument,
+  DevelopmentSchema,
+  DevelopmentRepository,
+  BuildingDocument,
+  BuildingSchema,
+  BuildingRepository,
+  UnitDocument,
+  UnitSchema,
+  UnitRepository,
+  FloorPlanDocument,
+  FloorPlanSchema,
+  FloorPlanRepository,
+} from '@baza/development';
 import {
   PropertyAssetDocument,
   PropertyAssetSchema,
@@ -20,6 +33,8 @@ import { EventHandlerRegistry } from '../outbox/event-handler.registry';
 import { MediaVerifiedHandler } from './media-verified.handler';
 import { PositionOccupantAssignedHandler } from './position-occupant-assigned.handler';
 import { PublicationRequestedHandler } from './publication-requested.handler';
+import { UnitPriceChangedHandler } from './unit-price-changed.handler';
+import { UnitStatusChangedHandler } from './unit-status-changed.handler';
 import { BookingCreatedHandler } from './booking-created.handler';
 import { BookingCancelledHandler } from './booking-cancelled.handler';
 import { BookingConfirmedHandler } from './booking-confirmed.handler';
@@ -40,9 +55,8 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
   'TaskCreated',
   'TaskCompleted',
   'TaskReassigned',
-  'UnitPriceChanged',
-  'UnitStatusChanged',
   'UnpublicationRequested',
+  'BookingConvertedToDeal',
 ] as const;
 
 /**
@@ -56,6 +70,9 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
     MongooseModule.forFeature([
       { name: MediaAssetDocument.name, schema: MediaAssetSchema },
       { name: DevelopmentDocument.name, schema: DevelopmentSchema },
+      { name: BuildingDocument.name, schema: BuildingSchema },
+      { name: UnitDocument.name, schema: UnitSchema },
+      { name: FloorPlanDocument.name, schema: FloorPlanSchema },
       { name: PropertyAssetDocument.name, schema: PropertyAssetSchema },
       { name: ListingDocument.name, schema: ListingSchema },
       { name: MarketplacePublicationDocument.name, schema: MarketplacePublicationSchema },
@@ -66,12 +83,17 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
     MediaStorageService,
     ImageVariantService,
     DevelopmentRepository,
+    BuildingRepository,
+    UnitRepository,
+    FloorPlanRepository,
     PropertyAssetRepository,
     ListingRepository,
     MarketplacePublicationRepository,
     MediaVerifiedHandler,
     PositionOccupantAssignedHandler,
     PublicationRequestedHandler,
+    UnitPriceChangedHandler,
+    UnitStatusChangedHandler,
     BookingCreatedHandler,
     BookingCancelledHandler,
     BookingConfirmedHandler,
@@ -85,6 +107,8 @@ export class HandlersModule implements OnModuleInit {
     private readonly mediaVerifiedHandler: MediaVerifiedHandler,
     private readonly positionOccupantAssignedHandler: PositionOccupantAssignedHandler,
     private readonly publicationRequestedHandler: PublicationRequestedHandler,
+    private readonly unitPriceChangedHandler: UnitPriceChangedHandler,
+    private readonly unitStatusChangedHandler: UnitStatusChangedHandler,
     private readonly bookingCreatedHandler: BookingCreatedHandler,
     private readonly bookingCancelledHandler: BookingCancelledHandler,
     private readonly bookingConfirmedHandler: BookingConfirmedHandler,
@@ -96,21 +120,13 @@ export class HandlersModule implements OnModuleInit {
     this.registry.register('MediaVerified', this.mediaVerifiedHandler);
     this.registry.register('PositionOccupantAssigned', this.positionOccupantAssignedHandler);
     this.registry.register('PublicationRequested', this.publicationRequestedHandler);
+    this.registry.register('UnitPriceChanged', this.unitPriceChangedHandler);
+    this.registry.register('UnitStatusChanged', this.unitStatusChangedHandler);
     this.registry.register('BookingCreated', this.bookingCreatedHandler);
     this.registry.register('BookingCancelled', this.bookingCancelledHandler);
     this.registry.register('BookingConfirmed', this.bookingConfirmedHandler);
     this.registry.register('BookingExtended', this.bookingExtendedHandler);
 
-    // События без специфицированного побочного эффекта. До 01.09.2026 у них
-    // не было handler'а вообще, и каждое такое событие уходило прямо в
-    // dead_letter (OutboxPollerService при отсутствии handler'а сразу
-    // выставляет attempts = MAX_ATTEMPTS). Среди них рутинные TaskCreated/
-    // TaskCompleted/UnitPriceChanged — то есть очередь «поломок» полнилась
-    // при обычной работе и переставала быть сигналом о настоящем сбое.
-    //
-    // Появится реальный side-effect — тип переезжает в собственный handler
-    // и убирается отсюда. Соответствие этого списка тому, что реально
-    // публикуется, стережёт handlers-coverage.spec.ts.
     for (const eventType of ACKNOWLEDGED_ONLY_EVENT_TYPES) {
       this.registry.register(eventType, this.acknowledgedEventHandler);
     }

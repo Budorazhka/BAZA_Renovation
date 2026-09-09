@@ -43,6 +43,25 @@ const VAKE = {
   version: 1,
 }
 
+const LAND_PARCEL = {
+  _id: 'asset-3',
+  propertyType: 'land',
+  location: { country: 'GE', city: 'Кобулети', address: 'ул. Агмашенебели, 100' },
+  characteristics: { area: 1500 },
+  representativePhone: '+995500000003',
+  version: 1,
+}
+
+const COMMERCIAL_OFFICE = {
+  _id: 'asset-4',
+  propertyType: 'commercial',
+  commercialSubtype: 'office',
+  location: { country: 'GE', city: 'Батуми', address: 'ул. Чавчавадзе, 50' },
+  characteristics: { area: 120, rooms: 4, floor: 2, totalFloors: 5 },
+  representativePhone: '+995500000004',
+  version: 1,
+}
+
 function listingFor(assetId: string, id: string, status: 'active' | 'archived' | 'expired') {
   return {
     _id: id,
@@ -64,12 +83,10 @@ describe('MyProperties Page Acceptance (MKT-SCR-019)', () => {
   beforeEach(() => {
     cleanup()
     vi.clearAllMocks()
-    ;(publishingApi.listPropertyAssets as any).mockResolvedValue([SEA_VIEW, VAKE])
-    ;(publishingApi.listListingsForAsset as any).mockImplementation(async (assetId: string) =>
-      assetId === 'asset-1'
-        ? [listingFor('asset-1', 'listing-1', 'active')]
-        : [listingFor('asset-2', 'listing-2', 'active')],
-    )
+    ;(publishingApi.listPropertyAssets as any).mockResolvedValue([SEA_VIEW, VAKE, LAND_PARCEL, COMMERCIAL_OFFICE])
+    ;(publishingApi.listListingsForAsset as any).mockImplementation(async (assetId: string) => [
+      listingFor(assetId, assetId === 'asset-1' ? 'listing-1' : `listing-${assetId}`, 'active'),
+    ])
   })
 
   afterEach(() => {
@@ -84,11 +101,20 @@ describe('MyProperties Page Acceptance (MKT-SCR-019)', () => {
     )
   }
 
-  it('показывает объекты владельца, полученные из API', async () => {
+  it('показывает объекты владельца, полученные из API с корректными названиями категорий и характеристиками', async () => {
     renderPage()
 
     expect(await screen.findByText('Квартира, ул. Химшиашвили, 15')).toBeDefined()
     expect(screen.getByText('Дом / Коттедж, Ваке, ул. Абашидзе 7')).toBeDefined()
+    expect(screen.getByText('Земельный участок, ул. Агмашенебели, 100')).toBeDefined()
+    expect(screen.getByText('Офис, ул. Чавчавадзе, 50')).toBeDefined()
+
+    // Land doesn't display "0 комн." or "0/0 эт."
+    const landAddressLine = screen.getByText(/📍 Кобулети, ул\. Агмашенебели, 100/)
+    expect(landAddressLine.textContent).toContain('1500 м²')
+    expect(landAddressLine.textContent).not.toContain('0 комн.')
+    expect(landAddressLine.textContent).not.toContain('0/0 эт.')
+
     expect(screen.getByRole('heading', { level: 1, name: /Мои объекты/i })).toBeDefined()
     expect(screen.getByTestId('account-add-property-cta')).toBeDefined()
   })

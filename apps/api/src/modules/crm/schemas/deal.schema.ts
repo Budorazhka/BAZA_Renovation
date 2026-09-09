@@ -85,6 +85,25 @@ export class DealDocument extends Document {
   @Prop({ type: MoneyAmountSchemaDefinition, required: false })
   expectedCommission?: MoneyAmount;
 
+  @Prop({
+    type: String,
+    enum: ['primary', 'secondary', 'rental', 'assignment'],
+    default: 'secondary',
+  })
+  dealType?: 'primary' | 'secondary' | 'rental' | 'assignment';
+
+  @Prop({ type: Types.ObjectId, required: false })
+  unitId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: false })
+  developmentId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, required: false })
+  installmentPlanId?: Types.ObjectId;
+
+  @Prop({ type: MoneyAmountSchemaDefinition, required: false })
+  downPayment?: MoneyAmount;
+
   @Prop({ type: [DealParticipantSchema], default: [] })
   participants!: DealParticipant[];
 

@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import type { MoneyAmount } from '@baza/contracts';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { AuditService } from '../audit/audit.service';
 import { CrmService } from '../crm/crm.service';
+import type { DealDocument } from '../crm/schemas/deal.schema';
 import { DevelopmentsService } from '../developments/developments.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { BookingRepository } from './repository/booking.repository';
@@ -59,7 +61,10 @@ export class BookingsService {
     // Tenant-scoped existence checks happen before the transaction. The
     // transaction itself still starts with BookingLock.bumpForUnit as its
     // first database write, as required by ADR-006.
-    await this.developmentsService.getUnitForOrganization(params.unitId, params.organizationId);
+    const unit = await this.developmentsService.getUnitForOrganization(params.unitId, params.organizationId);
+    if (unit.status === 'sold') {
+      throw new AppException(ErrorCode.BOOKING_OVERLAP, 'Cannot book sold unit');
+    }
     if (params.leadId) {
       await this.crmService.getLeadForOrganization(params.leadId, params.organizationId);
     }
@@ -102,6 +107,35 @@ export class BookingsService {
           },
           session,
         );
+
+        if (unit.status === 'available') {
+          await this.developmentsService.updateUnitStatusInSession(
+            unit._id,
+            params.organizationId,
+            unit.version,
+            'reserved',
+            ['available'],
+            session,
+          );
+
+          await this.outboxService.publish(
+            {
+              eventType: 'UnitStatusChanged',
+              aggregateId: unit._id,
+              aggregateType: 'unit',
+              deduplicationKey: `unit:${unit._id.toString()}:status:reserved:${booking._id.toString()}`,
+              payload: {
+                unitId: unit._id,
+                organizationId: params.organizationId,
+                buildingId: unit.buildingId,
+                previousStatus: 'available',
+                newStatus: 'reserved',
+              },
+            },
+            session,
+          );
+        }
+
         const response = toBookingResponse(booking) as unknown as Record<string, unknown>;
 
         await this.outboxService.publish(
@@ -305,6 +339,43 @@ export class BookingsService {
         // Только что изменили эту же запись в этой же транзакции — findOne
         // по её собственному _id не может вернуть null здесь.
         const response = toBookingResponse(updated!) as unknown as Record<string, unknown>;
+
+        const unit = await this.developmentsService.getUnitForOrganization(booking.unitId, params.organizationId);
+        if (unit.status === 'reserved') {
+          const otherActive = await this.bookingRepository.findOverlappingActiveExcluding(
+            booking.unitId,
+            booking._id,
+            new Date(0),
+            new Date(8640000000000000),
+            session,
+          );
+          if (!otherActive) {
+            await this.developmentsService.updateUnitStatusInSession(
+              unit._id,
+              params.organizationId,
+              unit.version,
+              'available',
+              ['reserved'],
+              session,
+            );
+            await this.outboxService.publish(
+              {
+                eventType: 'UnitStatusChanged',
+                aggregateId: unit._id,
+                aggregateType: 'unit',
+                deduplicationKey: `unit:${unit._id.toString()}:status:available:${booking._id.toString()}`,
+                payload: {
+                  unitId: unit._id,
+                  organizationId: params.organizationId,
+                  buildingId: unit.buildingId,
+                  previousStatus: 'reserved',
+                  newStatus: 'available',
+                },
+              },
+              session,
+            );
+          }
+        }
 
         await this.outboxService.publish(
           {
@@ -648,6 +719,235 @@ export class BookingsService {
         ErrorCode.IDEMPOTENCY_KEY_CONFLICT,
         'Idempotency-Key was concurrently claimed but its response is unavailable',
       );
+    }
+  }
+
+  /**
+   * booking.convert_to_deal: конвертация активной брони в сделку CRM.
+   * Бронь переходит в paid, квартира в sold, создаётся DealDocument в одной транзакции.
+   */
+  async convertToDeal(params: {
+    bookingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    managerPositionId: Types.ObjectId;
+    title?: string;
+    contactId?: Types.ObjectId;
+    dealType?: 'primary' | 'secondary' | 'rental' | 'assignment';
+    installmentPlanId?: Types.ObjectId;
+    downPayment?: MoneyAmount;
+    expectedCommission?: MoneyAmount;
+    notes?: string;
+    idempotencyKey: string;
+    correlationId: string;
+  }): Promise<{ booking: BookingDocument; deal: DealDocument } | { replay: IdempotentReplay }> {
+    const requestBody = {
+      bookingId: params.bookingId.toString(),
+      title: params.title ?? null,
+      contactId: params.contactId?.toString() ?? null,
+      dealType: params.dealType ?? null,
+      installmentPlanId: params.installmentPlanId?.toString() ?? null,
+      downPayment: params.downPayment ?? null,
+      expectedCommission: params.expectedCommission ?? null,
+      notes: params.notes ?? null,
+    };
+
+    const earlyReplay = await this.idempotencyService.checkReplay({
+      identityId: params.actorIdentityId,
+      operation: 'convertBookingToDeal',
+      key: params.idempotencyKey,
+      requestBody,
+    });
+    if (earlyReplay) {
+      return { replay: earlyReplay };
+    }
+
+    const booking = await this.bookingRepository.findByIdForOrganization(params.bookingId, params.organizationId);
+    if (!booking) {
+      throw new AppException(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
+    }
+    if (booking.status !== 'pending' && booking.status !== 'booked') {
+      throw new AppException(
+        ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+        `Booking status is '${booking.status}', only 'pending'/'booked' bookings can be converted to deal`,
+      );
+    }
+    if (booking.dateRange?.expiresAt && booking.dateRange.expiresAt.getTime() <= Date.now()) {
+      throw new AppException(
+        ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+        'Booking has expired',
+      );
+    }
+
+    const unit = await this.developmentsService.getUnitForOrganization(booking.unitId, params.organizationId);
+    if (unit.status === 'sold') {
+      throw new AppException(ErrorCode.UNIT_INVALID_STATUS_TRANSITION, 'Unit is already sold');
+    }
+
+    let effectiveContactId = params.contactId;
+    if (effectiveContactId) {
+      await this.crmService.getContactForOrganization(effectiveContactId, params.organizationId);
+    } else if (booking.leadId) {
+      const lead = await this.crmService.getLeadForOrganization(booking.leadId, params.organizationId);
+      if (lead.contactId) {
+        effectiveContactId = lead.contactId;
+      }
+    }
+
+    if (!effectiveContactId) {
+      throw new AppException(
+        ErrorCode.VALIDATION_FAILED,
+        'contactId is required when booking has no associated lead with contact',
+      );
+    }
+
+    const building = await this.developmentsService.getBuildingForOrganization(unit.buildingId, params.organizationId);
+
+    try {
+      return await runInTransaction(this.connection, async (session) => {
+        const replay = await this.idempotencyService.checkReplay({
+          identityId: params.actorIdentityId,
+          operation: 'convertBookingToDeal',
+          key: params.idempotencyKey,
+          requestBody,
+        });
+        if (replay) {
+          return { replay };
+        }
+
+        const { modifiedCount } = await this.bookingRepository.markPaidIfActive(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+        if (modifiedCount === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_INVALID_STATE_TRANSITION,
+            `Booking status is '${booking.status}', only 'pending'/'booked' bookings can be converted to deal`,
+          );
+        }
+
+        const { modifiedCount: unitModified } = await this.developmentsService.updateUnitStatusInSession(
+          unit._id,
+          params.organizationId,
+          unit.version,
+          'sold',
+          ['available', 'reserved'],
+          session,
+        );
+        if (unitModified === 0) {
+          throw new AppException(ErrorCode.VERSION_CONFLICT, 'Unit status conflict or version mismatch');
+        }
+
+        const deal = await this.crmService.createDealInSession(
+          {
+            organizationId: params.organizationId,
+            contactId: effectiveContactId,
+            ownerPositionId: params.managerPositionId,
+            leadId: booking.leadId ?? undefined,
+            title: params.title ?? `Deal for Unit ${unit.number}`,
+            description: params.notes,
+            stage: 'deal',
+            dealType: params.dealType ?? 'primary',
+            unitId: unit._id,
+            developmentId: building.developmentId,
+            installmentPlanId: params.installmentPlanId,
+            downPayment: params.downPayment,
+            expectedCommission: params.expectedCommission,
+          },
+          session,
+        );
+
+        const updatedBooking = await this.bookingRepository.findByIdForOrganization(
+          params.bookingId,
+          params.organizationId,
+          session,
+        );
+
+        await this.outboxService.publish(
+          {
+            eventType: 'BookingConvertedToDeal',
+            aggregateId: booking._id,
+            aggregateType: 'booking',
+            deduplicationKey: `booking:${booking._id.toString()}:converted:${deal._id.toString()}`,
+            payload: {
+              bookingId: booking._id,
+              dealId: deal._id,
+              unitId: booking.unitId,
+              organizationId: booking.organizationId,
+              leadId: booking.leadId ?? null,
+              contactId: effectiveContactId,
+            },
+          },
+          session,
+        );
+
+        await this.outboxService.publish(
+          {
+            eventType: 'UnitStatusChanged',
+            aggregateId: unit._id,
+            aggregateType: 'unit',
+            deduplicationKey: `unit:${unit._id.toString()}:status:sold:${deal._id.toString()}`,
+            payload: {
+              unitId: unit._id,
+              organizationId: params.organizationId,
+              buildingId: unit.buildingId,
+              previousStatus: unit.status,
+              newStatus: 'sold',
+            },
+          },
+          session,
+        );
+
+        await this.auditService.append(
+          {
+            actor: { type: 'identity', id: params.actorIdentityId },
+            action: 'booking.convert_to_deal',
+            resource: 'booking',
+            resourceId: booking._id,
+            correlationId: params.correlationId,
+            before: { status: booking.status },
+            after: { status: 'paid', dealId: deal._id },
+          },
+          session,
+        );
+
+        const response = {
+          booking: toBookingResponse(updatedBooking!),
+          dealId: deal._id.toString(),
+        };
+
+        await this.idempotencyService.record(
+          {
+            identityId: params.actorIdentityId,
+            operation: 'convertBookingToDeal',
+            key: params.idempotencyKey,
+            requestBody,
+            responseStatus: 201,
+            responseBody: response,
+          },
+          session,
+        );
+
+        return { booking: updatedBooking!, deal };
+      });
+    } catch (error: unknown) {
+      if (
+        isDuplicateKeyError(error) ||
+        (error instanceof AppException &&
+          (error.code === ErrorCode.BOOKING_INVALID_STATE_TRANSITION || error.code === ErrorCode.VERSION_CONFLICT))
+      ) {
+        const replay = await this.idempotencyService.awaitReplay({
+          identityId: params.actorIdentityId,
+          operation: 'convertBookingToDeal',
+          key: params.idempotencyKey,
+          requestBody,
+        });
+        if (replay) {
+          return { replay };
+        }
+      }
+      throw error;
     }
   }
 }

@@ -214,4 +214,56 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
       expect(await screen.findByText('Объект больше недоступен')).toBeDefined()
     })
   })
+
+  describe('Управление подборками клиента (SelectionsPage)', () => {
+    beforeEach(() => {
+      localStorage.clear()
+    })
+
+    it('создает новую подборку и сохраняет её в localStorage', () => {
+      render(
+        <MemoryRouter>
+          <SelectionsPage />
+        </MemoryRouter>,
+      )
+
+      const createBtn = screen.getByTestId('new-collection-btn')
+      fireEvent.click(createBtn)
+
+      expect(screen.getByDisplayValue(/Новая подборка/)).toBeDefined()
+      const saved = JSON.parse(localStorage.getItem('baza:marketplace:selections') || '[]')
+      expect(saved.length).toBeGreaterThanOrEqual(1)
+      expect(saved[0].title).toContain('Новая подборка')
+    })
+
+    it('редактирует название подборки и обновляет localStorage', () => {
+      render(
+        <MemoryRouter>
+          <SelectionsPage />
+        </MemoryRouter>,
+      )
+
+      const inputs = screen.getAllByRole('textbox', { name: /Название подборки/i })
+      fireEvent.change(inputs[0], { target: { value: 'Обновленное название' } })
+
+      expect(screen.getByDisplayValue('Обновленное название')).toBeDefined()
+      const saved = JSON.parse(localStorage.getItem('baza:marketplace:selections') || '[]')
+      expect(saved[0].title).toBe('Обновленное название')
+    })
+
+    it('удаляет подборку и обновляет localStorage', () => {
+      render(
+        <MemoryRouter>
+          <SelectionsPage />
+        </MemoryRouter>,
+      )
+
+      const deleteButtons = screen.getAllByTitle('Удалить подборку')
+      const countBefore = deleteButtons.length
+      fireEvent.click(deleteButtons[0])
+
+      const saved = JSON.parse(localStorage.getItem('baza:marketplace:selections') || '[]')
+      expect(saved.length).toBe(countBefore - 1)
+    })
+  })
 })

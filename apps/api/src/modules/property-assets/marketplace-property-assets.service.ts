@@ -20,7 +20,12 @@ export interface PropertyAssetMediaViewItem {
 import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
-import { PropertyAssetRepository, ListingRepository, ListingRevisionRepository } from '@baza/property-assets';
+import {
+  PropertyAssetRepository,
+  ListingRepository,
+  ListingRevisionRepository,
+  type PropertyAssetDocument,
+} from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import type { Currency } from '@baza/contracts';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
@@ -680,11 +685,29 @@ export class MarketplacePropertyAssetsService {
       }
 
       if (params.characteristics || params.representativePhone) {
+        const candidate = asset.characteristics as { toObject?: () => PropertyAssetDocument['characteristics'] };
+        const currentChars: PropertyAssetDocument['characteristics'] =
+          (typeof candidate?.toObject === 'function' ? candidate.toObject() : asset.characteristics);
+        const updatedCharacteristics: PropertyAssetDocument['characteristics'] | undefined = params.characteristics
+          ? {
+              area: params.characteristics.area ?? currentChars.area,
+              rooms: params.characteristics.rooms !== undefined ? params.characteristics.rooms : currentChars.rooms,
+              floor: params.characteristics.floor !== undefined ? params.characteristics.floor : currentChars.floor,
+              totalFloors:
+                params.characteristics.totalFloors !== undefined
+                  ? params.characteristics.totalFloors
+                  : currentChars.totalFloors,
+            }
+          : undefined;
+
         const { modifiedCount } = await this.propertyAssetRepository.updateEditableForIdentity(
           params.assetId,
           params.identityId,
           asset.version,
-          { characteristics: { ...asset.characteristics, ...params.characteristics }, representativePhone: params.representativePhone },
+          {
+            characteristics: updatedCharacteristics,
+            representativePhone: params.representativePhone,
+          },
           session,
         );
         if (modifiedCount === 0) {

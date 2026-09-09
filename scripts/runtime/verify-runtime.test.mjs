@@ -29,7 +29,7 @@ test('checkEndpoint reports HTTP failures and transport errors', async () => {
   assert.equal(transportFailure.error, 'connection refused');
 });
 
-test('verifyRuntime checks API and both web origins with defaults', async () => {
+test('verifyRuntime checks API and all three web origins with defaults', async () => {
   const requested = [];
   const results = await verifyRuntime({
     env: {},
@@ -44,9 +44,8 @@ test('verifyRuntime checks API and both web origins with defaults', async () => 
     'http://localhost:3000/health/ready',
     'http://localhost:4173',
     'http://localhost:4174',
+    'http://localhost:4175',
   ]);
-  // 4173 == marketplace-web, 4174 == admin-web (ADMIN_WEB replaces the
-  // stale ERP_WEB default previously at the same port — apps/erp-web does
-  // not exist in this worktree).
+  // 4173 == marketplace-web, 4174 == admin-web, 4175 == erp-web
   assert.equal(results.every((result) => result.ok), true);
 });

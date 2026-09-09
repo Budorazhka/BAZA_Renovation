@@ -8,6 +8,7 @@ import { ComplaintsPage } from './pages/ComplaintsPage'
 import { DuplicateCandidatesPage } from './pages/DuplicateCandidatesPage'
 import { AccountsPage } from './pages/AccountsPage'
 import { AuditPage } from './pages/AuditPage'
+import { OrganizationsPage } from './pages/OrganizationsPage'
 
 function Shell({ children }: { children: React.ReactNode }) {
   const { state, logout } = useAdminAuth()
@@ -34,6 +35,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         {state.status === 'signed-in' ? (
           <nav className="site-nav">
             <Link to="/publications">Публикации</Link>
+            <Link to="/organizations">Организации</Link>
             <Link to="/complaints">Жалобы</Link>
             <Link to="/duplicate-candidates">Дубликаты</Link>
             <Link to="/audit">Журнал аудита</Link>
@@ -60,6 +62,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <PublicationsPage />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/organizations"
+          element={
+            <RequireAdmin>
+              <OrganizationsPage />
             </RequireAdmin>
           }
         />

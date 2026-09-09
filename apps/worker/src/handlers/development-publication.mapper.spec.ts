@@ -1,4 +1,10 @@
-import { mapDevelopmentToDenormalizedFields, buildDevelopmentSeo, buildSearchProjection } from './development-publication.mapper';
+import {
+  mapDevelopmentToDenormalizedFields,
+  buildDevelopmentSeo,
+  buildSearchProjection,
+  computeDevelopmentPriceFrom,
+  computeDevelopmentPublicSummary,
+} from './development-publication.mapper';
 
 function makeDevelopment(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -105,5 +111,144 @@ describe('buildSearchProjection', () => {
       city: 'Batumi',
       classType: 'business',
     });
+  });
+
+  it('включает priceAmountMinorUnits и priceCurrency если priceFrom передан', () => {
+    const projection = buildSearchProjection(makeDevelopment(), {
+      amountMinorUnits: 5000000,
+      currency: 'USD',
+    });
+
+    expect(projection).toMatchObject({
+      priceAmountMinorUnits: 5000000,
+      priceCurrency: 'USD',
+    });
+  });
+});
+
+describe('computeDevelopmentPriceFrom', () => {
+  it('возвращает null при пустом наборе юнитов', () => {
+    expect(computeDevelopmentPriceFrom([])).toBeNull();
+  });
+
+  it('возвращает цену единственного доступного юнита', () => {
+    const units = [{ price: { amountMinorUnits: 4500000, currency: 'USD' } }];
+    expect(computeDevelopmentPriceFrom(units)).toEqual({
+      amountMinorUnits: 4500000,
+      currency: 'USD',
+    });
+  });
+
+  it('возвращает минимальную цену для нескольких юнитов в одной валюте', () => {
+    const units = [
+      { price: { amountMinorUnits: 6000000, currency: 'USD' } },
+      { price: { amountMinorUnits: 4500000, currency: 'USD' } },
+      { price: { amountMinorUnits: 8000000, currency: 'USD' } },
+    ];
+    expect(computeDevelopmentPriceFrom(units)).toEqual({
+      amountMinorUnits: 4500000,
+      currency: 'USD',
+    });
+  });
+
+  it('возвращает null при смешанных валютах (безопасное правило без конвертации)', () => {
+    const units = [
+      { price: { amountMinorUnits: 1000000, currency: 'USD' } },
+      { price: { amountMinorUnits: 5000000, currency: 'GEL' } },
+    ];
+    expect(computeDevelopmentPriceFrom(units)).toBeNull();
+  });
+
+  it('корректно вычисляет priceFrom при смене валюты всех юнитов', () => {
+    const unitsGel = [
+      { price: { amountMinorUnits: 12000000, currency: 'GEL' } },
+      { price: { amountMinorUnits: 9500000, currency: 'GEL' } },
+    ];
+    expect(computeDevelopmentPriceFrom(unitsGel)).toEqual({
+      amountMinorUnits: 9500000,
+      currency: 'GEL',
+    });
+  });
+});
+
+describe('computeDevelopmentPublicSummary', () => {
+  const buildings = [{ _id: 'b1', name: 'Building Alpha' }];
+
+  it('при однородной валюте строит согласованные priceFrom, searchProjection и denormalizedFields', () => {
+    const availableUnits = [
+      {
+        _id: 'u1',
+        number: '101',
+        kind: 'apartment',
+        rooms: 2,
+        area: 60,
+        buildingId: 'b1',
+        price: { amountMinorUnits: 5000000, currency: 'USD' },
+      },
+    ];
+
+    const summary = computeDevelopmentPublicSummary({
+      development: makeDevelopment(),
+      buildings,
+      availableUnits,
+    });
+
+    expect(summary.priceFrom).toEqual({ amountMinorUnits: 5000000, currency: 'USD' });
+    expect(summary.denormalizedFields.priceFrom).toEqual({ amountMinorUnits: 5000000, currency: 'USD' });
+    expect(summary.searchProjection.priceAmountMinorUnits).toBe(5000000);
+    expect(summary.searchProjection.priceCurrency).toBe('USD');
+    expect(summary.publicUnits).toHaveLength(1);
+    expect(summary.publicUnits[0]?.buildingName).toBe('Building Alpha');
+  });
+
+  it('при смешанных валютах не публикует общий priceFrom, но сохраняет валюты отдельных квартир', () => {
+    const availableUnits = [
+      {
+        _id: 'u1',
+        number: '101',
+        kind: 'apartment',
+        area: 50,
+        buildingId: 'b1',
+        price: { amountMinorUnits: 5000000, currency: 'USD' },
+      },
+      {
+        _id: 'u2',
+        number: '102',
+        kind: 'apartment',
+        area: 75,
+        buildingId: 'b1',
+        price: { amountMinorUnits: 12000000, currency: 'GEL' },
+      },
+    ];
+
+    const summary = computeDevelopmentPublicSummary({
+      development: makeDevelopment(),
+      buildings,
+      availableUnits,
+    });
+
+    expect(summary.priceFrom).toBeNull();
+    expect(summary.denormalizedFields).not.toHaveProperty('priceFrom');
+    expect(summary.searchProjection).not.toHaveProperty('priceAmountMinorUnits');
+    expect(summary.searchProjection).not.toHaveProperty('priceCurrency');
+    expect(summary.publicUnits).toEqual([
+      expect.objectContaining({ id: 'u1', price: { amountMinorUnits: 5000000, currency: 'USD' } }),
+      expect.objectContaining({ id: 'u2', price: { amountMinorUnits: 12000000, currency: 'GEL' } }),
+    ]);
+  });
+
+  it('при пустом наборе юнитов не оставляет залипших цен', () => {
+    const summary = computeDevelopmentPublicSummary({
+      development: makeDevelopment(),
+      buildings,
+      availableUnits: [],
+    });
+
+    expect(summary.priceFrom).toBeNull();
+    expect(summary.denormalizedFields).not.toHaveProperty('priceFrom');
+    expect(summary.denormalizedFields).not.toHaveProperty('units');
+    expect(summary.searchProjection).not.toHaveProperty('priceAmountMinorUnits');
+    expect(summary.searchProjection).not.toHaveProperty('priceCurrency');
+    expect(summary.publicUnits).toEqual([]);
   });
 });

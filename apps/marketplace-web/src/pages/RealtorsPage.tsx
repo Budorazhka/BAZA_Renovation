@@ -108,8 +108,15 @@ export function RealtorsPage() {
 
   return (
     <div className="figma-realtors-page">
+      <div className="demo-notice-banner" role="note">
+        <span className="demo-notice-banner__icon" aria-hidden="true">ℹ️</span>
+        <div className="demo-notice-banner__text">
+          <strong>Демонстрационный раздел:</strong> Реестр и рейтинг специалистов находятся на этапе подключения агентств недвижимости. Карточки, показатели сделок и отзывы сгенерированы для демонстрации интерфейса платформы.
+        </div>
+      </div>
+
       <div className="figma-realtors-header">
-        <div className="figma-realtors-header__eyebrow">Экосистема BAZA</div>
+        <div className="figma-realtors-header__eyebrow">Экосистема BAZA (Демо)</div>
         <h1 className="figma-realtors-header__title">Рейтинг риелторов в Грузии</h1>
         <p className="figma-realtors-header__subtitle">
           Проверенные эксперты по недвижимости с подтвержденными сделками, реальными отзывами покупателей и официальной аттестацией.
@@ -182,6 +189,7 @@ export function RealtorsPage() {
             </div>
 
             <div className="figma-realtor-badges">
+              <span className="figma-realtor-badge figma-realtor-badge--demo">Демо-профиль</span>
               {realtor.badges.map((b, i) => (
                 <span key={i} className={`figma-realtor-badge${b.includes('ТОП') ? ' figma-realtor-badge--top' : ''}`}>
                   {b}

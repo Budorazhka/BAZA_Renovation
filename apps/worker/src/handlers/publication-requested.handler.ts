@@ -1,19 +1,32 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import type { OutboxEventDocument } from '@baza/domain-events';
-import { DevelopmentRepository } from '@baza/development';
+import {
+  DevelopmentRepository,
+  BuildingRepository,
+  UnitRepository,
+  FloorPlanRepository,
+} from '@baza/development';
 import { ListingRepository, PropertyAssetRepository, type PropertyAssetDocument } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 import { MediaAssetRepository, MediaStorageService } from '@baza/media-storage';
 import type { EventHandler } from '../outbox/event-handler';
 import { buildSlugBase, buildSlugCandidate } from './slug.util';
-import { mapDevelopmentToDenormalizedFields, buildDevelopmentSeo, buildSearchProjection } from './development-publication.mapper';
+import {
+  buildDevelopmentSeo,
+  computeDevelopmentPublicSummary,
+} from './development-publication.mapper';
 import {
   mapListingToDenormalizedFields,
   buildListingSeo,
   buildListingSearchProjection,
   type PublicMediaItem,
 } from './listing-publication.mapper';
+import {
+  mapUnitToDenormalizedFields,
+  buildUnitSeo,
+  buildUnitSearchProjection,
+} from './unit-publication.mapper';
 
 const MAX_SLUG_ATTEMPTS = 10;
 
@@ -35,6 +48,9 @@ export class PublicationRequestedHandler implements EventHandler {
     private readonly propertyAssetRepository: PropertyAssetRepository,
     private readonly mediaAssetRepository: MediaAssetRepository,
     private readonly storage: MediaStorageService,
+    private readonly buildingRepository?: BuildingRepository,
+    private readonly unitRepository?: UnitRepository,
+    private readonly floorPlanRepository?: FloorPlanRepository,
   ) {}
 
   async handle(event: OutboxEventDocument): Promise<void> {
@@ -48,6 +64,11 @@ export class PublicationRequestedHandler implements EventHandler {
 
     if (payload.sourceType === 'listing') {
       await this.handleListing(payload, publicationId);
+      return;
+    }
+
+    if (payload.sourceType === 'unit') {
+      await this.handleUnit(payload, publicationId);
       return;
     }
 
@@ -70,6 +91,16 @@ export class PublicationRequestedHandler implements EventHandler {
       return;
     }
 
+    const buildings = this.buildingRepository ? await this.buildingRepository.listByDevelopmentId(sourceId) : [];
+    const buildingIds = buildings.map((b) => b._id);
+    const units = this.unitRepository ? await this.unitRepository.listByBuildingIds(buildingIds, { status: 'available' }) : [];
+
+    const summary = computeDevelopmentPublicSummary({
+      development,
+      buildings,
+      availableUnits: units,
+    });
+
     await this.publishWithSlugRetry(
       publicationId,
       payload,
@@ -77,8 +108,78 @@ export class PublicationRequestedHandler implements EventHandler {
       development.location.city,
       (slug) => ({
         seo: buildDevelopmentSeo(development, slug),
-        denormalizedFields: mapDevelopmentToDenormalizedFields(development),
-        searchProjection: buildSearchProjection(development),
+        denormalizedFields: summary.denormalizedFields,
+        searchProjection: summary.searchProjection,
+      }),
+    );
+  }
+
+  private async handleUnit(payload: PublicationRequestedPayload, publicationId: Types.ObjectId): Promise<void> {
+    if (!this.unitRepository || !this.buildingRepository) {
+      this.logger.error(
+        `PublicationRequested (${payload.publicationId}): UnitRepository или BuildingRepository не сконфигурированы. Помечаю build_failed.`,
+      );
+      await this.publicationRepository.markBuildFailed(publicationId);
+      return;
+    }
+
+    const sourceId = new Types.ObjectId(payload.sourceId);
+    const unit = await this.unitRepository.findById(sourceId);
+    if (!unit) {
+      this.logger.error(
+        `PublicationRequested (${payload.publicationId}): Unit ${payload.sourceId} не найден — ` +
+          `canonical-сущность удалена/недоступна между publish и обработкой worker'ом. Помечаю build_failed.`,
+      );
+      await this.publicationRepository.markBuildFailed(publicationId);
+      return;
+    }
+
+    const building = await this.buildingRepository.findById(unit.buildingId);
+    if (!building) {
+      this.logger.error(
+        `PublicationRequested (${payload.publicationId}): Building ${unit.buildingId.toString()} ` +
+          `(родитель Unit ${payload.sourceId}) не найден. Помечаю build_failed.`,
+      );
+      await this.publicationRepository.markBuildFailed(publicationId);
+      return;
+    }
+
+    const development = await this.developmentRepository.findById(building.developmentId);
+    if (!development) {
+      this.logger.error(
+        `PublicationRequested (${payload.publicationId}): Development ${building.developmentId.toString()} ` +
+          `(родитель Building ${building._id.toString()}) не найден. Помечаю build_failed.`,
+      );
+      await this.publicationRepository.markBuildFailed(publicationId);
+      return;
+    }
+
+    const floorPlan =
+      unit.floorPlanId && this.floorPlanRepository
+        ? await this.floorPlanRepository.findById(unit.floorPlanId)
+        : null;
+
+    let planImageUrl: string | undefined;
+    if (floorPlan?.imageAssetId && this.mediaAssetRepository && this.storage) {
+      const mediaDoc = await this.mediaAssetRepository.findById(floorPlan.imageAssetId);
+      if (mediaDoc && mediaDoc.status === 'verified' && mediaDoc.bucket === 'public') {
+        const variant =
+          mediaDoc.variants.find((v) => v.type === 'card' || v.type === 'detail') || mediaDoc.variants[0];
+        if (variant) {
+          planImageUrl = this.storage.getPublicUrl(variant.assetPath);
+        }
+      }
+    }
+
+    await this.publishWithSlugRetry(
+      publicationId,
+      payload,
+      `unit-${unit.number}-${building.name}`,
+      development.location.city,
+      (slug) => ({
+        seo: buildUnitSeo(unit, building, development, slug),
+        denormalizedFields: mapUnitToDenormalizedFields(unit, building, development, floorPlan, planImageUrl),
+        searchProjection: buildUnitSearchProjection(unit, building, development),
       }),
     );
   }

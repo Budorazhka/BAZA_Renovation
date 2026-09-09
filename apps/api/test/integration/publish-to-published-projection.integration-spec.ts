@@ -13,7 +13,12 @@ import { AdminPublicationService } from '../../src/modules/admin/admin-publicati
 import type { AdminContext } from '../../src/shared/admin/admin-context';
 import { RedisService } from '../../src/shared/redis/redis.service';
 import { createRedisMockService } from './support/redis-mock';
-import { DevelopmentRepository } from '@baza/development';
+import {
+  DevelopmentRepository,
+  BuildingRepository,
+  UnitRepository,
+  FloorPlanRepository,
+} from '@baza/development';
 import { ListingRepository, PropertyAssetRepository } from '@baza/property-assets';
 import { MarketplacePublicationRepository } from '@baza/publication';
 // D-03: кросс-app импорт напрямую из apps/worker внутри ТЕСТОВОГО файла
@@ -108,6 +113,9 @@ describe('Publish → outbox → worker → published projection → public read
       moduleRef.get(PropertyAssetRepository),
       moduleRef.get(MediaAssetRepository),
       moduleRef.get(MediaStorageService),
+      moduleRef.get(BuildingRepository),
+      moduleRef.get(UnitRepository),
+      moduleRef.get(FloorPlanRepository),
     );
   }, 120_000);
 

@@ -42,6 +42,7 @@ const NON_TENANT_REPOSITORIES = [
   'outbox-event',
   'marketplace-publication',
   'booking-lock',
+  'subscription-plan',
 ];
 
 /** `<файл>#<метод>` → почему запрос без organizationId здесь корректен. */
@@ -105,6 +106,9 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
     'Публичная сторона (PublicSelectionsController, без TenantGuard) — единственный ключ доступа это сам ' +
     'publicToken (256 бит случайности, SelectionsService.generatePublicToken), organizationId у анонимного ' +
     'посетителя ссылки физически нет. Тот же принцип, что invitation.repository.ts#findByTokenHash выше.',
+  'unit.repository.ts#listByBuildingIds':
+    'Worker-side вызов для сборки публичной проекции ЖК (PublicationRequestedHandler): ' +
+    'buildingIds получены из уже загруженного Development, worker работает как system actor вне tenant-контекста.',
 };
 
 const QUERY = /this\.model\.(find|findOne|findOneAndUpdate|updateOne|updateMany|deleteOne|deleteMany|countDocuments|aggregate|distinct)\b/;

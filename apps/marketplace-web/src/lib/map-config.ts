@@ -5,6 +5,8 @@
  * Treating that value as a real URL makes MapLibre emit a noisy network error;
  * returning undefined lets both map surfaces render their honest setup state.
  */
+export const DEFAULT_MAP_STYLE_URL = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json'
+
 export function resolveMapStyleUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const normalized = value.trim()

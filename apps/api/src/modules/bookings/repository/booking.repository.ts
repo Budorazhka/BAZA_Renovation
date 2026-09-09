@@ -218,4 +218,22 @@ export class BookingRepository {
       .exec();
     return { modifiedCount: result.modifiedCount };
   }
+
+  /**
+   * booking.convert_to_deal — перевод активной брони в статус paid при закрытии сделки.
+   */
+  async markPaidIfActive(
+    bookingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    session: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateOne(
+        { _id: bookingId, organizationId, status: { $in: ['pending', 'booked'] as BookingStatus[] } },
+        { $set: { status: 'paid' as BookingStatus } },
+      )
+      .session(session)
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
 }

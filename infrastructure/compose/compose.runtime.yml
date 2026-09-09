@@ -98,19 +98,7 @@ services:
       MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
       CORS_ALLOWED_ORIGIN_MARKETPLACE: ${CORS_ALLOWED_ORIGIN_MARKETPLACE:-http://localhost:4173}
       CORS_ALLOWED_ORIGIN_ADMIN: ${CORS_ALLOWED_ORIGIN_ADMIN:-http://localhost:4174}
-      # Origin для ERP-клиента. Самого erp-web в этом стеке НЕТ и быть не может:
-      # apps/erp-web намеренно исключён из workspace (см. pnpm-workspace.yaml —
-      # его зависимостей нет в lockfile, и подключение к гейтам названо там
-      # отдельным решением). Сервис отсюда убран 05.09.2026 после того, как его
-      # добавление уронило runtime-гейт дважды: сначала на pnpm install, потом на
-      # turbo build с «No package found with name '@baza/erp-web'».
-      #
-      # Переменная оставлена и по умолчанию ПУСТА: без неё
-      # resolveProductAudienceFromOrigin никогда не попадает в ветку 'erp', и
-      # логин из ERP отвечает AUTH_AUDIENCE_MISMATCH. Тот, кто поднимает
-      # ERP-клиент своими командами рядом со стеком, задаёт её своим origin —
-      # например CORS_ALLOWED_ORIGIN_ERP=http://localhost:5173.
-      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-}
+      CORS_ALLOWED_ORIGIN_ERP: ${CORS_ALLOWED_ORIGIN_ERP:-http://localhost:4175}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -236,6 +224,25 @@ services:
         condition: service_healthy
     ports:
       - "${MARKETPLACE_WEB_PORT:-4173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  erp-web:
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.erp-web
+      args:
+        VITE_PLATFORM_API_BASE_URL: ${VITE_PLATFORM_API_BASE_URL:-/api/v1}
+        VITE_CRM_API_BASE_URL: ${VITE_CRM_API_BASE_URL:-/api/v1}
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${ERP_WEB_PORT:-4175}:80"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
       interval: 5s

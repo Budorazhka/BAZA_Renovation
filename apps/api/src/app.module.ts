@@ -19,6 +19,7 @@ import { PropertyAssetsModule } from './modules/property-assets/property-assets.
 import { BookingsModule } from './modules/bookings/bookings.module';
 import { SelectionsModule } from './modules/selections/selections.module';
 import { FavoritesModule } from './modules/favorites/favorites.module';
+import { BillingModule } from './modules/billing/billing.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { FavoritesModule } from './modules/favorites/favorites.module';
     BookingsModule,
     SelectionsModule,
     FavoritesModule,
+    BillingModule,
   ],
   controllers: [HealthController],
   // TenantContextMiddleware/AdminContextMiddleware явно зарегистрированы

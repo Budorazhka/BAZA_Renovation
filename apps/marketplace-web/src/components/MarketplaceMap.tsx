@@ -16,7 +16,7 @@ import {
   type MarketplaceMapItem,
   type MarketplaceMapPoint,
 } from '../lib/map-data'
-import { resolveMapStyleUrl } from '../lib/map-config'
+import { resolveMapStyleUrl, DEFAULT_MAP_STYLE_URL } from '../lib/map-config'
 import type { BoundingBox, PublicListingCard } from '../types/marketplace'
 
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -172,7 +172,8 @@ export function MarketplaceMap({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedItem, setSelectedItem] = useState<MarketplaceMapItem | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
-  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL)
+  const isTest = import.meta.env.MODE === 'test'
+  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL) || (!isTest ? DEFAULT_MAP_STYLE_URL : undefined)
 
   itemsRef.current = items
   onBoundsChangeRef.current = onBoundsChange

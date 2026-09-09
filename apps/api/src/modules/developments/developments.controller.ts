@@ -23,6 +23,9 @@ import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitPriceDto } from './dto/update-unit-price.dto';
 import { UpdateUnitStatusDto } from './dto/update-unit-status.dto';
 import { ListUnitsQueryDto } from './dto/list-units-query.dto';
+import { GenerateChessboardDto } from './dto/generate-chessboard.dto';
+import { BatchCreateUnitsDto } from './dto/batch-create-units.dto';
+import { BatchUpdatePricesDto } from './dto/batch-update-prices.dto';
 import { CreateInstallmentPlanDto } from './dto/create-installment-plan.dto';
 import { UpdateInstallmentPlanDto } from './dto/update-installment-plan.dto';
 import { ListInstallmentPlansQueryDto } from './dto/list-installment-plans-query.dto';
@@ -595,6 +598,93 @@ export class DevelopmentsController {
       new Types.ObjectId(unitId),
       new Types.ObjectId(tenantContext.organizationId),
     );
+  }
+
+  @Post('buildings/:buildingId/chessboard/generate')
+  @HttpCode(201)
+  @RequirePermission('development', 'edit')
+  async generateChessboard(
+    @Req() req: FastifyRequest,
+    @Param('buildingId') buildingId: string,
+    @Body() dto: GenerateChessboardDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    return this.developmentsService.generateChessboard({
+      buildingId: new Types.ObjectId(buildingId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      sectionId: dto.sectionId ? new Types.ObjectId(dto.sectionId) : undefined,
+      fromFloor: dto.fromFloor,
+      toFloor: dto.toFloor,
+      unitsPerFloor: dto.unitsPerFloor,
+      numberingScheme: dto.numberingScheme,
+      defaultKind: dto.defaultKind,
+      rooms: dto.rooms,
+      defaultArea: dto.defaultArea,
+      defaultAreaLiving: dto.defaultAreaLiving,
+      defaultAreaBalcony: dto.defaultAreaBalcony,
+      defaultPrice: dto.defaultPrice,
+      floorPlanId: dto.floorPlanId ? new Types.ObjectId(dto.floorPlanId) : undefined,
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  @Post('buildings/:buildingId/units/batch')
+  @HttpCode(201)
+  @RequirePermission('development', 'edit')
+  async batchCreateUnits(
+    @Req() req: FastifyRequest,
+    @Param('buildingId') buildingId: string,
+    @Body() dto: BatchCreateUnitsDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    return this.developmentsService.batchCreateUnits({
+      buildingId: new Types.ObjectId(buildingId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      units: dto.units,
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      correlationId: req.correlationId,
+    });
+  }
+
+  @Post('developments/:developmentId/units/batch-price-update')
+  @RequirePermission('unit', 'price.update')
+  async batchUpdatePrices(
+    @Req() req: FastifyRequest,
+    @Param('developmentId') developmentId: string,
+    @Body() dto: BatchUpdatePricesDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    return this.developmentsService.batchUpdatePrices({
+      developmentId: new Types.ObjectId(developmentId),
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      buildingId: dto.buildingId ? new Types.ObjectId(dto.buildingId) : undefined,
+      floorMin: dto.floorMin,
+      floorMax: dto.floorMax,
+      kind: dto.kind,
+      unitIds: dto.unitIds?.map((id) => new Types.ObjectId(id)),
+      operationType: dto.operationType,
+      value: dto.value,
+      reason: dto.reason,
+      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorPositionId: new Types.ObjectId(tenantContext.positionId),
+      correlationId: req.correlationId,
+    });
   }
 
   @Post('developments/:developmentId/installment-plans')

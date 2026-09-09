@@ -38,8 +38,11 @@ function leadStatusForFilter(lead: Lead, stageColumnById: Record<string, LeadSta
 
 type LeadStageColumn = 'rejection' | 'in_progress' | 'success'
 
+import { ExportButton } from '@/components/common/ExportButton'
+
 export default function LeadsGeneralReportPage() {
     const { t } = useI18n();
+
   const { state } = useLeads()
   const [period, setPeriod] = useState<'7d' | '30d' | 'all'>('30d')
   const [employee, setEmployee] = useState<string>('all')
@@ -153,10 +156,14 @@ export default function LeadsGeneralReportPage() {
     <DashboardShell>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="w-full space-y-4">
-          <div>
-            <h1 className="text-xl font-normal text-[color:var(--theme-accent-heading)]">{t('leads.leadsGeneralReportPage.общий_отч_т_по_лидам')}</h1>
-            <p className="mt-1 text-sm text-[color:var(--app-text-muted)]">{t('leads.leadsGeneralReportPage.состояние_потока_лид')}</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-normal text-[color:var(--theme-accent-heading)]">{t('leads.leadsGeneralReportPage.общий_отч_т_по_лидам')}</h1>
+              <p className="mt-1 text-sm text-[color:var(--app-text-muted)]">{t('leads.leadsGeneralReportPage.состояние_потока_лид')}</p>
+            </div>
+            <ExportButton entity="leads" label="Экспорт лидов в Excel" />
           </div>
+
           <section className="rounded-lg border border-[var(--hub-card-border)] bg-[var(--hub-card-bg)] p-3">
             <div className="mb-3 flex items-center gap-2">
               <Filter className="size-4 text-[color:var(--gold)]" />

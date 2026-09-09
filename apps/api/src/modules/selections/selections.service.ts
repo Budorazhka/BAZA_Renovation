@@ -23,11 +23,10 @@ interface IdempotencyParams {
   requestBody: Record<string, unknown>;
 }
 
-/** Публичная проекция подборки — намеренно НЕ включает organizationId/createdByPositionId/leadId/publicToken/version (ADR-002: клиент без аутентификации не должен видеть внутренние ID организации). */
+/** Публичная проекция подборки — намеренно НЕ включает organizationId/createdByPositionId/leadId/publicToken/version/clientPhone (ADR-002: клиент без аутентификации не должен видеть внутренние ID организации и приватные контактные данные). */
 export interface PublicDevSelection {
   title: string;
   clientName?: string;
-  clientPhone?: string;
   agentNote?: string;
   status: DevSelectionStatus;
   items: Array<{
@@ -64,7 +63,6 @@ export function toPublicDevSelection(
   return {
     title: doc.title,
     clientName: doc.clientName,
-    clientPhone: doc.clientPhone,
     agentNote: doc.agentNote,
     status: doc.status,
     items: doc.items.map((item) => {

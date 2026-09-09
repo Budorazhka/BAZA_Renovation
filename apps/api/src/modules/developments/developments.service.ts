@@ -38,6 +38,7 @@ import type { SectionDocument } from './schemas/section.schema';
 import type { FloorDocument } from './schemas/floor.schema';
 import type { FloorPlanDocument, GeoPolygon2D } from './schemas/floor-plan.schema';
 import type { UnitDocument, UnitKind, UnitStatus } from './schemas/unit.schema';
+import type { BatchUnitItemDto } from './dto/batch-create-units.dto';
 import type {
   InstallmentPlanDocument,
   InstallmentApplyTo,
@@ -571,6 +572,32 @@ export class DevelopmentsService {
 
     return this.createIdempotently(params.idempotency, (session) =>
       this.floorPlanRepository.create(params, session),
+    );
+  }
+
+  async getBuildingForOrganization(id: Types.ObjectId, organizationId: Types.ObjectId): Promise<BuildingDocument> {
+    const building = await this.buildingRepository.findByIdForOrganization(id, organizationId);
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+    return building;
+  }
+
+  async updateUnitStatusInSession(
+    unitId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    expectedVersion: number,
+    status: UnitStatus,
+    fromStatuses: readonly UnitStatus[],
+    session: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    return this.unitRepository.updateStatusWithVersionCheck(
+      unitId,
+      organizationId,
+      expectedVersion,
+      status,
+      fromStatuses,
+      session,
     );
   }
 
@@ -1224,6 +1251,425 @@ export class DevelopmentsService {
         },
         session,
       );
+    });
+  }
+
+  /**
+   * Пакетная генерация шахматки по этажам и стоякам.
+   */
+  async generateChessboard(params: {
+    buildingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    sectionId?: Types.ObjectId;
+    fromFloor: number;
+    toFloor: number;
+    unitsPerFloor: number;
+    numberingScheme?: 'floor_prefix' | 'sequential';
+    defaultKind?: UnitKind;
+    rooms?: number;
+    defaultArea: number;
+    defaultAreaLiving?: number;
+    defaultAreaBalcony?: number;
+    defaultPrice: MoneyAmount;
+    floorPlanId?: Types.ObjectId;
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ generatedFloors: number; generatedUnits: number; units: UnitDocument[] }> {
+    if (params.fromFloor > params.toFloor) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'fromFloor must be <= toFloor');
+    }
+
+    const building = await this.buildingRepository.findByIdForOrganization(
+      params.buildingId,
+      params.organizationId,
+    );
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+
+    if (params.sectionId) {
+      const section = await this.sectionRepository.findByIdForOrganization(
+        params.sectionId,
+        params.organizationId,
+      );
+      if (!section || !section.buildingId.equals(params.buildingId)) {
+        throw new NotFoundException('Section not found');
+      }
+    }
+
+    if (params.floorPlanId) {
+      const floorPlan = await this.floorPlanRepository.findByIdForOrganization(
+        params.floorPlanId,
+        params.organizationId,
+      );
+      if (!floorPlan || !floorPlan.buildingId.equals(params.buildingId)) {
+        throw new NotFoundException('FloorPlan not found');
+      }
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      let generatedFloors = 0;
+      const floorMap = new Map<number, FloorDocument>();
+
+      for (let f = params.fromFloor; f <= params.toFloor; f++) {
+        let floor = await this.floorRepository.findByBuildingAndNumber(
+          params.buildingId,
+          f,
+          params.organizationId,
+        );
+        if (!floor) {
+          floor = await this.floorRepository.create(
+            {
+              buildingId: params.buildingId,
+              sectionId: params.sectionId,
+              organizationId: params.organizationId,
+              floorNumber: f,
+            },
+            session,
+          );
+          generatedFloors++;
+        }
+        floorMap.set(f, floor);
+      }
+
+      const existingUnits = await this.unitRepository.listForBuilding(
+        params.buildingId,
+        params.organizationId,
+        { limit: 10000 },
+      );
+      const existingNumbers = new Set(existingUnits.map((u) => u.number));
+
+      const unitsToCreate: Array<{
+        buildingId: Types.ObjectId;
+        floorId: Types.ObjectId;
+        sectionId?: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        number: string;
+        kind: UnitKind;
+        rooms?: number;
+        area: number;
+        areaLiving?: number;
+        areaBalcony?: number;
+        price: MoneyAmount;
+        floorPlanId?: Types.ObjectId;
+      }> = [];
+
+      let seq = 1;
+      for (let f = params.fromFloor; f <= params.toFloor; f++) {
+        const floor = floorMap.get(f)!;
+        for (let u = 1; u <= params.unitsPerFloor; u++) {
+          let unitNumber: string;
+          if (params.numberingScheme === 'sequential') {
+            unitNumber = String(seq++);
+          } else {
+            const pad = u < 10 ? `0${u}` : `${u}`;
+            unitNumber = `${f}${pad}`;
+          }
+
+          if (!existingNumbers.has(unitNumber)) {
+            existingNumbers.add(unitNumber);
+            unitsToCreate.push({
+              buildingId: params.buildingId,
+              floorId: floor._id,
+              sectionId: params.sectionId ?? floor.sectionId,
+              organizationId: params.organizationId,
+              number: unitNumber,
+              kind: params.defaultKind ?? 'apartment',
+              rooms: params.rooms,
+              area: params.defaultArea,
+              areaLiving: params.defaultAreaLiving,
+              areaBalcony: params.defaultAreaBalcony,
+              price: params.defaultPrice,
+              floorPlanId: params.floorPlanId,
+            });
+          }
+        }
+      }
+
+      const createdUnits = await this.unitRepository.createMany(unitsToCreate, session);
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'development.chessboard_generate',
+          resource: 'building',
+          resourceId: params.buildingId,
+          correlationId: params.correlationId,
+          after: {
+            generatedFloors,
+            generatedUnits: createdUnits.length,
+            fromFloor: params.fromFloor,
+            toFloor: params.toFloor,
+            unitsPerFloor: params.unitsPerFloor,
+          },
+        },
+        session,
+      );
+
+      return {
+        generatedFloors,
+        generatedUnits: createdUnits.length,
+        units: createdUnits,
+      };
+    });
+  }
+
+  /**
+   * Пакетный импорт/создание юнитов.
+   */
+  async batchCreateUnits(params: {
+    buildingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    units: BatchUnitItemDto[];
+    actorIdentityId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ createdCount: number; units: UnitDocument[] }> {
+    const building = await this.buildingRepository.findByIdForOrganization(
+      params.buildingId,
+      params.organizationId,
+    );
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const floorNumbers = Array.from(new Set(params.units.map((u) => u.floorNumber)));
+      const floorMap = new Map<number, FloorDocument>();
+
+      for (const fn of floorNumbers) {
+        let floor = await this.floorRepository.findByBuildingAndNumber(
+          params.buildingId,
+          fn,
+          params.organizationId,
+        );
+        if (!floor) {
+          floor = await this.floorRepository.create(
+            {
+              buildingId: params.buildingId,
+              organizationId: params.organizationId,
+              floorNumber: fn,
+            },
+            session,
+          );
+        }
+        floorMap.set(fn, floor);
+      }
+
+      const unitsToCreate: Array<{
+        buildingId: Types.ObjectId;
+        floorId: Types.ObjectId;
+        sectionId?: Types.ObjectId;
+        organizationId: Types.ObjectId;
+        number: string;
+        kind: UnitKind;
+        rooms?: number;
+        area: number;
+        areaLiving?: number;
+        areaBalcony?: number;
+        price: MoneyAmount;
+        floorPlanId?: Types.ObjectId;
+      }> = [];
+
+      for (const item of params.units) {
+        const floor = floorMap.get(item.floorNumber)!;
+        unitsToCreate.push({
+          buildingId: params.buildingId,
+          floorId: floor._id,
+          sectionId: item.sectionId ? new Types.ObjectId(item.sectionId) : floor.sectionId,
+          organizationId: params.organizationId,
+          number: item.number,
+          kind: item.kind,
+          rooms: item.rooms,
+          area: item.area,
+          areaLiving: item.areaLiving,
+          areaBalcony: item.areaBalcony,
+          price: item.price,
+          floorPlanId: item.floorPlanId ? new Types.ObjectId(item.floorPlanId) : undefined,
+        });
+      }
+
+      const createdUnits = await this.unitRepository.createMany(unitsToCreate, session);
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'development.units_batch_create',
+          resource: 'building',
+          resourceId: params.buildingId,
+          correlationId: params.correlationId,
+          after: {
+            createdCount: createdUnits.length,
+          },
+        },
+        session,
+      );
+
+      return {
+        createdCount: createdUnits.length,
+        units: createdUnits,
+      };
+    });
+  }
+
+  /**
+   * Массовое обновление цен на юниты с аудитом и outbox-событиями.
+   */
+  async batchUpdatePrices(params: {
+    developmentId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    buildingId?: Types.ObjectId;
+    floorMin?: number;
+    floorMax?: number;
+    kind?: UnitKind;
+    unitIds?: Types.ObjectId[];
+    operationType: 'percentage' | 'delta_per_sqm' | 'fixed_price_per_sqm' | 'fixed_total';
+    value: number;
+    reason?: string;
+    actorIdentityId: Types.ObjectId;
+    actorPositionId: Types.ObjectId;
+    correlationId: string;
+  }): Promise<{ updatedCount: number; affectedUnitIds: string[] }> {
+    const development = await this.developmentRepository.findByIdForOrganization(
+      params.developmentId,
+      params.organizationId,
+    );
+    if (!development) {
+      throw new NotFoundException('Development not found');
+    }
+
+    const buildings = await this.buildingRepository.listForDevelopment(
+      params.developmentId,
+      params.organizationId,
+    );
+    let targetBuildingIds = buildings.map((b) => b._id);
+
+    if (params.buildingId) {
+      if (!targetBuildingIds.some((bId) => bId.equals(params.buildingId!))) {
+        throw new NotFoundException('Building not found in development');
+      }
+      targetBuildingIds = [params.buildingId];
+    }
+
+    const floors = await this.floorRepository.listForBuildings(
+      targetBuildingIds,
+      params.organizationId,
+    );
+    const floorMap = new Map<string, number>();
+    for (const f of floors) {
+      floorMap.set(f._id.toString(), f.floorNumber);
+    }
+
+    const allUnits = await this.unitRepository.listForBuildings(
+      targetBuildingIds,
+      params.organizationId,
+      params.kind ? { kind: params.kind } : {},
+    );
+
+    const explicitUnitIdSet = params.unitIds ? new Set(params.unitIds.map((id) => id.toString())) : null;
+
+    const candidateUnits = allUnits.filter((u) => {
+      if (explicitUnitIdSet && !explicitUnitIdSet.has(u._id.toString())) {
+        return false;
+      }
+      const floorNum = floorMap.get(u.floorId.toString());
+      if (params.floorMin !== undefined && (floorNum === undefined || floorNum < params.floorMin)) {
+        return false;
+      }
+      if (params.floorMax !== undefined && (floorNum === undefined || floorNum > params.floorMax)) {
+        return false;
+      }
+      return true;
+    });
+
+    if (candidateUnits.length === 0) {
+      return { updatedCount: 0, affectedUnitIds: [] };
+    }
+
+    return runInTransaction(this.connection, async (session) => {
+      const affectedUnitIds: string[] = [];
+
+      for (const unit of candidateUnits) {
+        const oldMinor = unit.price.amountMinorUnits;
+        let newMinor: number;
+
+        switch (params.operationType) {
+          case 'percentage':
+            newMinor = Math.round(oldMinor * (1 + params.value / 100));
+            break;
+          case 'delta_per_sqm':
+            newMinor = oldMinor + Math.round(params.value * unit.area * 100);
+            break;
+          case 'fixed_price_per_sqm':
+            newMinor = Math.round(params.value * unit.area * 100);
+            break;
+          case 'fixed_total':
+            newMinor = Math.round(params.value * 100);
+            break;
+        }
+
+        if (newMinor <= 0) {
+          throw new AppException(
+            ErrorCode.VALIDATION_FAILED,
+            `Price calculation for unit ${unit.number} resulted in non-positive value (${newMinor})`,
+          );
+        }
+
+        const newPrice: MoneyAmount = {
+          amountMinorUnits: newMinor,
+          currency: unit.price.currency,
+        };
+
+        const { modifiedCount } = await this.unitRepository.updatePriceWithVersionCheck(
+          unit._id,
+          params.organizationId,
+          unit.version,
+          { price: newPrice, changedBy: params.actorPositionId },
+          session,
+        );
+
+        if (modifiedCount === 0) {
+          throw new ConflictException(`Unit ${unit.number} was modified by another request — refresh and retry`);
+        }
+
+        await this.outboxService.publish(
+          {
+            eventType: 'UnitPriceChanged',
+            aggregateType: 'unit',
+            aggregateId: unit._id,
+            payload: {
+              amountMinorUnits: newPrice.amountMinorUnits,
+              currency: newPrice.currency,
+            },
+            deduplicationKey: `unit:${unit._id.toString()}:UnitPriceChanged:v${unit.version + 1}`,
+          },
+          session,
+        );
+
+        affectedUnitIds.push(unit._id.toString());
+      }
+
+      await this.auditService.append(
+        {
+          actor: { type: 'identity', id: params.actorIdentityId },
+          action: 'development.batch_price_update',
+          resource: 'development',
+          resourceId: params.developmentId,
+          correlationId: params.correlationId,
+          after: {
+            updatedCount: affectedUnitIds.length,
+            operationType: params.operationType,
+            value: params.value,
+            reason: params.reason ?? null,
+            affectedUnitIds,
+          },
+        },
+        session,
+      );
+
+      return {
+        updatedCount: affectedUnitIds.length,
+        affectedUnitIds,
+      };
     });
   }
 }

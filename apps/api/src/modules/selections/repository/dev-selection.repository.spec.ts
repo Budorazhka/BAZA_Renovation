@@ -280,7 +280,7 @@ describe('DevSelectionRepository', () => {
       const result = await repository.markViewedByPublicToken('token-value');
 
       expect(findOneAndUpdateSpy).toHaveBeenCalledWith(
-        { publicToken: 'token-value' },
+        { publicToken: 'token-value', status: { $ne: 'archived' } },
         [
           {
             $set: {

@@ -6,6 +6,7 @@ import {
   type OwnerListing,
   type OwnerPropertyAsset,
 } from '../features/publishing/api/publishing-api'
+import { listingPropertyTypeLabel } from '../lib/format'
 import '../features/publishing/styles/publishing.css'
 import '../features/auth/styles/auth.css'
 
@@ -169,7 +170,7 @@ export function EditListingPage() {
         </div>
         <div>
           <dt>Тип объекта</dt>
-          <dd>{asset.propertyType}</dd>
+          <dd>{listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype)}</dd>
         </div>
         <div>
           <dt>Тип сделки</dt>
@@ -234,43 +235,47 @@ export function EditListingPage() {
           />
         </div>
 
-        <div className="wizard-field">
-          <label htmlFor="edit-rooms">Комнат</label>
-          <input
-            id="edit-rooms"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            value={rooms}
-            onChange={(event) => setRooms(event.target.value)}
-            disabled={isSaving}
-          />
-        </div>
+        {asset.propertyType !== 'land' && (
+          <>
+            <div className="wizard-field">
+              <label htmlFor="edit-rooms">Комнат</label>
+              <input
+                id="edit-rooms"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                value={rooms}
+                onChange={(event) => setRooms(event.target.value)}
+                disabled={isSaving}
+              />
+            </div>
 
-        <div className="wizard-field">
-          <label htmlFor="edit-floor">Этаж</label>
-          <input
-            id="edit-floor"
-            type="number"
-            inputMode="numeric"
-            value={floor}
-            onChange={(event) => setFloor(event.target.value)}
-            disabled={isSaving}
-          />
-        </div>
+            <div className="wizard-field">
+              <label htmlFor="edit-floor">Этаж</label>
+              <input
+                id="edit-floor"
+                type="number"
+                inputMode="numeric"
+                value={floor}
+                onChange={(event) => setFloor(event.target.value)}
+                disabled={isSaving}
+              />
+            </div>
 
-        <div className="wizard-field">
-          <label htmlFor="edit-total-floors">Этажей в доме</label>
-          <input
-            id="edit-total-floors"
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={totalFloors}
-            onChange={(event) => setTotalFloors(event.target.value)}
-            disabled={isSaving}
-          />
-        </div>
+            <div className="wizard-field">
+              <label htmlFor="edit-total-floors">Этажей в доме</label>
+              <input
+                id="edit-total-floors"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={totalFloors}
+                onChange={(event) => setTotalFloors(event.target.value)}
+                disabled={isSaving}
+              />
+            </div>
+          </>
+        )}
 
         <div className="wizard-field">
           <label htmlFor="edit-phone">Телефон в объявлении</label>

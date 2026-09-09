@@ -122,6 +122,48 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
         expect.any(Object),
       )
     })
+
+    const landChip = screen.getByRole('button', { name: 'Участки' })
+    fireEvent.click(landChip)
+
+    await waitFor(() => {
+      expect(marketplaceApi.listListings).toHaveBeenCalledWith(
+        expect.objectContaining({ dealType: 'rent_long', propertyType: 'land' }),
+        expect.any(Object),
+      )
+    })
+
+    const commercialChip = screen.getByRole('button', { name: 'Коммерческая' })
+    fireEvent.click(commercialChip)
+
+    await waitFor(() => {
+      expect(marketplaceApi.listListings).toHaveBeenCalledWith(
+        expect.objectContaining({ dealType: 'rent_long', propertyType: 'commercial' }),
+        expect.any(Object),
+      )
+    })
+
+    // Subtype chips appear
+    const officeChip = await screen.findByRole('button', { name: 'Офис' })
+    fireEvent.click(officeChip)
+
+    await waitFor(() => {
+      expect(marketplaceApi.listListings).toHaveBeenCalledWith(
+        expect.objectContaining({ dealType: 'rent_long', propertyType: 'commercial', commercialSubtype: 'office' }),
+        expect.any(Object),
+      )
+    })
+
+    // Switch back to apartments - commercialSubtype is reset
+    const aptChip = screen.getByRole('button', { name: 'Квартиры' })
+    fireEvent.click(aptChip)
+
+    await waitFor(() => {
+      expect(marketplaceApi.listListings).toHaveBeenCalledWith(
+        expect.objectContaining({ dealType: 'rent_long', propertyType: 'apartment', commercialSubtype: undefined }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('submitting city search form updates filter and re-queries', async () => {

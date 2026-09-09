@@ -1,18 +1,5 @@
-# ВНИМАНИЕ: этот образ сейчас СОБРАТЬ НЕЛЬЗЯ, и в compose его нет.
-#
-# apps/erp-web намеренно исключён из workspace (pnpm-workspace.yaml): его
-# зависимостей нет в lockfile, поэтому `pnpm install --frozen-lockfile` ниже
-# отработает без них, а `turbo run build --filter=@baza/erp-web...` завершится
-# с «No package found with name '@baza/erp-web' in workspace».
-#
-# Проверено дважды 04–05.09.2026: попытка поднять erp-web в runtime-стеке
-# уронила гейт обоими способами по очереди. Dockerfile оставлен как заготовка
-# на тот момент, когда ERP-клиент подключат к workspace — это отдельное
-# решение, требующее обновления lockfile и сведения конфигураций.
-#
-# Node 22 вместо прежнего 20 — заодно: на 20 падал уже сам pnpm install
-# (ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite), то есть версия была устаревшей
-# независимо от истории с workspace.
+# Dockerfile для сборки и раздачи клиента ERP (@baza/erp-web).
+# Подключен к workspace и runtime-топологии (07.09.2026).
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /workspace

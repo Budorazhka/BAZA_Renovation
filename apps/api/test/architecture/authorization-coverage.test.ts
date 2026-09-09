@@ -54,6 +54,9 @@ const INTENTIONALLY_UNAUTHORIZED: Record<string, string> = {
   'GET /leads/stage-definitions': 'справочник стадий воронки по продуктам — статичные метаданные, не данные лидов; под TenantGuard, требует только валидную tenant-сессию, без специального права',
 
   'GET /public/selections/:token': 'публичный просмотр подборки клиентом по ссылке — анонимный посетитель по определению (нет аутентификации, единственный ключ доступа это сам publicToken, 256 бит энтропии), whitelist-проекция (toPublicDevSelection) не содержит organizationId/внутренних ID',
+
+  'GET /billing/subscription': 'данные о текущей подписке и лимитах своей же организации; под TenantGuard, чужого не отдаёт',
+  'GET /billing/plans': 'каталог доступных тарифных планов платформы; под TenantGuard',
 };
 
 function listControllers(dir: string): string[] {

@@ -342,7 +342,7 @@ describe('Selections (dev selections) — HTTP integration (полный AppModu
   });
 
   describe('публичная сторона — GET /public/selections/:token', () => {
-    it('200 без какой-либо аутентификации, whitelist-проекция, инкремент viewCount, sent->viewed', async () => {
+    it('200 без какой-либо аутентификации, whitelist-проекция, инкремент viewCount, sent->viewed, без утечки приватного телефона', async () => {
       const { cookie, organizationId } = await seedOwnerSession();
       const unitId = await seedUnit(organizationId);
 
@@ -350,7 +350,12 @@ describe('Selections (dev selections) — HTTP integration (полный AppModu
         method: 'POST',
         url: '/api/v1/selections',
         headers: { cookie, 'idempotency-key': 'public-flow-create' },
-        payload: { title: 'Публичная подборка', unitIds: [unitId.toString()], clientName: 'Клиент' },
+        payload: {
+          title: 'Публичная подборка',
+          unitIds: [unitId.toString()],
+          clientName: 'Клиент',
+          clientPhone: '+995 599 99 99 99',
+        },
       });
       const created = JSON.parse(createResponse.body);
 
@@ -371,10 +376,34 @@ describe('Selections (dev selections) — HTTP integration (полный AppModu
       expect(body).not.toHaveProperty('createdByPositionId');
       expect(body).not.toHaveProperty('publicToken');
       expect(body).not.toHaveProperty('version');
+      expect(body).not.toHaveProperty('clientPhone');
 
       const secondOpen = await app.inject({ method: 'GET', url: `/api/v1/public/selections/${created.publicToken}` });
       expect(JSON.parse(secondOpen.body).viewCount).toBe(2);
       expect(JSON.parse(secondOpen.body).status).toBe('viewed');
+    });
+
+    it('404 для отозванной / архивированной подборки', async () => {
+      const { cookie, organizationId } = await seedOwnerSession();
+      const unitId = await seedUnit(organizationId);
+
+      const createResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/selections',
+        headers: { cookie, 'idempotency-key': 'public-flow-archived-create' },
+        payload: { title: 'Архивная подборка', unitIds: [unitId.toString()] },
+      });
+      const created = JSON.parse(createResponse.body);
+
+      await app.inject({
+        method: 'PATCH',
+        url: `/api/v1/selections/${created.id}/status`,
+        headers: { cookie, 'idempotency-key': 'public-flow-archived-status' },
+        payload: { expectedVersion: 0, status: 'archived' },
+      });
+
+      const response = await app.inject({ method: 'GET', url: `/api/v1/public/selections/${created.publicToken}` });
+      expect(response.statusCode).toBe(404);
     });
 
     it('404 для несуществующего токена', async () => {

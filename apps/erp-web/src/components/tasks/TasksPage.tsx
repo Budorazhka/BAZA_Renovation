@@ -4,7 +4,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { CreateTaskModal, type TaskAssigneeOption } from '@/components/tasks/CreateTaskModal'
+import { ExportButton } from '@/components/common/ExportButton'
 import { useAuth } from '@/context/AuthContext'
+
 import { buildCreateTaskPayload, isDisplayableTaskV2, mapTaskV2ToUiTask } from '@/lib/map-task-v2'
 import { newIdempotencyKey, tasksApiV2 } from '@/services/tasksApiV2'
 import { teamApi } from '@/services/teamApi'
@@ -368,24 +370,25 @@ export function TasksPage() {
             <div style={{ fontSize: 26, fontWeight: 400, color: C.white, letterSpacing: '-0.01em' }}>{t('tasks.tasksPage.задачи')}</div>
             <div style={{ fontSize: 13, color: C.whiteLow, marginTop: 4 }}>{t('tasks.tasksPage.личный_и_командный_т')}</div>
           </div>
-          <button
-            type="button"
-            onClick={() => setCreateOpen(true)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '9px 16px',
-              background: 'var(--gold-dark)',
-              border: 'none',
-              borderRadius: 7,
-              color: '#fff',
-              fontSize: 12,
-              fontWeight: 400,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase' as const,
-              cursor: 'pointer',
-            }}
-          >
-            <Plus size={20} strokeWidth={2} /> {t('tasks.tasksPage.новая_задача')}</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <ExportButton entity="tasks" label="Экспорт задач" />
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '9px 16px',
+                background: 'var(--gold-dark)',
+                border: 'none',
+                borderRadius: 7,
+                color: '#fff',
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <Plus size={13} strokeWidth={2.5} /> {t('tasks.tasksPage.новая_задача')}</button>
+          </div>
         </div>
 
         {/* Filter tabs */}

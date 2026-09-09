@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { resolveMapStyleUrl } from '../../../lib/map-config'
+import { resolveMapStyleUrl, DEFAULT_MAP_STYLE_URL } from '../../../lib/map-config'
 
 type Coordinates = [number, number]
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -29,7 +29,8 @@ export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPick
   const coordinatesRef = useRef(coordinates)
   const onChangeRef = useRef(onChange)
   const [mapError, setMapError] = useState<string | null>(null)
-  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL)
+  const isTest = import.meta.env.MODE === 'test'
+  const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL) || (!isTest ? DEFAULT_MAP_STYLE_URL : undefined)
 
   coordinatesRef.current = coordinates
   onChangeRef.current = onChange
@@ -37,39 +38,48 @@ export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPick
   useEffect(() => {
     if (!styleUrl || !containerRef.current) return
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: styleUrl,
-      center: coordinatesRef.current,
-      zoom: 15,
-    })
-    const markerElement = document.createElement('div')
-    markerElement.className = 'publishing-map-picker__marker'
-    markerElement.setAttribute('aria-hidden', 'true')
-    const marker = new maplibregl.Marker({ element: markerElement, draggable: true })
-      .setLngLat(coordinatesRef.current)
-      .addTo(map)
+    let map: MapLibreMap | null = null
+    let marker: MapLibreMarker | null = null
 
-    mapRef.current = map
-    markerRef.current = marker
+    try {
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: styleUrl,
+        center: coordinatesRef.current,
+        zoom: 15,
+      })
+      const markerElement = document.createElement('div')
+      markerElement.className = 'publishing-map-picker__marker'
+      markerElement.setAttribute('aria-hidden', 'true')
+      marker = new maplibregl.Marker({ element: markerElement, draggable: true })
+        .setLngLat(coordinatesRef.current)
+        .addTo(map)
 
-    const updateCoordinates = (next: Coordinates) => {
-      if (!isValidCoordinates(next)) return
-      marker.setLngLat(next)
-      onChangeRef.current(next)
+      mapRef.current = map
+      markerRef.current = marker
+
+      const updateCoordinates = (next: Coordinates) => {
+        if (!isValidCoordinates(next)) return
+        marker?.setLngLat(next)
+        onChangeRef.current(next)
+      }
+
+      map.on('click', (event) => updateCoordinates([event.lngLat.lng, event.lngLat.lat]))
+      marker.on('dragend', () => {
+        if (!marker) return
+        const point = marker.getLngLat()
+        updateCoordinates([point.lng, point.lat])
+      })
+      map.on('error', () => setMapError('Не удалось загрузить слой карты. Проверьте VITE_MAP_STYLE_URL.'))
+    } catch {
+      setMapError('Не удалось загрузить слой карты.')
+      return
     }
 
-    map.on('click', (event) => updateCoordinates([event.lngLat.lng, event.lngLat.lat]))
-    marker.on('dragend', () => {
-      const point = marker.getLngLat()
-      updateCoordinates([point.lng, point.lat])
-    })
-    map.on('error', () => setMapError('Не удалось загрузить слой карты. Проверьте VITE_MAP_STYLE_URL.'))
-
     return () => {
-      marker.remove()
+      marker?.remove()
       markerRef.current = null
-      map.remove()
+      map?.remove()
       mapRef.current = null
     }
   }, [styleUrl])

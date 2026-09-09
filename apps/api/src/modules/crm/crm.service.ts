@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { ContactRepository } from './repository/contact.repository';
+import type { ContactDocument } from './schemas/contact.schema';
 import { LeadRepository } from './repository/lead.repository';
 import { LeadEventRepository } from './repository/lead-event.repository';
 import { TaskRepository } from './repository/task.repository';
@@ -288,6 +289,48 @@ export interface CrmPositionReportReadModel {
   dealsCommission: Array<{ currency: string; amountMinorUnits: number }>;
 }
 
+export interface CrmTeamPerformanceTimeseriesPoint {
+  date: string;
+  leads: number;
+  deals: number;
+  completedTasks: number;
+}
+
+export interface CrmPositionPerformanceReadModel {
+  positionId: string | null;
+  leadsAdded: number;
+  leadsInWork: number;
+  leadsConverted: number;
+  leadsLost: number;
+  conversionRatePercent: number;
+  dealsTotal: number;
+  dealsWon: number;
+  dealsLost: number;
+  dealsCommission: Array<{ currency: string; amountMinorUnits: number }>;
+  tasksTotal: number;
+  tasksCompleted: number;
+  tasksOverdue: number;
+  tasksCompletedOnTime: number;
+  slaPercent: number;
+}
+
+export interface CrmTeamPerformanceReadModel {
+  summary: {
+    leadsTotal: number;
+    leadsConverted: number;
+    conversionRatePercent: number;
+    dealsTotal: number;
+    dealsWon: number;
+    dealsCommission: Array<{ currency: string; amountMinorUnits: number }>;
+    tasksTotal: number;
+    tasksCompleted: number;
+    slaPercent: number;
+  };
+  positions: CrmPositionPerformanceReadModel[];
+  timeseries: CrmTeamPerformanceTimeseriesPoint[];
+}
+
+
 /**
  * CRM-003 "активный лид без следующего действия" — мягкое правило
  * (owner-подтверждено 30.08.2026: только read-only флаг, БЕЗ блокировки
@@ -377,6 +420,39 @@ export class CrmService {
       throw new NotFoundException('Lead not found');
     }
     return lead;
+  }
+
+  async getContactForOrganization(
+    contactId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<ContactDocument> {
+    const contact = await this.contactRepository.findByIdForOrganization(contactId, organizationId);
+    if (!contact) {
+      throw new NotFoundException('Contact not found');
+    }
+    return contact;
+  }
+
+  async createDealInSession(
+    params: {
+      organizationId: Types.ObjectId;
+      contactId: Types.ObjectId;
+      ownerPositionId: Types.ObjectId;
+      leadId?: Types.ObjectId;
+      title: string;
+      description?: string;
+      stage?: DealStage;
+      dealType?: 'primary' | 'secondary' | 'rental' | 'assignment';
+      unitId?: Types.ObjectId;
+      developmentId?: Types.ObjectId;
+      installmentPlanId?: Types.ObjectId;
+      downPayment?: MoneyAmount;
+      expectedCommission?: MoneyAmount;
+      participants?: Array<{ role: string; contactId: Types.ObjectId }>;
+    },
+    session: ClientSession,
+  ): Promise<DealDocument> {
+    return this.dealRepository.create(params, session);
   }
 
   /**
@@ -3826,7 +3902,235 @@ export class CrmService {
 
     return { positions: [...byPosition.values()] };
   }
+
+  /**
+   * GET /crm/reports/team-performance — комплексный отчёт по результативности
+   * сотрудников и команды с разбивкой по воронке лидов, сделкам, комиссиям,
+   * выполнению задач (SLA) и динамике активности во времени (timeseries).
+   */
+  async getTeamPerformanceReport(params: {
+    organizationId: Types.ObjectId;
+    from?: Date;
+    to?: Date;
+    positionId?: Types.ObjectId;
+  }): Promise<CrmTeamPerformanceReadModel> {
+    const [leadRows, dealRows, taskRows, leadTimeseries, dealTimeseries, taskTimeseries] = await Promise.all([
+      this.leadRepository.aggregateByOwnerPosition(params.organizationId, { from: params.from, to: params.to }),
+      this.dealRepository.aggregateByOwnerPosition(params.organizationId, { from: params.from, to: params.to }),
+      this.taskRepository.aggregateByAssignedPosition(params.organizationId, { from: params.from, to: params.to }),
+      this.leadRepository.aggregateTimeseries(params.organizationId, {
+        from: params.from,
+        to: params.to,
+        ownerPositionId: params.positionId,
+      }),
+      this.dealRepository.aggregateTimeseries(params.organizationId, {
+        from: params.from,
+        to: params.to,
+        ownerPositionId: params.positionId,
+      }),
+      this.taskRepository.aggregateTimeseries(params.organizationId, {
+        from: params.from,
+        to: params.to,
+        assignedPositionId: params.positionId,
+      }),
+    ]);
+
+    const byPosition = new Map<
+      string,
+      {
+        positionId: string | null;
+        leadsAdded: number;
+        leadsConverted: number;
+        leadsLost: number;
+        dealsTotal: number;
+        dealsWon: number;
+        dealsLost: number;
+        dealsCommission: Map<string, number>;
+        tasksTotal: number;
+        tasksCompleted: number;
+        tasksOverdue: number;
+        tasksCompletedOnTime: number;
+      }
+    >();
+
+    const keyFor = (positionId: Types.ObjectId | null) => (positionId ? positionId.toString() : 'unassigned');
+
+    const entryFor = (positionId: Types.ObjectId | null) => {
+      const key = keyFor(positionId);
+      let entry = byPosition.get(key);
+      if (!entry) {
+        entry = {
+          positionId: positionId ? positionId.toString() : null,
+          leadsAdded: 0,
+          leadsConverted: 0,
+          leadsLost: 0,
+          dealsTotal: 0,
+          dealsWon: 0,
+          dealsLost: 0,
+          dealsCommission: new Map<string, number>(),
+          tasksTotal: 0,
+          tasksCompleted: 0,
+          tasksOverdue: 0,
+          tasksCompletedOnTime: 0,
+        };
+        byPosition.set(key, entry);
+      }
+      return entry;
+    };
+
+    for (const row of leadRows) {
+      const entry = entryFor(row.ownerPositionId);
+      entry.leadsAdded += row.count;
+      if (row.stage === 'converted') {
+        entry.leadsConverted += row.count;
+      } else if (row.stage === 'lost') {
+        entry.leadsLost += row.count;
+      }
+    }
+
+    const WON_DEAL_STAGES: readonly string[] = ['deal', 'golden', 'check_in', 'referral'];
+    for (const row of dealRows) {
+      const entry = entryFor(row.ownerPositionId);
+      entry.dealsTotal += row.count;
+      if (WON_DEAL_STAGES.includes(row.stage)) {
+        entry.dealsWon += row.count;
+      } else if (row.stage === 'closed_lost') {
+        entry.dealsLost += row.count;
+      }
+      if (row.currency && row.commissionAmountMinorUnits > 0) {
+        const current = entry.dealsCommission.get(row.currency) ?? 0;
+        entry.dealsCommission.set(row.currency, current + row.commissionAmountMinorUnits);
+      }
+    }
+
+    for (const row of taskRows) {
+      const entry = entryFor(row.assignedPositionId);
+      entry.tasksTotal += row.count;
+      if (row.status === 'completed') {
+        entry.tasksCompleted += row.count;
+      }
+      entry.tasksCompletedOnTime += row.completedOnTimeCount;
+      entry.tasksOverdue += row.overdueCount;
+    }
+
+    let positionList: CrmPositionPerformanceReadModel[] = [...byPosition.values()].map((raw) => {
+      const leadsInWork = Math.max(0, raw.leadsAdded - raw.leadsConverted - raw.leadsLost);
+      const conversionRatePercent =
+        raw.leadsAdded > 0 ? Math.round((raw.leadsConverted / raw.leadsAdded) * 1000) / 10 : 0;
+      const slaPercent =
+        raw.tasksCompleted > 0
+          ? Math.round((raw.tasksCompletedOnTime / raw.tasksCompleted) * 1000) / 10
+          : raw.tasksTotal > 0
+          ? 0
+          : 100;
+
+      const dealsCommission: Array<{ currency: string; amountMinorUnits: number }> = [];
+      for (const [currency, amountMinorUnits] of raw.dealsCommission.entries()) {
+        dealsCommission.push({ currency, amountMinorUnits });
+      }
+
+      return {
+        positionId: raw.positionId,
+        leadsAdded: raw.leadsAdded,
+        leadsInWork,
+        leadsConverted: raw.leadsConverted,
+        leadsLost: raw.leadsLost,
+        conversionRatePercent,
+        dealsTotal: raw.dealsTotal,
+        dealsWon: raw.dealsWon,
+        dealsLost: raw.dealsLost,
+        dealsCommission,
+        tasksTotal: raw.tasksTotal,
+        tasksCompleted: raw.tasksCompleted,
+        tasksOverdue: raw.tasksOverdue,
+        tasksCompletedOnTime: raw.tasksCompletedOnTime,
+        slaPercent,
+      };
+    });
+
+    if (params.positionId) {
+      const posStr = params.positionId.toString();
+      positionList = positionList.filter((p) => p.positionId === posStr);
+    }
+
+    // Summary
+    let totalLeads = 0;
+    let totalConvertedLeads = 0;
+    let totalDeals = 0;
+    let totalWonDeals = 0;
+    let totalTasks = 0;
+    let totalCompletedTasks = 0;
+    let totalOnTimeTasks = 0;
+    const summaryCommissionMap = new Map<string, number>();
+
+    for (const p of positionList) {
+      totalLeads += p.leadsAdded;
+      totalConvertedLeads += p.leadsConverted;
+      totalDeals += p.dealsTotal;
+      totalWonDeals += p.dealsWon;
+      totalTasks += p.tasksTotal;
+      totalCompletedTasks += p.tasksCompleted;
+      totalOnTimeTasks += p.tasksCompletedOnTime;
+      for (const comm of p.dealsCommission) {
+        const cur = summaryCommissionMap.get(comm.currency) ?? 0;
+        summaryCommissionMap.set(comm.currency, cur + comm.amountMinorUnits);
+      }
+    }
+
+    const summaryCommission: Array<{ currency: string; amountMinorUnits: number }> = [];
+    for (const [currency, amountMinorUnits] of summaryCommissionMap.entries()) {
+      summaryCommission.push({ currency, amountMinorUnits });
+    }
+
+    const summary = {
+      leadsTotal: totalLeads,
+      leadsConverted: totalConvertedLeads,
+      conversionRatePercent:
+        totalLeads > 0 ? Math.round((totalConvertedLeads / totalLeads) * 1000) / 10 : 0,
+      dealsTotal: totalDeals,
+      dealsWon: totalWonDeals,
+      dealsCommission: summaryCommission,
+      tasksTotal: totalTasks,
+      tasksCompleted: totalCompletedTasks,
+      slaPercent:
+        totalCompletedTasks > 0
+          ? Math.round((totalOnTimeTasks / totalCompletedTasks) * 1000) / 10
+          : totalTasks > 0
+          ? 0
+          : 100,
+    };
+
+    // Timeseries merge
+    const timeseriesMap = new Map<string, CrmTeamPerformanceTimeseriesPoint>();
+    const getPoint = (date: string) => {
+      let pt = timeseriesMap.get(date);
+      if (!pt) {
+        pt = { date, leads: 0, deals: 0, completedTasks: 0 };
+        timeseriesMap.set(date, pt);
+      }
+      return pt;
+    };
+
+    for (const lt of leadTimeseries) {
+      if (lt.date) getPoint(lt.date).leads += lt.count;
+    }
+    for (const dt of dealTimeseries) {
+      if (dt.date) getPoint(dt.date).deals += dt.count;
+    }
+    for (const tt of taskTimeseries) {
+      if (tt.date) getPoint(tt.date).completedTasks += tt.count;
+    }
+
+    const timeseries = [...timeseriesMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+    return {
+      summary,
+      positions: positionList,
+      timeseries,
+    };
+  }
 }
+
 
 function extractContactChannels(contact: DevelopmentContact): {
   phone: string;

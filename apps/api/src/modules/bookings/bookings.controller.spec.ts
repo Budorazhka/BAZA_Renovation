@@ -289,3 +289,73 @@ describe('BookingsController.listBookings', () => {
     expect(result.items).toHaveLength(2);
   });
 });
+
+describe('BookingsController.convertToDeal', () => {
+  it('requires Idempotency-Key before invoking the service', async () => {
+    const service = { convertToDeal: jest.fn() } as unknown as BookingsService;
+    const idempotency = { checkReplay: jest.fn() } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator());
+
+    await expect(
+      controller.convertToDeal(makeRequest(), { status: jest.fn() } as never, new Types.ObjectId(), {}),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_KEY_REQUIRED' });
+    expect(service.convertToDeal).not.toHaveBeenCalled();
+    expect(idempotency.checkReplay).not.toHaveBeenCalled();
+  });
+
+  it('returns an idempotent replay without invoking the convert command', async () => {
+    const service = { convertToDeal: jest.fn() } as unknown as BookingsService;
+    const idempotency = {
+      checkReplay: jest.fn().mockResolvedValue({ responseStatus: 201, responseBody: { dealId: 'deal-1' } }),
+    } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator());
+    const reply = { status: jest.fn() };
+
+    await expect(
+      controller.convertToDeal(makeRequest(), reply as never, new Types.ObjectId(), {}, 'same-key'),
+    ).resolves.toEqual({ dealId: 'deal-1' });
+    expect(reply.status).toHaveBeenCalledWith(201);
+    expect(service.convertToDeal).not.toHaveBeenCalled();
+  });
+
+  it('delegates to BookingsService.convertToDeal and returns 201', async () => {
+    const bookingId = new Types.ObjectId();
+    const dealId = new Types.ObjectId();
+    const booking = {
+      _id: bookingId,
+      unitId: new Types.ObjectId(),
+      organizationId: new Types.ObjectId(),
+      manager: new Types.ObjectId(),
+      dateRange: { startsAt: new Date('2026-09-01'), expiresAt: new Date('2026-09-02') },
+      status: 'paid',
+      createdAt: new Date('2026-08-31'),
+    };
+    const deal = { _id: dealId };
+    const convertSpy = jest.fn().mockResolvedValue({ booking, deal });
+    const service = { convertToDeal: convertSpy } as unknown as BookingsService;
+    const idempotency = { checkReplay: jest.fn().mockResolvedValue(null) } as unknown as IdempotencyService;
+    const controller = new BookingsController(service, idempotency, makePolicyEvaluator());
+    const reply = { status: jest.fn() };
+
+    const result = await controller.convertToDeal(
+      makeRequest(),
+      reply as never,
+      bookingId,
+      { title: 'Deal Unit 101' },
+      'conv-key-1',
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(201);
+    expect(convertSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookingId,
+        title: 'Deal Unit 101',
+        idempotencyKey: 'conv-key-1',
+      }),
+    );
+    expect(result).toMatchObject({
+      dealId: dealId.toString(),
+      booking: expect.objectContaining({ status: 'paid' }),
+    });
+  });
+});

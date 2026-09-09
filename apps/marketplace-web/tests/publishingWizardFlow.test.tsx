@@ -479,4 +479,47 @@ describe('Publishing Wizard End-to-End Functional Flow', () => {
 
     resolvePublish!({ id: 'pub-1', status: 'publication_pending', sourceId: 'listing-err' })
   })
+
+  it('supports land creation without rooms/floors and commercial creation with subtype', async () => {
+    ;(publishingApi.createPropertyAsset as any).mockResolvedValue({ _id: 'asset-land-1', version: 0 })
+
+    render(
+      <MemoryRouter initialEntries={['/publish']}>
+        <PublishingWizard />
+      </MemoryRouter>,
+    )
+
+    // Step 1: Location
+    await waitFor(() => expect(screen.getByTestId('wizard-step-location')).toBeDefined())
+    fireEvent.change(screen.getByTestId('location-input-address'), { target: { value: 'Kobuleti Beach Road' } })
+    fireEvent.click(screen.getByTestId('location-next-btn'))
+
+    // Step 2: Characteristics for Land
+    await waitFor(() => expect(screen.getByTestId('wizard-step-characteristics')).toBeDefined())
+
+    // Switch to Land
+    fireEvent.click(screen.getByTestId('property-type-land'))
+
+    // Room and floor inputs must NOT be in the DOM for land
+    expect(screen.queryByTestId('characteristics-input-rooms')).toBeNull()
+    expect(screen.queryByTestId('characteristics-input-floor')).toBeNull()
+
+    fireEvent.change(screen.getByTestId('characteristics-input-area'), { target: { value: '1200' } })
+    fireEvent.change(screen.getByTestId('characteristics-input-phone'), { target: { value: '+995555112233' } })
+    fireEvent.click(screen.getByTestId('characteristics-next-btn'))
+
+    await waitFor(() => {
+      expect(publishingApi.createPropertyAsset).toHaveBeenCalledWith(
+        expect.objectContaining({
+          characteristics: expect.objectContaining({
+            propertyType: 'land',
+            area: 1200,
+            rooms: '',
+            floor: '',
+          }),
+        }),
+        expect.any(String),
+      )
+    })
+  })
 })

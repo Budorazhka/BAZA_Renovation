@@ -1269,8 +1269,122 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: '#/components/schemas/Unit'
+  /buildings/{buildingId}/chessboard/generate:
+    post:
+      operationId: generateChessboard
+      summary: Пакетная генерация шахматки по этажам и стоякам
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromFloor, toFloor, unitsPerFloor, defaultArea, defaultPrice]
+              properties:
+                sectionId: {type: string}
+                fromFloor: {type: integer, minimum: 1}
+                toFloor: {type: integer, minimum: 1}
+                unitsPerFloor: {type: integer, minimum: 1}
+                numberingScheme: {type: string, enum: [floor_prefix, sequential]}
+                defaultKind: {type: string, enum: [apartment, commercial, office, parking, storage, other]}
+                rooms: {type: integer}
+                defaultArea: {type: number}
+                defaultAreaLiving: {type: number}
+                defaultAreaBalcony: {type: number}
+                defaultPrice: {$ref: '#/components/schemas/MoneyAmount'}
+                floorPlanId: {type: string}
+      responses:
+        '201':
+          description: Сетка успешно сгенерирована
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /buildings/{buildingId}/units/batch:
+    post:
+      operationId: batchCreateUnits
+      summary: Пакетный импорт/создание юнитов в корпусе
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: buildingId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [units]
+              properties:
+                units:
+                  type: array
+                  items:
+                    type: object
+                    required: [floorNumber, number, kind, area, price]
+                    properties:
+                      floorNumber: {type: integer}
+                      number: {type: string}
+                      kind: {type: string, enum: [apartment, commercial, office, parking, storage, other]}
+                      rooms: {type: integer}
+                      area: {type: number}
+                      areaLiving: {type: number}
+                      areaBalcony: {type: number}
+                      price: {$ref: '#/components/schemas/MoneyAmount'}
+                      sectionId: {type: string}
+                      floorPlanId: {type: string}
+      responses:
+        '201':
+          description: Юниты успешно созданы
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /developments/{developmentId}/units/batch-price-update:
+    post:
+      operationId: batchUpdatePrices
+      summary: Массовое обновление цен на юниты ЖК
+      tags: [erp-development]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+        - name: developmentId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operationType, value]
+              properties:
+                buildingId: {type: string}
+                floorMin: {type: integer}
+                floorMax: {type: integer}
+                kind: {type: string, enum: [apartment, commercial, office, parking, storage, other]}
+                unitIds:
+                  type: array
+                  items: {type: string}
+                operationType: {type: string, enum: [percentage, delta_per_sqm, fixed_price_per_sqm, fixed_total]}
+                value: {type: number}
+                reason: {type: string}
+      responses:
+        '200':
+          description: Цены успешно обновлены
+        '400':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
 
@@ -1606,6 +1720,69 @@ paths:
           $ref: '#/components/responses/Error'
         '409':
           description: Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key
+          $ref: '#/components/responses/Error'
+
+  /bookings/{bookingId}/convert-to-deal:
+    post:
+      operationId: convertBookingToDeal
+      summary: >
+        Конвертировать бронь в сделку CRM (Primary Sales). Бронь переходит в paid,
+        юнит в sold, создаётся DealDocument в одной транзакции.
+      tags: [erp-bookings]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                contactId:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                dealType:
+                  type: string
+                  enum: [primary, secondary, rental, assignment]
+                installmentPlanId:
+                  type: string
+                  pattern: '^[0-9a-fA-F]{24}$'
+                downPayment:
+                  $ref: '#/components/schemas/MoneyAmount'
+                expectedCommission:
+                  $ref: '#/components/schemas/MoneyAmount'
+                notes:
+                  type: string
+                  maxLength: 2000
+      responses:
+        '201':
+          description: Бронь конвертирована в сделку
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [booking, dealId]
+                properties:
+                  booking:
+                    $ref: '#/components/schemas/Booking'
+                  dealId:
+                    type: string
+        '400':
+          description: Отсутствует Idempotency-Key или невалидные параметры
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Booking/Contact не существует или чужая организация (non-disclosure)
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Booking не в активном статусе, unit уже продан, или конфликт Idempotency-Key
           $ref: '#/components/responses/Error'
 
   /selections:
@@ -3700,7 +3877,43 @@ paths:
           description: FORBIDDEN — нет crm_report.read
           $ref: '#/components/responses/Error'
 
+  /crm/reports/team-performance:
+    get:
+      operationId: getTeamPerformanceReport
+      summary: >
+        Комплексный отчёт по эффективности команды и сотрудников: воронка лидов,
+        сделки, комиссии, выполнение задач (SLA) и временные ряды активности.
+        Требует `crm_report.read` (organization scope — owner/director/rop/developer).
+      tags: [erp-crm]
+      parameters:
+        - name: from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: to
+          in: query
+          schema: {type: string, format: date-time}
+        - name: positionId
+          in: query
+          schema: {type: string}
+      responses:
+        '200':
+          description: Отчёт по результативности команды
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamPerformanceReportResponse'
+        '400':
+          description: VALIDATION_FAILED
+          $ref: '#/components/responses/Error'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет crm_report.read
+          $ref: '#/components/responses/Error'
+
   /admin/duplicate-candidates:
+
     get:
       operationId: adminListDuplicateCandidates
       summary: >
@@ -3887,6 +4100,133 @@ paths:
                 $ref: '#/components/schemas/AdminMeResponse'
         '403':
           description: FORBIDDEN — нет активного контекста администратора
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations:
+    get:
+      operationId: adminListOrganizations
+      summary: Список организаций (агентства, застройщики) для администратора
+      tags: [admin]
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [agency, developer, independent_realtor]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, frozen, archived]
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Список организаций с пагинацией
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationListResponse'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations/{organizationId}:
+    get:
+      operationId: adminGetOrganization
+      summary: Детальная карточка организации
+      tags: [admin]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Карточка организации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationDetailResponse'
+        '403':
+          description: FORBIDDEN
+          $ref: '#/components/responses/Error'
+        '404':
+          description: Организация не найдена
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations/{organizationId}/freeze:
+    post:
+      operationId: adminFreezeOrganization
+      summary: Заморозка организации администратором с указанием причины
+      tags: [admin]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreezeOrganizationRequest'
+      responses:
+        '200':
+          description: Организация заморожена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [frozen]}
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations/{organizationId}/unfreeze:
+    post:
+      operationId: adminUnfreezeOrganization
+      summary: Разморозка организации администратором
+      tags: [admin]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FreezeOrganizationRequest'
+      responses:
+        '200':
+          description: Организация разморожена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status]
+                properties:
+                  id: {type: string}
+                  status: {type: string, enum: [active]}
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
 
   /admin/accounts:
@@ -5749,6 +6089,119 @@ paths:
           description: Жалоба уже резолюцирована (status не pending)
           $ref: '#/components/responses/Error'
 
+  /billing/subscription:
+    get:
+      operationId: getBillingSubscription
+      summary: Получение текущей подписки, тарифа, лимитов и использования ресурсов организации
+      tags: [erp-billing]
+      responses:
+        '200':
+          description: Информация о подписке
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSubscriptionOverview'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /billing/plans:
+    get:
+      operationId: listBillingPlans
+      summary: Каталог доступных тарифных планов
+      tags: [erp-billing]
+      parameters:
+        - name: audience
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [developer, agency, independent_realtor]
+      responses:
+        '200':
+          description: Список активных тарифных планов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubscriptionPlan'
+        '401':
+          $ref: '#/components/responses/Error'
+
+  /billing/ledger:
+    get:
+      operationId: getBillingLedger
+      summary: История ручного биллинг-леджера организации (только для владельца)
+      tags: [erp-billing]
+      responses:
+        '200':
+          description: Записи леджера
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BillingLedgerEntry'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations/{organizationId}/billing:
+    get:
+      operationId: adminGetOrganizationBilling
+      summary: Просмотр подписки и истории биллинга организации администратором
+      tags: [admin-billing]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Обзор биллинга организации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBillingOverview'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+
+  /admin/organizations/{organizationId}/billing/activate:
+    post:
+      operationId: adminActivateSubscription
+      summary: Активация или продление тарифного плана организации администратором
+      tags: [admin-billing]
+      parameters:
+        - name: organizationId
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateSubscriptionRequest'
+      responses:
+        '200':
+          description: Подписка успешно активирована/продлена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSubscription'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
 
 components:
   securitySchemes:
@@ -7039,6 +7492,57 @@ components:
             $ref: '#/components/schemas/AdminAccountListItem'
         nextCursor: {type: string, nullable: true}
 
+    FreezeOrganizationRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 10
+
+    AdminOrganizationItem:
+      type: object
+      required: [id, name, type, status, createdAt]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        type: {type: string, enum: [agency, developer, independent_realtor]}
+        status: {type: string, enum: [active, frozen, archived]}
+        createdAt: {type: string, format: date-time}
+        positionsCount: {type: integer}
+
+    AdminOrganizationListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminOrganizationItem'
+        nextCursor:
+          type: string
+          nullable: true
+
+    AdminOrganizationDetailResponse:
+      type: object
+      required: [id, name, type, status, createdAt, positionsCount, positions]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        type: {type: string, enum: [agency, developer, independent_realtor]}
+        status: {type: string, enum: [active, frozen, archived]}
+        createdAt: {type: string, format: date-time}
+        positionsCount: {type: integer}
+        positions:
+          type: array
+          items:
+            type: object
+            required: [id, role, status]
+            properties:
+              id: {type: string}
+              role: {type: string}
+              status: {type: string}
+
     CreateAdminAccountRequest:
       type: object
       required: [identityId]
@@ -7839,4 +8343,244 @@ components:
         vk: {type: string}
         instagram: {type: string}
         website: {type: string}
+
+    PlanLimits:
+      type: object
+      required:
+        - maxActiveListings
+        - maxTeamPositions
+        - crmAccess
+        - chessboardAccess
+        - landingAccess
+      properties:
+        maxActiveListings: {type: integer, minimum: 0}
+        maxTeamPositions: {type: integer, minimum: 0}
+        crmAccess: {type: boolean}
+        chessboardAccess: {type: boolean}
+        landingAccess: {type: boolean}
+
+    PricePerMonth:
+      type: object
+      required:
+        - amountMinorUnits
+        - currency
+      properties:
+        amountMinorUnits: {type: integer, minimum: 0}
+        currency: {type: string}
+
+    SubscriptionPlan:
+      type: object
+      required:
+        - code
+        - name
+        - targetAudience
+        - limits
+        - pricePerMonth
+        - isActive
+      properties:
+        code: {type: string}
+        name: {type: string}
+        targetAudience:
+          type: string
+          enum: [developer, agency, independent_realtor]
+        limits:
+          $ref: '#/components/schemas/PlanLimits'
+        pricePerMonth:
+          $ref: '#/components/schemas/PricePerMonth'
+        isActive: {type: boolean}
+
+    ResourceUsage:
+      type: object
+      required:
+        - activeListings
+        - teamPositions
+      properties:
+        activeListings: {type: integer, minimum: 0}
+        teamPositions: {type: integer, minimum: 0}
+
+    OrganizationSubscription:
+      type: object
+      required:
+        - organizationId
+        - planCode
+        - status
+        - startedAt
+        - expiresAt
+        - currentUsage
+      properties:
+        organizationId: {type: string}
+        planCode: {type: string}
+        status:
+          type: string
+          enum: [trial, active, grace_period, frozen, cancelled]
+        startedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        gracePeriodEndsAt: {type: string, format: date-time, nullable: true}
+        customLimits:
+          allOf:
+            - $ref: '#/components/schemas/PlanLimits'
+          nullable: true
+        currentUsage:
+          $ref: '#/components/schemas/ResourceUsage'
+
+    OrganizationSubscriptionOverview:
+      type: object
+      required:
+        - subscription
+        - effectiveLimits
+      properties:
+        subscription:
+          $ref: '#/components/schemas/OrganizationSubscription'
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/SubscriptionPlan'
+          nullable: true
+        effectiveLimits:
+          $ref: '#/components/schemas/PlanLimits'
+
+    BillingLedgerEntry:
+      type: object
+      required:
+        - organizationId
+        - action
+        - amountMinorUnits
+        - currency
+        - planCode
+        - periodDays
+        - reason
+        - createdAt
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        action:
+          type: string
+          enum: [plan_activated, plan_renewed, plan_changed, limit_adjusted, payment_recorded, frozen]
+        amountMinorUnits: {type: integer, minimum: 0}
+        currency: {type: string}
+        planCode: {type: string}
+        periodDays: {type: integer, minimum: 0}
+        reason: {type: string}
+        recordedBy: {type: string}
+        createdAt: {type: string, format: date-time}
+
+    AdminBillingOverview:
+      type: object
+      required:
+        - subscription
+        - effectiveLimits
+        - ledger
+      properties:
+        subscription:
+          $ref: '#/components/schemas/OrganizationSubscription'
+        plan:
+          allOf:
+            - $ref: '#/components/schemas/SubscriptionPlan'
+          nullable: true
+        effectiveLimits:
+          $ref: '#/components/schemas/PlanLimits'
+        ledger:
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingLedgerEntry'
+
+    ActivateSubscriptionRequest:
+      type: object
+      required:
+        - planCode
+        - reason
+      properties:
+        planCode: {type: string}
+        periodDays: {type: integer, minimum: 1, default: 30}
+        amountMinorUnits: {type: integer, minimum: 0, default: 0}
+        currency: {type: string, default: USD}
+        reason: {type: string, minLength: 10}
+
+    TeamPerformanceSummary:
+      type: object
+      required:
+        - leadsTotal
+
+        - leadsConverted
+        - conversionRatePercent
+        - dealsTotal
+        - dealsWon
+        - dealsCommission
+        - tasksTotal
+        - tasksCompleted
+        - slaPercent
+      properties:
+        leadsTotal: {type: integer, minimum: 0}
+        leadsConverted: {type: integer, minimum: 0}
+        conversionRatePercent: {type: number}
+        dealsTotal: {type: integer, minimum: 0}
+        dealsWon: {type: integer, minimum: 0}
+        dealsCommission:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoneyAmount'
+        tasksTotal: {type: integer, minimum: 0}
+        tasksCompleted: {type: integer, minimum: 0}
+        slaPercent: {type: number}
+
+    TeamPerformancePositionItem:
+      type: object
+      required:
+        - positionId
+        - leadsAdded
+        - leadsInWork
+        - leadsConverted
+        - leadsLost
+        - conversionRatePercent
+        - dealsTotal
+        - dealsWon
+        - dealsLost
+        - dealsCommission
+        - tasksTotal
+        - tasksCompleted
+        - tasksOverdue
+        - tasksCompletedOnTime
+        - slaPercent
+      properties:
+        positionId: {type: string, nullable: true}
+        leadsAdded: {type: integer, minimum: 0}
+        leadsInWork: {type: integer, minimum: 0}
+        leadsConverted: {type: integer, minimum: 0}
+        leadsLost: {type: integer, minimum: 0}
+        conversionRatePercent: {type: number}
+        dealsTotal: {type: integer, minimum: 0}
+        dealsWon: {type: integer, minimum: 0}
+        dealsLost: {type: integer, minimum: 0}
+        dealsCommission:
+          type: array
+          items:
+            $ref: '#/components/schemas/MoneyAmount'
+        tasksTotal: {type: integer, minimum: 0}
+        tasksCompleted: {type: integer, minimum: 0}
+        tasksOverdue: {type: integer, minimum: 0}
+        tasksCompletedOnTime: {type: integer, minimum: 0}
+        slaPercent: {type: number}
+
+    TeamPerformanceTimeseriesPoint:
+      type: object
+      required: [date, leads, deals, completedTasks]
+      properties:
+        date: {type: string}
+        leads: {type: integer, minimum: 0}
+        deals: {type: integer, minimum: 0}
+        completedTasks: {type: integer, minimum: 0}
+
+    TeamPerformanceReportResponse:
+      type: object
+      required: [summary, positions, timeseries]
+      properties:
+        summary:
+          $ref: '#/components/schemas/TeamPerformanceSummary'
+        positions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamPerformancePositionItem'
+        timeseries:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamPerformanceTimeseriesPoint'
 

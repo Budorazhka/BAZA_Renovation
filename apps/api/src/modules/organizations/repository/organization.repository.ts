@@ -45,4 +45,42 @@ export class OrganizationRepository {
       .exec();
     return docs.map((doc) => ({ id: doc._id, name: doc.name, type: doc.type }));
   }
+
+  async list(params: {
+    type?: OrganizationType;
+    status?: string;
+    search?: string;
+    cursor?: Types.ObjectId;
+    limit: number;
+  }): Promise<OrganizationDocument[]> {
+    const filter: Record<string, unknown> = {};
+    if (params.cursor) {
+      filter._id = { $gt: params.cursor };
+    }
+    if (params.type) {
+      filter.type = params.type;
+    }
+    if (params.status) {
+      filter.status = params.status;
+    }
+    if (params.search?.trim()) {
+      filter.name = { $regex: params.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    }
+
+    return this.model
+      .find(filter)
+      .sort({ _id: 1 })
+      .limit(params.limit)
+      .exec();
+  }
+
+  async updateStatus(
+    id: Types.ObjectId,
+    status: OrganizationDocument['status'],
+    session?: ClientSession,
+  ): Promise<OrganizationDocument | null> {
+    return this.model
+      .findByIdAndUpdate(id, { $set: { status } }, { new: true, session })
+      .exec();
+  }
 }

@@ -124,3 +124,100 @@ export function adminApiClient(request: APIRequestContext) {
     },
   };
 }
+
+export function erpApiClient(request: APIRequestContext) {
+  const origin = env.erpOrigin;
+
+  return {
+    async register(login: string, password: string) {
+      return registerIdentity(request, login, { password, origin });
+    },
+
+    async login(login: string, password: string): Promise<AuthResult & { body: unknown }> {
+      const response = await request.post(apiUrl('/auth/login'), {
+        headers: { Origin: origin },
+        data: { login, password },
+      });
+      const body = await response.json().catch(() => undefined);
+      return { status: response.status(), identityId: body?.identityId, requires2fa: body?.requires2fa, body };
+    },
+
+    async registerOrganization(params: { login: string; password: string; name: string; type: string }) {
+      const response = await request.post(apiUrl('/organizations/register'), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data: params,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async createDevelopment(data: Record<string, unknown>) {
+      const response = await request.post(apiUrl('/developments'), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async createBuilding(developmentId: string, data: Record<string, unknown>) {
+      const response = await request.post(apiUrl(`/developments/${developmentId}/buildings`), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async generateChessboard(buildingId: string, data: Record<string, unknown>) {
+      const response = await request.post(apiUrl(`/developments/buildings/${buildingId}/chessboard/generate`), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async batchUpdatePrices(developmentId: string, data: Record<string, unknown>) {
+      const response = await request.post(apiUrl(`/developments/${developmentId}/units/batch-prices`), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async publishDevelopment(developmentId: string) {
+      const response = await request.post(apiUrl(`/developments/${developmentId}/publish`), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data: {},
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async listUnits(buildingId: string) {
+      const response = await request.get(apiUrl(`/developments/buildings/${buildingId}/units?limit=50`), {
+        headers: { Origin: origin },
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async listLeads() {
+      const response = await request.get(apiUrl('/leads?limit=20'), {
+        headers: { Origin: origin },
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async createBooking(data: Record<string, unknown>) {
+      const response = await request.post(apiUrl('/bookings'), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+
+    async convertBookingToDeal(bookingId: string, data: Record<string, unknown>) {
+      const response = await request.post(apiUrl(`/bookings/${bookingId}/convert-to-deal`), {
+        headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
+        data,
+      });
+      return { status: response.status(), body: await response.json().catch(() => undefined) };
+    },
+  };
+}

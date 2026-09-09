@@ -30,6 +30,7 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /bookings/:bookingId/cancel': 'cancel — ADR-006 прямо перечисляет',
   'POST /bookings/:bookingId/confirm': 'follow-up команда брони (book-001)',
   'POST /bookings/:bookingId/extend': 'follow-up команда брони (book-001)',
+  'POST /bookings/:bookingId/convert-to-deal': 'конвертация брони в сделку — повтор создал бы дубликат сделки',
   'POST /developments/:developmentId/publish': 'publish — ADR-006 прямо перечисляет',
   'POST /property-assets/:assetId/listings/:listingId/publish': 'publish листинга',
   'POST /marketplace/property-assets/:assetId/listings/:listingId/publish':
@@ -50,6 +51,9 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /buildings/:buildingId/floors': 'дубль этажа',
   'POST /buildings/:buildingId/floor-plans': 'дубль планировки',
   'POST /floors/:floorId/units': 'дубль юнита — шахматка показала бы несуществующий лот',
+  'POST /buildings/:buildingId/chessboard/generate': 'массовая генерация сетки юнитов — повтор создал бы дубликаты лотов',
+  'POST /buildings/:buildingId/units/batch': 'пакетный импорт юнитов — повтор создал бы дубликаты лотов',
+  'POST /developments/:developmentId/units/batch-price-update': 'массовое изменение цен с Idempotency-Key',
   'POST /admin/accounts': 'дубль админ-аккаунта: второй аккаунт с админ-доступом на ту же identity',
   'POST /developments/:developmentId/installment-plans': 'создание плана рассрочки — дубль создал бы дублирующий план',
   'PATCH /developments/:developmentId/installment-plans/:id': 'обновление плана рассрочки с Idempotency-Key и expectedVersion',
@@ -202,6 +206,10 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /admin/duplicate-candidates/:duplicateCandidateId/confirm': 'условный update кандидата',
   'POST /admin/publications/:publicationId/unpublish': 'условный update (conventions.md §8)',
   'POST /admin/complaints/:complaintId/resolve': 'условный update по status:pending (CAS), повтор с уже резолюцированной жалобой — 409',
+  'POST /admin/organizations/:organizationId/freeze': 'условный update по статусу (заморозка организации)',
+  'POST /admin/organizations/:organizationId/unfreeze': 'условный update по статусу (разморозка организации)',
+  'POST /admin/organizations/:organizationId/billing/activate':
+    'ручная активация/продление тарифа администратором с обязательным аудитом, транзакцией и обоснованием (reason >= 10)',
 };
 
 /** Сколько записей помечено `ПРОБЕЛ:`. Рост числа обязан быть осознанным. */

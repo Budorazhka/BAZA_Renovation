@@ -16,11 +16,16 @@ import { AdminDuplicateCandidateService } from './admin-duplicate-candidate.serv
 import { AdminDuplicateCandidateController } from './admin-duplicate-candidate.controller';
 import { AdminComplaintService } from './admin-complaint.service';
 import { AdminComplaintController } from './admin-complaint.controller';
+import { AdminOrganizationService } from './admin-organization.service';
+import { AdminOrganizationController } from './admin-organization.controller';
+import { AdminBillingController } from './admin-billing.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { PropertyAssetsModule } from '../property-assets/property-assets.module';
 import { AuditModule } from '../audit/audit.module';
 import { IdentityModule } from '../identity/identity.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
+import { BillingModule } from '../billing/billing.module';
 
 /**
  * PermissionGrantRepository НЕ импортируется/регистрируется здесь напрямую
@@ -50,6 +55,8 @@ import { IdentityModule } from '../identity/identity.module';
     PropertyAssetsModule,
     AuditModule,
     IdentityModule,
+    OrganizationsModule,
+    BillingModule,
   ],
   controllers: [
     AdminPublicationController,
@@ -58,6 +65,8 @@ import { IdentityModule } from '../identity/identity.module';
     AdminAuditController,
     AdminDuplicateCandidateController,
     AdminComplaintController,
+    AdminOrganizationController,
+    AdminBillingController,
   ],
   providers: [
     AdminAccountRepository,
@@ -67,6 +76,7 @@ import { IdentityModule } from '../identity/identity.module';
     AdminAuditService,
     AdminDuplicateCandidateService,
     AdminComplaintService,
+    AdminOrganizationService,
   ],
   exports: [AdminAccountRepository],
 })

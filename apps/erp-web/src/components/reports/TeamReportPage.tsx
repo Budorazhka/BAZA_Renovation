@@ -26,9 +26,12 @@ import {
 } from "@/components/analytics-network";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ExportButton } from "@/components/common/ExportButton";
+import { useTeamPerformance } from "@/hooks/useTeamPerformance";
 import { MOCK_KPI } from "@/data/team-kpi-mock";
 import { getManagerAnalyticsData, type ManagerAnalyticsData, type TeamBranchFilter } from "@/lib/bi/manager-analytics-adapter";
 import type { ActivityMarker, ActivityTimeseriesPoint, AnalyticsPeriod, DynamicKpi, FunnelBoard, PartnerRow, SortColumn, SortDirection } from "@/types/analytics";
+
 
 const defaultSortColumn: SortColumn = "leadsAdded";
 const defaultSortDirection: SortDirection = "desc";
@@ -224,6 +227,12 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
         : undefined;
     const selectedManagerPlan = selectedManager ? MOCK_KPI[selectedManager.id]?.plan ?? 0 : 0;
 
+    const { data: liveTeamData } = useTeamPerformance(
+        globalPeriod,
+        branchFilter,
+        isManagerMode && selectedManagerId !== ALL_MANAGERS_ID ? selectedManagerId : undefined,
+    );
+
     const teamGlobalData = useMemo(
         () => getManagerAnalyticsData(globalPeriod, branchFilter),
         [branchFilter, globalPeriod]
@@ -234,7 +243,8 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
             : managerBaseData,
         [isAllManagersSelected, managerBaseData, selectedManager, selectedManagerPlan]
     );
-    const globalData = isManagerMode ? managerGlobalData : teamGlobalData;
+    const globalData = liveTeamData ?? (isManagerMode ? managerGlobalData : teamGlobalData);
+
     const todayData = useMemo(() => getManagerAnalyticsData("week", branchFilter), [branchFilter]);
     const managerTodayData = useMemo(() => {
         const base = getManagerAnalyticsData("week", "all");
@@ -388,8 +398,10 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
                                 </select>
                             )}
                             <PeriodTabs selectedPeriod={globalPeriod} onPeriodChange={setGlobalPeriod} />
+                            <ExportButton entity="tasks" label="Выгрузка задач" />
                         </div>
                     </div>
+
 
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <SummaryTile

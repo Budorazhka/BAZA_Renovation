@@ -7,6 +7,7 @@ export interface FacetFiltersProps {
   cityParam?: string
   dealTypeParam?: string
   propertyTypeParam?: string
+  commercialSubtypeParam?: string
   sortParam?: string
   isMapView?: boolean
   onFilterChange: (filters: {
@@ -33,6 +34,7 @@ export function FacetFilters({
   cityParam = '',
   dealTypeParam,
   propertyTypeParam,
+  commercialSubtypeParam,
   sortParam = 'newest',
   isMapView = false,
   onFilterChange,
@@ -47,7 +49,7 @@ export function FacetFilters({
   }, [cityParam])
 
   const isDev = tabParam !== 'listings'
-  const hasActiveFilters = Boolean(cityParam || dealTypeParam || propertyTypeParam)
+  const hasActiveFilters = Boolean(cityParam || dealTypeParam || propertyTypeParam || commercialSubtypeParam)
 
   const handleCitySubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,6 +69,15 @@ export function FacetFilters({
     ['house', 'Дома и виллы'],
     ['commercial', 'Коммерческая'],
     ['land', 'Участки'],
+  ]
+
+  const commercialSubtypes: Array<[string | undefined, string]> = [
+    [undefined, 'Вся коммерция'],
+    ['office', 'Офис'],
+    ['retail', 'Торговая площадь'],
+    ['warehouse', 'Склад'],
+    ['business', 'Готовый бизнес'],
+    ['free_purpose', 'Свободное назначение'],
   ]
 
   return (
@@ -184,6 +195,21 @@ export function FacetFilters({
                   </button>
                 ))}
               </div>
+
+              {propertyTypeParam === 'commercial' && (
+                <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label="Формат коммерции">
+                  {commercialSubtypes.map(([value, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`filter-chip figma-filter-chip${commercialSubtypeParam === value ? ' is-active' : ''}`}
+                      onClick={() => onFilterChange({ commercialSubtype: value })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </details>
         )}

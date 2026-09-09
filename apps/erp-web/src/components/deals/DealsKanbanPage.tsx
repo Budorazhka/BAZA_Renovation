@@ -10,8 +10,10 @@ import { useDeals } from '@/context/DealsContext'
 import { leadsApiV2 } from '@/services/leadsApiV2'
 import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { LEAD_STAGE_COLUMN, LEAD_STAGES } from '@/data/leads-mock'
+import { ExportButton } from '@/components/common/ExportButton'
 import type { Lead } from '@/types/leads'
 import { useI18n } from "@/i18n";
+
 
 const STAGE_COLORS: Record<DealStage, string> = {
   showing:     '#60a5fa',
@@ -119,7 +121,8 @@ export function DealsKanbanPage() {
             <div style={{ fontSize: 13, color: C.textSubtle, marginTop: 4 }}>
               {t('deals.dealsKanbanPage.канбан_воронки')}{deals.length} {t('deals.dealsKanbanPage.сделок_в_воронке')}</div>
           </div>
-          <div style={{ display: 'flex', gap: 8, position: 'relative' as const }}>
+          <div style={{ display: 'flex', gap: 8, position: 'relative' as const, alignItems: 'center' }}>
+            <ExportButton entity="deals" label="Экспорт сделок" />
             <button
               onClick={() => navigate('/dashboard/deals/report')}
               style={{
@@ -134,6 +137,7 @@ export function DealsKanbanPage() {
               }}
             >
               {t('deals.dealsKanbanPage.отч_т')}</button>
+
             {canEditDeals ? (
               <button
                 type="button"

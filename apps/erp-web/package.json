@@ -7,9 +7,9 @@
     "dev": "vite --configLoader native",
     "build": "tsc -b && vite build --configLoader runner",
     "typecheck": "tsc -b",
-    "test": "vitest run",
-    "test:unit": "vitest run",
-    "lint": "eslint .",
+    "test": "vitest run --configLoader runner",
+    "test:unit": "vitest run --configLoader runner",
+    "lint:local": "eslint .",
     "test:e2e": "playwright test",
     "preview": "vite preview",
     "alphabase:export": "node scripts/export-alphabase-xlsx.mjs"

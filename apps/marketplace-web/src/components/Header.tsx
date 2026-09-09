@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthSession } from '../features/auth/model/useAuthSession'
+import { useI18n } from '../i18n'
 
 interface HeaderProps {
   onCityChange?: (city: string) => void
@@ -17,11 +18,12 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, isChecking, logout } = useAuthSession()
+  const { language, setLanguage, t } = useI18n()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false)
   const [currentCity, setCurrentCity] = useState('Тбилиси')
   const [currentCurrency, setCurrentCurrency] = useState('USD')
-  const [currentLang, setCurrentLang] = useState('RU')
+  const currentLang = language.toUpperCase()
 
   const [cityDropdownOpen, setCityDropdownOpen] = useState(false)
   const [currencyDropdownOpen, setCurrencyDropdownOpen] = useState(false)
@@ -45,7 +47,8 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
   }
 
   const handleLangSelect = (lang: string) => {
-    setCurrentLang(lang)
+    const l = lang.toLowerCase() as 'ru' | 'en' | 'ka'
+    setLanguage(l)
     setLangDropdownOpen(false)
     onLanguageChange?.(lang)
   }
@@ -68,7 +71,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             aria-selected={isDevelopments}
             className={`main-nav__link figma-header__tab${isDevelopments ? ' is-active' : ''}`}
           >
-            Новостройки
+            {t('nav.newConstructions')}
           </Link>
           <Link
             to="/secondary"
@@ -77,37 +80,37 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             aria-selected={isSecondary}
             className={`main-nav__link figma-header__tab${isSecondary ? ' is-active' : ''}`}
           >
-            Вторичка
+            {t('nav.secondary')}
           </Link>
           <Link
             to="/newconstructions"
             className="main-nav__link figma-header__tab"
           >
-            Проекты
+            {t('nav.projects')}
           </Link>
           <Link
             to="/rent"
             className={`main-nav__link figma-header__tab${isRent ? ' is-active' : ''}`}
           >
-            Аренда
+            {t('nav.rent')}
           </Link>
           <Link
             to="/secondary?propertyType=commercial"
             className={`main-nav__link figma-header__tab${isCommercial ? ' is-active' : ''}`}
           >
-            Коммерция
+            {t('nav.commercial')}
           </Link>
           <Link
             to="/requests"
             className="main-nav__link figma-header__tab"
           >
-            Запросы
+            {t('nav.requests')}
           </Link>
           <Link
             to="/banks"
             className="main-nav__link figma-header__tab"
           >
-            Банки
+            {t('nav.banks')}
           </Link>
         </nav>
 
@@ -119,7 +122,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             to="/publish"
             data-testid="header-publish-cta"
           >
-            + Разместить
+            {t('header.publish')}
           </Link>
 
           {/* Language Switcher (Figma 381:7158 [63x24]) */}
@@ -127,7 +130,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             <button
               className="header-locale figma-header__btn"
               type="button"
-              aria-label="Выбрать язык"
+              aria-label={t('header.selectLanguage')}
               aria-expanded={langDropdownOpen}
               onClick={() => {
                 setLangDropdownOpen(!langDropdownOpen)
@@ -217,7 +220,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             // просто короткая. Место сохраняется, чтобы шапку не дёргало.
             <span
               className="header-action header-action--dark figma-header__cabinet-btn"
-              aria-label="Проверяем сессию"
+              aria-label={t('header.checking')}
               aria-busy="true"
             />
           ) : isAuthenticated ? (
@@ -236,15 +239,15 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
                 }}
               >
                 <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
-                <span>Кабинет</span>
+                <span>{t('header.cabinet')}</span>
               </button>
               {accountDropdownOpen && (
                 <div className="figma-header__dropdown-menu" role="menu">
                   <Link role="menuitem" to="/account/properties" onClick={() => setAccountDropdownOpen(false)}>
-                    Мои объекты
+                    {t('header.myProperties')}
                   </Link>
                   <Link role="menuitem" to="/account/favorites" onClick={() => setAccountDropdownOpen(false)}>
-                    Избранное
+                    {t('header.favorites')}
                   </Link>
                   <button
                     type="button"
@@ -256,7 +259,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
                       navigate('/')
                     }}
                   >
-                    Выйти
+                    {t('header.logout')}
                   </button>
                 </div>
               )}
@@ -268,7 +271,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
               data-testid="header-login-link"
             >
               <span className="figma-header__cabinet-icon" aria-hidden="true">◔</span>
-              <span>Войти</span>
+              <span>{t('header.login')}</span>
             </Link>
           )}
 
@@ -291,20 +294,20 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
       {mobileMenuOpen && (
         <div className="figma-header__mobile-drawer" role="dialog" aria-label="Мобильное меню">
           <div className="figma-header__mobile-links">
-            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>Новостройки</Link>
-            <Link to="/secondary" onClick={() => setMobileMenuOpen(false)}>Вторичка</Link>
-            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>Проекты</Link>
-            <Link to="/rent" onClick={() => setMobileMenuOpen(false)}>Аренда</Link>
-            <Link to="/secondary?propertyType=commercial" onClick={() => setMobileMenuOpen(false)}>Коммерция</Link>
-            <Link to="/requests" onClick={() => setMobileMenuOpen(false)}>Запросы</Link>
-            <Link to="/banks" onClick={() => setMobileMenuOpen(false)}>Банки</Link>
+            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>{t('nav.newConstructions')}</Link>
+            <Link to="/secondary" onClick={() => setMobileMenuOpen(false)}>{t('nav.secondary')}</Link>
+            <Link to="/newconstructions" onClick={() => setMobileMenuOpen(false)}>{t('nav.projects')}</Link>
+            <Link to="/rent" onClick={() => setMobileMenuOpen(false)}>{t('nav.rent')}</Link>
+            <Link to="/secondary?propertyType=commercial" onClick={() => setMobileMenuOpen(false)}>{t('nav.commercial')}</Link>
+            <Link to="/requests" onClick={() => setMobileMenuOpen(false)}>{t('nav.requests')}</Link>
+            <Link to="/banks" onClick={() => setMobileMenuOpen(false)}>{t('nav.banks')}</Link>
             <hr className="figma-header__drawer-divider" />
             {/* В мобильном меню входа не было вовсе: попасть в кабинет с
                 телефона можно было только по прямому адресу. */}
             {isAuthenticated ? (
               <>
-                <Link to="/account/properties" onClick={() => setMobileMenuOpen(false)}>Мои объекты</Link>
-                <Link to="/account/favorites" onClick={() => setMobileMenuOpen(false)}>Избранное</Link>
+                <Link to="/account/properties" onClick={() => setMobileMenuOpen(false)}>{t('header.myProperties')}</Link>
+                <Link to="/account/favorites" onClick={() => setMobileMenuOpen(false)}>{t('header.favorites')}</Link>
                 <button
                   type="button"
                   className="figma-header__mobile-logout"
@@ -314,14 +317,14 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
                     navigate('/')
                   }}
                 >
-                  Выйти
+                  {t('header.logout')}
                 </button>
               </>
             ) : (
-              <Link to="/auth/login" onClick={() => setMobileMenuOpen(false)}>Войти</Link>
+              <Link to="/auth/login" onClick={() => setMobileMenuOpen(false)}>{t('header.login')}</Link>
             )}
             <Link to="/publish" className="figma-header__mobile-cta" onClick={() => setMobileMenuOpen(false)}>
-              + Разместить объект
+              {t('header.publish')}
             </Link>
           </div>
         </div>

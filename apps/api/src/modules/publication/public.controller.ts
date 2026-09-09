@@ -131,6 +131,39 @@ function toPublicSeo(seo: PublicDevelopmentSeo | undefined) {
   };
 }
 
+interface PublicMoneyAmount {
+  amountMinorUnits?: unknown;
+  currency?: unknown;
+}
+
+function toPublicMoney(money: unknown) {
+  if (!money || typeof money !== 'object') return undefined;
+  const m = money as PublicMoneyAmount;
+  if (typeof m.amountMinorUnits !== 'number' || typeof m.currency !== 'string') return undefined;
+  return {
+    amountMinorUnits: m.amountMinorUnits,
+    currency: m.currency,
+  };
+}
+
+function toPublicUnits(units: unknown) {
+  if (!Array.isArray(units)) return undefined;
+  return units
+    .map((u) => {
+      if (!u || typeof u !== 'object') return null;
+      return {
+        id: typeof u.id === 'string' ? u.id : undefined,
+        number: typeof u.number === 'string' ? u.number : undefined,
+        kind: typeof u.kind === 'string' ? u.kind : undefined,
+        rooms: typeof u.rooms === 'number' ? u.rooms : undefined,
+        area: typeof u.area === 'number' ? u.area : undefined,
+        buildingName: typeof u.buildingName === 'string' ? u.buildingName : undefined,
+        price: toPublicMoney(u.price),
+      };
+    })
+    .filter(Boolean);
+}
+
 /**
  * Public API — ОТДЕЛЬНАЯ граница безопасности от worker'а, не просто
  * развёртка уже собранного worker'ом denormalizedFields. Раньше здесь стоял
@@ -146,7 +179,7 @@ function toPublicSeo(seo: PublicDevelopmentSeo | undefined) {
  *
  * Список denormalizedFields — ровно то, что сейчас кладёт worker
  * (mapDevelopmentToDenormalizedFields): name/location/classType/startDate/
- * completionDate/description. Координаты — отдельное явное исключение из
+ * completionDate/description/priceFrom/units. Координаты — отдельное явное исключение из
  * searchProjection.geo, прошедшее собственную валидацию GeoJSON. Расширение
  * публичного набора требует явной правки обеих границ, не может произойти
  * случайно через spread.
@@ -186,6 +219,8 @@ function toPublicCard(
     startDate: fields.startDate,
     completionDate: fields.completionDate,
     description: fields.description,
+    priceFrom: toPublicMoney(fields.priceFrom),
+    units: toPublicUnits(fields.units),
     publisher,
     seo: toPublicSeo(publication.seo),
   };

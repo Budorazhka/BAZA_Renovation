@@ -74,6 +74,7 @@ const DEFAULTS = {
   api: 'http://localhost:3000',
   marketplace: 'http://localhost:4173',
   admin: 'http://localhost:4174',
+  erp: 'http://localhost:4175',
   mongoHost: 'localhost',
   mongoPort: 27017,
   redisHost: 'localhost',
@@ -307,8 +308,9 @@ export async function runPreflight({ env = process.env, fetcher = fetch } = {}) 
   const api = env.RUNTIME_API_URL || DEFAULTS.api;
   const marketplace = env.RUNTIME_MARKETPLACE_URL || DEFAULTS.marketplace;
   const admin = env.RUNTIME_ADMIN_URL || DEFAULTS.admin;
+  const erp = env.RUNTIME_ERP_URL || DEFAULTS.erp;
 
-  const [nodeCheck, pnpmCheck, dockerCheck, mongoCheck, redisCheck, minioCheck, apiLiveness, apiReadiness, marketplaceWeb, adminWeb] =
+  const [nodeCheck, pnpmCheck, dockerCheck, mongoCheck, redisCheck, minioCheck, apiLiveness, apiReadiness, marketplaceWeb, adminWeb, erpWeb] =
     await Promise.all([
       Promise.resolve(checkNodeVersion()),
       checkPnpm(),
@@ -322,6 +324,7 @@ export async function runPreflight({ env = process.env, fetcher = fetch } = {}) 
       ),
       checkEndpoint('marketplace-web (root)', marketplace, { fetcher }).then((r) => withRemediation(r, 'pnpm runtime:up  (or: pnpm --filter marketplace-web dev -- --port 4173)')),
       checkEndpoint('admin-web (root)', admin, { fetcher }).then((r) => withRemediation(r, 'pnpm runtime:up  (or: pnpm --filter admin-web dev -- --port 4174)')),
+      checkEndpoint('erp-web (root)', erp, { fetcher }).then((r) => withRemediation(r, 'pnpm runtime:up  (or: pnpm --filter @baza/erp-web dev -- --port 4175)')),
     ]);
 
   const results = [
@@ -335,6 +338,7 @@ export async function runPreflight({ env = process.env, fetcher = fetch } = {}) 
     apiReadiness,
     marketplaceWeb,
     adminWeb,
+    erpWeb,
   ];
 
   const allOk = results.every((r) => r.ok);

@@ -12,6 +12,8 @@ export const env = {
   marketplaceOrigin: process.env.RUNTIME_MARKETPLACE_ORIGIN || process.env.RUNTIME_MARKETPLACE_URL || 'http://localhost:4173',
   adminUrl: process.env.RUNTIME_ADMIN_URL || 'http://localhost:4174',
   adminOrigin: process.env.RUNTIME_ADMIN_ORIGIN || process.env.RUNTIME_ADMIN_URL || 'http://localhost:4174',
+  erpUrl: process.env.RUNTIME_ERP_URL || 'http://localhost:4175',
+  erpOrigin: process.env.RUNTIME_ERP_ORIGIN || process.env.RUNTIME_ERP_URL || 'http://localhost:4175',
   // The runtime Mongo replica set advertises its Docker hostname (`mongodb`).
   // The host-side seed fixture must stay on the host member and therefore
   // uses directConnection when connecting through a published port.

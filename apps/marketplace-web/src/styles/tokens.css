@@ -139,9 +139,6 @@
   --space-20: 80px;
   /* [Не выверено: на ступень крупнее --text-display 28px] */
   --text-2xl: 32px;
-  /* [Не выверено: 21 объявление в listing-card.css и соседних файлах пишет
-     var(--color-main, #1BA800), а самого токена не было — держался только на
-     fallback, и брендовый зелёный оказался вписан хексом в 21 месте.
-     Значение взято из этих fallback, с макетом не сверялось.] */
-  --color-main: #1BA800;
+  /* [Figma Verified: унифицирован с --color-brand-green / --color-accent (#169600)] */
+  --color-main: var(--color-brand-green);
 }

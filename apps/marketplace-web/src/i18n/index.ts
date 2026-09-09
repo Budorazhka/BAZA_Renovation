@@ -1,0 +1,5 @@
+export * from './types'
+export * from './i18n-context'
+export { ru } from './locales/ru'
+export { en } from './locales/en'
+export { ka } from './locales/ka'

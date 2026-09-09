@@ -1606,5 +1606,106 @@ describe('DevelopmentsService — Installment Plans', () => {
       ).rejects.toBeInstanceOf(ConflictException);
     });
   });
+
+  describe('batchUpdatePrices', () => {
+    it('обновляет цены юнитов и публикует UnitPriceChanged в outbox', async () => {
+      const u1Id = new Types.ObjectId();
+      const floorId = new Types.ObjectId();
+
+      const units = [
+        {
+          _id: u1Id,
+          number: '101',
+          floorId,
+          area: 50,
+          price: { amountMinorUnits: 5000000, currency: 'USD' },
+          version: 0,
+        },
+      ];
+
+      const outboxPublished: Array<{ eventType: string; payload: Record<string, unknown> }> = [];
+      const service = makeService({
+        developmentRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }),
+        },
+        buildingRepository: {
+          listForDevelopment: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]),
+        },
+        floorRepository: {
+          listForBuildings: jest.fn().mockResolvedValue([{ _id: floorId, floorNumber: 1 }]),
+        },
+        unitRepository: {
+          listForBuildings: jest.fn().mockResolvedValue(units),
+          updatePriceWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        },
+        outboxService: {
+          publish: jest.fn().mockImplementation((event) => {
+            outboxPublished.push(event);
+            return Promise.resolve();
+          }),
+        },
+      });
+
+      const result = await service.batchUpdatePrices({
+        developmentId,
+        organizationId,
+        operationType: 'percentage',
+        value: 10,
+        actorIdentityId: new Types.ObjectId(),
+        actorPositionId: new Types.ObjectId(),
+        correlationId: 'test-cid',
+      });
+
+      expect(result.updatedCount).toBe(1);
+      expect(outboxPublished.length).toBe(1);
+      expect(outboxPublished[0]?.eventType).toBe('UnitPriceChanged');
+      expect(outboxPublished[0]?.payload.amountMinorUnits).toBe(5500000);
+    });
+
+    it('выбрасывает ConflictException если updatePriceWithVersionCheck возвращает modifiedCount: 0', async () => {
+      const u1Id = new Types.ObjectId();
+      const floorId = new Types.ObjectId();
+
+      const units = [
+        {
+          _id: u1Id,
+          number: '101',
+          floorId,
+          area: 50,
+          price: { amountMinorUnits: 5000000, currency: 'USD' },
+          version: 0,
+        },
+      ];
+
+      const service = makeService({
+        developmentRepository: {
+          findByIdForOrganization: jest.fn().mockResolvedValue({ _id: developmentId }),
+        },
+        buildingRepository: {
+          listForDevelopment: jest.fn().mockResolvedValue([{ _id: new Types.ObjectId() }]),
+        },
+        floorRepository: {
+          listForBuildings: jest.fn().mockResolvedValue([{ _id: floorId, floorNumber: 1 }]),
+        },
+        unitRepository: {
+          listForBuildings: jest.fn().mockResolvedValue(units),
+          updatePriceWithVersionCheck: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+        },
+        outboxService: { publish: jest.fn() },
+      });
+
+      await expect(
+        service.batchUpdatePrices({
+          developmentId,
+          organizationId,
+          operationType: 'percentage',
+          value: 10,
+          actorIdentityId: new Types.ObjectId(),
+          actorPositionId: new Types.ObjectId(),
+          correlationId: 'test-cid',
+        }),
+      ).rejects.toThrow('Unit 101 was modified by another request — refresh and retry');
+    });
+  });
 });
 

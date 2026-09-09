@@ -589,6 +589,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/buildings/{buildingId}/chessboard/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Пакетная генерация шахматки по этажам и стоякам */
+        post: operations["generateChessboard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/buildings/{buildingId}/units/batch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Пакетный импорт/создание юнитов в корпусе */
+        post: operations["batchCreateUnits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/developments/{developmentId}/units/batch-price-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Массовое обновление цен на юниты ЖК */
+        post: operations["batchUpdatePrices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/units/{unitId}": {
         parameters: {
             query?: never;
@@ -740,6 +791,23 @@ export interface paths {
         put?: never;
         /** Продлить бронь (BOOK-001 follow-up) — booking.extend.organization (не .own, как cancel). Только вперёд: newExpiresAt строго позже текущего expiresAt. Проверяется на пересечение с другими активными бронями того же unit (исключая саму себя). */
         post: operations["extendBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bookings/{bookingId}/convert-to-deal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Конвертировать бронь в сделку CRM (Primary Sales). Бронь переходит в paid, юнит в sold, создаётся DealDocument в одной транзакции. */
+        post: operations["convertBookingToDeal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1453,6 +1521,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/crm/reports/team-performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Комплексный отчёт по эффективности команды и сотрудников: воронка лидов, сделки, комиссии, выполнение задач (SLA) и временные ряды активности. Требует `crm_report.read` (organization scope — owner/director/rop/developer). */
+        get: operations["getTeamPerformanceReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/duplicate-candidates": {
         parameters: {
             query?: never;
@@ -1532,6 +1617,74 @@ export interface paths {
         get: operations["adminMe"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Список организаций (агентства, застройщики) для администратора */
+        get: operations["adminListOrganizations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Детальная карточка организации */
+        get: operations["adminGetOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}/freeze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Заморозка организации администратором с указанием причины */
+        post: operations["adminFreezeOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}/unfreeze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Разморозка организации администратором */
+        post: operations["adminUnfreezeOrganization"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2492,6 +2645,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/billing/subscription": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Получение текущей подписки, тарифа, лимитов и использования ресурсов организации */
+        get: operations["getBillingSubscription"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Каталог доступных тарифных планов */
+        get: operations["listBillingPlans"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/billing/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** История ручного биллинг-леджера организации (только для владельца) */
+        get: operations["getBillingLedger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}/billing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Просмотр подписки и истории биллинга организации администратором */
+        get: operations["adminGetOrganizationBilling"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/organizations/{organizationId}/billing/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Активация или продление тарифного плана организации администратором */
+        post: operations["adminActivateSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3437,6 +3675,40 @@ export interface components {
             items: components["schemas"]["AdminAccountListItem"][];
             nextCursor: string | null;
         };
+        FreezeOrganizationRequest: {
+            reason: string;
+        };
+        AdminOrganizationItem: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "agency" | "developer" | "independent_realtor";
+            /** @enum {string} */
+            status: "active" | "frozen" | "archived";
+            /** Format: date-time */
+            createdAt: string;
+            positionsCount?: number;
+        };
+        AdminOrganizationListResponse: {
+            items: components["schemas"]["AdminOrganizationItem"][];
+            nextCursor?: string | null;
+        };
+        AdminOrganizationDetailResponse: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            type: "agency" | "developer" | "independent_realtor";
+            /** @enum {string} */
+            status: "active" | "frozen" | "archived";
+            /** Format: date-time */
+            createdAt: string;
+            positionsCount: number;
+            positions: {
+                id: string;
+                role: string;
+                status: string;
+            }[];
+        };
         CreateAdminAccountRequest: {
             identityId: string;
             /** @default false */
@@ -3995,6 +4267,118 @@ export interface components {
             vk?: string;
             instagram?: string;
             website?: string;
+        };
+        PlanLimits: {
+            maxActiveListings: number;
+            maxTeamPositions: number;
+            crmAccess: boolean;
+            chessboardAccess: boolean;
+            landingAccess: boolean;
+        };
+        PricePerMonth: {
+            amountMinorUnits: number;
+            currency: string;
+        };
+        SubscriptionPlan: {
+            code: string;
+            name: string;
+            /** @enum {string} */
+            targetAudience: "developer" | "agency" | "independent_realtor";
+            limits: components["schemas"]["PlanLimits"];
+            pricePerMonth: components["schemas"]["PricePerMonth"];
+            isActive: boolean;
+        };
+        ResourceUsage: {
+            activeListings: number;
+            teamPositions: number;
+        };
+        OrganizationSubscription: {
+            organizationId: string;
+            planCode: string;
+            /** @enum {string} */
+            status: "trial" | "active" | "grace_period" | "frozen" | "cancelled";
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            gracePeriodEndsAt?: string | null;
+            customLimits?: components["schemas"]["PlanLimits"] | null;
+            currentUsage: components["schemas"]["ResourceUsage"];
+        };
+        OrganizationSubscriptionOverview: {
+            subscription: components["schemas"]["OrganizationSubscription"];
+            plan?: components["schemas"]["SubscriptionPlan"] | null;
+            effectiveLimits: components["schemas"]["PlanLimits"];
+        };
+        BillingLedgerEntry: {
+            id?: string;
+            organizationId: string;
+            /** @enum {string} */
+            action: "plan_activated" | "plan_renewed" | "plan_changed" | "limit_adjusted" | "payment_recorded" | "frozen";
+            amountMinorUnits: number;
+            currency: string;
+            planCode: string;
+            periodDays: number;
+            reason: string;
+            recordedBy?: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AdminBillingOverview: {
+            subscription: components["schemas"]["OrganizationSubscription"];
+            plan?: components["schemas"]["SubscriptionPlan"] | null;
+            effectiveLimits: components["schemas"]["PlanLimits"];
+            ledger: components["schemas"]["BillingLedgerEntry"][];
+        };
+        ActivateSubscriptionRequest: {
+            planCode: string;
+            /** @default 30 */
+            periodDays: number;
+            /** @default 0 */
+            amountMinorUnits: number;
+            /** @default USD */
+            currency: string;
+            reason: string;
+        };
+        TeamPerformanceSummary: {
+            leadsTotal: number;
+            leadsConverted: number;
+            conversionRatePercent: number;
+            dealsTotal: number;
+            dealsWon: number;
+            dealsCommission: components["schemas"]["MoneyAmount"][];
+            tasksTotal: number;
+            tasksCompleted: number;
+            slaPercent: number;
+        };
+        TeamPerformancePositionItem: {
+            positionId: string | null;
+            leadsAdded: number;
+            leadsInWork: number;
+            leadsConverted: number;
+            leadsLost: number;
+            conversionRatePercent: number;
+            dealsTotal: number;
+            dealsWon: number;
+            dealsLost: number;
+            dealsCommission: components["schemas"]["MoneyAmount"][];
+            tasksTotal: number;
+            tasksCompleted: number;
+            tasksOverdue: number;
+            tasksCompletedOnTime: number;
+            slaPercent: number;
+        };
+        TeamPerformanceTimeseriesPoint: {
+            date: string;
+            leads: number;
+            deals: number;
+            completedTasks: number;
+        };
+        TeamPerformanceReportResponse: {
+            summary: components["schemas"]["TeamPerformanceSummary"];
+            positions: components["schemas"]["TeamPerformancePositionItem"][];
+            timeseries: components["schemas"]["TeamPerformanceTimeseriesPoint"][];
         };
     };
     responses: {
@@ -5236,9 +5620,135 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Unit"][];
+                    "application/json": unknown[];
                 };
             };
+        };
+    };
+    generateChessboard: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    sectionId?: string;
+                    fromFloor: number;
+                    toFloor: number;
+                    unitsPerFloor: number;
+                    /** @enum {string} */
+                    numberingScheme?: "floor_prefix" | "sequential";
+                    /** @enum {string} */
+                    defaultKind?: "apartment" | "commercial" | "office" | "parking" | "storage" | "other";
+                    rooms?: number;
+                    defaultArea: number;
+                    defaultAreaLiving?: number;
+                    defaultAreaBalcony?: number;
+                    defaultPrice: components["schemas"]["MoneyAmount"];
+                    floorPlanId?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Сетка успешно сгенерирована */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    batchCreateUnits: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                buildingId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    units: {
+                        floorNumber: number;
+                        number: string;
+                        /** @enum {string} */
+                        kind: "apartment" | "commercial" | "office" | "parking" | "storage" | "other";
+                        rooms?: number;
+                        area: number;
+                        areaLiving?: number;
+                        areaBalcony?: number;
+                        price: components["schemas"]["MoneyAmount"];
+                        sectionId?: string;
+                        floorPlanId?: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Юниты успешно созданы */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    batchUpdatePrices: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                developmentId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    buildingId?: string;
+                    floorMin?: number;
+                    floorMax?: number;
+                    /** @enum {string} */
+                    kind?: "apartment" | "commercial" | "office" | "parking" | "storage" | "other";
+                    unitIds?: string[];
+                    /** @enum {string} */
+                    operationType: "percentage" | "delta_per_sqm" | "fixed_price_per_sqm" | "fixed_total";
+                    value: number;
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Цены успешно обновлены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
             404: components["responses"]["Error"];
         };
     };
@@ -5559,6 +6069,55 @@ export interface operations {
             /** @description Booking не существует/чужая организация (non-disclosure) */
             404: components["responses"]["Error"];
             /** @description Пересечение активной брони, Booking не в pending/booked, или конфликт Idempotency-Key */
+            409: components["responses"]["Error"];
+        };
+    };
+    convertBookingToDeal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    title?: string;
+                    contactId?: string;
+                    /** @enum {string} */
+                    dealType?: "primary" | "secondary" | "rental" | "assignment";
+                    installmentPlanId?: string;
+                    downPayment?: components["schemas"]["MoneyAmount"];
+                    expectedCommission?: components["schemas"]["MoneyAmount"];
+                    notes?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Бронь конвертирована в сделку */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        booking: components["schemas"]["Booking"];
+                        dealId: string;
+                    };
+                };
+            };
+            /** @description Отсутствует Idempotency-Key или невалидные параметры */
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            /** @description Booking/Contact не существует или чужая организация (non-disclosure) */
+            404: components["responses"]["Error"];
+            /** @description Booking не в активном статусе, unit уже продан, или конфликт Idempotency-Key */
             409: components["responses"]["Error"];
         };
     };
@@ -7384,6 +7943,36 @@ export interface operations {
             403: components["responses"]["Error"];
         };
     };
+    getTeamPerformanceReport: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                positionId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Отчёт по результативности команды */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamPerformanceReportResponse"];
+                };
+            };
+            /** @description VALIDATION_FAILED */
+            400: components["responses"]["Error"];
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет crm_report.read */
+            403: components["responses"]["Error"];
+        };
+    };
     adminListDuplicateCandidates: {
         parameters: {
             query?: {
@@ -7551,6 +8140,125 @@ export interface operations {
             };
             /** @description FORBIDDEN — нет активного контекста администратора */
             403: components["responses"]["Error"];
+        };
+    };
+    adminListOrganizations: {
+        parameters: {
+            query?: {
+                type?: "agency" | "developer" | "independent_realtor";
+                status?: "active" | "frozen" | "archived";
+                search?: string;
+                /** @description Непрозрачный cursor из предыдущего ответа; для newest принимается legacy ObjectId. */
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список организаций с пагинацией */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrganizationListResponse"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+        };
+    };
+    adminGetOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Карточка организации */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminOrganizationDetailResponse"];
+                };
+            };
+            /** @description FORBIDDEN */
+            403: components["responses"]["Error"];
+            /** @description Организация не найдена */
+            404: components["responses"]["Error"];
+        };
+    };
+    adminFreezeOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreezeOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Организация заморожена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** @enum {string} */
+                        status: "frozen";
+                    };
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+        };
+    };
+    adminUnfreezeOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FreezeOrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description Организация разморожена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        id: string;
+                        /** @enum {string} */
+                        status: "active";
+                    };
+                };
+            };
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
     adminListAccounts: {
@@ -9360,6 +10068,127 @@ export interface operations {
             404: components["responses"]["Error"];
             /** @description Жалоба уже резолюцирована (status не pending) */
             409: components["responses"]["Error"];
+        };
+    };
+    getBillingSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Информация о подписке */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSubscriptionOverview"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    listBillingPlans: {
+        parameters: {
+            query?: {
+                audience?: "developer" | "agency" | "independent_realtor";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Список активных тарифных планов */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionPlan"][];
+                };
+            };
+            401: components["responses"]["Error"];
+        };
+    };
+    getBillingLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Записи леджера */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BillingLedgerEntry"][];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminGetOrganizationBilling: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Обзор биллинга организации */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminBillingOverview"];
+                };
+            };
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+        };
+    };
+    adminActivateSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organizationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Подписка успешно активирована/продлена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationSubscription"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            404: components["responses"]["Error"];
         };
     };
 }

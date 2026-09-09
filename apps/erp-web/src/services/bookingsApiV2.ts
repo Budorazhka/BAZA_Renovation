@@ -95,4 +95,74 @@ export const bookingsApiV2 = {
     cancelAttemptKeys.delete(bookingId)
     return data
   },
+
+  /** GET /api/v1/bookings/:id */
+  async getById(bookingId: string): Promise<BookingV2> {
+    const { data } = await api.get<BookingV2>(`/api/v1/bookings/${bookingId}`)
+    return data
+  },
+
+  /** POST /api/v1/bookings — booking.create (requires Idempotency-Key) */
+  async create(payload: CreateBookingV2Payload, idempotencyKey?: string): Promise<BookingV2> {
+    const key = idempotencyKey || uid()
+    const { data } = await api.post<BookingV2>('/api/v1/bookings', payload, {
+      headers: { 'Idempotency-Key': key },
+    })
+    return data
+  },
+
+  /** POST /api/v1/bookings/:id/extend */
+  async extend(bookingId: string, payload: ExtendBookingPayload, idempotencyKey?: string): Promise<BookingV2> {
+    const key = idempotencyKey || attemptKey(confirmAttemptKeys, `extend-${bookingId}`)
+    const { data } = await api.post<BookingV2>(`/api/v1/bookings/${bookingId}/extend`, payload, {
+      headers: { 'Idempotency-Key': key },
+    })
+    confirmAttemptKeys.delete(`extend-${bookingId}`)
+    return data
+  },
+
+  /** POST /api/v1/bookings/:id/convert-to-deal */
+  async convertToDeal(
+    bookingId: string,
+    payload: ConvertBookingToDealPayload = {},
+    idempotencyKey?: string,
+  ): Promise<ConvertBookingToDealResult> {
+    const key = idempotencyKey || attemptKey(confirmAttemptKeys, `convert-${bookingId}`)
+    const { data } = await api.post<ConvertBookingToDealResult>(
+      `/api/v1/bookings/${bookingId}/convert-to-deal`,
+      payload,
+      { headers: { 'Idempotency-Key': key } },
+    )
+    confirmAttemptKeys.delete(`convert-${bookingId}`)
+    return data
+  },
+}
+
+export interface CreateBookingV2Payload {
+  unitId: string
+  leadId?: string | null
+  startsAt: string
+  expiresAt: string
+}
+
+export interface ExtendBookingPayload {
+  newExpiresAt: string
+  reason?: string
+}
+
+export interface ConvertBookingToDealPayload {
+  title?: string
+  contactId?: string
+  dealType?: 'primary' | 'secondary' | 'rental' | 'assignment'
+  installmentPlanId?: string
+  downPayment?: { amountMinorUnits: number; currency: string }
+  expectedCommission?: { amountMinorUnits: number; currency: string }
+  notes?: string
+}
+
+export interface ConvertBookingToDealResult {
+  dealId: string
+  bookingId: string
+  unitId: string
+  status: string
 }

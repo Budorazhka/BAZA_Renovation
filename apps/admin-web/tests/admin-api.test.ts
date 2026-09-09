@@ -188,4 +188,51 @@ describe('createAdminApi', () => {
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'совпадают все параметры и контакты' })
     expect(result).toEqual({ id: 'dup1', status: 'confirmed_duplicate' })
   })
+
+  it('listOrganizations builds query params for type, status, search, cursor, and limit', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ items: [], nextCursor: null }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    await api.listOrganizations({ type: 'agency', status: 'active', search: 'Batumi', cursor: 'c3', limit: 20 })
+
+    const [url] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/organizations?type=agency&status=active&search=Batumi&cursor=c3&limit=20')
+  })
+
+  it('getOrganization calls GET on the correct organizationId path', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ id: 'org1', name: 'Batumi Agency', type: 'agency', status: 'active', createdAt: '2026-01-01', positionsCount: 1, positions: [] }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.getOrganization('org1')
+
+    const [url] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/organizations/org1')
+    expect(result.name).toBe('Batumi Agency')
+  })
+
+  it('freezeOrganization posts reason to /freeze endpoint', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ id: 'org1', status: 'frozen' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.freezeOrganization('org1', 'Нарушение условий размещения объектов')
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/organizations/org1/freeze')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'Нарушение условий размещения объектов' })
+    expect(result).toEqual({ id: 'org1', status: 'frozen' })
+  })
+
+  it('unfreezeOrganization posts reason to /unfreeze endpoint', async () => {
+    const fetcher = vi.fn(async () => jsonResponse({ id: 'org1', status: 'active' }))
+    const api = createAdminApi({ baseUrl: 'https://api.example.test/api/v1', fetcher })
+
+    const result = await api.unfreezeOrganization('org1', 'Документы проверены и подтверждены')
+
+    const [url, init] = fetcher.mock.calls[0]!
+    expect(url).toBe('https://api.example.test/api/v1/admin/organizations/org1/unfreeze')
+    expect(init).toMatchObject({ method: 'POST' })
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ reason: 'Документы проверены и подтверждены' })
+    expect(result).toEqual({ id: 'org1', status: 'active' })
+  })
 })

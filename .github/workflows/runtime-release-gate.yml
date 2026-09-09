@@ -34,8 +34,10 @@ jobs:
       API_PORT: 3000
       ADMIN_WEB_PORT: 4174
       MARKETPLACE_WEB_PORT: 4173
+      ERP_WEB_PORT: 4175
       CORS_ALLOWED_ORIGIN_MARKETPLACE: http://localhost:4173
       CORS_ALLOWED_ORIGIN_ADMIN: http://localhost:4174
+      CORS_ALLOWED_ORIGIN_ERP: http://localhost:4175
       # The browser runs on the runner, while API/worker run in containers.
       # extra_hosts in compose.runtime.yml makes this name resolve on Linux.
       MINIO_ENDPOINT: http://host.docker.internal:9000
@@ -46,6 +48,8 @@ jobs:
       RUNTIME_MARKETPLACE_ORIGIN: http://localhost:4173
       RUNTIME_ADMIN_URL: http://localhost:4174
       RUNTIME_ADMIN_ORIGIN: http://localhost:4174
+      RUNTIME_ERP_URL: http://localhost:4175
+      RUNTIME_ERP_ORIGIN: http://localhost:4175
       RUNTIME_MONGO_URI: mongodb://localhost:27017/baza?replicaSet=rs0&directConnection=true
       RUNTIME_MONGO_HOST: localhost
       RUNTIME_MONGO_PORT: 27017

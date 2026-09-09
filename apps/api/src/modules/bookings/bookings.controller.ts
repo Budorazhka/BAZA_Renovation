@@ -13,6 +13,7 @@ import { ParseObjectIdPipe } from '../../shared/validation/parse-object-id.pipe'
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { ExtendBookingDto } from './dto/extend-booking.dto';
+import { ConvertBookingToDealDto } from './dto/convert-booking-to-deal.dto';
 import { ListBookingsQueryDto } from './dto/list-bookings.dto';
 import { BookingsService, toBookingResponse } from './bookings.service';
 
@@ -231,6 +232,74 @@ export class BookingsController {
 
     reply.status(200);
     return toBookingResponse(result);
+  }
+
+  /**
+   * booking.convert_to_deal — закрытие брони и создание сделки в CRM.
+   */
+  @Post('bookings/:bookingId/convert-to-deal')
+  @HttpCode(201)
+  @RequirePermission('deal', 'create')
+  async convertToDeal(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Param('bookingId', ParseObjectIdPipe) bookingId: Types.ObjectId,
+    @Body() dto: ConvertBookingToDealDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (!idempotencyKey) {
+      throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = {
+      bookingId: bookingId.toString(),
+      title: dto.title ?? null,
+      contactId: dto.contactId ?? null,
+      dealType: dto.dealType ?? null,
+      installmentPlanId: dto.installmentPlanId ?? null,
+      downPayment: dto.downPayment ?? null,
+      expectedCommission: dto.expectedCommission ?? null,
+      notes: dto.notes ?? null,
+    };
+    const replay = await this.idempotencyService.checkReplay({
+      identityId: actorIdentityId,
+      operation: 'convertBookingToDeal',
+      key: idempotencyKey,
+      requestBody,
+    });
+    if (replay) {
+      reply.status(replay.responseStatus);
+      return replay.responseBody;
+    }
+
+    const result = await this.bookingsService.convertToDeal({
+      bookingId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      actorIdentityId,
+      managerPositionId: new Types.ObjectId(tenantContext.positionId),
+      title: dto.title,
+      contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
+      dealType: dto.dealType,
+      installmentPlanId: dto.installmentPlanId ? new Types.ObjectId(dto.installmentPlanId) : undefined,
+      downPayment: dto.downPayment,
+      expectedCommission: dto.expectedCommission,
+      notes: dto.notes,
+      idempotencyKey,
+      correlationId: req.correlationId,
+    });
+
+    if ('replay' in result) {
+      reply.status(result.replay.responseStatus);
+      return result.replay.responseBody;
+    }
+
+    reply.status(201);
+    return {
+      booking: toBookingResponse(result.booking),
+      dealId: result.deal._id.toString(),
+    };
   }
 
   /**

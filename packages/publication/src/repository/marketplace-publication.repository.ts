@@ -169,6 +169,38 @@ export class MarketplacePublicationRepository {
   }
 
   /**
+   * Worker-side: обновление проекции опубликованного объекта при изменении цен или статусов.
+   * CAS: если передан options.expectedVersion, обновление применится ТОЛЬКО ЕСЛИ
+   * текущая версия совпадает с ожидаемой и статус по-прежнему 'published'.
+   * Защищает от перезаписи более свежего снимка старым при гонках или перестановке событий.
+   */
+  async updateProjection(
+    id: Types.ObjectId,
+    fields: {
+      denormalizedFields?: Record<string, unknown>;
+      searchProjection?: Record<string, unknown>;
+    },
+    options?: {
+      expectedVersion?: number;
+    },
+  ): Promise<MarketplacePublicationDocument | null> {
+    const filter: Record<string, unknown> = { _id: id, status: 'published' };
+    if (typeof options?.expectedVersion === 'number') {
+      filter.version = options.expectedVersion;
+    }
+    const $set: Record<string, unknown> = {};
+    if (fields.denormalizedFields) {
+      $set.denormalizedFields = fields.denormalizedFields;
+    }
+    if (fields.searchProjection) {
+      $set.searchProjection = fields.searchProjection;
+    }
+    return this.model
+      .findOneAndUpdate(filter, { $set, $inc: { version: 1 } }, { new: true })
+      .exec();
+  }
+
+  /**
    * Public developments list — filtered by sourceType:'development', not
    * just status:'published'. PublicationSourceType also includes 'unit'
    * and 'listing'; without this filter, a future unit-sourceType publish

@@ -104,6 +104,12 @@ export function ListingCard({
               <span aria-hidden="true">✓</span> Проверено
             </span>
           ) : null}
+
+          {item.isMls ? (
+            <span className="figma-listing-card__badge figma-listing-card__badge--mls" data-testid="badge-mls">
+              MLS
+            </span>
+          ) : null}
         </div>
 
         {/* Action Buttons */}

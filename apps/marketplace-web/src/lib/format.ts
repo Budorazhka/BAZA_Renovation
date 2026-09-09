@@ -40,9 +40,11 @@ export function listingPropertyTypeLabel(propertyType?: string, commercialSubtyp
       if (commercialSubtype === 'office') return 'Офис'
       if (commercialSubtype === 'warehouse') return 'Склад'
       if (commercialSubtype === 'retail') return 'Торговое помещение'
+      if (commercialSubtype === 'business') return 'Готовый бизнес'
+      if (commercialSubtype === 'free_purpose') return 'Свободное назначение'
       return 'Коммерческая недвижимость'
     default:
-      return 'Объект'
+      return 'Объект недвижимости'
   }
 }
 
@@ -74,4 +76,12 @@ export function listingPrice(item: PublicListingCard): string {
     return `${currency}${formatted} / сут.`
   }
   return `${currency}${formatted}`
+}
+
+export function formatMoneyAmount(price?: { amountMinorUnits?: number; currency?: string }): string | null {
+  if (!price || price.amountMinorUnits == null) return null
+  const amount = price.amountMinorUnits / 100
+  const currency = price.currency === 'USD' ? '$' : price.currency === 'GEL' ? '₾' : '₽'
+  const formatted = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(amount)
+  return `${currency} ${formatted}`
 }

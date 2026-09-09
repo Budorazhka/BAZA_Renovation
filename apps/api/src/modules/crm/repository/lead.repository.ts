@@ -473,4 +473,40 @@ export class LeadRepository {
       ])
       .exec();
   }
+
+  async aggregateTimeseries(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date; ownerPositionId?: Types.ObjectId },
+  ): Promise<Array<{ date: string; count: number }>> {
+    const match: Record<string, unknown> = { organizationId, status: { $ne: 'deleted' } };
+    if (params.ownerPositionId) {
+      match.ownerPositionId = params.ownerPositionId;
+    }
+    if (params.from || params.to) {
+      const createdAt: Record<string, Date> = {};
+      if (params.from) createdAt.$gte = params.from;
+      if (params.to) createdAt.$lte = params.to;
+      match.createdAt = createdAt;
+    }
+
+    return this.model
+      .aggregate<{ date: string; count: number }>([
+        { $match: match },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            date: '$_id',
+            count: 1,
+          },
+        },
+        { $sort: { date: 1 } },
+      ])
+      .exec();
+  }
 }

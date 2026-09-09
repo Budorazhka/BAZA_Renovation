@@ -72,14 +72,47 @@ const INITIAL_COLLECTIONS: CollectionItem[] = [
   },
 ]
 
+const STORAGE_KEY = 'baza:marketplace:selections'
+
+function loadSavedCollections(): CollectionItem[] {
+  if (typeof window === 'undefined') return INITIAL_COLLECTIONS
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) return parsed
+    }
+  } catch {
+    // Ignore storage parse error
+  }
+  return INITIAL_COLLECTIONS
+}
+
+function saveCollections(items: CollectionItem[]) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+  } catch {
+    // Ignore storage write error
+  }
+}
+
 export function SelectionsPage() {
-  const [collections, setCollections] = useState<CollectionItem[]>(INITIAL_COLLECTIONS)
+  const [collections, setCollections] = useState<CollectionItem[]>(loadSavedCollections)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useSeoMetadata({
     title: 'Мои подборки объектов | BAZA',
     description: 'Управление клиентскими подборками недвижимости, создание персонализированных ссылок и витрин.',
   })
+
+  const updateCollections = (updater: (prev: CollectionItem[]) => CollectionItem[]) => {
+    setCollections((prev) => {
+      const next = updater(prev)
+      saveCollections(next)
+      return next
+    })
+  }
 
   const handleCreateNewCollection = () => {
     const newCol: CollectionItem = {
@@ -89,17 +122,17 @@ export function SelectionsPage() {
       createdAt: 'Сегодня',
       properties: [],
     }
-    setCollections([newCol, ...collections])
+    updateCollections((prev) => [newCol, ...prev])
   }
 
   const handleUpdateTitle = (id: string, nextTitle: string) => {
-    setCollections((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title: nextTitle } : c))
+    updateCollections((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title: nextTitle } : c)),
     )
   }
 
   const handleDeleteCollection = (id: string) => {
-    setCollections((prev) => prev.filter((c) => c.id !== id))
+    updateCollections((prev) => prev.filter((c) => c.id !== id))
   }
 
   const handleCopyLink = (col: CollectionItem) => {
@@ -129,6 +162,21 @@ export function SelectionsPage() {
           + Создать подборку
         </button>
       </div>
+
+      {collections.length === 0 ? (
+        <div className="state-panel" role="status" style={{ textAlign: 'center', padding: '48px 16px' }}>
+          <p style={{ fontSize: '16px', color: 'var(--color-neutral-secondary, #555454)', marginBottom: '16px' }}>
+            У вас пока нет созданных подборок объектов.
+          </p>
+          <button
+            type="button"
+            className="figma-fav-filter-btn figma-fav-filter-btn--active"
+            onClick={handleCreateNewCollection}
+          >
+            + Создать первую подборку
+          </button>
+        </div>
+      ) : null}
 
       <div className="figma-collections-list" aria-label="Список клиентских подборок">
         {collections.map((col) => (

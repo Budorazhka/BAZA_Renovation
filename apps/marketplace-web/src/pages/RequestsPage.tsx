@@ -103,6 +103,13 @@ export function RequestsPage() {
 
   return (
     <div className="figma-requests-page">
+      <div className="demo-notice-banner" role="note">
+        <span className="demo-notice-banner__icon" aria-hidden="true">ℹ️</span>
+        <div className="demo-notice-banner__text">
+          <strong>Демонстрационный раздел:</strong> Доска клиентских запросов работает в ознакомительном режиме. Представленные карточки потребностей носят иллюстративный характер.
+        </div>
+      </div>
+
       <div className="figma-requests-header">
         <div>
           <h1 className="figma-requests-header__title">Запросы клиентов</h1>
@@ -114,7 +121,7 @@ export function RequestsPage() {
         <button
           type="button"
           className="figma-requests-add-btn"
-          onClick={() => alert('Форма добавления заявки')}
+          onClick={() => alert('Форма добавления заявки находится в разработке (демонстрационный режим)')}
           data-testid="add-request-btn"
         >
           + Оставить запрос

@@ -1,19 +1,27 @@
 import type {
+  ActivateSubscriptionParams,
   AdminAccountList,
   AdminAuditEventList,
   AdminAuditEventListQuery,
+  AdminBillingOverview,
   AdminComplaintList,
   AdminComplaintListQuery,
   AdminDuplicateCandidateList,
   AdminDuplicateCandidateListQuery,
   AdminMe,
+  AdminOrganizationDetail,
+  AdminOrganizationList,
+  AdminOrganizationListQuery,
   AdminPublicationList,
   AdminPublicationListQuery,
   ConfirmDuplicateResult,
   DeactivateReactivateResult,
+  FreezeOrganizationResult,
+  OrganizationSubscription,
   PermissionGrant,
   PermissionScope,
   ResolveComplaintResult,
+  UnfreezeOrganizationResult,
   UnpublishResult,
 } from '../types/admin'
 
@@ -231,6 +239,49 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
       if (query.limit) params.set('limit', String(query.limit))
       const suffix = params.size > 0 ? `?${params.toString()}` : ''
       return request(`/admin/publications/${encodeURIComponent(publicationId)}/audit${suffix}`)
+    },
+
+    async listOrganizations(query: AdminOrganizationListQuery = {}): Promise<AdminOrganizationList> {
+      const params = new URLSearchParams()
+      if (query.type) params.set('type', query.type)
+      if (query.status) params.set('status', query.status)
+      if (query.search?.trim()) params.set('search', query.search.trim())
+      if (query.cursor) params.set('cursor', query.cursor)
+      if (query.limit) params.set('limit', String(query.limit))
+      const suffix = params.size > 0 ? `?${params.toString()}` : ''
+      return request(`/admin/organizations${suffix}`)
+    },
+
+    async getOrganization(organizationId: string): Promise<AdminOrganizationDetail> {
+      return request(`/admin/organizations/${encodeURIComponent(organizationId)}`)
+    },
+
+    async freezeOrganization(organizationId: string, reason: string): Promise<FreezeOrganizationResult> {
+      return request(`/admin/organizations/${encodeURIComponent(organizationId)}/freeze`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async unfreezeOrganization(organizationId: string, reason: string): Promise<UnfreezeOrganizationResult> {
+      return request(`/admin/organizations/${encodeURIComponent(organizationId)}/unfreeze`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      })
+    },
+
+    async getOrganizationBilling(organizationId: string): Promise<AdminBillingOverview> {
+      return request(`/admin/organizations/${encodeURIComponent(organizationId)}/billing`)
+    },
+
+    async activateSubscription(
+      organizationId: string,
+      params: ActivateSubscriptionParams,
+    ): Promise<OrganizationSubscription> {
+      return request(`/admin/organizations/${encodeURIComponent(organizationId)}/billing/activate`, {
+        method: 'POST',
+        body: JSON.stringify(params),
+      })
     },
   }
 }

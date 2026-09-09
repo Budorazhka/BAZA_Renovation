@@ -80,7 +80,16 @@ export function HomePage() {
       <section className="figma-home-container" aria-label="Категории недвижимости">
         <div className="figma-home-categories-grid">
           <Link to="/newconstructions" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">🏢</div>
+            <div className="figma-category-card__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 21h18" />
+                <path d="M5 21V7l8-4v18" />
+                <path d="M13 9l6 3v9" />
+                <path d="M9 9h1" />
+                <path d="M9 13h1" />
+                <path d="M9 17h1" />
+              </svg>
+            </div>
             <div>
               <h2 className="figma-category-card__title">Новостройки</h2>
               <span className="figma-category-card__count">Жилые комплексы от застройщиков</span>
@@ -89,7 +98,13 @@ export function HomePage() {
           </Link>
 
           <Link to="/secondary" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">🔑</div>
+            <div className="figma-category-card__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 2l-2 2m-1.5 1.5L14 9l-3-3 1.5-1.5 4-4L21 2z" />
+                <path d="M15.5 7.5L8.5 14.5" />
+                <circle cx="6.5" cy="17.5" r="3.5" />
+              </svg>
+            </div>
             <div>
               <h2 className="figma-category-card__title">Вторичка</h2>
               <span className="figma-category-card__count">Квартиры с готовым ремонтом</span>
@@ -98,7 +113,12 @@ export function HomePage() {
           </Link>
 
           <Link to="/secondary?propertyType=house" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">🏡</div>
+            <div className="figma-category-card__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10.5z" />
+                <path d="M9 22V12h6v10" />
+              </svg>
+            </div>
             <div>
               <h2 className="figma-category-card__title">Дома и виллы</h2>
               <span className="figma-category-card__count">Частные резиденции и таунхаусы</span>
@@ -107,7 +127,13 @@ export function HomePage() {
           </Link>
 
           <Link to="/secondary?propertyType=commercial" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">🏬</div>
+            <div className="figma-category-card__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 9l1.5-5h15L21 9v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
+                <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
+                <path d="M9 22V14h6v8" />
+              </svg>
+            </div>
             <div>
               <h2 className="figma-category-card__title">Коммерция</h2>
               <span className="figma-category-card__count">Офисы, торговые площади, склады</span>
@@ -116,7 +142,14 @@ export function HomePage() {
           </Link>
 
           <Link to="/secondary?propertyType=land" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">🌄</div>
+            <div className="figma-category-card__icon" aria-hidden="true">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 18l4-7 4 7" />
+                <path d="M2 20l5-9 5 9" />
+                <path d="M14 20l4-5 4 5" />
+                <path d="M2 20h20" />
+              </svg>
+            </div>
             <div>
               <h2 className="figma-category-card__title">Земельные участки</h2>
               <span className="figma-category-card__count">Участки под застройку и инвестиции</span>

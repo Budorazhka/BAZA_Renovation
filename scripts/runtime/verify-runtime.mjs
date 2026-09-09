@@ -24,6 +24,7 @@ const DEFAULTS = {
   api: 'http://localhost:3000',
   marketplace: 'http://localhost:4173',
   admin: 'http://localhost:4174',
+  erp: 'http://localhost:4175',
 };
 
 function withPath(origin, path) {
@@ -53,12 +54,14 @@ export async function verifyRuntime({ env = process.env, fetcher = fetch } = {})
   const api = env.RUNTIME_API_URL || DEFAULTS.api;
   const marketplace = env.RUNTIME_MARKETPLACE_URL || DEFAULTS.marketplace;
   const admin = env.RUNTIME_ADMIN_URL || DEFAULTS.admin;
+  const erp = env.RUNTIME_ERP_URL || DEFAULTS.erp;
 
   return Promise.all([
     checkEndpoint('api liveness', withPath(api, '/health'), { fetcher }),
     checkEndpoint('api readiness', withPath(api, '/health/ready'), { fetcher }),
     checkEndpoint('marketplace web', marketplace, { fetcher }),
     checkEndpoint('admin web', admin, { fetcher }),
+    checkEndpoint('erp web', erp, { fetcher }),
   ]);
 }
 

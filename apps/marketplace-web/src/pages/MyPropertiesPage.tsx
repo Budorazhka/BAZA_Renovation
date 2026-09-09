@@ -329,7 +329,17 @@ export function MyPropertiesPage() {
                 <h2 className="figma-account-card-title">{item.title}</h2>
                 <div className="figma-account-card-price">{item.priceFormatted}</div>
                 <p className="figma-account-card-address">
-                  📍 {item.city}, {item.address} · {item.rooms} комн. · {item.area} м² · {item.floor}/{item.totalFloors} эт.
+                  📍 {item.city}, {item.address}
+                  {[
+                    item.propertyType !== 'land' && item.rooms ? `${item.rooms} комн.` : null,
+                    item.area ? `${item.area} м²` : null,
+                    item.propertyType !== 'land' && item.floor
+                      ? `${item.floor}${item.totalFloors ? `/${item.totalFloors}` : ''} эт.`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .map((chip, i) => ` · ${chip}`)
+                    .join('')}
                 </p>
 
                 {/* Statistics row */}
@@ -415,7 +425,12 @@ export function MyPropertiesPage() {
                   <td>
                     <strong style={{ display: 'block' }}>{item.title}</strong>
                     <span style={{ fontSize: '12px', color: '#757575' }}>
-                      {item.rooms} комн. · {item.area} м²
+                      {[
+                        item.propertyType !== 'land' && item.rooms ? `${item.rooms} комн.` : null,
+                        item.area ? `${item.area} м²` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
                     </span>
                   </td>
                   <td>{item.city}, {item.address}</td>

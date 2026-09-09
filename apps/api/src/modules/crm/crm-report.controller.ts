@@ -8,6 +8,7 @@ import { RequirePermission } from '../authorization/require-permission.decorator
 import { CrmService } from './crm.service';
 import { LeadFunnelReportDto } from './dto/lead-funnel-report.dto';
 import { PositionsReportDto } from './dto/positions-report.dto';
+import { TeamPerformanceReportDto } from './dto/team-performance-report.dto';
 
 /**
  * ERP tenant-scoped CRM reporting endpoints — расширение существующего CRM-
@@ -15,11 +16,10 @@ import { PositionsReportDto } from './dto/positions-report.dto';
  * позициям концептуально относится к той же tenant/CRM-области, что
  * Lead/Deal/CalendarEvent, отдельный модуль верхнего уровня не оправдан).
  *
- * Оба эндпоинта read-only (GET) — Idempotency-Key не применим, см.
+ * Все эндпоинты read-only (GET) — Idempotency-Key не применим, см.
  * idempotency-coverage.test.ts (маршрут не попадает в реестр не-GET команд).
  *
- * Право `crm_report.read` — новый resource, отдельный от `lead.read`/
- * `deal.read`: агрегирующий отчёт по всей организации (в том числе по
+ * Право `crm_report.read` — агрегирующий отчёт по всей организации (в том числе по
  * позициям других сотрудников) — это не то же самое действие, что чтение
  * СВОИХ/организационных лидов и сделок по отдельности, и должно выдаваться
  * осознанно тем ролям, у которых уже есть organization-wide видимость CRM
@@ -52,6 +52,18 @@ export class CrmReportController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       from: dto.from ? new Date(dto.from) : undefined,
       to: dto.to ? new Date(dto.to) : undefined,
+    });
+  }
+
+  @Get('team-performance')
+  @RequirePermission('crm_report', 'read')
+  async getTeamPerformance(@Req() req: FastifyRequest, @Query() dto: TeamPerformanceReportDto) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.getTeamPerformanceReport({
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      from: dto.from ? new Date(dto.from) : undefined,
+      to: dto.to ? new Date(dto.to) : undefined,
+      positionId: dto.positionId ? new Types.ObjectId(dto.positionId) : undefined,
     });
   }
 }

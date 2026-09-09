@@ -12,6 +12,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@baza/contracts": "workspace:*",
     "@nestjs/common": "^11.2.3",
     "@nestjs/mongoose": "^11.0.4",
     "mongoose": "^8.9.0"

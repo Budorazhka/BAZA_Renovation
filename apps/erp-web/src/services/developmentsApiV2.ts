@@ -437,4 +437,77 @@ export const developmentsApiV2 = {
     const { data } = await api.patch<UnitV2>(`/api/v1/units/${unitId}/status`, { expectedVersion, status })
     return data
   },
+
+  /** POST /api/v1/buildings/:id/chessboard/generate. */
+  async generateChessboard(buildingId: string, payload: GenerateChessboardPayload, idempotencyKey: string): Promise<UnitV2[]> {
+    const { data } = await api.post<UnitV2[]>(`/api/v1/buildings/${buildingId}/chessboard/generate`, payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    return data
+  },
+
+  /** POST /api/v1/buildings/:id/units/batch. */
+  async batchCreateUnits(buildingId: string, payload: BatchCreateUnitsPayload, idempotencyKey: string): Promise<UnitV2[]> {
+    const { data } = await api.post<UnitV2[]>(`/api/v1/buildings/${buildingId}/units/batch`, payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    return data
+  },
+
+  /** POST /api/v1/developments/:id/units/batch-price-update. */
+  async batchUpdatePrices(developmentId: string, payload: BatchUpdatePricesPayload, idempotencyKey: string): Promise<BatchUpdatePricesResult> {
+    const { data } = await api.post<BatchUpdatePricesResult>(`/api/v1/developments/${developmentId}/units/batch-price-update`, payload, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    })
+    return data
+  },
+}
+
+export interface GenerateChessboardPayload {
+  sectionId?: string
+  fromFloor: number
+  toFloor: number
+  unitsPerFloor: number
+  numberingScheme?: 'floor_prefix' | 'sequential'
+  defaultKind?: UnitKindV2
+  rooms?: number
+  defaultArea: number
+  defaultAreaLiving?: number
+  defaultAreaBalcony?: number
+  defaultPrice?: MoneyAmountV2
+  floorPlanId?: string
+}
+
+export interface BatchCreateUnitItemPayload {
+  floorNumber: number
+  sectionId?: string
+  number: string
+  kind: UnitKindV2
+  rooms?: number
+  area: number
+  areaLiving?: number
+  areaBalcony?: number
+  price: MoneyAmountV2
+  floorPlanId?: string
+}
+
+export interface BatchCreateUnitsPayload {
+  units: BatchCreateUnitItemPayload[]
+}
+
+export type PriceOperationType = 'percentage' | 'delta_per_sqm' | 'fixed_price_per_sqm' | 'fixed_total'
+
+export interface BatchUpdatePricesPayload {
+  buildingId?: string
+  floorMin?: number
+  floorMax?: number
+  kind?: UnitKindV2
+  unitIds?: string[]
+  operationType: PriceOperationType
+  value: number
+  reason?: string
+}
+
+export interface BatchUpdatePricesResult {
+  updatedCount: number
 }

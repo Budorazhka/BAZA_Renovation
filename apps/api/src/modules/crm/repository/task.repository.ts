@@ -272,4 +272,131 @@ export class TaskRepository {
       })
       .exec();
   }
+
+  async aggregateByAssignedPosition(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date },
+  ): Promise<Array<{
+    assignedPositionId: Types.ObjectId | null;
+    status: TaskStatus;
+    count: number;
+    completedOnTimeCount: number;
+    overdueCount: number;
+  }>> {
+    const match: Record<string, unknown> = { organizationId };
+    if (params.from || params.to) {
+      const createdAt: Record<string, Date> = {};
+      if (params.from) createdAt.$gte = params.from;
+      if (params.to) createdAt.$lte = params.to;
+      match.createdAt = createdAt;
+    }
+
+    return this.model
+      .aggregate<{
+        assignedPositionId: Types.ObjectId | null;
+        status: TaskStatus;
+        count: number;
+        completedOnTimeCount: number;
+        overdueCount: number;
+      }>([
+        { $match: match },
+        {
+          $group: {
+            _id: {
+              assignedPositionId: { $ifNull: ['$assignedPositionId', null] },
+              status: '$status',
+            },
+            count: { $sum: 1 },
+            completedOnTimeCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $eq: ['$status', 'completed'] },
+                      { $ne: ['$dueAt', null] },
+                      { $lte: ['$completedAt', '$dueAt'] },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+            overdueCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $or: [
+                      {
+                        $and: [
+                          { $eq: ['$status', 'completed'] },
+                          { $ne: ['$dueAt', null] },
+                          { $gt: ['$completedAt', '$dueAt'] },
+                        ],
+                      },
+                      {
+                        $and: [
+                          { $in: ['$status', ['open']] },
+                          { $ne: ['$dueAt', null] },
+                          { $lt: ['$dueAt', new Date()] },
+                        ],
+                      },
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            assignedPositionId: '$_id.assignedPositionId',
+            status: '$_id.status',
+            count: 1,
+            completedOnTimeCount: 1,
+            overdueCount: 1,
+          },
+        },
+      ])
+      .exec();
+  }
+
+  async aggregateTimeseries(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date; assignedPositionId?: Types.ObjectId },
+  ): Promise<Array<{ date: string; count: number }>> {
+    const match: Record<string, unknown> = { organizationId, status: 'completed' };
+    if (params.assignedPositionId) {
+      match.assignedPositionId = params.assignedPositionId;
+    }
+    if (params.from || params.to) {
+      const dateFilter: Record<string, Date> = {};
+      if (params.from) dateFilter.$gte = params.from;
+      if (params.to) dateFilter.$lte = params.to;
+      match.completedAt = dateFilter;
+    }
+
+    return this.model
+      .aggregate<{ date: string; count: number }>([
+        { $match: match },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$completedAt' } },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            date: '$_id',
+            count: 1,
+          },
+        },
+        { $sort: { date: 1 } },
+      ])
+      .exec();
+  }
 }

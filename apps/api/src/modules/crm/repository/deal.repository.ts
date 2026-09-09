@@ -22,6 +22,11 @@ export interface CreateDealParams {
   description?: string;
   stage?: DealStage;
   expectedCommission?: MoneyAmount;
+  dealType?: 'primary' | 'secondary' | 'rental' | 'assignment';
+  unitId?: Types.ObjectId;
+  developmentId?: Types.ObjectId;
+  installmentPlanId?: Types.ObjectId;
+  downPayment?: MoneyAmount;
   participants?: DealParticipant[];
   checklistItems?: DealChecklistItem[];
 }
@@ -47,6 +52,7 @@ export class DealRepository {
       ownerPositionId: params.ownerPositionId,
       title: params.title,
       stage: params.stage ?? 'showing',
+      dealType: params.dealType ?? 'secondary',
       participants: params.participants ?? [],
       checklistItems: params.checklistItems ?? [],
       version: 0,
@@ -55,6 +61,10 @@ export class DealRepository {
     if (params.leadId !== undefined) docData.leadId = params.leadId;
     if (params.description !== undefined) docData.description = params.description;
     if (params.expectedCommission !== undefined) docData.expectedCommission = params.expectedCommission;
+    if (params.unitId !== undefined) docData.unitId = params.unitId;
+    if (params.developmentId !== undefined) docData.developmentId = params.developmentId;
+    if (params.installmentPlanId !== undefined) docData.installmentPlanId = params.installmentPlanId;
+    if (params.downPayment !== undefined) docData.downPayment = params.downPayment;
 
     const [created] = await this.model.create([docData], { session });
     return created!;
@@ -321,6 +331,42 @@ export class DealRepository {
             commissionAmountMinorUnits: 1,
           },
         },
+      ])
+      .exec();
+  }
+
+  async aggregateTimeseries(
+    organizationId: Types.ObjectId,
+    params: { from?: Date; to?: Date; ownerPositionId?: Types.ObjectId },
+  ): Promise<Array<{ date: string; count: number }>> {
+    const match: Record<string, unknown> = { organizationId, status: { $ne: 'deleted' } };
+    if (params.ownerPositionId) {
+      match.ownerPositionId = params.ownerPositionId;
+    }
+    if (params.from || params.to) {
+      const createdAt: Record<string, Date> = {};
+      if (params.from) createdAt.$gte = params.from;
+      if (params.to) createdAt.$lte = params.to;
+      match.createdAt = createdAt;
+    }
+
+    return this.model
+      .aggregate<{ date: string; count: number }>([
+        { $match: match },
+        {
+          $group: {
+            _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            date: '$_id',
+            count: 1,
+          },
+        },
+        { $sort: { date: 1 } },
       ])
       .exec();
   }

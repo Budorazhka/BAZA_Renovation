@@ -58,3 +58,22 @@ export function duplicateCandidateStatusLabel(status: string): string {
   return DUPLICATE_CANDIDATE_STATUS_LABELS[status] ?? status
 }
 
+const ORGANIZATION_TYPE_LABELS: Record<string, string> = {
+  agency: 'Агентство',
+  developer: 'Застройщик',
+  independent_realtor: 'Частный риелтор',
+}
+
+export function organizationTypeLabel(type: string): string {
+  return ORGANIZATION_TYPE_LABELS[type] ?? type
+}
+
+const ORGANIZATION_STATUS_LABELS: Record<string, string> = {
+  active: 'Активна',
+  frozen: 'Заморожена',
+  archived: 'В архиве',
+}
+
+export function organizationStatusLabel(status: string): string {
+  return ORGANIZATION_STATUS_LABELS[status] ?? status
+}

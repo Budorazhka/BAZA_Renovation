@@ -3244,3 +3244,81 @@ describe('CrmService.getPositionsReport', () => {
     expect(result.positions).toEqual([]);
   });
 });
+
+describe('CrmService.getTeamPerformanceReport', () => {
+  it('агрегирует лиды, сделки, задачи и временные ряды в сводный отчёт и позиции', async () => {
+    const positionId = new Types.ObjectId();
+    const organizationId = new Types.ObjectId();
+
+    const aggregateLeadsByOwnerPosition = jest.fn().mockResolvedValue([
+      { ownerPositionId: positionId, stage: 'new', count: 5 },
+      { ownerPositionId: positionId, stage: 'converted', count: 2 },
+      { ownerPositionId: positionId, stage: 'lost', count: 1 },
+    ]);
+    const aggregateDealsByOwnerPosition = jest.fn().mockResolvedValue([
+      { ownerPositionId: positionId, stage: 'deal', currency: 'USD', count: 2, commissionAmountMinorUnits: 40000 },
+      { ownerPositionId: positionId, stage: 'closed_lost', currency: 'USD', count: 1, commissionAmountMinorUnits: 0 },
+    ]);
+    const aggregateByAssignedPosition = jest.fn().mockResolvedValue([
+      {
+        assignedPositionId: positionId,
+        status: 'completed',
+        count: 8,
+        completedOnTimeCount: 7,
+        overdueCount: 1,
+      },
+      {
+        assignedPositionId: positionId,
+        status: 'open',
+        count: 2,
+        completedOnTimeCount: 0,
+        overdueCount: 1,
+      },
+    ]);
+    const leadTimeseries = jest.fn().mockResolvedValue([{ date: '2026-09-01', count: 3 }]);
+    const dealTimeseries = jest.fn().mockResolvedValue([{ date: '2026-09-01', count: 1 }]);
+    const taskTimeseries = jest.fn().mockResolvedValue([{ date: '2026-09-01', count: 4 }]);
+
+    const service = createTestCrmService({
+      leadRepository: {
+        aggregateByOwnerPosition: aggregateLeadsByOwnerPosition,
+        aggregateTimeseries: leadTimeseries,
+      },
+      dealRepository: {
+        aggregateByOwnerPosition: aggregateDealsByOwnerPosition,
+        aggregateTimeseries: dealTimeseries,
+      },
+      taskRepository: {
+        aggregateByAssignedPosition,
+        aggregateTimeseries: taskTimeseries,
+      },
+    });
+
+    const result = await service.getTeamPerformanceReport({ organizationId });
+
+    expect(result.summary.leadsTotal).toBe(8);
+    expect(result.summary.leadsConverted).toBe(2);
+    expect(result.summary.conversionRatePercent).toBe(25);
+    expect(result.summary.dealsTotal).toBe(3);
+    expect(result.summary.dealsWon).toBe(2);
+    expect(result.summary.dealsCommission).toEqual([{ currency: 'USD', amountMinorUnits: 40000 }]);
+    expect(result.summary.tasksTotal).toBe(10);
+    expect(result.summary.tasksCompleted).toBe(8);
+    expect(result.summary.slaPercent).toBe(87.5);
+
+    expect(result.positions).toHaveLength(1);
+    expect(result.positions[0]!.positionId).toBe(positionId.toString());
+    expect(result.positions[0]!.leadsAdded).toBe(8);
+    expect(result.positions[0]!.leadsConverted).toBe(2);
+    expect(result.positions[0]!.leadsLost).toBe(1);
+    expect(result.positions[0]!.leadsInWork).toBe(5);
+    expect(result.positions[0]!.conversionRatePercent).toBe(25);
+    expect(result.positions[0]!.dealsTotal).toBe(3);
+    expect(result.positions[0]!.dealsWon).toBe(2);
+    expect(result.positions[0]!.slaPercent).toBe(87.5);
+
+    expect(result.timeseries).toEqual([
+      { date: '2026-09-01', leads: 3, deals: 1, completedTasks: 4 },
+    ]);
+  });
+});
