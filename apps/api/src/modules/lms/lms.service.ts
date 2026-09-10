@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { AppException } from '../../shared/errors/app-exception';
@@ -64,6 +64,8 @@ export function toLmsCourseDto(doc: LmsCourseDocument) {
 
 @Injectable()
 export class LmsService implements OnModuleInit {
+  private readonly logger = new Logger(LmsService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     private readonly itemRepository: LmsItemRepository,
@@ -81,8 +83,13 @@ export class LmsService implements OnModuleInit {
     try {
       await this.itemRepository.seedSystemItemsIfEmpty(SEED_LMS_ITEMS);
       await this.courseRepository.seedSystemCoursesIfEmpty(SEED_LMS_COURSES);
-    } catch {
-      // Ignored if replica set is not initialized yet in unit test contexts
+    } catch (error) {
+      // Ожидаемо: реплика ещё не проинициализирована в юнит-тестах. Но
+      // ИСПРАВЛЕНО 10.09.2026: раньше ошибка глушилась молча (catch {}) —
+      // в проде реальный сбой сидирования (например, дублирующийся courseId)
+      // был бы неотличим от штатного пропуска. Логируем, дальше не бросаем:
+      // отсутствие системных курсов не должно ронять старт API.
+      this.logger.warn(`seedDefaultsIfEmpty failed, skipping: ${(error as Error).message}`);
     }
   }
 

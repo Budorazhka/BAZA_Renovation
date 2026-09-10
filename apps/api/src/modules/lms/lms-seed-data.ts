@@ -144,21 +144,10 @@ export const SEED_LMS_ITEMS: SeedLmsItem[] = [
     },
     isSystem: true,
   },
-  {
-    itemId: 'video-crm-tour',
-    type: 'video',
-    title: 'Экскурсия по CRM-системе',
-    description: 'Обзор всех ключевых модулей платформы: лиды, аналитика, шахматка.',
-    targetRole: 'all',
-    readTime: '12 мин',
-    tags: ['Видео', 'CRM'],
-    content: {
-      type: 'video',
-      url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      description: 'В этом видео разбираем интерфейс системы: как устроены воронка лидов, шахматка, раздел аналитики и задачи.',
-    },
-    isSystem: true,
-  },
+  // ИСПРАВЛЕНО 10.09.2026: здесь был элемент 'video-crm-tour' с плейсхолдером
+  // url на посторонний ролик (Rick Roll) вместо реального видео — реального
+  // видео-тура по CRM ещё не существует, честнее не публиковать материал
+  // с фейковой ссылкой, чем выдавать шутку за контент.
   {
     itemId: 'art-funnel-reading',
     type: 'article',
@@ -237,7 +226,6 @@ export const SEED_LMS_COURSES: SeedLmsCourse[] = [
       'pres-product-knowledge',
       'pres-objections',
       'script-objection-price',
-      'video-crm-tour',
     ],
     finalQuiz: {
       passingScore: 70,
