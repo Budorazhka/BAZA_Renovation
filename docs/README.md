@@ -11,10 +11,11 @@
 | [../CLAUDE_HANDOFF_TZ.md](../CLAUDE_HANDOFF_TZ.md) | Техзадание владельца. **Обязательно перед любой задачей по marketplace UI:** §5.1 — жёсткий gate по Figma. Перенесён сюда из корня рабочей папки 04.09.2026. |
 | [discovery/figma-ui-delivery-gate.md](discovery/figma-ui-delivery-gate.md) | Процедура и Definition of Done для marketplace UI. Каждый UI-пакет изменений обязан добавить сюда запись. |
 | [BAZA_MASTER_PLAN.md](BAZA_MASTER_PLAN.md) | Источник объёма работ: решения владельца продукта, целевая модель, план этапов 0–12, бэклог с критериями приёмки, журнал решений. Перенесён сюда из корня рабочей папки 01.09.2026. |
-| [roadmap-2026-09.md](roadmap-2026-09.md) | Куда двигаемся дальше: волны работ, что взято в работу и какие решения ждут владельца. |
+| [roadmap-2026-09.md](roadmap-2026-09.md) | Куда двигаемся дальше: закрытая очередь этапа 7, внеочередные модули, предложение следующей очереди, решения, которые ждут владельца. |
 | [architecture.md](architecture.md) | Перед любой задачей. Карта владения кодом, правила зависимостей, чек-лист изменения, правило про три уровня тестов. |
-| [progress-report-2026-09-07.md](progress-report-2026-09-07.md) | **Актуальная сверка:** код и сводка Gemini, результаты проверок, ограничения оценки готовности. |
-| [codex/plans/2026-09-07-primary-sales-completion.md](codex/plans/2026-09-07-primary-sales-completion.md) | **Текущая очередь:** девять задач завершения первички с критериями приёмки и зависимостями. |
+| [progress-report-2026-09-11.md](progress-report-2026-09-11.md) | **Актуальная сверка:** что вошло в код 09–10.09 вне очереди, что исправлено, статус модулей, поправки к прежним утверждениям. |
+| [progress-report-2026-09-07.md](progress-report-2026-09-07.md) | **Исторический отчёт.** Сверка со сводкой Gemini перед очередью этапа 7. |
+| [codex/plans/2026-09-07-primary-sales-completion.md](codex/plans/2026-09-07-primary-sales-completion.md) | **Закрытая очередь** этапа 7: девять задач с критериями приёмки и зависимостями. |
 | [progress-report-2026-09-05.md](progress-report-2026-09-05.md) | **Исторический отчёт.** Что сделано за 02–05.09, чего нет и что блокирует сдачу UI. |
 | [progress-report-2026-09-01.md](progress-report-2026-09-01.md) | Предыдущий срез: **процент готовности по этапам плана** (раздел 2). Знаменатель с тех пор не менялся. |
 | [discovery/figma-visual-compare-checklist.md](discovery/figma-visual-compare-checklist.md) | Чек-лист сверки экранов с макетом: строка на экран, ID фреймов, файлы снимков, открытые вопросы к владельцу. |
@@ -122,6 +123,13 @@ permission-matrix.md», часть оснований уже перенесен�
 
 - [chessboard-export.md](operations/chessboard-export.md) — выгрузка шахматки в XLSX, грант `chessboard.export`.
 
+### Этапы 9–11 (начаты 09–10.09 вне очереди)
+
+- [billing-manual-subscriptions.md](operations/billing-manual-subscriptions.md) — тарифы, подписка, журнал, ручная активация админом с грантом; лимиты и заморозка пока ничего не ограничивают.
+- [messenger-skeleton.md](operations/messenger-skeleton.md) — каркас диалогов и привязки к CRM без транспорта: сообщения никуда не уходят и ниоткуда не приходят.
+- [lms-knowledge-base.md](operations/lms-knowledge-base.md) — материалы, курсы и прогресс в пределах организации; ответы теста уходят клиенту.
+- [community-forum-exchange.md](operations/community-forum-exchange.md) — межорганизационный форум и биржа MLS; модерация своей организации, выдуманный стартовый контент ещё засевается.
+
 ### CI, сборка, эксплуатация
 
 - [p0-01-contract-quality-gate.md](operations/p0-01-contract-quality-gate.md) — клиент синхронизирован, исправлены запуск admin-тестов и lint тестовых doubles; 55/55 локальных задач без кеша, границы проверки явно указаны.
@@ -143,6 +151,7 @@ permission-matrix.md», часть оснований уже перенесен�
 
 - [current-state-reconciliation-2026-08-31.md](operations/current-state-reconciliation-2026-08-31.md) — что реально реализовано в CRM на 31.08.
 - [current-state-reconciliation-2026-09-02.md](operations/current-state-reconciliation-2026-09-02.md) — сверка на конец 02.09: стражей 4 → 7, пробелов контракта 49 → 30, задачи ERP без мока.
+- Датированные сверки с 01.09 лежат в корне `docs/`: [01.09](progress-report-2026-09-01.md), [05.09](progress-report-2026-09-05.md), [07.09](progress-report-2026-09-07.md), [11.09](progress-report-2026-09-11.md).
 - [consolidation-2026-08-31.md](operations/consolidation-2026-08-31.md) — сведение веток в `codex/integration`.
 
 ## Прочее
