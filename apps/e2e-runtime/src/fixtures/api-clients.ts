@@ -167,7 +167,10 @@ export function erpApiClient(request: APIRequestContext) {
     },
 
     async generateChessboard(buildingId: string, data: Record<string, unknown>) {
-      const response = await request.post(apiUrl(`/developments/buildings/${buildingId}/chessboard/generate`), {
+      // ИСПРАВЛЕНО 10.09.2026: было /developments/buildings/... — реальный
+      // маршрут @Post('buildings/:buildingId/chessboard/generate') на
+      // @Controller() без префикса, лишний /developments давал 404.
+      const response = await request.post(apiUrl(`/buildings/${buildingId}/chessboard/generate`), {
         headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
         data,
       });
@@ -175,7 +178,8 @@ export function erpApiClient(request: APIRequestContext) {
     },
 
     async batchUpdatePrices(developmentId: string, data: Record<string, unknown>) {
-      const response = await request.post(apiUrl(`/developments/${developmentId}/units/batch-prices`), {
+      // ИСПРАВЛЕНО 10.09.2026: реальный путь — batch-price-update, не batch-prices.
+      const response = await request.post(apiUrl(`/developments/${developmentId}/units/batch-price-update`), {
         headers: { 'Idempotency-Key': randomUUID(), Origin: origin },
         data,
       });
@@ -191,7 +195,8 @@ export function erpApiClient(request: APIRequestContext) {
     },
 
     async listUnits(buildingId: string) {
-      const response = await request.get(apiUrl(`/developments/buildings/${buildingId}/units?limit=50`), {
+      // ИСПРАВЛЕНО 10.09.2026: маршрут @Get('buildings/:buildingId/units'), без /developments.
+      const response = await request.get(apiUrl(`/buildings/${buildingId}/units?limit=50`), {
         headers: { Origin: origin },
       });
       return { status: response.status(), body: await response.json().catch(() => undefined) };

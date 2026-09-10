@@ -48,16 +48,20 @@ test.describe('P1-05: primary sales journey', () => {
       classType: 'comfort',
     });
     expect(devRes.status).toBe(201);
-    const devId = (devRes.body as any).id;
+    // Развития/корпуса/юниты отдаются как есть (Mongoose-документ), без DTO
+    // с явным полем id — конвенция всего этого модуля: docs/api/conventions.md
+    // "внутренние связи между сущностями — неизменяемый _id". id есть только
+    // там, где заведён явный DTO-маппер (leads, bookings, lms) — здесь его нет.
+    const devId = (devRes.body as any)._id;
     expect(devId).toBeDefined();
 
     // 3. Создание корпуса
     const bldRes = await erp.createBuilding(devId, {
       name: 'Block A',
-      floorsTotal: 5,
+      floorsCount: 5,
     });
     expect(bldRes.status).toBe(201);
-    const bldId = (bldRes.body as any).id;
+    const bldId = (bldRes.body as any)._id;
     expect(bldId).toBeDefined();
 
     // 4. Генерация шахматки (5 этажей, по 4 квартиры = 20 квартир)
@@ -71,7 +75,8 @@ test.describe('P1-05: primary sales journey', () => {
       defaultArea: 50,
       defaultPrice: { amountMinorUnits: 5000000, currency: 'USD' },
     });
-    expect(chessRes.status).toBe(200);
+    // generateChessboard — @HttpCode(201) (создаёт юниты), не 200.
+    expect(chessRes.status).toBe(201);
     expect((chessRes.body as any).generatedUnits).toBe(20);
 
     // 5. Пакетное обновление цен: наценка 10%
@@ -104,10 +109,13 @@ test.describe('P1-05: primary sales journey', () => {
       });
       if (catRes.status() === 200) {
         const catBody = await catRes.json();
-        const found = (catBody.items || []).find((item: any) => item.denormalizedFields?.name === 'Batumi Sunset Towers');
+        // public.controller.ts::toPublicCard разворачивает denormalizedFields
+        // прямо в тело карточки (name/priceFrom/slug — верхний уровень), не
+        // передаёт их как вложенный объект.
+        const found = (catBody.items || []).find((item: any) => item.name === 'Batumi Sunset Towers');
         if (found) {
           devSlug = found.slug;
-          expect(found.denormalizedFields?.priceFrom?.amountMinorUnits).toBe(5500000);
+          expect(found.priceFrom?.amountMinorUnits).toBe(5500000);
           break;
         }
       }
@@ -121,7 +129,9 @@ test.describe('P1-05: primary sales journey', () => {
       data: {
         requesterName: 'Иван Покупатель',
         requesterPhone: uniquePhone(),
-        utm: { source: 'e2e-test' },
+        // UtmDto whitelist'ит только стандартные utm_* ключи (см.
+        // crm/dto/reveal-contact.dto.ts) — 'source' там 400.
+        utm: { utm_source: 'e2e-test' },
       },
     });
     expect(revealRes.status()).toBe(200);
@@ -153,7 +163,8 @@ test.describe('P1-05: primary sales journey', () => {
       title: 'Сделка по квартире 101 — Sunset Towers',
       expectedCommission: { amountMinorUnits: 165000, currency: 'USD' },
     });
-    expect(dealRes.status).toBe(200);
+    // convertToDeal — @HttpCode(201) (создаёт Deal), матчит OpenAPI.
+    expect(dealRes.status).toBe(201);
     expect((dealRes.body as any).deal?.id || (dealRes.body as any).deal?._id || (dealRes.body as any).dealId).toBeDefined();
   });
 });
