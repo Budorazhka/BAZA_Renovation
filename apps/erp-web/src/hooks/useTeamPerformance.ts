@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { crmReportsApi, type TeamPerformanceReportResponse } from '@/services/crmReportsApi';
+import { crmReportsApi, type MoneyAmountSum, type TeamPerformanceReportResponse } from '@/services/crmReportsApi';
+import { teamApi } from '@/services/teamApi';
+import type { TeamUser } from '@/types/team';
 import type {
+  ActivityMarker,
   ActivityTimeseriesPoint,
   AnalyticsPeriod,
   DynamicKpi,
@@ -32,6 +35,25 @@ function getPeriodDates(period: AnalyticsPeriod): { from?: string; to?: string }
   return { from: fromDate.toISOString(), to };
 }
 
+/** Позиции в Mongo — 24-символьный hex ObjectId. Мок-id вида 'emp-rop-msk'
+ * (personnel-mock/MOCK_EMPLOYEES) под это не подходят — бэкенд не может их
+ * распарсить и падает 500-й. */
+const MONGO_OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+
+/**
+ * Складывает amountMinorUnits только если все записи в одной валюте — суммы в
+ * разных валютах нельзя складывать без конвертации, это не "нечестно", а
+ * математически неверно. При смешанных валютах агрегат не считаем (0, currency
+ * null) вместо того, чтобы подписать сумму валют одним произвольным кодом.
+ */
+function sumMinorUnitsIfSingleCurrency(entries: MoneyAmountSum[]): { millions: number; currency: string | null } {
+  if (entries.length === 0) return { millions: 0, currency: null };
+  const currencies = new Set(entries.map((e) => e.currency));
+  if (currencies.size > 1) return { millions: 0, currency: null };
+  const totalMinor = entries.reduce((acc, e) => acc + e.amountMinorUnits, 0);
+  return { millions: Math.round((totalMinor / 100_000_000) * 10) / 10, currency: entries[0].currency };
+}
+
 export function useTeamPerformance(
   period: AnalyticsPeriod = 'month',
   branchFilter: TeamBranchFilter = 'all',
@@ -46,20 +68,27 @@ export function useTeamPerformance(
     try {
       setLoading(true);
       setError(null);
+
+      if (positionId && !MONGO_OBJECT_ID_RE.test(positionId)) {
+        // Список сотрудников для фильтра отчёта должен приходить из
+        // team-users API (teamApi.list(), см. ниже), не из мок-данных вроде
+        // MOCK_EMPLOYEES — их id backend принять не может.
+        throw new Error('Некорректный идентификатор сотрудника — выберите сотрудника из списка команды');
+      }
+
       const { from, to } = getPeriodDates(period);
-      const report = await crmReportsApi.getTeamPerformance({
-        from,
-        to,
-        positionId: positionId && positionId !== 'all' ? positionId : undefined,
-      });
+      const [report, teamUsers] = await Promise.all([
+        crmReportsApi.getTeamPerformance({ from, to, positionId }),
+        // Реальный список сотрудников организации (то же API, что и реестр
+        // команды) — только для честных имён/аватаров вместо "Менеджер #xxxx"
+        // и заглушек ui-avatars.com. Недоступность не должна валить отчёт.
+        teamApi.list().catch(() => [] as TeamUser[]),
+      ]);
       setRawReport(report);
+      const teamUserByPositionId = new Map(teamUsers.map((u) => [u.id, u] as const));
 
       // Маппинг данных из Platform API в структуры UI
-      const revenueMinorUnits = report.summary.dealsCommission.reduce(
-        (acc, cur) => acc + cur.amountMinorUnits,
-        0,
-      );
-      const revenueMillions = Math.round((revenueMinorUnits / 100_000_000) * 10) / 10;
+      const { millions: revenueMillions } = sumMinorUnitsIfSingleCurrency(report.summary.dealsCommission);
 
       const dynamicKpi: DynamicKpi = {
         addedListings: report.summary.dealsTotal,
@@ -74,7 +103,10 @@ export function useTeamPerformance(
 
       const staticKpi: StaticKpi = {
         level1Referrals: report.positions.length,
-        totalListings: report.summary.dealsTotal,
+        // Карточка подписана "Активные задачи" (TeamReportPage.tsx) — честно
+        // считаем незавершённые задачи, а не dealsTotal (раньше тут были
+        // сделки под подписью "задачи").
+        totalListings: Math.max(0, report.summary.tasksTotal - report.summary.tasksCompleted),
         totalLeads: report.summary.leadsTotal,
         totalDeals: report.summary.dealsWon,
       };
@@ -92,22 +124,29 @@ export function useTeamPerformance(
       }));
 
       const managers: PartnerRow[] = report.positions.map((pos, idx) => {
-        const commMinor = pos.dealsCommission.reduce((acc, c) => acc + c.amountMinorUnits, 0);
-        const commUsd = Math.round((commMinor / 100) * 10) / 10;
-        const posName = pos.positionId ? `Менеджер #${pos.positionId.slice(-4)}` : 'Общий пул';
+        const teamUser = pos.positionId ? teamUserByPositionId.get(pos.positionId) : undefined;
+        const posName = teamUser?.name ?? (pos.positionId ? `Менеджер #${pos.positionId.slice(-4)}` : 'Общий пул');
+        const { millions: commUsd } = sumMinorUnitsIfSingleCurrency(pos.dealsCommission);
         const marker: 'green' | 'yellow' | 'red' =
           pos.slaPercent >= 70 ? 'green' : pos.slaPercent >= 40 ? 'yellow' : 'red';
 
         return {
           id: pos.positionId ?? `unassigned-${idx}`,
-          avatarUrl: `https://ui-avatars.com/api/?name=${encodeURIComponent(posName)}&background=14532d&color=ffffff&size=128&bold=true&format=svg`,
+          // Реальный аватар позиции, если загружен, иначе пусто — без
+          // заглушек с ui-avatars.com (ParticipantCell сама покажет инициалы).
+          avatarUrl: teamUser?.avatarUrl ?? '',
           name: posName,
-          isOnline: true,
-          lastSeenMinutesAgo: 5,
-          onlineDaysLast7: 5,
-          onlineWeekMarkers: [marker, marker, marker, marker, marker, 'green', 'green'],
-          platformMinutesToday: 120,
-          crmMinutesToday: 90,
+          // Backend не отдаёт присутствие/онлайн-телеметрию для отчёта —
+          // раньше здесь были константы (isOnline: true, "5 минут",
+          // 120/90 минут, "5 из 7 дней"). Честных данных для этих полей нет,
+          // PartnerRow/ParticipantCell не поддерживают состояние "нет данных",
+          // поэтому используем нейтральные значения, а не выдумываем цифры.
+          isOnline: false,
+          lastSeenMinutesAgo: null,
+          onlineDaysLast7: 0,
+          onlineWeekMarkers: Array(7).fill(marker) as ActivityMarker[],
+          platformMinutesToday: 0,
+          crmMinutesToday: 0,
           branch: branchFilter,
           role: 'manager',
           planPercent: pos.conversionRatePercent,
@@ -196,7 +235,9 @@ export function useTeamPerformance(
           managersCount: managers.length,
           activeManagersCount: managers.filter((m) => m.activityMarker === 'green').length,
           riskManagersCount: managers.filter((m) => m.activityMarker === 'red').length,
-          avgOnlineDaysLast7: 5,
+          // Нет присутствие-телеметрии с бэкенда (см. managers[].onlineDaysLast7
+          // выше) — честно 0, а не выдуманная константа "5 из 7".
+          avgOnlineDaysLast7: 0,
           avgPlanPercent: report.summary.conversionRatePercent,
           revenueMillions,
         },

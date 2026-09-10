@@ -195,8 +195,15 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
         { value: 'msk', label: t('teamReport.branchMsk') },
         { value: 'spb', label: t('teamReport.branchSpb') },
     ];
-    const dynamicLabels: Partial<Record<keyof DynamicKpi, string>> = {
+    const mockDynamicLabels: Partial<Record<keyof DynamicKpi, string>> = {
         addedListings: t('teamReport.newListings'), addedLeads: t('teamReport.newLeads'), callClicks: t('teamReport.calls'), chatOpens: t('teamReport.chats'), selectionsCreated: t('teamReport.selections'), deals: t('teamReport.deals'),
+    };
+    // Для живого отчёта (useTeamPerformance) поля DynamicKpi переиспользованы
+    // под другие метрики бэкенда (задачи вместо звонков/чатов, конверсии
+    // вместо рассылок) — подписи те же слова, что раньше показывали мок,
+    // но привязаны к реально приходящим полям.
+    const liveDynamicLabels: Partial<Record<keyof DynamicKpi, string>> = {
+        addedListings: 'Сделок всего', addedLeads: t('teamReport.newLeads'), callClicks: 'Задач выполнено', chatOpens: 'Задач всего', selectionsCreated: 'Лидов конвертировано', deals: t('teamReport.deals'),
     };
     const [globalPeriod, setGlobalPeriod] = useState<AnalyticsPeriod>("month");
     const [leadsPeriod, setLeadsPeriod] = useState<AnalyticsPeriod>("month");
@@ -227,11 +234,17 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
         : undefined;
     const selectedManagerPlan = selectedManager ? MOCK_KPI[selectedManager.id]?.plan ?? 0 : 0;
 
-    const { data: liveTeamData } = useTeamPerformance(
+    const {
+        data: liveTeamData,
+        rawReport: liveRawReport,
+        loading: liveTeamLoading,
+        error: liveTeamError,
+    } = useTeamPerformance(
         globalPeriod,
         branchFilter,
         isManagerMode && selectedManagerId !== ALL_MANAGERS_ID ? selectedManagerId : undefined,
     );
+    const dynamicLabels = liveTeamData ? liveDynamicLabels : mockDynamicLabels;
 
     const teamGlobalData = useMemo(
         () => getManagerAnalyticsData(globalPeriod, branchFilter),
@@ -244,6 +257,21 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
         [isAllManagersSelected, managerBaseData, selectedManager, selectedManagerPlan]
     );
     const globalData = liveTeamData ?? (isManagerMode ? managerGlobalData : teamGlobalData);
+    // Суммы комиссий по сделкам в разных валютах хук не складывает в одно
+    // число (см. sumMinorUnitsIfSingleCurrency в useTeamPerformance) — здесь
+    // подписываем итог реальным кодом валюты вместо жёстко зашитого "$",
+    // либо честно говорим, что валюты смешаны, вместо того чтобы показать
+    // сумму долларов и юаней под одним ярлыком.
+    const liveCommissionCurrencies = liveTeamData
+        ? Array.from(new Set((liveRawReport?.summary.dealsCommission ?? []).map((c) => c.currency)))
+        : [];
+    const revenueDisplay = !liveTeamData
+        ? `$${formatDecimal(globalData.summary.revenueMillions, language)}M`
+        : liveCommissionCurrencies.length > 1
+            ? t('teamReport.mixedCurrencies', 'Смешанные валюты')
+            : liveCommissionCurrencies.length === 1
+                ? `${formatDecimal(globalData.summary.revenueMillions, language)}M ${liveCommissionCurrencies[0]}`
+                : `${formatDecimal(0, language)}M`;
 
     const todayData = useMemo(() => getManagerAnalyticsData("week", branchFilter), [branchFilter]);
     const managerTodayData = useMemo(() => {
@@ -402,6 +430,17 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
                         </div>
                     </div>
 
+                    {liveTeamLoading && (
+                        <div className="rounded-lg border border-[var(--hub-card-border)] bg-[var(--hub-card-bg)] px-4 py-2 text-sm text-[color:var(--workspace-text-muted)]">
+                            Загружаем актуальные показатели команды…
+                        </div>
+                    )}
+                    {!liveTeamLoading && liveTeamError && (
+                        <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-300">
+                            <AlertTriangle className="size-4 shrink-0" />
+                            Не удалось загрузить актуальные показатели команды: {liveTeamError}. Ниже — демонстрационные данные, не показатели вашей команды.
+                        </div>
+                    )}
 
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                         <SummaryTile
@@ -418,7 +457,7 @@ export function TeamAnalyticsReport({ mode = "team" }: TeamAnalyticsReportProps)
                         <SummaryTile
                             icon={TrendingUp}
                             label={t("teamReport.revenue")}
-                            value={`$${formatDecimal(globalData.summary.revenueMillions, language)}M`}
+                            value={revenueDisplay}
                             meta={`${t("teamReport.averagePlan")} ${globalData.summary.avgPlanPercent}%`}
                             tone="bg-amber-500/10 text-amber-300"
                         />
