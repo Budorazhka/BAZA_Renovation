@@ -134,7 +134,13 @@ describe('Авторизация и доступ в кабинет', () => {
     fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'secretPassword123' } })
     fireEvent.click(screen.getByTestId('auth-submit-btn'))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: /Мои объекты/ })).toBeTruthy())
+    // ИСПРАВЛЕНО 10.09.2026: дефолтный таймаут waitFor (1с) периодически не
+    // успевал на CI-раннере — между кликом и рендером кабинета несколько
+    // асинхронных шагов подряд (checkSession → login → редирект →
+    // монтирование страницы), локально укладывается в 1с почти всегда, на
+    // медленном/загруженном раннере — не всегда. Флейк подтверждён дважды
+    // подряд в CI при 100% зелёном прогоне локально.
+    await waitFor(() => expect(screen.getByRole('heading', { name: /Мои объекты/ })).toBeTruthy(), { timeout: 5000 })
     // И остаётся там: форма входа не возвращается.
     expect(screen.queryByTestId('auth-page')).toBeNull()
   })
@@ -201,7 +207,13 @@ describe('Авторизация и доступ в кабинет', () => {
     fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'secretPassword123' } })
     fireEvent.click(screen.getByTestId('auth-submit-btn'))
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: /Мои объекты/ })).toBeTruthy())
+    // ИСПРАВЛЕНО 10.09.2026: дефолтный таймаут waitFor (1с) периодически не
+    // успевал на CI-раннере — между кликом и рендером кабинета несколько
+    // асинхронных шагов подряд (checkSession → login → редирект →
+    // монтирование страницы), локально укладывается в 1с почти всегда, на
+    // медленном/загруженном раннере — не всегда. Флейк подтверждён дважды
+    // подряд в CI при 100% зелёном прогоне локально.
+    await waitFor(() => expect(screen.getByRole('heading', { name: /Мои объекты/ })).toBeTruthy(), { timeout: 5000 })
 
     // Ровно два обращения: проверка при загрузке страницы и перепроверка после
     // входа. Третьего, от смонтировавшегося RequireAuth, быть не должно —
