@@ -731,6 +731,7 @@ export class BookingsService {
     organizationId: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     managerPositionId: Types.ObjectId;
+    requiredManagerPositionId?: Types.ObjectId;
     title?: string;
     contactId?: Types.ObjectId;
     dealType?: 'primary' | 'secondary' | 'rental' | 'assignment';
@@ -762,7 +763,17 @@ export class BookingsService {
       return { replay: earlyReplay };
     }
 
-    const booking = await this.bookingRepository.findByIdForOrganization(params.bookingId, params.organizationId);
+    // ИСПРАВЛЕНО 10.09.2026: раньше читалось через findByIdForOrganization
+    // (весь tenant, без учёта own-scope) — manager с booking.confirm.own (не
+    // organization/global) мог конвертировать в сделку ЧУЖУЮ бронь, хотя
+    // само 'подтвердить'/'продлить' её ему недоступно. requiredManagerPositionId
+    // — тот же own-scope filter, что confirmBooking (booking.confirm scope,
+    // ближайший по семантике "завершение жизненного цикла своей брони").
+    const booking = await this.bookingRepository.findByIdForOrganizationOwned(
+      params.bookingId,
+      params.organizationId,
+      params.requiredManagerPositionId,
+    );
     if (!booking) {
       throw new AppException(ErrorCode.BOOKING_NOT_FOUND, 'Booking not found');
     }
@@ -818,6 +829,7 @@ export class BookingsService {
         const { modifiedCount } = await this.bookingRepository.markPaidIfActive(
           params.bookingId,
           params.organizationId,
+          params.requiredManagerPositionId,
           session,
         );
         if (modifiedCount === 0) {

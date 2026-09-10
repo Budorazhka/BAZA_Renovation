@@ -222,14 +222,26 @@ export class BookingRepository {
   /**
    * booking.convert_to_deal — перевод активной брони в статус paid при закрытии сделки.
    */
+  /**
+   * managerPositionId — тот же own-scope filter, что confirmIfPending выше:
+   * ИСПРАВЛЕНО 10.09.2026, второй слой защиты на случай гонки между
+   * findByIdForOrganizationOwned (non-disclosure lookup в сервисе) и этой
+   * записью, не единственная защита.
+   */
   async markPaidIfActive(
     bookingId: Types.ObjectId,
     organizationId: Types.ObjectId,
+    managerPositionId: Types.ObjectId | undefined,
     session: ClientSession,
   ): Promise<{ modifiedCount: number }> {
     const result = await this.model
       .updateOne(
-        { _id: bookingId, organizationId, status: { $in: ['pending', 'booked'] as BookingStatus[] } },
+        {
+          _id: bookingId,
+          organizationId,
+          status: { $in: ['pending', 'booked'] as BookingStatus[] },
+          ...(managerPositionId ? { manager: managerPositionId } : {}),
+        },
         { $set: { status: 'paid' as BookingStatus } },
       )
       .session(session)

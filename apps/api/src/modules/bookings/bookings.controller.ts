@@ -236,6 +236,14 @@ export class BookingsController {
 
   /**
    * booking.convert_to_deal — закрытие брони и создание сделки в CRM.
+   *
+   * ИСПРАВЛЕНО 10.09.2026: гейт был только @RequirePermission('deal',
+   * 'create') — совсем другой ресурс, не 'booking'. Manager с
+   * booking.confirm.own (own-scope, не organization/global) мог
+   * конвертировать в сделку ЧУЖУЮ бронь, хотя confirm/cancel/extend её ему
+   * недоступны. ownerFilterForAction('confirm') — тот же own-scope filter,
+   * что уже применяется к confirmBooking, переиспользован здесь как
+   * ближайшая по семантике проверка "своя ли эта бронь".
    */
   @Post('bookings/:bookingId/convert-to-deal')
   @HttpCode(201)
@@ -279,6 +287,7 @@ export class BookingsController {
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       actorIdentityId,
       managerPositionId: new Types.ObjectId(tenantContext.positionId),
+      requiredManagerPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'confirm'),
       title: dto.title,
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       dealType: dto.dealType,

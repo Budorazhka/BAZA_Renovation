@@ -858,7 +858,11 @@ describe('BookingsService.convertToDeal', () => {
 
     const service = makeService({
       bookingRepository: {
-        findByIdForOrganization: jest.fn().mockResolvedValue(booking).mockResolvedValueOnce(booking).mockResolvedValueOnce(paidBooking),
+        // findByIdForOrganizationOwned — предварительная own-scope проверка;
+        // findByIdForOrganization — повторное чтение ПОСЛЕ записи (paid), уже
+        // не нуждается в own-scope фильтре, доступ подтверждён выше.
+        findByIdForOrganizationOwned: jest.fn().mockResolvedValue(booking),
+        findByIdForOrganization: jest.fn().mockResolvedValue(paidBooking),
         markPaidIfActive: markPaidSpy,
       } as never,
       developmentsService: {
@@ -881,7 +885,7 @@ describe('BookingsService.convertToDeal', () => {
       expect(result.booking.status).toBe('paid');
       expect(result.deal).toBe(deal);
     }
-    expect(markPaidSpy).toHaveBeenCalledWith(bookingId, organizationId, expect.anything());
+    expect(markPaidSpy).toHaveBeenCalledWith(bookingId, organizationId, undefined, expect.anything());
     expect(updateUnitStatusSpy).toHaveBeenCalledWith(
       unitId,
       organizationId,
@@ -919,7 +923,7 @@ describe('BookingsService.convertToDeal', () => {
 
   it('бросает BOOKING_NOT_FOUND если бронь не найдена', async () => {
     const service = makeService({
-      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(null) } as never,
+      bookingRepository: { findByIdForOrganizationOwned: jest.fn().mockResolvedValue(null) } as never,
     });
 
     await expect(service.convertToDeal(params())).rejects.toMatchObject({
@@ -935,7 +939,7 @@ describe('BookingsService.convertToDeal', () => {
       status: 'rejected',
     };
     const service = makeService({
-      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+      bookingRepository: { findByIdForOrganizationOwned: jest.fn().mockResolvedValue(booking) } as never,
     });
 
     await expect(service.convertToDeal(params())).rejects.toMatchObject({
@@ -951,7 +955,7 @@ describe('BookingsService.convertToDeal', () => {
       status: 'booked',
     };
     const service = makeService({
-      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+      bookingRepository: { findByIdForOrganizationOwned: jest.fn().mockResolvedValue(booking) } as never,
       developmentsService: {
         getUnitForOrganization: jest.fn().mockResolvedValue({ _id: unitId, status: 'sold' }),
       } as never,
@@ -971,7 +975,7 @@ describe('BookingsService.convertToDeal', () => {
       dateRange: { startsAt: new Date(Date.now() - 100000), expiresAt: new Date(Date.now() - 1000) },
     };
     const service = makeService({
-      bookingRepository: { findByIdForOrganization: jest.fn().mockResolvedValue(booking) } as never,
+      bookingRepository: { findByIdForOrganizationOwned: jest.fn().mockResolvedValue(booking) } as never,
     });
 
     await expect(service.convertToDeal(params())).rejects.toMatchObject({
