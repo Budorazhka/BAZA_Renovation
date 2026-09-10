@@ -231,6 +231,7 @@ export function TrustIndex({ value, size = 'sm' }: { value: number; size?: 'sm' 
 function LeftRail({ active }: { active: string }) {
     const { t } = useI18n();
   const navigate = useNavigate()
+  const { currentUser } = useAuth()
   const [sections, setSections] = useState<ForumSection[]>([])
   const [me, setMe] = useState<ForumMember | null>(null)
 
@@ -239,7 +240,7 @@ function LeftRail({ active }: { active: string }) {
     const load = async () => {
       const [s, member] = await Promise.all([
         communityApi.getSections(),
-        communityApi.getCurrentUser(),
+        communityApi.getCurrentUser(currentUser?.id),
       ])
       if (!cancelled) {
         setSections(s)
@@ -248,7 +249,7 @@ function LeftRail({ active }: { active: string }) {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [currentUser?.id])
 
   const railItems = useMemo(() => {
     const items: Array<{ key: string; label: string; icon: ReactNode; route: string; group?: string; showGroupHeader?: boolean }> = [
@@ -362,18 +363,22 @@ export function ForumRightRail() {
 
   return (
     <div className="flex flex-col gap-3">
-      <RailPanel title={t('community.forum.forumKit.сейчас_обсуждают')}>
-        {loading ? renderSkeleton(5) : (
-          <ul className="flex flex-col">
-            {tags.map((t, i) => (
-              <li key={t.tag} className="flex items-center justify-between py-1.5 text-[16px]" style={{ borderTop: i ? ROW_DIVIDER : 'none' }}>
-                <span style={{ color: 'var(--workspace-text-muted)' }}>#{t.tag}</span>
-                <span style={{ color: GOLD }}>{t.count}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </RailPanel>
+      {/* /community/tags/trending не реализован на бэкенде — communityApi.getTrendingTags
+          честно возвращает пусто, без сети; блок скрываем, а не подменяем моком. */}
+      {(loading || tags.length > 0) && (
+        <RailPanel title={t('community.forum.forumKit.сейчас_обсуждают')}>
+          {loading ? renderSkeleton(5) : (
+            <ul className="flex flex-col">
+              {tags.map((t, i) => (
+                <li key={t.tag} className="flex items-center justify-between py-1.5 text-[16px]" style={{ borderTop: i ? ROW_DIVIDER : 'none' }}>
+                  <span style={{ color: 'var(--workspace-text-muted)' }}>#{t.tag}</span>
+                  <span style={{ color: GOLD }}>{t.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </RailPanel>
+      )}
 
       <RailPanel title={t('community.forum.forumKit.ближайшие_события')}>
         {loading ? renderSkeleton(3) : (

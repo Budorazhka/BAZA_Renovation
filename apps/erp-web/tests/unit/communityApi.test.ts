@@ -55,13 +55,10 @@ describe('communityApi service client', () => {
   it('getSections() вызывает GET /api/v1/community/sections', async () => {
     const { communityApi } = await import('@/services/communityApi');
     const mockSections = [{ id: 'market', name: 'Аналитика' }];
-    // First call checks availability, second call executes
-    getMock
-      .mockResolvedValueOnce({ status: 200, data: { success: true } })
-      .mockResolvedValueOnce({ data: { success: true, data: { sections: mockSections, groups: [] } } });
+    getMock.mockResolvedValueOnce({ data: { success: true, data: { sections: mockSections, groups: [] } } });
 
     const result = await communityApi.getSections();
-    expect(getMock).toHaveBeenCalledWith('/api/v1/community/sections', expect.anything());
+    expect(getMock).toHaveBeenCalledWith('/api/v1/community/sections');
     expect(result).toEqual(mockSections);
   });
 
@@ -74,7 +71,6 @@ describe('communityApi service client', () => {
       body: 'Текст обсуждения',
     };
     const created = { id: 't-1', ...payload };
-    getMock.mockResolvedValueOnce({ status: 200, data: { success: true } });
     postMock.mockResolvedValueOnce({ data: { success: true, data: created } });
 
     const result = await communityApi.createThread(payload, 'custom-idem-1');
@@ -91,7 +87,6 @@ describe('communityApi service client', () => {
   it('createReply() отправляет POST /api/v1/community/threads/:id/replies с Idempotency-Key', async () => {
     const { communityApi } = await import('@/services/communityApi');
     const created = { id: 'r-1', threadId: 't-1', body: 'Ответ' };
-    getMock.mockResolvedValueOnce({ status: 200, data: { success: true } });
     postMock.mockResolvedValueOnce({ data: { success: true, data: created } });
 
     const result = await communityApi.createReply('t-1', 'Ответ', 'custom-idem-reply');
@@ -107,7 +102,6 @@ describe('communityApi service client', () => {
 
   it('updateExchangeStatus() вызывает PATCH /api/v1/community/exchange/:id/status', async () => {
     const { communityApi } = await import('@/services/communityApi');
-    getMock.mockResolvedValueOnce({ status: 200, data: { success: true } });
     patchMock.mockResolvedValueOnce({
       data: { success: true, data: { exchange: { status: 'closed' } } },
     });
@@ -122,7 +116,6 @@ describe('communityApi service client', () => {
 
   it('registerForEvent() вызывает POST /api/v1/community/events/:id/attend', async () => {
     const { communityApi } = await import('@/services/communityApi');
-    getMock.mockResolvedValueOnce({ status: 200, data: { success: true } });
     postMock.mockResolvedValueOnce({
       data: { success: true, data: { attending: true, attendeeCount: 15 } },
     });

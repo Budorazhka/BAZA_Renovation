@@ -1,12 +1,6 @@
 import axios from 'axios';
 import { PLATFORM_API_BASE_URL } from '@/config/backend';
 import {
-  EVENTS,
-  MEMBERS,
-  REPLIES,
-  SECTIONS,
-  THREADS,
-  TRENDING_TAGS,
   type ExchangeIntent,
   type ExchangeSide,
   type ExchangeStatus,
@@ -50,28 +44,23 @@ export interface PaginatedData<T> {
   hasMore: boolean;
 }
 
-// ─── API availability cache ───────────────────────────────────────────────────
-// Once we confirm the API is available, never fall back to mocks again.
-
-let _apiAvailable: boolean | null = null;
-
-async function checkApiAvailable(): Promise<boolean> {
-  if (_apiAvailable !== null) return _apiAvailable;
-  try {
-    const resp = await api.get('/api/v1/community/sections', { timeout: 5000 });
-    _apiAvailable = resp.status >= 200 && resp.status < 300;
-  } catch {
-    _apiAvailable = false;
-  }
-  return _apiAvailable;
+function emptyPage<T>(page?: number, pageSize?: number): PaginatedData<T> {
+  return { items: [], total: 0, page: page ?? 1, pageSize: pageSize ?? 20, hasMore: false };
 }
 
-async function withFallback<T>(apiCall: () => Promise<T>, fallback: T): Promise<T> {
-  const available = await checkApiAvailable();
-  if (!available) return fallback;
+// ─── Чтение: реальный вызов, честный пустой результат при ошибке ──────────────
+// В отличие от мутаций (см. ниже), для чтения допустимо показать "нет данных"
+// вместо падения экрана — но НЕ моки, выдаваемые за реальные данные. Раньше
+// здесь был общий withFallback с постоянным кэшем "API доступен/недоступен",
+// который после первой ошибки (в т.ч. 400 из-за расхождения параметров с
+// бэкендом) навсегда переключал ВСЕ вызовы, включая мутации, на локальные
+// моки — пользователь видел "опубликовано", а данные не сохранялись.
+
+async function safeGet<T>(request: () => Promise<T>, fallback: T, context: string): Promise<T> {
   try {
-    return await apiCall();
-  } catch {
+    return await request();
+  } catch (error) {
+    console.warn(`[community] ${context}: не удалось загрузить, показываю пустое состояние`, error);
     return fallback;
   }
 }
@@ -87,11 +76,13 @@ function paginate<T>(items: T[], page: number, pageSize: number): PaginatedData<
   };
 }
 
-// ─── Sections ─────────────────────────────────────────────────────────────────
+// ─── API ────────────────────────────────────────────────────────────────────
 
 export const communityApi = {
+  // ─── Разделы ────────────────────────────────────────────────────────────────
+
   getSections: () =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<{ sections: ForumSection[]; groups: unknown[] } | ForumSection[]>>(
@@ -101,37 +92,42 @@ export const communityApi = {
             const data = r.data.data;
             if (Array.isArray(data)) return data;
             if (data && 'sections' in data && Array.isArray(data.sections)) return data.sections;
-            return SECTIONS;
+            return [];
           }),
-      SECTIONS,
-    ).then((s) => (Array.isArray(s) ? s : SECTIONS)),
+      [] as ForumSection[],
+      'getSections',
+    ),
 
   getSectionById: (id: string) =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<ForumSection>>(`/api/v1/community/sections/${id}`)
           .then((r) => r.data.data),
-      SECTIONS.find((s) => s.id === id) ?? null,
+      null as ForumSection | null,
+      'getSectionById',
     ),
 
-  // ─── Threads ────────────────────────────────────────────────────────────────
+  // ─── Темы (треды) ────────────────────────────────────────────────────────────
 
   getThreads: (params?: {
     section?: string;
     type?: ThreadType;
-    authorId?: string;
     search?: string;
     sort?: 'active' | 'new' | 'unanswered';
     page?: number;
     pageSize?: number;
   }) =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+            // Бэкенд (ListCommunityThreadsQueryDto) ждёт `section`, не `sectionId` —
+            // раньше здесь уходил `sectionId`, ValidationPipe с
+            // forbidNonWhitelisted отклонял его 400-й, и любое чтение тредов
+            // уходило в fallback.
             params: {
-              sectionId: params?.section,
+              section: params?.section,
               type: params?.type,
               search: params?.search,
               sort: params?.sort,
@@ -140,32 +136,25 @@ export const communityApi = {
             },
           })
           .then((r) => r.data.data),
-      (() => {
-        let items = [...THREADS];
-        if (params?.section) items = items.filter((t) => t.sectionId === params.section);
-        if (params?.type) items = items.filter((t) => t.type === params.type);
-        if (params?.authorId) items = items.filter((t) => t.authorId === params.authorId);
-        if (params?.search) {
-          const q = params.search.toLowerCase();
-          items = items.filter(
-            (t) => t.title.toLowerCase().includes(q) || t.excerpt.toLowerCase().includes(q),
-          );
-        }
-        // pinned first
-        items.sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
-        if (params?.sort === 'unanswered') items = items.filter((t) => t.replyCount === 0);
-        return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
-      })(),
+      emptyPage<ForumThread>(params?.page, params?.pageSize),
+      'getThreads',
     ),
 
   getThreadById: (id: string) =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`)
           .then((r) => r.data.data),
-      THREADS.find((t) => t.id === id) ?? null,
+      null as ForumThread | null,
+      'getThreadById',
     ),
+
+  // ─── Мутации: без отката на моки — ошибка должна долететь до UI ────────────
+  // Раньше withFallback на любой ошибке (в т.ч. неверные query-параметры) тихо
+  // возвращал "оптимистичный" локальный мок, будто запись прошла, и мутировал
+  // общий модульный THREADS/REPLIES массив — пользователь видел "опубликовано",
+  // а на сервере ничего не было. Теперь ошибка пробрасывается вызывающему коду.
 
   createThread: (
     data: {
@@ -186,233 +175,97 @@ export const communityApi = {
     },
     idempotencyKey?: string,
   ) =>
-    withFallback(
-      () =>
-        api
-          .post<ApiResponse<ForumThread>>('/api/v1/community/threads', data, {
-            headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() },
-          })
-          .then((r) => r.data.data),
-      // Optimistic mock — return a local thread
-      (() => {
-        const newThread: ForumThread = {
-          id: `t${Date.now()}`,
-          type: data.type,
-          sectionId: data.sectionId,
-          title: data.title,
-          excerpt: data.body.slice(0, 200),
-          authorId: 'm5', // ME_ID
-          createdAgo: 'только что',
-          lastActiveAgo: 'только что',
-          views: 0,
-          reactions: 0,
-          replyCount: 0,
-          tags: data.tags ?? [],
-          exchange: data.exchange
-            ? {
-                ...data.exchange,
-                status: 'open' as ExchangeStatus,
-              }
-            : undefined,
-        };
-        THREADS.unshift(newThread);
-        return newThread;
-      })(),
-    ),
+    api
+      .post<ApiResponse<ForumThread>>('/api/v1/community/threads', data, {
+        headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() },
+      })
+      .then((r) => r.data.data),
 
   updateThread: (id: string, data: Partial<Pick<ForumThread, 'title' | 'pinned' | 'solved'>>) =>
-    withFallback(
-      () =>
-        api
-          .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`, data)
-          .then((r) => r.data.data),
-      (() => {
-        const t = THREADS.find((t) => t.id === id);
-        if (t) Object.assign(t, data);
-        return t ?? null;
-      })(),
-    ),
+    api
+      .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`, data)
+      .then((r) => r.data.data),
 
   deleteThread: (id: string) =>
-    withFallback(
-      () =>
-        api
-          .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/threads/${id}`)
-          .then((r) => r.data.data),
-      (() => {
-        const idx = THREADS.findIndex((t) => t.id === id);
-        if (idx !== -1) THREADS.splice(idx, 1);
-        return { success: true };
-      })(),
-    ),
+    api
+      .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/threads/${id}`)
+      .then((r) => r.data.data),
 
   pinThread: (id: string, pinned: boolean) =>
-    withFallback(
-      () =>
-        api
-          .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}/pin`, { pinned })
-          .then((r) => r.data.data),
-      (() => {
-        const t = THREADS.find((t) => t.id === id);
-        if (t) t.pinned = pinned;
-        return t ?? null;
-      })(),
-    ),
+    api
+      .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}/pin`, { pinned })
+      .then((r) => r.data.data),
 
-  // ─── Replies ────────────────────────────────────────────────────────────────
+  // ─── Ответы ──────────────────────────────────────────────────────────────────
 
   getReplies: (threadId: string, params?: { page?: number; pageSize?: number; sort?: string }) =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<PaginatedData<ForumReply>>>(`/api/v1/community/threads/${threadId}/replies`, { params })
           .then((r) => r.data.data),
-      (() => {
-        let items = REPLIES.filter((r) => r.threadId === threadId);
-        if (params?.sort === 'best_first') {
-          items = [...items].sort((a, b) => Number(Boolean(b.isBest)) - Number(Boolean(a.isBest)));
-        }
-        return paginate(items, params?.page ?? 1, params?.pageSize ?? 50);
-      })(),
+      emptyPage<ForumReply>(params?.page, params?.pageSize),
+      'getReplies',
     ),
 
   createReply: (threadId: string, body: string, idempotencyKey?: string) =>
-    withFallback(
-      () =>
-        api
-          .post<ApiResponse<ForumReply>>(
-            `/api/v1/community/threads/${threadId}/replies`,
-            { body },
-            { headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() } },
-          )
-          .then((r) => r.data.data),
-      (() => {
-        const reply: ForumReply = {
-          id: `r${Date.now()}`,
-          threadId,
-          authorId: 'm5',
-          createdAgo: 'только что',
-          reactions: 0,
-          body,
-        };
-        REPLIES.push(reply);
-        const thread = THREADS.find((t) => t.id === threadId);
-        if (thread) thread.replyCount++;
-        return reply;
-      })(),
-    ),
+    api
+      .post<ApiResponse<ForumReply>>(
+        `/api/v1/community/threads/${threadId}/replies`,
+        { body },
+        { headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() } },
+      )
+      .then((r) => r.data.data),
 
   updateReply: (id: string, body: string) =>
-    withFallback(
-      () =>
-        api
-          .patch<ApiResponse<ForumReply>>(`/api/v1/community/replies/${id}`, { body })
-          .then((r) => r.data.data),
-      (() => {
-        const r = REPLIES.find((r) => r.id === id);
-        if (r) r.body = body;
-        return r ?? null;
-      })(),
-    ),
+    api
+      .patch<ApiResponse<ForumReply>>(`/api/v1/community/replies/${id}`, { body })
+      .then((r) => r.data.data),
 
   deleteReply: (id: string) =>
-    withFallback(
-      () =>
-        api
-          .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/replies/${id}`)
-          .then((r) => r.data.data),
-      (() => {
-        const idx = REPLIES.findIndex((r) => r.id === id);
-        if (idx !== -1) {
-          const reply = REPLIES[idx];
-          const thread = THREADS.find((t) => t.id === reply.threadId);
-          if (thread) thread.replyCount--;
-          REPLIES.splice(idx, 1);
-        }
-        return { success: true };
-      })(),
-    ),
+    api
+      .delete<ApiResponse<{ success: boolean }>>(`/api/v1/community/replies/${id}`)
+      .then((r) => r.data.data),
 
   setBestReply: (threadId: string, replyId: string) =>
-    withFallback(
-      () =>
-        api
-          .patch<ApiResponse<ForumReply>>(
-            `/api/v1/community/replies/${replyId}/accept`,
-            { threadId },
-          )
-          .then((r) => {
-            const reply = r.data.data;
-            return {
-              replyId,
-              isBest: reply?.isBest ?? true,
-              threadSolved: true,
-            };
-          }),
-      (() => {
-        const thread = THREADS.find((t) => t.id === threadId);
-        const replies = REPLIES.filter((r) => r.threadId === threadId);
-        const target = replies.find((r) => r.id === replyId);
-        if (!target) return { replyId, isBest: false, threadSolved: false };
+    api
+      .patch<ApiResponse<ForumReply>>(`/api/v1/community/replies/${replyId}/accept`, { threadId })
+      .then((r) => {
+        const reply = r.data.data;
+        return {
+          replyId,
+          isBest: reply?.isBest ?? true,
+          threadSolved: true,
+        };
+      }),
 
-        const wasBest = target.isBest;
-        // Reset all
-        replies.forEach((r) => (r.isBest = false));
-        if (!wasBest) {
-          target.isBest = true;
-          if (thread) thread.solved = true;
-        } else {
-          if (thread) thread.solved = false;
-        }
-        return { replyId, isBest: !wasBest, threadSolved: !wasBest };
-      })(),
-    ),
-
-  // ─── Reactions ──────────────────────────────────────────────────────────────
+  // ─── Реакции ────────────────────────────────────────────────────────────────
 
   toggleThreadReaction: (threadId: string) =>
-    withFallback(
-      () =>
-        api
-          .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
-            `/api/v1/community/threads/${threadId}/like`,
-          )
-          .then((r) => {
-            const data = r.data.data;
-            const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
-            const reacted = data?.reacted ?? data?.hasLiked ?? false;
-            return { reacted, reactionCount };
-          }),
-      (() => {
-        const t = THREADS.find((t) => t.id === threadId);
-        if (!t) return { reacted: false, reactionCount: 0 };
-        t.reactions++;
-        return { reacted: true, reactionCount: t.reactions };
-      })(),
-    ),
+    api
+      .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
+        `/api/v1/community/threads/${threadId}/like`,
+      )
+      .then((r) => {
+        const data = r.data.data;
+        const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
+        const reacted = data?.reacted ?? data?.hasLiked ?? false;
+        return { reacted, reactionCount };
+      }),
 
   toggleReplyReaction: (replyId: string) =>
-    withFallback(
-      () =>
-        api
-          .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
-            `/api/v1/community/replies/${replyId}/like`,
-          )
-          .then((r) => {
-            const data = r.data.data;
-            const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
-            const reacted = data?.reacted ?? data?.hasLiked ?? false;
-            return { reacted, reactionCount };
-          }),
-      (() => {
-        const r = REPLIES.find((r) => r.id === replyId);
-        if (!r) return { reacted: false, reactionCount: 0 };
-        r.reactions++;
-        return { reacted: true, reactionCount: r.reactions };
-      })(),
-    ),
+    api
+      .post<ApiResponse<{ reacted?: boolean; hasLiked?: boolean; reactions?: number; reactionCount?: number }>>(
+        `/api/v1/community/replies/${replyId}/like`,
+      )
+      .then((r) => {
+        const data = r.data.data;
+        const reactionCount = data?.reactionCount ?? data?.reactions ?? 0;
+        const reacted = data?.reacted ?? data?.hasLiked ?? false;
+        return { reacted, reactionCount };
+      }),
 
-  // ─── Members ────────────────────────────────────────────────────────────────
+  // ─── Участники ──────────────────────────────────────────────────────────────
 
   getMembers: (params?: {
     sort?: 'trust' | 'activity' | 'reactions' | 'joined';
@@ -423,236 +276,189 @@ export const communityApi = {
     page?: number;
     pageSize?: number;
   }) =>
-    withFallback(
+    safeGet(
       () =>
-        api
-          .get<ApiResponse<ForumMember[]>>('/api/v1/community/leaderboard')
-          .then((r) => paginate(r.data.data, params?.page ?? 1, params?.pageSize ?? 20)),
-      (() => {
-        let items = [...MEMBERS];
-        if (params?.segment) items = items.filter((m) => m.segment === params.segment);
-        if (params?.role) items = items.filter((m) => m.role === params.role);
-        if (params?.search) {
-          const q = params.search.toLowerCase();
-          items = items.filter((m) => m.name.toLowerCase().includes(q));
-        }
-        if (params?.sort === 'trust') items.sort((a, b) => b.trustIndex - a.trustIndex);
-        else if (params?.sort === 'reactions') items.sort((a, b) => b.reactionsReceived - a.reactionsReceived);
-        else items.sort((a, b) => b.trustIndex - a.trustIndex);
-        return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
-      })(),
+        api.get<ApiResponse<ForumMember[]>>('/api/v1/community/leaderboard').then((r) => {
+          let items = Array.isArray(r.data.data) ? [...r.data.data] : [];
+          if (params?.segment) items = items.filter((m) => m.segment === params.segment);
+          if (params?.role) items = items.filter((m) => m.role === params.role);
+          if (params?.search) {
+            const q = params.search.toLowerCase();
+            items = items.filter((m) => m.name.toLowerCase().includes(q));
+          }
+          if (params?.sort === 'trust') items.sort((a, b) => b.trustIndex - a.trustIndex);
+          else if (params?.sort === 'reactions') items.sort((a, b) => b.reactionsReceived - a.reactionsReceived);
+          return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
+        }),
+      emptyPage<ForumMember>(params?.page, params?.pageSize),
+      'getMembers',
     ),
 
   getMemberById: (id: string) =>
-    withFallback(
+    safeGet(
       () =>
-        api.get<ApiResponse<ForumMember>>(`/api/v1/community/leaderboard`).then((r) => {
-          const members = r.data.data as unknown as ForumMember[];
-          return members.find((m) => m.id === id) ?? MEMBERS.find((m) => m.id === id) ?? null;
+        api.get<ApiResponse<ForumMember[]>>('/api/v1/community/leaderboard').then((r) => {
+          const members = Array.isArray(r.data.data) ? r.data.data : [];
+          return members.find((m) => m.id === id) ?? null;
         }),
-      MEMBERS.find((m) => m.id === id) ?? null,
+      null as ForumMember | null,
+      'getMemberById',
     ),
 
   getMemberThreads: (memberId: string, params?: { page?: number; pageSize?: number }) =>
-    withFallback(
+    safeGet(
       () =>
         api
           .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
-            params: { authorIdentityId: memberId, ...params },
+            // Бэкенд не умеет фильтровать треды по автору (ListCommunityThreadsQueryDto
+            // такого поля не знает) — тянем более широкую страницу реальных
+            // тредов и фильтруем на клиенте, а не подставляем локальный мок.
+            params: { pageSize: 200 },
           })
-          .then((r) => r.data.data),
-      (() => {
-        const items = THREADS.filter((t) => t.authorId === memberId);
-        return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
-      })(),
+          .then((r) => {
+            const items = (r.data.data?.items ?? []).filter((t) => t.authorId === memberId);
+            return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
+          }),
+      emptyPage<ForumThread>(params?.page, params?.pageSize),
+      'getMemberThreads',
     ),
 
-  // ─── Events ─────────────────────────────────────────────────────────────────
+  // ─── Мероприятия ────────────────────────────────────────────────────────────
 
-  getEvents: (params?: { status?: 'planned' | 'done'; format?: 'online' | 'offline' }) =>
-    withFallback(
+  getEvents: (params?: { format?: 'online' | 'offline' }) =>
+    safeGet(
       () =>
         api
-          .get<ApiResponse<{ items: ForumEvent[]; total: number } | ForumEvent[]>>(
-            '/api/v1/community/events',
-            { params },
-          )
+          .get<ApiResponse<{ items: ForumEvent[]; total: number } | ForumEvent[]>>('/api/v1/community/events')
           .then((r) => {
             const data = r.data.data;
-            if (Array.isArray(data)) return data;
-            if (data && 'items' in data && Array.isArray(data.items)) return data.items;
-            return EVENTS;
+            let items: ForumEvent[] = Array.isArray(data)
+              ? data
+              : data && 'items' in data && Array.isArray(data.items)
+                ? data.items
+                : [];
+            // ListCommunityEventsQueryDto не знает ни `status`, ни `format` —
+            // фильтруем на клиенте по полю, которое реально есть в ForumEvent.
+            if (params?.format) items = items.filter((e) => e.format === params.format);
+            return items;
           }),
-      (() => {
-        const items = [...EVENTS];
-        return items;
-      })(),
-    ).then((e) => (Array.isArray(e) ? e : [])),
-
-  registerForEvent: (eventId: string) =>
-    withFallback(
-      () =>
-        api
-          .post<ApiResponse<{ attending: boolean; attendeeCount: number }>>(
-            `/api/v1/community/events/${eventId}/attend`,
-          )
-          .then((r) => ({
-            registered: r.data.data.attending,
-            attendees: r.data.data.attendeeCount,
-          })),
-      { registered: true, attendees: 0 },
+      [] as ForumEvent[],
+      'getEvents',
     ),
 
-  // ─── Tags ───────────────────────────────────────────────────────────────────
+  registerForEvent: (eventId: string) =>
+    api
+      .post<ApiResponse<{ attending: boolean; attendeeCount: number }>>(`/api/v1/community/events/${eventId}/attend`)
+      .then((r) => ({
+        registered: r.data.data.attending,
+        attendees: r.data.data.attendeeCount,
+      })),
 
-  getTrendingTags: (limit = 5) =>
-    withFallback(
-      () =>
-        api
-          .get<ApiResponse<Array<{ tag: string; count: number }>>>('/api/v1/community/tags/trending', {
-            params: { limit },
-          })
-          .then((r) => r.data.data),
-      TRENDING_TAGS.slice(0, limit),
-    ).then((t) => (Array.isArray(t) ? t : [])),
+  // ─── Теги ───────────────────────────────────────────────────────────────────
 
-  // ─── Exchange ───────────────────────────────────────────────────────────────
+  getTrendingTags: (_limit = 5) => {
+    // /api/v1/community/tags/trending не существует в community.controller.ts
+    // на бэкенде — раньше 404 тихо подменялся константными тегами из мока.
+    // Честно возвращаем пусто, ничего не запрашивая.
+    return Promise.resolve([] as Array<{ tag: string; count: number }>);
+  },
+
+  // ─── Биржа ──────────────────────────────────────────────────────────────────
 
   getExchangeBoard: (params?: {
     intentGroup?: 'sale' | 'rent' | 'cobroking' | 'service';
     side?: ExchangeSide;
   }) =>
-    withFallback(
+    safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>(
-            '/api/v1/community/exchange',
-            { params },
-          )
+          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/exchange', {
+            // Бэкенд знает `exchangeSide`/`exchangeIntent`, а не `side`/`intentGroup` —
+            // `intentGroup` (группа из нескольких intent) на бэкенде не
+            // существует вовсе, группируем на клиенте по реальным данным.
+            params: { exchangeSide: params?.side },
+          })
           .then((r) => {
-            const items = r.data.data?.items ?? [];
+            const GROUP_OF: Record<ExchangeIntent, string> = {
+              buy_seek: 'sale',
+              sale_offer: 'sale',
+              rent_seek: 'rent',
+              rent_offer: 'rent',
+              client_handover: 'cobroking',
+              partner_seek: 'cobroking',
+              service_offer: 'service',
+            };
+            let items = r.data.data?.items ?? [];
+            if (params?.intentGroup) {
+              items = items.filter((t) => t.exchange && GROUP_OF[t.exchange.intent] === params.intentGroup);
+            }
             const demand = items.filter((t) => t.exchange?.side === 'demand');
             const supply = items.filter((t) => t.exchange?.side === 'supply');
             return { demand, supply, total: r.data.data?.total ?? items.length };
           }),
-      (() => {
-        const GROUP_OF: Record<ExchangeIntent, string> = {
-          buy_seek: 'sale',
-          sale_offer: 'sale',
-          rent_seek: 'rent',
-          rent_offer: 'rent',
-          client_handover: 'cobroking',
-          partner_seek: 'cobroking',
-          service_offer: 'service',
-        };
-        const SIDE: Record<ExchangeIntent, ExchangeSide> = {
-          rent_seek: 'demand',
-          buy_seek: 'demand',
-          partner_seek: 'demand',
-          client_handover: 'supply',
-          rent_offer: 'supply',
-          sale_offer: 'supply',
-          service_offer: 'supply',
-        };
-        let items = THREADS.filter((t) => t.type === 'exchange' && t.exchange);
-        if (params?.intentGroup) {
-          items = items.filter((t) => t.exchange && GROUP_OF[t.exchange.intent] === params.intentGroup);
-        }
-        const demand = items.filter((t) => t.exchange && SIDE[t.exchange.intent] === 'demand');
-        const supply = items.filter((t) => t.exchange && SIDE[t.exchange.intent] === 'supply');
-        return { demand, supply, total: items.length };
-      })(),
-    ).then((r) => ({
-      demand: Array.isArray(r?.demand) ? r.demand : [],
-      supply: Array.isArray(r?.supply) ? r.supply : [],
-      total: r?.total ?? 0,
-    })),
+      { demand: [] as ForumThread[], supply: [] as ForumThread[], total: 0 },
+      'getExchangeBoard',
+    ),
 
   updateExchangeStatus: (threadId: string, status: ExchangeStatus) =>
-    withFallback(
+    api
+      .patch<ApiResponse<ForumThread>>(`/api/v1/community/exchange/${threadId}/status`, { status })
+      .then((r) => ({ status: (r.data.data?.exchange?.status as ExchangeStatus) ?? status })),
+
+  // ─── Поиск ──────────────────────────────────────────────────────────────────
+
+  search: (q: string, params?: { page?: number; pageSize?: number }) =>
+    safeGet(
       () =>
         api
-          .patch<ApiResponse<ForumThread>>(
-            `/api/v1/community/exchange/${threadId}/status`,
-            { status },
-          )
-          .then((r) => ({ status: (r.data.data?.exchange?.status as ExchangeStatus) ?? status })),
-      (() => {
-        const t = THREADS.find((t) => t.id === threadId);
-        if (t?.exchange) t.exchange.status = status;
-        return { status };
-      })(),
-    ),
-
-  // ─── Search ─────────────────────────────────────────────────────────────────
-
-  search: (q: string, params?: { type?: 'threads' | 'members' | 'all'; page?: number; pageSize?: number }) =>
-    withFallback(
-      () =>
-        api
-          .get<ApiResponse<PaginatedData<ForumThread>>>(
-            '/api/v1/community/threads',
-            { params: { search: q, ...params } },
-          )
+          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+            // `type: 'threads' | 'members' | 'all'` раньше уходил напрямую в query
+            // `type`, а бэкенд трактует `type` как ThreadType (discussion/question/…)
+            // — 'all' там не значение enum, 400. Поиск по участникам бэкенд не
+            // поддерживает вовсе (leaderboard без query), возвращаем честно [].
+            params: { search: q, page: params?.page, pageSize: params?.pageSize },
+          })
           .then((r) => ({
             threads: r.data.data?.items ?? [],
-            members: [],
+            members: [] as ForumMember[],
             total: r.data.data?.total ?? 0,
           })),
-      (() => {
-        const ql = q.toLowerCase();
-        const threads = THREADS.filter(
-          (t) => t.title.toLowerCase().includes(ql) || t.excerpt.toLowerCase().includes(ql),
-        );
-        const members = MEMBERS.filter((m) => m.name.toLowerCase().includes(ql));
-        return { threads, members, total: threads.length + members.length };
-      })(),
+      { threads: [] as ForumThread[], members: [] as ForumMember[], total: 0 },
+      'search',
     ),
 
-  // ─── Stats ──────────────────────────────────────────────────────────────────
+  // ─── Статистика ─────────────────────────────────────────────────────────────
 
-  getStats: () =>
-    withFallback(
-      () =>
-        api
-          .get<ApiResponse<{
-            totalMembers: number;
-            activeLast7Days: number;
-            avgEngagement: number;
-            plannedEvents: number;
-            atRiskMembers: number;
-            totalThreads: number;
-            totalReplies: number;
-            solvedQuestions: number;
-          }>>('/api/v1/community/stats')
-          .then((r) => r.data.data),
-      {
-        totalMembers: MEMBERS.length,
-        activeLast7Days: MEMBERS.filter((m) => m.lastActiveLabel === 'сегодня' || m.lastActiveLabel.includes('ч')).length,
-        avgEngagement: Math.round(MEMBERS.reduce((s, m) => s + m.trustIndex, 0) / MEMBERS.length),
-        plannedEvents: EVENTS.filter((e) => e.registrationOpen).length,
-        atRiskMembers: 2,
-        totalThreads: THREADS.length,
-        totalReplies: REPLIES.length,
-        solvedQuestions: THREADS.filter((t) => t.solved).length,
-      },
-    ),
-
-  // ─── Current user ───────────────────────────────────────────────────────────
-
-  getCurrentUser: () => {
-    const userId = typeof localStorage !== 'undefined' ? localStorage.getItem('userId') || 'm5' : 'm5';
-    return withFallback(
-      () =>
-        api.get<ApiResponse<ForumMember>>(`/api/v1/community/leaderboard`).then((r) => {
-          const members = r.data.data as unknown as ForumMember[];
-          return members.find((m) => m.id === userId) ?? MEMBERS.find((m) => m.id === 'm5')!;
-        }),
-      MEMBERS.find((m) => m.id === userId) ?? MEMBERS.find((m) => m.id === 'm5')!,
-    );
+  getStats: () => {
+    // /api/v1/community/stats не существует в community.controller.ts —
+    // раньше 404 тихо подменялся числами, посчитанными по локальному моку.
+    // Честно возвращаем нули, ничего не запрашивая. Не используется нигде в
+    // текущем UI.
+    return Promise.resolve({
+      totalMembers: 0,
+      activeLast7Days: 0,
+      avgEngagement: 0,
+      plannedEvents: 0,
+      atRiskMembers: 0,
+      totalThreads: 0,
+      totalReplies: 0,
+      solvedQuestions: 0,
+    });
   },
 
-  // ─── API status ─────────────────────────────────────────────────────────────
+  // ─── Текущий пользователь ───────────────────────────────────────────────────
 
-  isApiAvailable: () => checkApiAvailable(),
+  /** identityId берёт вызывающий компонент из auth-контекста (useAuth), не localStorage. */
+  getCurrentUser: (identityId?: string) => {
+    if (!identityId) return Promise.resolve(null as ForumMember | null);
+    return safeGet(
+      () =>
+        api.get<ApiResponse<ForumMember[]>>('/api/v1/community/leaderboard').then((r) => {
+          const members = Array.isArray(r.data.data) ? r.data.data : [];
+          return members.find((m) => m.id === identityId) ?? null;
+        }),
+      null as ForumMember | null,
+      'getCurrentUser',
+    );
+  },
 };

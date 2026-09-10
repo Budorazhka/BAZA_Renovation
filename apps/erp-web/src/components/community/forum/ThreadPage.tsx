@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 import { CheckCircle2, ChevronLeft, Eye } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { communityApi } from '@/services/communityApi'
@@ -54,20 +55,32 @@ export default function ThreadPage() {
 
   const handleReaction = async () => {
     if (!thread) return
-    const result = await communityApi.toggleThreadReaction(thread.id)
-    setThread({ ...thread, reactions: result.reactionCount })
+    try {
+      const result = await communityApi.toggleThreadReaction(thread.id)
+      setThread({ ...thread, reactions: result.reactionCount })
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Не удалось поставить реакцию')
+    }
   }
 
   const handleReplyReaction = async (replyId: string) => {
-    const result = await communityApi.toggleReplyReaction(replyId)
-    setReplies((prev) => prev.map((r) => (r.id === replyId ? { ...r, reactions: result.reactionCount } : r)))
+    try {
+      const result = await communityApi.toggleReplyReaction(replyId)
+      setReplies((prev) => prev.map((r) => (r.id === replyId ? { ...r, reactions: result.reactionCount } : r)))
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Не удалось поставить реакцию')
+    }
   }
 
   const handleSetBest = async (replyId: string) => {
     if (!thread) return
-    const result = await communityApi.setBestReply(thread.id, replyId)
-    setThread({ ...thread, solved: result.threadSolved })
-    setReplies((prev) => prev.map((r) => ({ ...r, isBest: r.id === replyId ? result.isBest : false })))
+    try {
+      const result = await communityApi.setBestReply(thread.id, replyId)
+      setThread({ ...thread, solved: result.threadSolved })
+      setReplies((prev) => prev.map((r) => ({ ...r, isBest: r.id === replyId ? result.isBest : false })))
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Не удалось отметить лучший ответ')
+    }
   }
 
   const handleSendReply = async () => {
@@ -78,6 +91,8 @@ export default function ThreadPage() {
       setReplies((prev) => [...prev, reply])
       setDraft('')
       setThread({ ...thread, replyCount: thread.replyCount + 1 })
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Не удалось отправить ответ')
     } finally {
       setReplyLoading(false)
     }

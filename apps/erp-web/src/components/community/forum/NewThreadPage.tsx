@@ -1,5 +1,6 @@
 import { type ReactNode, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import {
   ArrowLeftRight,
   Building2,
@@ -85,6 +86,8 @@ export default function NewThreadPage() {
       if (thread) {
         navigate(isExchange ? `${FORUM_BASE}/exchange` : `${FORUM_BASE}/t/${thread.id}`)
       }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || 'Не удалось опубликовать тему')
     } finally {
       setSubmitting(false)
     }
