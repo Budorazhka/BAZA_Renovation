@@ -117,7 +117,13 @@ async function renderPage(task = serverTask()) {
   listTeamMock.mockResolvedValue(TEAM)
   const { TasksPage } = await import('@/components/tasks/TasksPage')
   const result = render(createElement(TasksPage))
-  await screen.findByText('tasks.tasksPage.взять_в_работу')
+  // ИСПРАВЛЕНО 10.09.2026: дефолтный таймаут findByText (1с) не всегда
+  // укладывался в CI на полную цепочку монтирования — резолв мока списка
+  // задач, эффект автовыбора первой задачи, ре-рендер карточки. Падало в
+  // CI дважды подряд после первого раунда фиксов (которые чинили только
+  // ТРИ конкретных места клика/проверки, не саму эту общую точку входа,
+  // от которой зависят все тесты файла), локально проходило стабильно.
+  await screen.findByText('tasks.tasksPage.взять_в_работу', {}, { timeout: 5000 })
   return result
 }
 
