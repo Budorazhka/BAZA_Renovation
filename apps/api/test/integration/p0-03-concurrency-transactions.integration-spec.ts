@@ -604,6 +604,12 @@ describe('P0-03: Concurrency, transactions, idempotency, and projection CAS', ()
           actorIdentityId: identityId,
           actorPositionId: positionId,
           correlationId: 'cid-batch-conflict',
+          idempotency: {
+            identityId,
+            operation: 'devBatchUpdatePrices',
+            key: 'p0-03-batch-conflict',
+            requestBody: { probe: 1 },
+          },
         }),
       ).rejects.toBeInstanceOf(ConflictException);
 

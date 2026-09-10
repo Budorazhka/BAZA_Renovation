@@ -213,6 +213,12 @@ describe('P1-05: Полный пользовательский путь прод
       defaultPrice: { amountMinorUnits: 5000000, currency: 'USD' },
       actorIdentityId: identIdA,
       correlationId: 'journey-generate-chessboard-corr-id',
+      idempotency: {
+        identityId: identIdA,
+        operation: 'devGenerateChessboard',
+        key: `chess-generate-${Date.now()}`,
+        requestBody: { buildingId: buildingId.toString() },
+      },
     });
     expect(chessboardResult.units).toHaveLength(20);
     expect(chessboardResult.units[0]!.price.amountMinorUnits).toBe(5000000);
@@ -228,6 +234,12 @@ describe('P1-05: Полный пользовательский путь прод
       actorIdentityId: identIdA,
       actorPositionId: posIdA,
       correlationId: 'journey-batch-pricing-corr-id',
+      idempotency: {
+        identityId: identIdA,
+        operation: 'devBatchUpdatePrices',
+        key: `batch-price-${Date.now()}`,
+        requestBody: { developmentId: devId.toString(), buildingId: buildingId.toString() },
+      },
     });
     expect(batchResult.updatedCount).toBe(20);
 

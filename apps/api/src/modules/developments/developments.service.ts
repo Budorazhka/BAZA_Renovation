@@ -1274,6 +1274,7 @@ export class DevelopmentsService {
     floorPlanId?: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    idempotency: IdempotencyParams;
   }): Promise<{ generatedFloors: number; generatedUnits: number; units: UnitDocument[] }> {
     if (params.fromFloor > params.toFloor) {
       throw new AppException(ErrorCode.VALIDATION_FAILED, 'fromFloor must be <= toFloor');
@@ -1406,11 +1407,27 @@ export class DevelopmentsService {
         session,
       );
 
-      return {
+      const result = {
         generatedFloors,
         generatedUnits: createdUnits.length,
         units: createdUnits,
       };
+      // ИСПРАВЛЕНО 10.09.2026: запись идемпотентности в той же транзакции,
+      // что и создание юнитов — см. createIdempotently выше, тот же принцип
+      // ADR-006, здесь не переиспользован буквально из-за пред-транзакционных
+      // проверок (building/section/floorPlan) выше по методу.
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: params.idempotency.operation,
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: JSON.parse(JSON.stringify(result)),
+        },
+        session,
+      );
+      return result;
     });
   }
 
@@ -1423,6 +1440,7 @@ export class DevelopmentsService {
     units: BatchUnitItemDto[];
     actorIdentityId: Types.ObjectId;
     correlationId: string;
+    idempotency: IdempotencyParams;
   }): Promise<{ createdCount: number; units: UnitDocument[] }> {
     const building = await this.buildingRepository.findByIdForOrganization(
       params.buildingId,
@@ -1504,10 +1522,23 @@ export class DevelopmentsService {
         session,
       );
 
-      return {
+      const result = {
         createdCount: createdUnits.length,
         units: createdUnits,
       };
+      // ИСПРАВЛЕНО 10.09.2026: без записи повтор плодил дублирующиеся юниты.
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: params.idempotency.operation,
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 201,
+          responseBody: JSON.parse(JSON.stringify(result)),
+        },
+        session,
+      );
+      return result;
     });
   }
 
@@ -1528,6 +1559,7 @@ export class DevelopmentsService {
     actorIdentityId: Types.ObjectId;
     actorPositionId: Types.ObjectId;
     correlationId: string;
+    idempotency: IdempotencyParams;
   }): Promise<{ updatedCount: number; affectedUnitIds: string[] }> {
     const development = await this.developmentRepository.findByIdForOrganization(
       params.developmentId,
@@ -1666,10 +1698,24 @@ export class DevelopmentsService {
         session,
       );
 
-      return {
+      const result = {
         updatedCount: affectedUnitIds.length,
         affectedUnitIds,
       };
+      // ИСПРАВЛЕНО 10.09.2026: без записи повторный запрос (ретрай/двойной
+      // клик по "+10%") применял процентную наценку второй раз.
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: params.idempotency.operation,
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 200,
+          responseBody: JSON.parse(JSON.stringify(result)),
+        },
+        session,
+      );
+      return result;
     });
   }
 }

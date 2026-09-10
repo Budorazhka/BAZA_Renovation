@@ -1654,6 +1654,7 @@ describe('DevelopmentsService — Installment Plans', () => {
         actorIdentityId: new Types.ObjectId(),
         actorPositionId: new Types.ObjectId(),
         correlationId: 'test-cid',
+        idempotency: idem(),
       });
 
       expect(result.updatedCount).toBe(1);
@@ -1703,6 +1704,7 @@ describe('DevelopmentsService — Installment Plans', () => {
           actorIdentityId: new Types.ObjectId(),
           actorPositionId: new Types.ObjectId(),
           correlationId: 'test-cid',
+          idempotency: idem(),
         }),
       ).rejects.toThrow('Unit 101 was modified by another request — refresh and retry');
     });

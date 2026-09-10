@@ -614,6 +614,21 @@ export class DevelopmentsController {
       throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
     }
 
+    // ИСПРАВЛЕНО 10.09.2026: заголовок требовался, но никуда не передавался
+    // — сетевой ретрай или двойной клик плодили дублирующиеся юниты. Тот же
+    // паттерн checkCreateReplay, что уже применяется в createDevelopment.
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { buildingId, ...dto };
+    const replay = await this.developmentsService.checkCreateReplay(
+      identityId,
+      'devGenerateChessboard',
+      idempotencyKey,
+      requestBody,
+    );
+    if (replay) {
+      return replay.responseBody;
+    }
+
     return this.developmentsService.generateChessboard({
       buildingId: new Types.ObjectId(buildingId),
       organizationId: new Types.ObjectId(tenantContext.organizationId),
@@ -629,8 +644,9 @@ export class DevelopmentsController {
       defaultAreaBalcony: dto.defaultAreaBalcony,
       defaultPrice: dto.defaultPrice,
       floorPlanId: dto.floorPlanId ? new Types.ObjectId(dto.floorPlanId) : undefined,
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId: identityId,
       correlationId: req.correlationId,
+      idempotency: { identityId, operation: 'devGenerateChessboard', key: idempotencyKey, requestBody },
     });
   }
 
@@ -648,16 +664,32 @@ export class DevelopmentsController {
       throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
     }
 
+    // ИСПРАВЛЕНО 10.09.2026: см. generateChessboard выше — без этого повтор
+    // запроса плодил дубли юнитов (в схеме нет unique-индекса на (buildingId, number)).
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { buildingId, units: dto.units };
+    const replay = await this.developmentsService.checkCreateReplay(
+      identityId,
+      'devBatchCreateUnits',
+      idempotencyKey,
+      requestBody,
+    );
+    if (replay) {
+      return replay.responseBody;
+    }
+
     return this.developmentsService.batchCreateUnits({
       buildingId: new Types.ObjectId(buildingId),
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       units: dto.units,
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId: identityId,
       correlationId: req.correlationId,
+      idempotency: { identityId, operation: 'devBatchCreateUnits', key: idempotencyKey, requestBody },
     });
   }
 
   @Post('developments/:developmentId/units/batch-price-update')
+  @HttpCode(200)
   @RequirePermission('unit', 'price.update')
   async batchUpdatePrices(
     @Req() req: FastifyRequest,
@@ -668,6 +700,20 @@ export class DevelopmentsController {
     const tenantContext = requireTenantContext(req);
     if (!idempotencyKey) {
       throw new AppException(ErrorCode.IDEMPOTENCY_KEY_REQUIRED, 'Idempotency-Key header is required');
+    }
+
+    // ИСПРАВЛЕНО 10.09.2026: без этого повторный запрос ("+10%" два раза
+    // подряд из-за ретрая/двойного клика) применял процентную наценку дважды.
+    const identityId = new Types.ObjectId(tenantContext.identityId);
+    const requestBody = { developmentId, ...dto };
+    const replay = await this.developmentsService.checkCreateReplay(
+      identityId,
+      'devBatchUpdatePrices',
+      idempotencyKey,
+      requestBody,
+    );
+    if (replay) {
+      return replay.responseBody;
     }
 
     return this.developmentsService.batchUpdatePrices({
@@ -681,9 +727,10 @@ export class DevelopmentsController {
       operationType: dto.operationType,
       value: dto.value,
       reason: dto.reason,
-      actorIdentityId: new Types.ObjectId(tenantContext.identityId),
+      actorIdentityId: identityId,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       correlationId: req.correlationId,
+      idempotency: { identityId, operation: 'devBatchUpdatePrices', key: idempotencyKey, requestBody },
     });
   }
 
