@@ -135,9 +135,11 @@ export class CommunityReplyRepository {
       .session(session ?? null)
       .exec();
 
-    // Mark current reply as best
+    // Mark current reply as best. ИСПРАВЛЕНО 10.09.2026: раньше искали только
+    // по {replyId} без threadId — можно было передать replyId из ЧУЖОЙ темы и
+    // получить в исходной теме два "лучших ответа" одновременно.
     return this.model
-      .findOneAndUpdate({ replyId }, { $set: { isBest: true } }, { new: true, session: session ?? null })
+      .findOneAndUpdate({ replyId, threadId }, { $set: { isBest: true } }, { new: true, session: session ?? null })
       .exec();
   }
 }

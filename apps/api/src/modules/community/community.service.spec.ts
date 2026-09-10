@@ -284,7 +284,7 @@ describe('CommunityService', () => {
       threadRepo.findById.mockResolvedValue(mockThread);
       threadRepo.update.mockResolvedValue({ ...mockThread, title: 'Updated' });
 
-      const result = await service.updateThread('t-1', identityId, false, { title: 'Updated' });
+      const result = await service.updateThread('t-1', identityId, orgId, { title: 'Updated' });
       expect(result.title).toBe('Updated');
     });
 
@@ -292,11 +292,12 @@ describe('CommunityService', () => {
       const mockThread = {
         threadId: 't-1',
         authorIdentityId: new Types.ObjectId(),
+        organizationId: new Types.ObjectId(),
       } as CommunityThreadDocument;
       threadRepo.findById.mockResolvedValue(mockThread);
 
       await expect(
-        service.updateThread('t-1', identityId, false, { title: 'Hacked' }),
+        service.updateThread('t-1', identityId, orgId, { title: 'Hacked' }),
       ).rejects.toMatchObject({
         code: ErrorCode.FORBIDDEN,
       });
@@ -310,7 +311,7 @@ describe('CommunityService', () => {
       expect(result).toEqual({ reactions: 5, hasLiked: true });
     });
 
-    it('закрепляет тему модератором', async () => {
+    it('закрепляет тему модератором своей организации', async () => {
       const mockThread = {
         threadId: 't-1',
         pinned: true,
@@ -318,10 +319,23 @@ describe('CommunityService', () => {
         authorPositionId: positionId,
         organizationId: orgId,
       } as CommunityThreadDocument;
+      threadRepo.findById.mockResolvedValue(mockThread);
       threadRepo.update.mockResolvedValue(mockThread);
 
-      const result = await service.pinThread('t-1', true);
+      const result = await service.pinThread('t-1', orgId, true);
       expect(result.pinned).toBe(true);
+    });
+
+    it('запрещает закреплять чужую тему', async () => {
+      const mockThread = {
+        threadId: 't-1',
+        organizationId: new Types.ObjectId(),
+      } as CommunityThreadDocument;
+      threadRepo.findById.mockResolvedValue(mockThread);
+
+      await expect(service.pinThread('t-1', orgId, true)).rejects.toMatchObject({
+        code: ErrorCode.FORBIDDEN,
+      });
     });
   });
 

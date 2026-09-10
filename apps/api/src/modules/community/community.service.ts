@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -101,6 +101,8 @@ export function toCommunityEventDto(doc: CommunityEventDocument, currentIdentity
 
 @Injectable()
 export class CommunityService implements OnModuleInit {
+  private readonly logger = new Logger(CommunityService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     private readonly sectionRepository: CommunitySectionRepository,
@@ -126,8 +128,11 @@ export class CommunityService implements OnModuleInit {
         defaultId,
       );
       await this.eventRepository.seedSystemEventsIfEmpty(SEED_COMMUNITY_EVENTS);
-    } catch {
-      // Ignored if replica set is not initialized yet in unit test contexts
+    } catch (error) {
+      // ИСПРАВЛЕНО 10.09.2026: было catch {} — молча глушило любую ошибку,
+      // включая реальные сбои сидирования в проде, не только штатный случай
+      // неинициализированной реплики в юнит-тестах.
+      this.logger.warn(`seedDefaultsIfEmpty failed, skipping: ${(error as Error).message}`);
     }
   }
 
@@ -305,7 +310,7 @@ export class CommunityService implements OnModuleInit {
   async updateThread(
     threadId: string,
     identityId: Types.ObjectId,
-    isModerator: boolean,
+    callerOrganizationId: Types.ObjectId,
     data: UpdateCommunityThreadDto,
   ) {
     const thread = await this.threadRepository.findById(threadId);
@@ -314,6 +319,10 @@ export class CommunityService implements OnModuleInit {
     }
 
     const isAuthor = thread.authorIdentityId.equals(identityId);
+    // 'manage' — это грант на роль ВНУТРИ организации заявителя, а не
+    // полномочие над чужим контентом межорганизационной площадки: модератор
+    // может править только темы своей же организации.
+    const isModerator = thread.organizationId.equals(callerOrganizationId);
     if (!isAuthor && !isModerator) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only author or moderator can update thread');
     }
@@ -345,13 +354,14 @@ export class CommunityService implements OnModuleInit {
     return toCommunityThreadDto(updated!);
   }
 
-  async deleteThread(threadId: string, identityId: Types.ObjectId, isModerator: boolean) {
+  async deleteThread(threadId: string, identityId: Types.ObjectId, callerOrganizationId: Types.ObjectId) {
     const thread = await this.threadRepository.findById(threadId);
     if (!thread) {
       throw new AppException(ErrorCode.NOT_FOUND, `Thread '${threadId}' not found`);
     }
 
     const isAuthor = thread.authorIdentityId.equals(identityId);
+    const isModerator = thread.organizationId.equals(callerOrganizationId);
     if (!isAuthor && !isModerator) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only author or moderator can delete thread');
     }
@@ -373,7 +383,14 @@ export class CommunityService implements OnModuleInit {
     return this.threadRepository.toggleReaction(threadId, identityId.toHexString());
   }
 
-  async pinThread(threadId: string, pinned: boolean) {
+  async pinThread(threadId: string, callerOrganizationId: Types.ObjectId, pinned: boolean) {
+    const thread = await this.threadRepository.findById(threadId);
+    if (!thread) {
+      throw new AppException(ErrorCode.NOT_FOUND, `Thread '${threadId}' not found`);
+    }
+    if (!thread.organizationId.equals(callerOrganizationId)) {
+      throw new AppException(ErrorCode.FORBIDDEN, 'Only your own organization threads can be pinned');
+    }
     const updated = await this.threadRepository.update(threadId, { pinned });
     if (!updated) {
       throw new AppException(ErrorCode.NOT_FOUND, `Thread '${threadId}' not found`);
@@ -493,7 +510,7 @@ export class CommunityService implements OnModuleInit {
   async updateReply(
     replyId: string,
     identityId: Types.ObjectId,
-    isModerator: boolean,
+    callerOrganizationId: Types.ObjectId,
     data: UpdateCommunityReplyDto,
   ) {
     const reply = await this.replyRepository.findById(replyId);
@@ -502,6 +519,7 @@ export class CommunityService implements OnModuleInit {
     }
 
     const isAuthor = reply.authorIdentityId.equals(identityId);
+    const isModerator = reply.organizationId.equals(callerOrganizationId);
     if (!isAuthor && !isModerator) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only author or moderator can update reply');
     }
@@ -510,13 +528,14 @@ export class CommunityService implements OnModuleInit {
     return toCommunityReplyDto(updated!);
   }
 
-  async deleteReply(replyId: string, identityId: Types.ObjectId, isModerator: boolean) {
+  async deleteReply(replyId: string, identityId: Types.ObjectId, callerOrganizationId: Types.ObjectId) {
     const reply = await this.replyRepository.findById(replyId);
     if (!reply) {
       throw new AppException(ErrorCode.NOT_FOUND, `Reply '${replyId}' not found`);
     }
 
     const isAuthor = reply.authorIdentityId.equals(identityId);
+    const isModerator = reply.organizationId.equals(callerOrganizationId);
     if (!isAuthor && !isModerator) {
       throw new AppException(ErrorCode.FORBIDDEN, 'Only author or moderator can delete reply');
     }

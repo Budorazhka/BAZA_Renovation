@@ -100,11 +100,16 @@ export class CommunityController {
     @Body() dto: UpdateCommunityThreadDto,
   ) {
     const tenantContext = requireTenantContext(req);
-    const isModerator = false;
+    // Правки контента (title/body/tags/pinned/locked) доступны автору темы
+    // всегда, а модератору — только внутри своей же организации: 'manage' —
+    // это грант на роль в организации заявителя, а не полномочие над чужим
+    // контентом на общей межорганизационной площадке (community — MLS
+    // exchange, см. domain-model.md). Сервис сверяет
+    // thread.organizationId === callerOrganizationId сам.
     const data = await this.communityService.updateThread(
       threadId,
       new Types.ObjectId(tenantContext.identityId),
-      isModerator,
+      new Types.ObjectId(tenantContext.organizationId),
       dto,
     );
     return { success: true, data };
@@ -114,11 +119,15 @@ export class CommunityController {
   @RequirePermission('community_thread', 'manage')
   async deleteThread(@Req() req: FastifyRequest, @Param('threadId') threadId: string) {
     const tenantContext = requireTenantContext(req);
-    const isModerator = true;
+    // ИСПРАВЛЕНО 10.09.2026: было захардкожено isModerator = true — любая
+    // организация с грантом 'manage' (owner/director/rop/administrator/
+    // developer, т.е. большинство ролей) могла удалить чужую тему на общей
+    // площадке. community — межорганизационный форум и MLS-биржа, поэтому
+    // модерация ограничивается темами своей же организации.
     const data = await this.communityService.deleteThread(
       threadId,
       new Types.ObjectId(tenantContext.identityId),
-      isModerator,
+      new Types.ObjectId(tenantContext.organizationId),
     );
     return { success: true, data };
   }
@@ -136,8 +145,23 @@ export class CommunityController {
 
   @Patch('threads/:threadId/pin')
   @RequirePermission('community_thread', 'manage')
-  async pinThread(@Param('threadId') threadId: string, @Body('pinned') pinned: boolean) {
-    const data = await this.communityService.pinThread(threadId, pinned ?? true);
+  async pinThread(
+    @Req() req: FastifyRequest,
+    @Param('threadId') threadId: string,
+    @Body('pinned') pinned: boolean,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    if (pinned !== undefined && typeof pinned !== 'boolean') {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'pinned must be a boolean');
+    }
+    // ИСПРАВЛЕНО 10.09.2026: раньше проверок владения не было вообще —
+    // любая организация с грантом 'manage' могла закрепить чужую тему
+    // поверх общей ленты у всех. Ограничено темами своей организации.
+    const data = await this.communityService.pinThread(
+      threadId,
+      new Types.ObjectId(tenantContext.organizationId),
+      pinned ?? true,
+    );
     return { success: true, data };
   }
 
@@ -186,11 +210,10 @@ export class CommunityController {
     @Body() dto: UpdateCommunityReplyDto,
   ) {
     const tenantContext = requireTenantContext(req);
-    const isModerator = false;
     const data = await this.communityService.updateReply(
       replyId,
       new Types.ObjectId(tenantContext.identityId),
-      isModerator,
+      new Types.ObjectId(tenantContext.organizationId),
       dto,
     );
     return { success: true, data };
@@ -200,11 +223,11 @@ export class CommunityController {
   @RequirePermission('community_reply', 'manage')
   async deleteReply(@Req() req: FastifyRequest, @Param('replyId') replyId: string) {
     const tenantContext = requireTenantContext(req);
-    const isModerator = true;
+    // ИСПРАВЛЕНО 10.09.2026: было isModerator = true безусловно, см. deleteThread.
     const data = await this.communityService.deleteReply(
       replyId,
       new Types.ObjectId(tenantContext.identityId),
-      isModerator,
+      new Types.ObjectId(tenantContext.organizationId),
     );
     return { success: true, data };
   }
@@ -228,6 +251,9 @@ export class CommunityController {
     @Body('threadId') threadId: string,
   ) {
     const tenantContext = requireTenantContext(req);
+    if (typeof threadId !== 'string' || threadId.length === 0) {
+      throw new AppException(ErrorCode.VALIDATION_FAILED, 'threadId must be a non-empty string');
+    }
     const data = await this.communityService.acceptReply(
       threadId,
       replyId,
