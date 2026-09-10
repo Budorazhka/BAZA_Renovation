@@ -119,6 +119,7 @@ permission-matrix.md», часть оснований уже перенесен�
 - [admin-duplicate-candidates-review.md](operations/admin-duplicate-candidates-review.md) — очередь модерации дублей.
 - [first-super-admin-bootstrap.md](operations/first-super-admin-bootstrap.md) — создание первого супер-админа.
 - [team-user-atomicity.md](operations/team-user-atomicity.md) — создание сотрудника: позиция, гранты, назначение и профиль одной транзакцией.
+- [default-grants-backfill.md](operations/default-grants-backfill.md) — разовая команда доливает стартовые гранты ролей в существующие должности; отозванное вручную и суженное не трогает. Запускать после релиза с новыми грантами и после переноса организаций.
 
 ### ЖК и шахматка
 

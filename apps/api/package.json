@@ -13,6 +13,7 @@
     "clean": "rm -rf dist",
     "actuality:expire-overdue": "ts-node src/jobs/actuality-expire.command.ts",
     "bookings:expire-overdue": "ts-node src/jobs/booking-expire.command.ts",
+    "grants:backfill-defaults": "ts-node src/jobs/grants-backfill.command.ts",
     "migrate:legacy-leads": "ts-node src/jobs/migrate-legacy-leads.command.ts",
     "export:legacy-leads": "ts-node src/jobs/export-legacy-leads.script.ts"
   },

@@ -80,5 +80,6 @@ provider credentials», модель доставки, in-app и Telegram-уве
    не удаляет его диалоги.
 10. `create-task` использует ту же операцию идемпотентности `createTask`, что и
     `POST /tasks`: один ключ на двух эндпоинтах даст 409.
-11. Организации, созданные до 10.09, не имеют грантов messenger: новые гранты не
-    доливаются в существующие должности.
+11. Организации, созданные до 10.09, не имеют грантов messenger, пока в окружении
+    не запущена доливка `grants:backfill-defaults` (N-06,
+    [default-grants-backfill](default-grants-backfill.md)).

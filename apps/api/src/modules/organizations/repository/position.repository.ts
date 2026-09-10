@@ -59,6 +59,16 @@ export class PositionRepository {
     return this.model.find({ organizationId, status: { $ne: 'closed' } }).exec();
   }
 
+  /**
+   * Доливка стартовых грантов (DefaultGrantsBackfillService, команда
+   * grants-backfill): проход по позициям ВСЕХ организаций пачками по курсору
+   * _id. closed — удалённые позиции (см. markClosed), права им не нужны.
+   */
+  async listNotClosedPage(params: { cursor?: Types.ObjectId; limit: number }): Promise<PositionDocument[]> {
+    const filter = params.cursor ? { status: { $ne: 'closed' }, _id: { $gt: params.cursor } } : { status: { $ne: 'closed' } };
+    return this.model.find(filter).sort({ _id: 1 }).limit(params.limit).exec();
+  }
+
   async markOccupied(
     positionId: Types.ObjectId,
     occupantName: string,

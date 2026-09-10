@@ -165,6 +165,20 @@ export class PolicyEvaluatorService {
     }));
   }
 
+  /**
+   * Доливка стартовых грантов в существующие позиции (organizations,
+   * DefaultGrantsBackfillService): пары resource+action пачки субъектов,
+   * включая отозванные — тот же module-boundary принцип, что
+   * listGrantsForSubject выше.
+   */
+  async listGrantKeysForSubjects(
+    subjectType: PermissionSubjectType,
+    subjectIds: Types.ObjectId[],
+    session?: ClientSession,
+  ): Promise<Array<{ subjectId: Types.ObjectId; resource: string; action: string; revoked: boolean }>> {
+    return this.permissionGrantRepository.findGrantKeysForSubjects(subjectType, subjectIds, session);
+  }
+
   async findGrantById(id: Types.ObjectId): Promise<PermissionGrantDocument | null> {
     return this.permissionGrantRepository.findById(id);
   }

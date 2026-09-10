@@ -12,6 +12,7 @@ import { InvitationRepository } from './repository/invitation.repository';
 import { PositionProfileRepository } from './repository/position-profile.repository';
 import { PositionAssignmentService } from './position-assignment.service';
 import { OrganizationsService } from './organizations.service';
+import { DefaultGrantsBackfillService } from './default-grants-backfill.service';
 import { TeamService } from './team.service';
 import { OrganizationsController } from './organizations.controller';
 import { OrganizationOnboardingController } from './organization-onboarding.controller';
@@ -56,6 +57,7 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     PositionProfileRepository,
     PositionAssignmentService,
     OrganizationsService,
+    DefaultGrantsBackfillService,
     TeamService,
   ],
   exports: [PositionAssignmentService, OrganizationsService],

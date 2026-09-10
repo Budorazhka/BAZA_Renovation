@@ -71,6 +71,11 @@ owner, director, rop, manager, developer: ровно тем, у кого уже 
 
 Для новых организаций всё работает сразу.
 
+> Обновление 11.09.2026: доливка появилась — команда
+> `pnpm --filter @baza/api run grants:backfill-defaults` выдаёт существующим
+> Position недостающие стартовые гранты, включая `media_asset.upload`. См.
+> [default-grants-backfill.md](default-grants-backfill.md).
+
 ## Verification
 
 - `permission-grants.test.ts` — 4 проверки, включая обе стороны сверки.

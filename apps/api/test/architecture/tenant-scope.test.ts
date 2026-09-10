@@ -74,6 +74,10 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
     'по organizationId, взятому из найденной брони.',
   'position.repository.ts#setAvatarAsset':
     'Запись по positionId, владение проверено вызывающим до вызова.',
+  'position.repository.ts#listNotClosedPage':
+    'Доливка стартовых грантов ролей (DefaultGrantsBackfillService, CLI-команда grants-backfill): ' +
+    'намеренно проходит по позициям всех организаций, tenant-контекста у неё нет по определению. ' +
+    'Гранты пишутся по _id найденной позиции, в аудит уходит её organizationId.',
   'media-asset.repository.ts#findByIds':
     'Медиа скоупится не организацией, а ownerScope. Вызывающий MediaService.' +
     'getAssetsForOwnerScope отбрасывает чужие через ownerScopesEqual; воркер работает ' +

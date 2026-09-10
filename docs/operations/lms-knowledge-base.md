@@ -53,4 +53,6 @@ vertical-slice DoD. Модуль пришёл раньше очереди; из�
    `lmsApi.ts` называет параметры `targetRole`/`search`, DTO ждёт `role`/`type` —
    пока их никто не передаёт, при передаче будет 400.
 8. Загрузка файлов материалов идёт на старый `CRM_API_BASE_URL`.
-9. Организации, созданные до 10.09, не имеют грантов LMS.
+9. Организации, созданные до 10.09, не имеют грантов LMS, пока в окружении не
+   запущена доливка `grants:backfill-defaults` (N-06,
+   [default-grants-backfill](default-grants-backfill.md)).

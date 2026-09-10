@@ -46,6 +46,34 @@ export class PermissionGrantRepository {
   }
 
   /**
+   * Доливка стартовых грантов (DefaultGrantsBackfillService): какие пары
+   * resource+action уже есть у пачки субъектов — ВМЕСТЕ с отозванными.
+   * Отозванный грант — решение человека, доливка не должна его возвращать,
+   * поэтому фильтра revokedAt здесь нет. Только нужные поля, lean: на пачку
+   * из сотен позиций приходят тысячи грантов.
+   */
+  async findGrantKeysForSubjects(
+    subjectType: PermissionSubjectType,
+    subjectIds: Types.ObjectId[],
+    session?: ClientSession,
+  ): Promise<Array<{ subjectId: Types.ObjectId; resource: string; action: string; revoked: boolean }>> {
+    if (subjectIds.length === 0) {
+      return [];
+    }
+    const docs = await this.model
+      .find({ subjectType, subjectId: { $in: subjectIds } }, { subjectId: 1, resource: 1, action: 1, revokedAt: 1 })
+      .session(session ?? null)
+      .lean()
+      .exec();
+    return docs.map((doc) => ({
+      subjectId: doc.subjectId,
+      resource: doc.resource,
+      action: doc.action,
+      revoked: doc.revokedAt != null,
+    }));
+  }
+
+  /**
    * CAS/optimistic concurrency: filter включает и _id, и revokedAt:
    * {$exists:false}, и version:expectedVersion — modifiedCount:0 означает
    * либо "grant уже отозван кем-то другим между чтением списка и этим
