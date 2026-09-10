@@ -9936,8 +9936,14 @@ components:
         senderPositionId: {type: string, nullable: true}
         text: {type: string}
         messageType: {type: string, enum: [text, photo, video, document, audio]}
-        status: {type: string, enum: [sent, delivered, read]}
-        sentAt: {type: string, format: date-time}
+        status:
+          type: string
+          enum: [queued, sent, delivered, read]
+          description: >-
+            queued — принято платформой, в канал не отправлено. Транспорта пока
+            нет (этап 10 не начат), поэтому исходящие остаются queued; sent
+            ставит будущий транспорт после ответа провайдера.
+        sentAt: {type: string, format: date-time, description: 'Время приёма сообщения платформой, не факт отправки в канал.'}
         media:
           allOf:
             - $ref: '#/components/schemas/MessageMedia'

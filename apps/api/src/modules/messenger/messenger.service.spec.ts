@@ -96,7 +96,7 @@ describe('MessengerService', () => {
       platform: 'telegram',
       accountType: 'bot',
       name: 'Sales Bot',
-      authStatus: 'authenticated',
+      authStatus: 'pending',
       isActive: true,
       createdAt: new Date(),
     };
@@ -139,7 +139,7 @@ describe('MessengerService', () => {
       author: 'agent',
       text: 'Добрый день!',
       messageType: 'text',
-      status: 'sent',
+      status: 'queued',
       sentAt: new Date(),
     };
     (messageRepo.create as jest.Mock).mockResolvedValue(fakeMessage);
@@ -151,12 +151,50 @@ describe('MessengerService', () => {
     });
 
     expect(res.text).toBe('Добрый день!');
+    // Транспорта нет — «отправлено» платформа сказать не может.
+    expect(messageRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'queued' }),
+      fakeSession,
+    );
+    expect(res.status).toBe('queued');
     expect(dialogRepo.updateLastMessage).toHaveBeenCalled();
     expect(outboxService.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         eventType: 'MessengerMessageSent',
         aggregateId: dialogId,
       }),
+      fakeSession,
+    );
+  });
+
+  it('sends media message as queued, not sent', async () => {
+    const orgId = new Types.ObjectId();
+    const dialogId = new Types.ObjectId();
+    (dialogRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+      _id: dialogId,
+      organizationId: orgId,
+      platform: 'telegram',
+      externalChatId: 'chat-99',
+    });
+    (messageRepo.create as jest.Mock).mockResolvedValue({
+      _id: new Types.ObjectId(),
+      organizationId: orgId,
+      dialogId,
+      author: 'agent',
+      text: '[Файл: plan.pdf]',
+      messageType: 'document',
+      status: 'queued',
+      sentAt: new Date(),
+    });
+
+    await service.sendMediaMessage({
+      organizationId: orgId,
+      dialogId,
+      media: { fileName: 'plan.pdf', url: 'https://example.test/plan.pdf' },
+    });
+
+    expect(messageRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'queued', messageType: 'document' }),
       fakeSession,
     );
   });

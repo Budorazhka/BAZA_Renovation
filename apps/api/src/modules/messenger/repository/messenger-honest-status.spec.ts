@@ -1,0 +1,47 @@
+import { Types } from 'mongoose';
+import { MessengerAccountRepository } from './messenger-account.repository';
+import { MessengerMessageRepository } from './messenger-message.repository';
+
+/**
+ * 11.09.2026: транспорта в мессенджер нет (этап 10 не начат), поэтому
+ * репозитории не должны сами объявлять аккаунт подключённым, а исходящее —
+ * отправленным. Раньше create ставил 'authenticated' + lastSyncAt и 'sent'.
+ */
+function modelWithCreate() {
+  const create = jest.fn().mockImplementation(async (docs: unknown[]) => docs);
+  return { model: { create } as never, create };
+}
+
+describe('Мессенджер: репозитории не выдают статус, которого не было', () => {
+  it('новый аккаунт — pending и без отметки синхронизации', async () => {
+    const { model, create } = modelWithCreate();
+    const repository = new MessengerAccountRepository(model);
+
+    await repository.create({
+      organizationId: new Types.ObjectId(),
+      platform: 'telegram',
+      name: 'Sales Bot',
+      botToken: '12345:token',
+    });
+
+    const doc = create.mock.calls[0][0][0];
+    expect(doc).toMatchObject({ authStatus: 'pending', isActive: true });
+    expect(doc).not.toHaveProperty('lastSyncAt');
+  });
+
+  it('исходящее без явного статуса — queued, входящее — delivered', async () => {
+    const { model, create } = modelWithCreate();
+    const repository = new MessengerMessageRepository(model);
+    const base = {
+      organizationId: new Types.ObjectId(),
+      dialogId: new Types.ObjectId(),
+      text: 'Добрый день!',
+    };
+
+    await repository.create({ ...base, author: 'agent' });
+    await repository.create({ ...base, author: 'client' });
+
+    expect(create.mock.calls[0][0][0]).toMatchObject({ status: 'queued' });
+    expect(create.mock.calls[1][0][0]).toMatchObject({ status: 'delivered' });
+  });
+});

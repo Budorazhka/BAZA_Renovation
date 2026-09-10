@@ -42,7 +42,8 @@ export class MessengerMessageRepository {
         {
           ...params,
           messageType: params.messageType ?? 'text',
-          status: params.status ?? (params.author === 'agent' ? 'sent' : 'delivered'),
+          // Исходящее без явного статуса — queued: отправлять его пока некому.
+          status: params.status ?? (params.author === 'agent' ? 'queued' : 'delivered'),
           sentAt: params.sentAt ?? new Date(),
         },
       ],

@@ -5036,9 +5036,15 @@ export interface components {
             text: string;
             /** @enum {string} */
             messageType: "text" | "photo" | "video" | "document" | "audio";
-            /** @enum {string} */
-            status: "sent" | "delivered" | "read";
-            /** Format: date-time */
+            /**
+             * @description queued — принято платформой, в канал не отправлено. Транспорта пока нет (этап 10 не начат), поэтому исходящие остаются queued; sent ставит будущий транспорт после ответа провайдера.
+             * @enum {string}
+             */
+            status: "queued" | "sent" | "delivered" | "read";
+            /**
+             * Format: date-time
+             * @description Время приёма сообщения платформой, не факт отправки в канал.
+             */
             sentAt: string;
             media?: components["schemas"]["MessageMedia"] | null;
         };

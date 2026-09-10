@@ -3,11 +3,18 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type MessageAuthor = 'client' | 'agent';
 export type MessageType = 'text' | 'photo' | 'video' | 'document' | 'audio';
-export type MessageStatus = 'sent' | 'delivered' | 'read';
+/**
+ * `queued` — сообщение принято платформой, но в канал не отправлено. До
+ * 11.09.2026 исходящее сразу получало `sent`, хотя транспорта нет:
+ * MessengerMessageSent воркер только подтверждает (ACKNOWLEDGED_ONLY_EVENT_TYPES).
+ * `sent` должен ставить будущий транспорт после ответа провайдера (Telegram
+ * Bot API, WhatsApp), не API в момент приёма.
+ */
+export type MessageStatus = 'queued' | 'sent' | 'delivered' | 'read';
 
 export const MESSAGE_AUTHORS: readonly MessageAuthor[] = ['client', 'agent'] as const;
 export const MESSAGE_TYPES: readonly MessageType[] = ['text', 'photo', 'video', 'document', 'audio'] as const;
-export const MESSAGE_STATUSES: readonly MessageStatus[] = ['sent', 'delivered', 'read'] as const;
+export const MESSAGE_STATUSES: readonly MessageStatus[] = ['queued', 'sent', 'delivered', 'read'] as const;
 
 export interface MessageMedia {
   assetId?: Types.ObjectId;
@@ -55,9 +62,10 @@ export class MessengerMessageDocument extends Document {
   @Prop({ required: true, type: String, enum: MESSAGE_TYPES, default: 'text' })
   messageType!: MessageType;
 
-  @Prop({ required: true, type: String, enum: MESSAGE_STATUSES, default: 'sent' })
+  @Prop({ required: true, type: String, enum: MESSAGE_STATUSES, default: 'queued' })
   status!: MessageStatus;
 
+  /** Время приёма сообщения платформой; имя поля — из контракта, не факт отправки. */
   @Prop({ required: true, type: Date, default: () => new Date() })
   sentAt!: Date;
 

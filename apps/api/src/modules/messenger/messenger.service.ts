@@ -419,7 +419,8 @@ export class MessengerService {
           senderPositionId: params.senderPositionId,
           text: params.text,
           messageType: 'text',
-          status: 'sent',
+          // queued, не sent: транспорта нет, воркер событие только подтверждает.
+          status: 'queued',
           sentAt: now,
         },
         session,
@@ -502,7 +503,8 @@ export class MessengerService {
           text: displayText,
           messageType: params.messageType ?? 'document',
           media: params.media,
-          status: 'sent',
+          // queued, не sent: транспорта нет, воркер событие только подтверждает.
+          status: 'queued',
           sentAt: now,
         },
         session,

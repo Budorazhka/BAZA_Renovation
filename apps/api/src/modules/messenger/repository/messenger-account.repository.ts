@@ -37,9 +37,12 @@ export class MessengerAccountRepository {
           botToken: params.botToken,
           telegramBotUsername: params.telegramBotUsername,
           phoneNumber: params.phoneNumber,
-          authStatus: 'authenticated',
+          // 11.09.2026: было 'authenticated' и lastSyncAt = сейчас — без единой
+          // проверки у провайдера (токен бота не проверяется через getMe, у
+          // WhatsApp учётных данных нет вовсе). Аккаунт pending, пока
+          // подключение не подтвердит будущий транспорт; синхронизации не было.
+          authStatus: 'pending',
           isActive: true,
-          lastSyncAt: new Date(),
         },
       ],
       { session },

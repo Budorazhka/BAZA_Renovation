@@ -45,7 +45,7 @@ export class MessengerAccountDocument extends Document {
   @Prop({ required: false, trim: true })
   phoneNumber?: string;
 
-  @Prop({ required: true, type: String, enum: MESSENGER_AUTH_STATUSES, default: 'authenticated' })
+  @Prop({ required: true, type: String, enum: MESSENGER_AUTH_STATUSES, default: 'pending' })
   authStatus!: MessengerAuthStatus;
 
   @Prop({ required: true, default: true })
