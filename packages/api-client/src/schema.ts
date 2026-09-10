@@ -11151,7 +11151,10 @@ export interface operations {
     adminActivateSubscription: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Обязателен на всех создающих и критических командах. ADR-006 называет publish/book/cancel/manual-ledger как примеры; фактический перечень шире и закреплён тестом apps/api/test/architecture/idempotency-coverage.test.ts — см. docs/api/conventions.md §8. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
             path: {
                 organizationId: string;
             };
@@ -11176,6 +11179,7 @@ export interface operations {
             401: components["responses"]["Error"];
             403: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
         };
     };
     listMessengerAccounts: {
