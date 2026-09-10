@@ -133,6 +133,39 @@ describe('UnitRepository', () => {
       expect(findSpy).toHaveBeenCalledWith({ buildingId, organizationId });
       expect(limitSpy).toHaveBeenCalledWith(50);
     });
+
+    /**
+     * ИСПРАВЛЕНО 10.09.2026 (баг найден E2E, не этим тестом — см. докстринг
+     * ниже почему): DevelopmentsController.listUnits вызывает этот метод как
+     * `{ kind: dto.kind, status: dto.status, limit: dto.limit }` — объектным
+     * литералом, где ключи kind/status ПРИСУТСТВУЮТ всегда, просто со
+     * значением undefined, если query-параметр не передан. Это НЕ то же
+     * самое, что просто не передать ключ (см. тест выше) — спред `...rest`
+     * старой реализации сохранял такие ключи в Mongo-фильтре, и `{status:
+     * undefined}` матчил ноль реальных документов вместо всех. Тест выше
+     * («без kind/status...») эту регрессию не ловил, потому что вызывал
+     * repository напрямую с объектом БЕЗ этих ключей вообще — ровно так,
+     * как настоящий HTTP-запрос через контроллер никогда не вызывает.
+     */
+    it('kind/status присутствуют в вызове как undefined (как их шлёт контроллер) — не должны попасть в Mongo-фильтр', async () => {
+      const buildingId = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const mockModel = { find: findSpy };
+
+      const repository = new UnitRepository(mockModel as never);
+      const dto: { kind?: string; status?: string } = {};
+      await repository.listForBuilding(buildingId, organizationId, {
+        kind: dto.kind as never,
+        status: dto.status as never,
+        limit: 50,
+      });
+
+      expect(findSpy).toHaveBeenCalledWith({ buildingId, organizationId });
+    });
   });
 
   describe('listForBuildings / countForBuildings (chessboard.export)', () => {

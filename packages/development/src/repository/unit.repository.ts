@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { ClientSession, Model, Types } from 'mongoose';
+import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import type { MoneyAmount } from '@baza/contracts';
 import { UnitDocument, UnitKind, UnitStatus } from '../schemas/unit.schema';
 
@@ -86,8 +86,19 @@ export class UnitRepository {
     organizationId: Types.ObjectId,
     filter: { kind?: UnitKind; status?: UnitStatus; limit: number },
   ): Promise<UnitDocument[]> {
-    const { limit, ...rest } = filter;
-    return this.model.find({ buildingId, organizationId, ...rest }).sort({ _id: 1 }).limit(limit).exec();
+    // ИСПРАВЛЕНО 10.09.2026: `{ kind: undefined, status: undefined, ...}` —
+    // ключ с явным undefined всё равно попадал в Mongo-фильтр через спред
+    // (в отличие от listForBuildings ниже, где kind добавляется условным
+    // тернарником) и MongoDB матчил только документы, где поле буквально
+    // отсутствует/undefined — у реальных юнитов status всегда строка
+    // ('available' и т.д.), поэтому запрос без явного kind/status не находил
+    // НИЧЕГО. Баг обнаружен E2E-тестом (07-primary-sales-journey) только
+    // сейчас: раньше тест бил в неверный URL и падал 404 раньше, чем мог
+    // дойти до этой проверки.
+    const query: FilterQuery<UnitDocument> = { buildingId, organizationId };
+    if (filter.kind !== undefined) query.kind = filter.kind;
+    if (filter.status !== undefined) query.status = filter.status;
+    return this.model.find(query).sort({ _id: 1 }).limit(filter.limit).exec();
   }
 
   /**
