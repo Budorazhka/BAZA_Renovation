@@ -8,7 +8,6 @@ import {
   type ExchangeIntent,
   type ExchangeSide,
 } from '../schemas/community-thread.schema';
-import type { SeedThread } from '../community-seed-data';
 
 export interface ListThreadsFilter {
   sectionId?: string;
@@ -211,44 +210,13 @@ export class CommunityThreadRepository {
       .exec();
   }
 
-  async seedSystemThreadsIfEmpty(
-    threads: SeedThread[],
-    defaultIdentityId: Types.ObjectId,
-    defaultOrgId: Types.ObjectId,
-    defaultPositionId: Types.ObjectId,
-    session?: ClientSession,
-  ): Promise<void> {
-    const count = await this.model.countDocuments().session(session ?? null);
-    if (count > 0) return;
-
-    for (const t of threads) {
-      await this.model.updateOne(
-        { threadId: t.threadId },
-        {
-          $setOnInsert: {
-            threadId: t.threadId,
-            type: t.type,
-            sectionId: t.sectionId,
-            title: t.title,
-            excerpt: t.excerpt,
-            body: t.body,
-            authorIdentityId: defaultIdentityId,
-            authorPositionId: defaultPositionId,
-            organizationId: defaultOrgId,
-            authorSnapshot: t.authorSnapshot,
-            views: t.views,
-            reactions: t.reactions,
-            reactionUserIds: [],
-            replyCount: t.replyCount,
-            tags: t.tags,
-            pinned: t.pinned,
-            solved: t.solved,
-            locked: false,
-            exchange: t.exchange ?? null,
-          },
-        },
-        { upsert: true, session: session ?? undefined },
-      );
-    }
+  /** Очистка выдуманных тем бывшего засева по их фиксированным id (RETIRED_SEED_THREAD_IDS). */
+  async deleteByThreadIds(threadIds: readonly string[], session?: ClientSession): Promise<number> {
+    if (threadIds.length === 0) return 0;
+    const res = await this.model
+      .deleteMany({ threadId: { $in: [...threadIds] } })
+      .session(session ?? null)
+      .exec();
+    return res.deletedCount;
   }
 }

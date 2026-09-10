@@ -150,9 +150,10 @@ export class CreateCommunityThreadDto {
   @IsString({ each: true })
   tags?: string[];
 
-  @IsOptional()
-  @IsBoolean()
-  pinned?: boolean;
+  // `pinned` убран 11.09.2026: любой, кто мог создать тему, закреплял её поверх
+  // общей ленты у всех организаций. Закрепление — только
+  // PATCH /community/threads/:id/pin (модерация своей организации). В
+  // OpenAPI CreateCommunityThreadRequest этого поля и не было.
 
   @IsOptional()
   @ValidateNested()

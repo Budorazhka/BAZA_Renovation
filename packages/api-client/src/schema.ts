@@ -3294,7 +3294,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Таблица лидеров сообщества */
+        /**
+         * Таблица лидеров сообщества
+         * @description Пока рейтинг не считается из данных, `data` — пустой массив. До 11.09.2026
+         *     здесь отдавались захардкоженные вымышленные участники.
+         */
         get: operations["getCommunityLeaderboard"];
         put?: never;
         post?: never;

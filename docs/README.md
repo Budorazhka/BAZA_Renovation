@@ -127,9 +127,9 @@ permission-matrix.md», часть оснований уже перенесен�
 ### Этапы 9–11 (начаты 09–10.09 вне очереди)
 
 - [billing-manual-subscriptions.md](operations/billing-manual-subscriptions.md) — тарифы, подписка, журнал, ручная активация админом с грантом; лимиты и заморозка пока ничего не ограничивают.
-- [messenger-skeleton.md](operations/messenger-skeleton.md) — каркас диалогов и привязки к CRM без транспорта: сообщения никуда не уходят и ниоткуда не приходят.
+- [messenger-skeleton.md](operations/messenger-skeleton.md) — каркас диалогов и привязки к CRM без транспорта: сообщения никуда не уходят и ниоткуда не приходят; с 11.09 исходящее остаётся `queued`, новый аккаунт `pending`.
 - [lms-knowledge-base.md](operations/lms-knowledge-base.md) — материалы, курсы и прогресс в пределах организации; ответы теста уходят клиенту.
-- [community-forum-exchange.md](operations/community-forum-exchange.md) — межорганизационный форум и биржа MLS; модерация своей организации, выдуманный стартовый контент ещё засевается.
+- [community-forum-exchange.md](operations/community-forum-exchange.md) — межорганизационный форум и биржа MLS; модерация своей организации; с 11.09 стартует пустым, выдуманный засев вычищается из баз при старте.
 
 ### CI, сборка, эксплуатация
 

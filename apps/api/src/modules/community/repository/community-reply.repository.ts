@@ -102,6 +102,16 @@ export class CommunityReplyRepository {
     return res.deletedCount > 0;
   }
 
+  /** Ответы к удалённым темам бывшего засева: без темы до них не добраться. */
+  async deleteByThreadIds(threadIds: readonly string[], session?: ClientSession): Promise<number> {
+    if (threadIds.length === 0) return 0;
+    const res = await this.model
+      .deleteMany({ threadId: { $in: [...threadIds] } })
+      .session(session ?? null)
+      .exec();
+    return res.deletedCount;
+  }
+
   async toggleReaction(
     replyId: string,
     userId: string,

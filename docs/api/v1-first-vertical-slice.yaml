@@ -7441,6 +7441,9 @@ paths:
     get:
       operationId: getCommunityLeaderboard
       summary: Таблица лидеров сообщества
+      description: |
+        Пока рейтинг не считается из данных, `data` — пустой массив. До 11.09.2026
+        здесь отдавались захардкоженные вымышленные участники.
       tags: [community]
       responses:
         '200':

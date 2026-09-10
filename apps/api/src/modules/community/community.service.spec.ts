@@ -1,5 +1,10 @@
 import { Types } from 'mongoose';
 import { CommunityService } from './community.service';
+import {
+  RETIRED_SEED_EVENT_IDS,
+  RETIRED_SEED_THREAD_IDS,
+  SEED_COMMUNITY_SECTIONS,
+} from './community-seed-data';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import type { CommunitySectionRepository } from './repository/community-section.repository';
 import type { CommunityThreadRepository } from './repository/community-thread.repository';
@@ -40,7 +45,7 @@ interface MockThreadRepo {
   toggleReaction: jest.Mock;
   incrementReplyCount: jest.Mock;
   updateExchangeStatus: jest.Mock;
-  seedSystemThreadsIfEmpty: jest.Mock;
+  deleteByThreadIds: jest.Mock;
 }
 
 interface MockReplyRepo {
@@ -51,13 +56,14 @@ interface MockReplyRepo {
   delete: jest.Mock;
   toggleReaction: jest.Mock;
   markAsBest: jest.Mock;
+  deleteByThreadIds: jest.Mock;
 }
 
 interface MockEventRepo {
   findUpcoming: jest.Mock;
   findById: jest.Mock;
   toggleAttendance: jest.Mock;
-  seedSystemEventsIfEmpty: jest.Mock;
+  deleteByEventIds: jest.Mock;
 }
 
 interface MockIdempotencyService {
@@ -99,7 +105,7 @@ describe('CommunityService', () => {
       toggleReaction: jest.fn(),
       incrementReplyCount: jest.fn().mockResolvedValue(undefined),
       updateExchangeStatus: jest.fn(),
-      seedSystemThreadsIfEmpty: jest.fn().mockResolvedValue(undefined),
+      deleteByThreadIds: jest.fn().mockResolvedValue(0),
     };
     replyRepo = {
       findPaginated: jest.fn(),
@@ -109,12 +115,13 @@ describe('CommunityService', () => {
       delete: jest.fn(),
       toggleReaction: jest.fn(),
       markAsBest: jest.fn(),
+      deleteByThreadIds: jest.fn().mockResolvedValue(0),
     };
     eventRepo = {
       findUpcoming: jest.fn(),
       findById: jest.fn(),
       toggleAttendance: jest.fn(),
-      seedSystemEventsIfEmpty: jest.fn().mockResolvedValue(undefined),
+      deleteByEventIds: jest.fn().mockResolvedValue(0),
     };
     idempotencyService = {
       checkReplay: jest.fn().mockResolvedValue(null),
@@ -133,6 +140,36 @@ describe('CommunityService', () => {
       idempotencyService as unknown as IdempotencyService,
       outboxService as unknown as OutboxService,
     );
+  });
+
+  // ─── Засев при старте ──────────────────────────────────────────────────────
+
+  describe('seedDefaultsIfEmpty', () => {
+    it('засевает только разделы и вычищает выдуманные темы, ответы и мероприятия прежнего засева', async () => {
+      threadRepo.deleteByThreadIds.mockResolvedValue(3);
+      replyRepo.deleteByThreadIds.mockResolvedValue(1);
+      eventRepo.deleteByEventIds.mockResolvedValue(2);
+
+      await service.seedDefaultsIfEmpty();
+
+      expect(sectionRepo.seedSystemSectionsIfEmpty).toHaveBeenCalledWith(SEED_COMMUNITY_SECTIONS);
+      expect(threadRepo.deleteByThreadIds).toHaveBeenCalledWith(RETIRED_SEED_THREAD_IDS);
+      expect(replyRepo.deleteByThreadIds).toHaveBeenCalledWith(RETIRED_SEED_THREAD_IDS);
+      expect(eventRepo.deleteByEventIds).toHaveBeenCalledWith(RETIRED_SEED_EVENT_IDS);
+      expect(threadRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('не валит старт приложения, если засев упал', async () => {
+      sectionRepo.seedSystemSectionsIfEmpty.mockRejectedValue(new Error('replica set not ready'));
+
+      await expect(service.seedDefaultsIfEmpty()).resolves.toBeUndefined();
+    });
+
+    it('засевает ровно шесть разделов с уникальными id', () => {
+      const ids = SEED_COMMUNITY_SECTIONS.map((s) => s.sectionId);
+      expect(ids).toEqual(['market', 'cases', 'law', 'exchange', 'showcase', 'events']);
+      expect(new Set(ids).size).toBe(ids.length);
+    });
   });
 
   // ─── Разделы ───────────────────────────────────────────────────────────────
@@ -250,6 +287,52 @@ describe('CommunityService', () => {
         expect.anything(),
       );
       expect(result.id).toBe('t-123');
+    });
+
+    it('создаёт тему незакреплённой, даже если в теле пришёл pinned', async () => {
+      sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
+      threadRepo.create.mockResolvedValue({
+        threadId: 't-pin',
+        authorIdentityId: identityId,
+        organizationId: orgId,
+      } as unknown as CommunityThreadDocument);
+
+      await service.createThread({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-pin',
+        // В DTO поля больше нет (ValidationPipe отклонит его в HTTP), здесь
+        // проверяем, что и сервис его не протащит, если оно всё же дойдёт.
+        data: { type: 'announcement', sectionId: 'market', title: 'T', body: 'B', pinned: true } as never,
+      });
+
+      expect(threadRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ pinned: false }),
+        expect.anything(),
+      );
+    });
+
+    it('без профиля автора не приписывает ему компанию и сегмент', async () => {
+      sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
+      threadRepo.create.mockResolvedValue({
+        threadId: 't-author',
+        authorIdentityId: identityId,
+        organizationId: orgId,
+      } as unknown as CommunityThreadDocument);
+
+      await service.createThread({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-author',
+        data: { type: 'discussion', sectionId: 'market', title: 'T', body: 'B' },
+      });
+
+      const snapshot = threadRepo.create.mock.calls[0]![0].authorSnapshot;
+      expect(snapshot.name).toBe('Участник BAZA');
+      expect(snapshot).not.toHaveProperty('company');
+      expect(snapshot).not.toHaveProperty('segment');
     });
 
     it('возвращает сохранённый ответ при повторе idempotencyKey', async () => {
@@ -473,11 +556,8 @@ describe('CommunityService', () => {
   // ─── Лидерборд ─────────────────────────────────────────────────────────────
 
   describe('leaderboard', () => {
-    it('возвращает лидеров сообщества', async () => {
-      const result = await service.getLeaderboard();
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBeGreaterThan(0);
-      expect(result[0]).toHaveProperty('trustIndex');
+    it('возвращает пустой список, пока рейтинг не считается из данных', async () => {
+      await expect(service.getLeaderboard()).resolves.toEqual([]);
     });
   });
 });

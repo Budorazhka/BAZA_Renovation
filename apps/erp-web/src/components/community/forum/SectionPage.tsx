@@ -40,6 +40,14 @@ function EventsPanel() {
 
   if (loading) return <div className={panelClass}><ForumLoader text="Загрузка событий..." /></div>
 
+  if (events.length === 0) {
+    return (
+      <div className={`${panelClass} px-5 py-12 text-center text-[16px]`} style={{ color: 'var(--workspace-text-muted)' }}>
+        Мероприятий пока нет
+      </div>
+    )
+  }
+
   return (
     <div className={panelClass}>
       {events.map((e, i) => (

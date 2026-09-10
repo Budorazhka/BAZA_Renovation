@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, ClientSession, Types } from 'mongoose';
 import { CommunityEventDocument } from '../schemas/community-event.schema';
-import type { SeedEvent } from '../community-seed-data';
 
 @Injectable()
 export class CommunityEventRepository {
@@ -60,27 +59,13 @@ export class CommunityEventRepository {
     return { attending, attendeeCount: event.attendeeCount };
   }
 
-  async seedSystemEventsIfEmpty(events: SeedEvent[], session?: ClientSession): Promise<void> {
-    const count = await this.model.countDocuments().session(session ?? null);
-    if (count > 0) return;
-
-    for (const ev of events) {
-      await this.model.updateOne(
-        { eventId: ev.eventId },
-        {
-          $setOnInsert: {
-            eventId: ev.eventId,
-            title: ev.title,
-            description: ev.description,
-            date: ev.date,
-            location: ev.location,
-            format: ev.format,
-            attendeeIdentityIds: [],
-            attendeeCount: ev.attendeeCount,
-          },
-        },
-        { upsert: true, session: session ?? undefined },
-      );
-    }
+  /** Очистка выдуманных мероприятий бывшего засева по их фиксированным id (RETIRED_SEED_EVENT_IDS). */
+  async deleteByEventIds(eventIds: readonly string[], session?: ClientSession): Promise<number> {
+    if (eventIds.length === 0) return 0;
+    const res = await this.model
+      .deleteMany({ eventId: { $in: [...eventIds] } })
+      .session(session ?? null)
+      .exec();
+    return res.deletedCount;
   }
 }

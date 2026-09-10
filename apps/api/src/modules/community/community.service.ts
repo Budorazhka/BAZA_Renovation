@@ -21,9 +21,9 @@ import {
   ListCommunityEventsQueryDto,
 } from './dto/community.dto';
 import {
+  RETIRED_SEED_EVENT_IDS,
+  RETIRED_SEED_THREAD_IDS,
   SEED_COMMUNITY_SECTIONS,
-  SEED_COMMUNITY_THREADS,
-  SEED_COMMUNITY_EVENTS,
 } from './community-seed-data';
 import type { CommunitySectionDocument } from './schemas/community-section.schema';
 import type {
@@ -33,6 +33,12 @@ import type {
 } from './schemas/community-thread.schema';
 import type { CommunityReplyDocument } from './schemas/community-reply.schema';
 import type { CommunityEventDocument } from './schemas/community-event.schema';
+
+const DEFAULT_AUTHOR_SNAPSHOT: AuthorSnapshot = {
+  name: 'Участник BAZA',
+  role: 'member',
+  badges: ['Участник'],
+};
 
 export function toCommunitySectionDto(doc: CommunitySectionDocument) {
   return {
@@ -117,17 +123,25 @@ export class CommunityService implements OnModuleInit {
     await this.seedDefaultsIfEmpty();
   }
 
+  /**
+   * Засевается только структура — разделы. Темы и мероприятия появляются от
+   * настоящих участников; выдуманные записи прежнего засева удаляются по
+   * фиксированным id (см. RETIRED_SEED_* в community-seed-data.ts). Обе
+   * операции идемпотентны, поэтому без транзакции: прерванный старт доделает
+   * следующий.
+   */
   async seedDefaultsIfEmpty(): Promise<void> {
     try {
       await this.sectionRepository.seedSystemSectionsIfEmpty(SEED_COMMUNITY_SECTIONS);
-      const defaultId = new Types.ObjectId();
-      await this.threadRepository.seedSystemThreadsIfEmpty(
-        SEED_COMMUNITY_THREADS,
-        defaultId,
-        defaultId,
-        defaultId,
-      );
-      await this.eventRepository.seedSystemEventsIfEmpty(SEED_COMMUNITY_EVENTS);
+
+      const retiredThreads = await this.threadRepository.deleteByThreadIds(RETIRED_SEED_THREAD_IDS);
+      const retiredReplies = await this.replyRepository.deleteByThreadIds(RETIRED_SEED_THREAD_IDS);
+      const retiredEvents = await this.eventRepository.deleteByEventIds(RETIRED_SEED_EVENT_IDS);
+      if (retiredThreads + retiredReplies + retiredEvents > 0) {
+        this.logger.log(
+          `Removed fabricated seed content: threads=${retiredThreads}, replies=${retiredReplies}, events=${retiredEvents}`,
+        );
+      }
     } catch (error) {
       // ИСПРАВЛЕНО 10.09.2026: было catch {} — молча глушило любую ошибку,
       // включая реальные сбои сидирования в проде, не только штатный случай
@@ -230,13 +244,10 @@ export class CommunityService implements OnModuleInit {
       params.data.excerpt ||
       params.data.body.slice(0, 160).replace(/[#*_`]/g, '').trim();
 
-    const snapshot: AuthorSnapshot = params.authorSnapshot ?? {
-      name: 'Участник BAZA',
-      company: 'Агентство недвижимости',
-      segment: 'broker',
-      role: 'member',
-      badges: ['Участник'],
-    };
+    // Компанию и сегмент не подставляем: раньше каждому автору без профиля
+    // приписывалось «Агентство недвижимости / broker», в том числе
+    // застройщикам. Пока снимка профиля нет, показываем только то, что знаем.
+    const snapshot: AuthorSnapshot = params.authorSnapshot ?? DEFAULT_AUTHOR_SNAPSHOT;
 
     return runInTransaction(this.connection, async (session: ClientSession) => {
       const created = await this.threadRepository.create(
@@ -252,7 +263,7 @@ export class CommunityService implements OnModuleInit {
           organizationId: params.organizationId,
           authorSnapshot: snapshot,
           tags: params.data.tags ?? [],
-          pinned: params.data.pinned ?? false,
+          pinned: false,
           exchange: params.data.exchange
             ? {
                 intent: params.data.exchange.intent,
@@ -449,13 +460,7 @@ export class CommunityService implements OnModuleInit {
     }
 
     const replyId = `rep-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    const snapshot: AuthorSnapshot = params.authorSnapshot ?? {
-      name: 'Участник BAZA',
-      company: 'Агентство недвижимости',
-      segment: 'broker',
-      role: 'member',
-      badges: ['Участник'],
-    };
+    const snapshot: AuthorSnapshot = params.authorSnapshot ?? DEFAULT_AUTHOR_SNAPSHOT;
 
     return runInTransaction(this.connection, async (session: ClientSession) => {
       const created = await this.replyRepository.create(
@@ -661,50 +666,13 @@ export class CommunityService implements OnModuleInit {
 
   // ─── Лидерборд и статистика ──────────────────────────────────────────────────
 
-  async getLeaderboard() {
-    return [
-      {
-        id: 'm1',
-        name: 'Алексей Смирнов',
-        company: 'Grand Realty',
-        segment: 'broker',
-        role: 'expert',
-        city: 'Тбилиси',
-        trustIndex: 98,
-        solvedQuestions: 34,
-        cobrokingDeals: 18,
-        eventsYtd: 6,
-        reactionsReceived: 412,
-        badges: ['Топ брокер', 'Эксперт'],
-      },
-      {
-        id: 'm2',
-        name: 'Георгий Мамедов',
-        company: 'GeoPrime Realty',
-        segment: 'broker',
-        role: 'expert',
-        city: 'Батуми',
-        trustIndex: 95,
-        solvedQuestions: 29,
-        cobrokingDeals: 15,
-        eventsYtd: 5,
-        reactionsReceived: 380,
-        badges: ['Эксперт · право'],
-      },
-      {
-        id: 'm3',
-        name: 'Елена Васильева',
-        company: 'Invest Realty Pro',
-        segment: 'agent',
-        role: 'member',
-        city: 'Батуми',
-        trustIndex: 92,
-        solvedQuestions: 19,
-        cobrokingDeals: 12,
-        eventsYtd: 4,
-        reactionsReceived: 295,
-        badges: ['MLS Участник'],
-      },
-    ];
+  /**
+   * Рейтинга пока нет: до 11.09.2026 здесь отдавались три выдуманных человека
+   * («Алексей Смирнов, Grand Realty, индекс доверия 98» и т.д.) всем
+   * организациям как настоящий топ. Пустой список честнее, пока метрики
+   * (решённые вопросы, со-брокинг) не считаются из данных.
+   */
+  async getLeaderboard(): Promise<never[]> {
+    return [];
   }
 }

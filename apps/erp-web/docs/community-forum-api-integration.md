@@ -120,7 +120,7 @@ Static-ish catalog rendered in the left rail and used to label threads. `threads
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Stable slug (`market`, `law`, `mortgage`, `marketing`, `tech`, `networking`, `exchange`, `showcase`, `events`). Used in thread filters. |
+| `id` | string | Stable slug (`market`, `cases`, `law`, `exchange`, `showcase`, `events`). Used in thread filters. |
 | `name` | string | Display name. |
 | `kind` | enum `sectionKind` | Drives layout (feed vs category vs exchange board vs events). |
 | `group` | string \| null | Optional left-rail grouping (e.g. «Кулуары»). |
@@ -128,7 +128,11 @@ Static-ish catalog rendered in the left rail and used to label threads. `threads
 | `description` | string | One-line subtitle. |
 | `threads` | number | Count of threads in the section. |
 
-> The initial section list can be **seeded from `forumData.ts` `SECTIONS`** — the slugs there are canonical.
+> Since 11.09.2026 the canonical list is the backend's `SEED_COMMUNITY_SECTIONS`
+> (`apps/api/src/modules/community/community-seed-data.ts`). `forumData.ts` `SECTIONS`
+> mirrors it for labels and the new-thread form; `tests/unit/communitySectionsSync.test.ts`
+> fails if the two drift. The old nine-section list (`mortgage`, `marketing`, `tech`,
+> `networking`) never existed on the backend: posting there returned 404.
 
 ---
 

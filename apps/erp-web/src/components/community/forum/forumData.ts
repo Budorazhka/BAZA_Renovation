@@ -157,16 +157,20 @@ export const STATUS_LABEL: Record<ExchangeStatus, string> = {
 
 // ─── Разделы ─────────────────────────────────────────────────────────────────
 
+// Зеркало разделов API (apps/api/src/modules/community/community-seed-data.ts,
+// SEED_COMMUNITY_SECTIONS): отсюда берутся подписи и список разделов в форме
+// новой темы. До 11.09.2026 здесь были свои девять разделов — четыре из них
+// (ипотека, маркетинг, технологии, нетворкинг) API не знает, и публикация в
+// них падала с 404, а раздела «Кейсы и опыт» в форме не было вовсе. Тест
+// tests/unit/communitySectionsSync.test.ts не даёт спискам разойтись снова.
+// Счётчик тем здесь 0: настоящие числа левый рельс берёт из GET /community/sections.
 export const SECTIONS: ForumSection[] = [
-  { id: 'market', name: 'Лента рынка', kind: 'feed', icon: 'megaphone', description: 'Анонсы застройщиков и изменения рынка', threads: 124 },
-  { id: 'law', name: 'Право и сделки', kind: 'category', group: 'Кулуары', icon: 'scale', description: 'Эскроу, ДДУ, налоги, сделки с нерезидентами', threads: 86 },
-  { id: 'mortgage', name: 'Ипотека и финансы', kind: 'category', group: 'Кулуары', icon: 'landmark', description: 'Программы, одобрения, рефинансирование', threads: 73 },
-  { id: 'marketing', name: 'Маркетинг и лидген', kind: 'category', group: 'Кулуары', icon: 'target', description: 'Каналы привлечения, контент, реклама', threads: 64 },
-  { id: 'tech', name: 'Технологии и CRM', kind: 'category', group: 'Кулуары', icon: 'cpu', description: 'Автоматизация, интеграции, инструменты', threads: 41 },
-  { id: 'networking', name: 'Нетворкинг', kind: 'category', group: 'Кулуары', icon: 'coffee', description: 'Знакомства и неформальное общение', threads: 58 },
-  { id: 'exchange', name: 'Биржа', kind: 'exchange', icon: 'arrows', description: 'Спрос и предложение: co-broking, объекты, услуги', threads: 92 },
-  { id: 'showcase', name: 'Новостройки', kind: 'showcase', icon: 'building', description: 'Застройщики, ЖК и условия агентам', threads: 37 },
-  { id: 'events', name: 'События', kind: 'events', icon: 'calendar', description: 'Эфиры, нетворкинги, круглые столы', threads: 18 },
+  { id: 'market', name: 'Лента рынка', kind: 'feed', icon: 'megaphone', description: 'Анонсы застройщиков, старты продаж и срочные новости рынка недвижимости', threads: 0 },
+  { id: 'cases', name: 'Кейсы и опыт', kind: 'category', icon: 'briefcase', description: 'Разборы реальных сделок, сложных переговоров и практических кейсов', threads: 0 },
+  { id: 'law', name: 'Юристы и налоги', kind: 'category', icon: 'scale', description: 'ДДУ, эскроу, налоги, ипотека и правовые риски при покупке', threads: 0 },
+  { id: 'exchange', name: 'Биржа запросов (MLS)', kind: 'exchange', icon: 'arrow-left-right', description: 'Прямой обмен клиентами, со-брокинг и поиск партнерских объектов', threads: 0 },
+  { id: 'showcase', name: 'Витрина объектов', kind: 'showcase', icon: 'building', description: 'Эксклюзивные предложения партнеров с подтвержденной комиссией', threads: 0 },
+  { id: 'events', name: 'Мероприятия', kind: 'events', group: 'Кулуары', icon: 'calendar', description: 'Брокер-туры, вебинары девелоперов и закрытые встречи сообщества', threads: 0 },
 ]
 
 export function getSection(id: string): ForumSection | undefined {

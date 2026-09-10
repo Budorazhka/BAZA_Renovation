@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   ArrowUp,
   ArrowUpRight,
+  Briefcase,
   Building2,
   CalendarDays,
   CheckCircle2,
@@ -69,9 +70,12 @@ export function sectionRoute(section: ForumSection): string {
 
 // ─── Иконки ──────────────────────────────────────────────────────────────────
 
+// Ключи — значения `icon` разделов из API (SEED_COMMUNITY_SECTIONS); неизвестный
+// ключ падает на MessagesSquare.
 const SECTION_ICONS: Record<string, LucideIcon> = {
-  megaphone: Megaphone, scale: Scale, landmark: Landmark, target: Target,
-  cpu: Cpu, coffee: Coffee, arrows: ArrowLeftRight, building: Building2, calendar: CalendarDays,
+  megaphone: Megaphone, briefcase: Briefcase, scale: Scale, landmark: Landmark, target: Target,
+  cpu: Cpu, coffee: Coffee, arrows: ArrowLeftRight, 'arrow-left-right': ArrowLeftRight,
+  building: Building2, calendar: CalendarDays,
 }
 
 export function SectionGlyph({ icon, size = 17 }: { icon: string; size?: number }) {
@@ -380,36 +384,42 @@ export function ForumRightRail() {
         </RailPanel>
       )}
 
-      <RailPanel title={t('community.forum.forumKit.ближайшие_события')}>
-        {loading ? renderSkeleton(3) : (
-          <ul className="flex flex-col gap-2">
-            {events.map((e) => (
-              <li key={e.id} className="flex items-center gap-2 text-[16px]" style={{ color: 'var(--workspace-text)' }}>
-                <span className="size-2.5 shrink-0 rounded-full" style={{ background: e.registrationOpen ? GOLD : MINT }} />
-                <span style={{ color: 'var(--workspace-text-dim)' }}>{e.date}</span>
-                <span className="min-w-0 truncate">{e.title}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </RailPanel>
+      {/* Мероприятий и рейтинга на старте нет (выдуманный засев убран 11.09.2026),
+          поэтому пустые панели тоже скрываем, как теги выше. */}
+      {(loading || events.length > 0) && (
+        <RailPanel title={t('community.forum.forumKit.ближайшие_события')}>
+          {loading ? renderSkeleton(3) : (
+            <ul className="flex flex-col gap-2">
+              {events.map((e) => (
+                <li key={e.id} className="flex items-center gap-2 text-[16px]" style={{ color: 'var(--workspace-text)' }}>
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: e.registrationOpen ? GOLD : MINT }} />
+                  <span style={{ color: 'var(--workspace-text-dim)' }}>{e.date}</span>
+                  <span className="min-w-0 truncate">{e.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </RailPanel>
+      )}
 
-      <RailPanel title={t('community.forum.forumKit.топ_недели')}>
-        {loading ? renderSkeleton(3) : (
-          <ul className="flex flex-col gap-1.5">
-            {topMembersList.map((m) => (
-              <li key={m.id}>
-                <button type="button" onClick={() => navigate(`${FORUM_BASE}/u/${m.id}`)}
-                  className="flex w-full items-center gap-2 text-left transition-colors hover:text-[color:var(--theme-accent-heading)]">
-                  <ShieldCheck size={14} strokeWidth={2} style={{ color: MINT }} />
-                  <span className="min-w-0 flex-1 truncate text-[16px]" style={{ color: 'var(--workspace-text)' }}>{m.name}</span>
-                  <span style={{ color: m.trustIndex >= 70 ? GOLD : MINT, fontSize: 17, fontWeight: 500 }}>{m.trustIndex}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </RailPanel>
+      {(loading || topMembersList.length > 0) && (
+        <RailPanel title={t('community.forum.forumKit.топ_недели')}>
+          {loading ? renderSkeleton(3) : (
+            <ul className="flex flex-col gap-1.5">
+              {topMembersList.map((m) => (
+                <li key={m.id}>
+                  <button type="button" onClick={() => navigate(`${FORUM_BASE}/u/${m.id}`)}
+                    className="flex w-full items-center gap-2 text-left transition-colors hover:text-[color:var(--theme-accent-heading)]">
+                    <ShieldCheck size={14} strokeWidth={2} style={{ color: MINT }} />
+                    <span className="min-w-0 flex-1 truncate text-[16px]" style={{ color: 'var(--workspace-text)' }}>{m.name}</span>
+                    <span style={{ color: m.trustIndex >= 70 ? GOLD : MINT, fontSize: 17, fontWeight: 500 }}>{m.trustIndex}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </RailPanel>
+      )}
     </div>
   )
 }
