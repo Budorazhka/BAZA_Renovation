@@ -12,6 +12,10 @@ Deny-by-default: отсутствие явного grant означает отк
 
 Шесть фиксированных ролей (ADR-003, ADR-008 Accepted в исходном журнале решений master plan; `marketer` добавлена 25.08.2026 — `[technical decision]`, не owner decision, см. примечание ниже раздела 1.2): **owner, director, rop, manager, administrator, marketer**. Роль на `Position` задаёт **стартовый** набор grants при создании позиции — далее super_admin организации (owner) может донастроить конкретные grants индивидуально через `accessProfile` (Position, Module 2 domain-model.md) или `personalAccess` (override поверх позиции для конкретного человека — уже частично специфицировано в ERP-коде как паттерн, `teamApi.ts`).
 
+**Седьмая роль `developer`** (27.08.2026, D-07, подтверждена владельцем) есть в `apps/api/src/modules/organizations/default-role-grants.ts`: набор уровня owner для организации-застройщика, которая публикует свои ЖК и ведёт лиды с витрины. Разделы 1.1–1.6 её не показывают, разделы 1.7–1.8 показывают. Сверить 1.1–1.6 с кодом — открытый пункт (11.09.2026).
+
+**Гранты не доливаются в существующие должности.** Набор применяется только при создании должности, механизма миграции нет (прецедент `position.read` описан в `default-role-grants.ts`). Каждый новый грант в этой матрице означает 403 для организаций, созданных до его появления.
+
 ### 1.1. CRM / Leads / Contacts / Deals
 
 | Permission | owner | director | rop | manager | administrator | marketer |
@@ -93,6 +97,41 @@ Deny-by-default: отсутствие явного grant означает отк
 | `messenger_message.send.own` | ✓ | ✓ | ✓ | ✓ | — | — |
 | `messenger_message.send.organization` | ✓ | ✓ | ✓ | — | — | — |
 
+**Расхождение с кодом (11.09.2026).** `.own` у `messenger_message.send`, `messenger_dialog.link_crm` и у создания задачи из диалога не применяется: контроллер сужает выборку по владельцу только для чтения. Менеджер с `.own` может писать в чужие диалоги своей организации. См. [operations/messenger-skeleton.md](../operations/messenger-skeleton.md).
+
+### 1.7. LMS (Этап 11)
+
+`[technical decision — 10.09.2026]`, не owner decision: гранты пришли вместе с модулем (`be0e5f7`) без записи в журнале решений. `org`/`own` — scope гранта в коде.
+
+| Permission | owner | director | rop | manager | administrator | marketer | developer |
+|---|---|---|---|---|---|---|---|
+| `lms_material.read` | org | org | org | org | org | org | org |
+| `lms_material.manage` | org | org | org | — | — | — | org |
+| `lms_course.read` | org | org | org | org | org | org | org |
+| `lms_course.manage` | org | org | org | — | — | — | org |
+| `lms_progress.read` | org | org | org | own | own | own | org |
+| `lms_progress.update` | own | own | own | own | own | own | own |
+
+`lms_progress.read` со scope `org` чужой прогресс не открывает: эндпоинт отдаёт только прогресс вызывающей должности, сводки по команде нет. Правильные ответы итогового теста отдаются всем, у кого есть `lms_course.read`, — см. [operations/lms-knowledge-base.md](../operations/lms-knowledge-base.md).
+
+### 1.8. Community и биржа MLS (Этап 11)
+
+`[technical decision — 10.09.2026]`, не owner decision: гранты пришли вместе с модулем (`f91f3d6`) без записи в журнале решений.
+
+| Permission | owner | director | rop | manager | administrator | marketer | developer |
+|---|---|---|---|---|---|---|---|
+| `community_thread.read` | org | org | org | org | org | org | org |
+| `community_thread.create` | org | org | org | own | org | own | org |
+| `community_thread.manage` | org | org | org | — | org | — | org |
+| `community_reply.create` | org | org | org | own | org | own | org |
+| `community_reply.manage` | org | org | org | — | org | — | org |
+| `community_exchange.read` | org | org | org | org | org | org | org |
+| `community_exchange.create` | org | org | org | own | org | — | org |
+| `community_event.read` | org | org | org | org | org | org | org |
+| `community_event.attend` | org | org | org | own | org | own | org |
+
+Scope здесь на поведение не влияет: контроллер community проверяет только наличие гранта, а темы, ответы и биржа видны всем организациям по замыслу модуля. `manage` с 10.09.2026 действует только на контент своей организации (`c01688e`); до этого удаление чужих тем было открыто всем, у кого есть `manage`. Модерации всей площадки нет — это admin-контур, раздел 2. Кто видит биржу и нужна ли верификация участников (master plan §2.3) — решение владельца, см. [operations/community-forum-exchange.md](../operations/community-forum-exchange.md).
+
 ---
 
 ## 2. Системные admin actors
@@ -146,7 +185,7 @@ Deny-by-default: отсутствие явного grant означает отк
 | **Listing unpublish** (владелец/риэлтор) | владелец listing или иерархия (owner/director/rop) | audit, reason опционален (не Admin-действие) |
 | **Listing unpublish** (Admin) | Admin grant `listing.unpublish.city/domain/global` | **обязательный reason**, audit (ADR-005 unpublish, master plan D-06) |
 | **Rating adjustment** (Admin) | `review.rating_adjust.*` | **обязательный reason** (`[owner decision — xlsx #142]`: «Для админов» — только Admin, не сама организация может корректировать чужой рейтинг) |
-| **Manual ledger change** | Admin grant `manual_ledger.write.*` | **обязательный reason**, append-only (никогда update, только новая компенсирующая запись, domain-model.md) |
+| **Manual ledger change** | Admin grant `manual_ledger.write.*` | **обязательный reason**, append-only (никогда update, только новая компенсирующая запись, domain-model.md). Для активации тарифа проверяется с 10.09.2026 (`9925a5b`); до этого хватало входа администратора |
 | **Impersonation** | super_admin или explicit Admin grant `impersonation.start.*` | обязательная причина, короткий TTL, заметная UI-плашка, запрет ряда критических действий во время impersonation-сессии, полный audit (master plan разд.5.4) |
 | **Export** (bulk data) | `export.organization` (ERP) / соответствующий Admin grant | audit с указанием объёма/типа экспортируемых данных |
 | **Import** (bulk lead create) | `import.organization` + `lead.create.organization` | один audit-batch на весь файл (actor, filename, total/created/failed), не построчно — тот же принцип "каждый клик не надо" |
