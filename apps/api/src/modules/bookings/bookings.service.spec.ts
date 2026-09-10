@@ -241,6 +241,86 @@ describe('BookingsService.book', () => {
   });
 });
 
+describe('BookingsService.book — резервирование юнита (11.09.2026)', () => {
+  const organizationId = new Types.ObjectId();
+  const unitId = new Types.ObjectId();
+
+  function params() {
+    return {
+      unitId,
+      organizationId,
+      managerPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      startsAt: new Date('2026-09-20T10:00:00.000Z'),
+      expiresAt: new Date('2026-09-21T10:00:00.000Z'),
+      idempotencyKey: 'book-reserve',
+      correlationId: 'corr-reserve',
+    };
+  }
+
+  function repositories() {
+    return {
+      bookingRepository: {
+        findOverlappingActive: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockImplementation(async (data: Record<string, unknown>) => ({
+          _id: new Types.ObjectId(),
+          ...data,
+          status: 'pending',
+          createdAt: new Date('2026-09-11T10:00:00.000Z'),
+        })),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+    };
+  }
+
+  it('резервирует юнит по version, прочитанной в транзакции, а не до неё', async () => {
+    // До транзакции — version 1, в транзакции уже 2 (пакетное изменение цен).
+    const getUnit = jest
+      .fn()
+      .mockResolvedValueOnce({ _id: unitId, status: 'available', version: 1, buildingId: new Types.ObjectId() })
+      .mockResolvedValueOnce({ _id: unitId, status: 'available', version: 2, buildingId: new Types.ObjectId() });
+    const updateUnit = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const service = makeService({
+      ...repositories(),
+      developmentsService: { getUnitForOrganization: getUnit, updateUnitStatusInSession: updateUnit } as never,
+    });
+
+    await service.book(params());
+
+    expect(getUnit).toHaveBeenLastCalledWith(unitId, organizationId, expect.anything());
+    expect(updateUnit).toHaveBeenCalledWith(unitId, organizationId, 2, 'reserved', ['available'], expect.anything());
+  });
+
+  it('промах CAS при резервировании откатывает бронь (VERSION_CONFLICT), а не оставляет юнит available', async () => {
+    const service = makeService({
+      ...repositories(),
+      developmentsService: {
+        getUnitForOrganization: jest
+          .fn()
+          .mockResolvedValue({ _id: unitId, status: 'available', version: 1, buildingId: new Types.ObjectId() }),
+        updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      } as never,
+    });
+
+    await expect(service.book(params())).rejects.toMatchObject({ code: ErrorCode.VERSION_CONFLICT });
+  });
+
+  it('отказывает, если юнит продан между проверкой и транзакцией', async () => {
+    const service = makeService({
+      ...repositories(),
+      developmentsService: {
+        getUnitForOrganization: jest
+          .fn()
+          .mockResolvedValueOnce({ _id: unitId, status: 'available', version: 1 })
+          .mockResolvedValueOnce({ _id: unitId, status: 'sold', version: 2 }),
+        updateUnitStatusInSession: jest.fn(),
+      } as never,
+    });
+
+    await expect(service.book(params())).rejects.toMatchObject({ code: ErrorCode.BOOKING_OVERLAP });
+  });
+});
+
 describe('BookingsService.cancelBooking', () => {
   const organizationId = new Types.ObjectId();
   const unitId = new Types.ObjectId();
@@ -378,6 +458,282 @@ describe('BookingsService.cancelBooking', () => {
     expect(awaitReplaySpy).toHaveBeenCalledWith(
       expect.objectContaining({ operation: 'cancelBooking', key: 'cancel-1' }),
     );
+  });
+
+  /**
+   * 11.09.2026: освобождение юнита вынесено в releaseUnitIfFree (общий путь
+   * с истечением). Юнит читается в сессии транзакции, промах CAS больше не
+   * проглатывается: раньше отмена оставляла юнит reserved навсегда.
+   */
+  function reservedUnitDevelopmentsService(modifiedCount: number) {
+    return {
+      getUnitForOrganization: jest.fn().mockResolvedValue({
+        _id: unitId,
+        status: 'reserved',
+        version: 4,
+        buildingId: new Types.ObjectId(),
+      }),
+      updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount }),
+    };
+  }
+
+  it('освобождает reserved юнит: читает его в сессии транзакции и публикует UnitStatusChanged', async () => {
+    const booking = pendingBooking();
+    const developmentsService = reservedUnitDevelopmentsService(1);
+    const outboxSpy = jest.fn().mockResolvedValue(undefined);
+    const service = makeService({
+      bookingRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValueOnce(booking).mockResolvedValueOnce({ ...booking, status: 'rejected' }),
+        cancelIfActive: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      developmentsService: developmentsService as never,
+      outboxService: { publish: outboxSpy } as never,
+    });
+
+    await service.cancelBooking(params());
+
+    // Третий аргумент — сессия транзакции: юнит читается в её снимке.
+    expect(developmentsService.getUnitForOrganization).toHaveBeenCalledWith(unitId, organizationId, expect.anything());
+    expect(developmentsService.updateUnitStatusInSession).toHaveBeenCalledWith(
+      unitId,
+      organizationId,
+      4,
+      'available',
+      ['reserved'],
+      expect.anything(),
+    );
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'UnitStatusChanged', payload: expect.objectContaining({ newStatus: 'available' }) }),
+      expect.anything(),
+    );
+  });
+
+  it('промах CAS при освобождении юнита откатывает отмену (VERSION_CONFLICT), а не оставляет юнит reserved', async () => {
+    const booking = pendingBooking();
+    const service = makeService({
+      bookingRepository: {
+        findByIdForOrganization: jest.fn().mockResolvedValueOnce(booking).mockResolvedValueOnce({ ...booking, status: 'rejected' }),
+        cancelIfActive: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      developmentsService: reservedUnitDevelopmentsService(0) as never,
+    });
+
+    await expect(service.cancelBooking(params())).rejects.toMatchObject({ code: ErrorCode.VERSION_CONFLICT });
+  });
+});
+
+describe('BookingsService.expireOverdueBookings', () => {
+  const now = new Date('2026-09-11T12:00:00.000Z');
+
+  function overdueBooking(overrides: Record<string, unknown> = {}) {
+    return {
+      _id: new Types.ObjectId(),
+      unitId: new Types.ObjectId(),
+      organizationId: new Types.ObjectId(),
+      leadId: undefined,
+      manager: new Types.ObjectId(),
+      dateRange: { startsAt: new Date('2026-09-10T10:00:00.000Z'), expiresAt: new Date('2026-09-11T10:00:00.000Z') },
+      status: 'pending',
+      createdAt: new Date('2026-09-10T09:00:00.000Z'),
+      ...overrides,
+    };
+  }
+
+  function reservedUnit(unitId: Types.ObjectId) {
+    return { _id: unitId, status: 'reserved', version: 7, buildingId: new Types.ObjectId() };
+  }
+
+  it('переводит просроченную бронь в expired, освобождает юнит и пишет события и аудит системного актора', async () => {
+    const booking = overdueBooking();
+    const lockSpy = jest.fn().mockResolvedValue(undefined);
+    const expireSpy = jest.fn().mockResolvedValue(booking);
+    const outboxSpy = jest.fn().mockResolvedValue(undefined);
+    const auditSpy = jest.fn().mockResolvedValue(undefined);
+    const updateUnitSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: jest.fn().mockResolvedValueOnce([booking]),
+        expireIfOverdue: expireSpy,
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      bookingLockRepository: { bumpForUnit: lockSpy } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue(reservedUnit(booking.unitId)),
+        updateUnitStatusInSession: updateUnitSpy,
+      } as never,
+      outboxService: { publish: outboxSpy } as never,
+      auditService: { append: auditSpy } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now })).resolves.toEqual({
+      expiredCount: 1,
+      releasedUnits: 1,
+      errors: 0,
+    });
+
+    expect(lockSpy).toHaveBeenCalledWith(booking.unitId, expect.anything());
+    // CAS получает тот же now, что и выборка: продлённая после выборки бронь не истечёт.
+    expect(expireSpy).toHaveBeenCalledWith(booking._id, booking.organizationId, now, expect.anything());
+    expect(updateUnitSpy).toHaveBeenCalledWith(
+      booking.unitId,
+      booking.organizationId,
+      7,
+      'available',
+      ['reserved'],
+      expect.anything(),
+    );
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'UnitStatusChanged', aggregateId: booking.unitId }),
+      expect.anything(),
+    );
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: 'BookingExpired',
+        aggregateId: booking._id,
+        deduplicationKey: `booking:${booking._id.toString()}:expired`,
+        payload: expect.objectContaining({ previousStatus: 'pending', unitReleased: true }),
+      }),
+      expect.anything(),
+    );
+    expect(auditSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actor: { type: 'system' },
+        action: 'booking.expire',
+        resourceId: booking._id,
+        after: { status: 'expired', unitReleased: true },
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('не освобождает юнит, пока на нём есть другая активная бронь', async () => {
+    const booking = overdueBooking({ status: 'booked' });
+    const updateUnitSpy = jest.fn();
+    const outboxSpy = jest.fn().mockResolvedValue(undefined);
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: jest.fn().mockResolvedValueOnce([booking]),
+        expireIfOverdue: jest.fn().mockResolvedValue(booking),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(overdueBooking({ unitId: booking.unitId })),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue(reservedUnit(booking.unitId)),
+        updateUnitStatusInSession: updateUnitSpy,
+      } as never,
+      outboxService: { publish: outboxSpy } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now })).resolves.toEqual({
+      expiredCount: 1,
+      releasedUnits: 0,
+      errors: 0,
+    });
+    expect(updateUnitSpy).not.toHaveBeenCalled();
+    expect(outboxSpy).not.toHaveBeenCalledWith(expect.objectContaining({ eventType: 'UnitStatusChanged' }), expect.anything());
+    expect(outboxSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ eventType: 'BookingExpired', payload: expect.objectContaining({ unitReleased: false }) }),
+      expect.anything(),
+    );
+  });
+
+  it('пропускает бронь, которую продлили, отменили или перевели в сделку после выборки (CAS вернул null)', async () => {
+    const booking = overdueBooking();
+    const outboxSpy = jest.fn();
+    const auditSpy = jest.fn();
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: jest.fn().mockResolvedValueOnce([booking]),
+        expireIfOverdue: jest.fn().mockResolvedValue(null),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+      outboxService: { publish: outboxSpy } as never,
+      auditService: { append: auditSpy } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now })).resolves.toEqual({
+      expiredCount: 0,
+      releasedUnits: 0,
+      errors: 0,
+    });
+    expect(outboxSpy).not.toHaveBeenCalled();
+    expect(auditSpy).not.toHaveBeenCalled();
+  });
+
+  it('ошибка на одной брони не останавливает прогон — считается в errors', async () => {
+    const broken = overdueBooking();
+    const healthy = overdueBooking();
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: jest.fn().mockResolvedValueOnce([broken, healthy]),
+        expireIfOverdue: jest
+          .fn()
+          .mockRejectedValueOnce(new Error('write conflict'))
+          .mockResolvedValueOnce(healthy),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue(reservedUnit(healthy.unitId)),
+        updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now })).resolves.toEqual({
+      expiredCount: 1,
+      releasedUnits: 1,
+      errors: 1,
+    });
+  });
+
+  it('промах CAS юнита откатывает истечение брони целиком и считается ошибкой', async () => {
+    const booking = overdueBooking();
+    const outboxSpy = jest.fn().mockResolvedValue(undefined);
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: jest.fn().mockResolvedValueOnce([booking]),
+        expireIfOverdue: jest.fn().mockResolvedValue(booking),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockResolvedValue(reservedUnit(booking.unitId)),
+        updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+      } as never,
+      outboxService: { publish: outboxSpy } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now })).resolves.toEqual({
+      expiredCount: 0,
+      releasedUnits: 0,
+      errors: 1,
+    });
+    expect(outboxSpy).not.toHaveBeenCalledWith(expect.objectContaining({ eventType: 'BookingExpired' }), expect.anything());
+  });
+
+  it('проходит все страницы по курсору, пока пачка полная', async () => {
+    const first = overdueBooking();
+    const second = overdueBooking();
+    const findSpy = jest.fn().mockResolvedValueOnce([first]).mockResolvedValueOnce([second]).mockResolvedValueOnce([]);
+    const service = makeService({
+      bookingRepository: {
+        findOverdueActive: findSpy,
+        expireIfOverdue: jest.fn().mockImplementation((id: Types.ObjectId) => (id.equals(first._id) ? first : second)),
+        findOverlappingActiveExcluding: jest.fn().mockResolvedValue(null),
+      } as never,
+      bookingLockRepository: { bumpForUnit: jest.fn().mockResolvedValue(undefined) } as never,
+      developmentsService: {
+        getUnitForOrganization: jest.fn().mockImplementation((unitId: Types.ObjectId) => reservedUnit(unitId)),
+        updateUnitStatusInSession: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+      } as never,
+    });
+
+    await expect(service.expireOverdueBookings({ now, limit: 1 })).resolves.toMatchObject({ expiredCount: 2 });
+    expect(findSpy).toHaveBeenNthCalledWith(1, now, { cursor: undefined, limit: 1 });
+    expect(findSpy).toHaveBeenNthCalledWith(2, now, { cursor: first._id, limit: 1 });
+    expect(findSpy).toHaveBeenNthCalledWith(3, now, { cursor: second._id, limit: 1 });
   });
 });
 

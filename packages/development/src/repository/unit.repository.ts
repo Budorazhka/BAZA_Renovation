@@ -35,11 +35,18 @@ export class UnitRepository {
     return doc!;
   }
 
+  /**
+   * `session` — чтобы прочитать юнит в снимке уже открытой транзакции, когда
+   * по его `version` сразу идёт CAS (освобождение юнита при отмене и
+   * истечении брони). Прочитанный вне транзакции юнит мог устареть, и CAS
+   * тихо не срабатывал.
+   */
   async findByIdForOrganization(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
+    session?: ClientSession,
   ): Promise<UnitDocument | null> {
-    return this.model.findOne({ _id: id, organizationId }).exec();
+    return this.model.findOne({ _id: id, organizationId }).session(session ?? null).exec();
   }
 
   /**

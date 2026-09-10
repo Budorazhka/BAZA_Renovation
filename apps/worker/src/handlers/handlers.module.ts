@@ -57,6 +57,10 @@ export const ACKNOWLEDGED_ONLY_EVENT_TYPES = [
   'TaskReassigned',
   'UnpublicationRequested',
   'BookingConvertedToDeal',
+  // 11.09.2026: истечение брони по сроку. Побочный эффект (уведомить
+  // менеджера) — будущая задача уведомлений; освобождение юнита уже сделано
+  // в API той же транзакцией и приходит отдельным UnitStatusChanged.
+  'BookingExpired',
   'MessengerMessageSent',
   'LmsCourseCompleted',
   'CommunityThreadCreated',

@@ -111,6 +111,7 @@ permission-matrix.md», часть оснований уже перенесен�
 
 - [book-001-atomic-booking.md](operations/book-001-atomic-booking.md) — атомарная бронь юнита.
 - [book-001-decision-memo-2026-08-31.md](operations/book-001-decision-memo-2026-08-31.md) — разбор принятых решений по BOOK-001.
+- [booking-expiry.md](operations/booking-expiry.md) — просроченная бронь истекает и освобождает юнит по расписанию; отмена и резервирование больше не оставляют юнит в неверном статусе при гонке.
 
 ### Админ-контур
 

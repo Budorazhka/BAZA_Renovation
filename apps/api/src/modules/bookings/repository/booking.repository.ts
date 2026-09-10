@@ -4,6 +4,7 @@ import { ClientSession, Model, Types } from 'mongoose';
 import {
   ACTIVE_BOOKING_STATUSES,
   BookingDocument,
+  EXPIRABLE_BOOKING_STATUSES,
   type BookingStatus,
 } from '../schemas/booking.schema';
 
@@ -222,6 +223,55 @@ export class BookingRepository {
   /**
    * booking.convert_to_deal — перевод активной брони в статус paid при закрытии сделки.
    */
+  /**
+   * Фоновая задача истечения (BookingsService.expireOverdueBookings):
+   * намеренно по всем организациям — tenant-контекста у неё нет. Курсор по
+   * `_id`, а не «перечитать первые N»: бронь, которую не удалось обработать,
+   * иначе возвращалась бы в каждую следующую пачку и зациклила прогон. Тот же
+   * приём, что ListingRepository.findActiveListingsConfirmedBefore.
+   */
+  async findOverdueActive(
+    now: Date,
+    params: { cursor?: Types.ObjectId; limit: number },
+  ): Promise<BookingDocument[]> {
+    const query: Record<string, unknown> = {
+      status: { $in: EXPIRABLE_BOOKING_STATUSES },
+      'dateRange.expiresAt': { $lte: now },
+    };
+    if (params.cursor) query._id = { $gt: params.cursor };
+    return this.model.find(query).sort({ _id: 1 }).limit(params.limit).exec();
+  }
+
+  /**
+   * CAS истечения: бронь всё ещё `pending`/`booked` И её срок всё ещё истёк
+   * на момент `now`. Второе условие не лишнее: между пачкой
+   * findOverdueActive и этой транзакцией менеджер мог продлить бронь
+   * (extendBooking сдвигает expiresAt) — продлённая бронь истечь не должна.
+   *
+   * Возвращает документ ДО изменения (`new: false`): аудиту нужен настоящий
+   * исходный статус, а он мог смениться с `pending` на `booked` после чтения
+   * пачки. null — бронь уже не подходит (продлена, отменена, стала сделкой).
+   */
+  async expireIfOverdue(
+    bookingId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    now: Date,
+    session: ClientSession,
+  ): Promise<BookingDocument | null> {
+    return this.model
+      .findOneAndUpdate(
+        {
+          _id: bookingId,
+          organizationId,
+          status: { $in: EXPIRABLE_BOOKING_STATUSES },
+          'dateRange.expiresAt': { $lte: now },
+        },
+        { $set: { status: 'expired' as BookingStatus } },
+        { new: false, session },
+      )
+      .exec();
+  }
+
   /**
    * managerPositionId — тот же own-scope filter, что confirmIfPending выше:
    * ИСПРАВЛЕНО 10.09.2026, второй слой защиты на случай гонки между

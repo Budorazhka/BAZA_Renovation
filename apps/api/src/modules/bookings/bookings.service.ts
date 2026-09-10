@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import type { MoneyAmount } from '@baza/contracts';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
@@ -28,6 +28,8 @@ export interface BookingResponse {
 
 @Injectable()
 export class BookingsService {
+  private readonly logger = new Logger(BookingsService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     private readonly bookingRepository: BookingRepository,
@@ -108,26 +110,46 @@ export class BookingsService {
           session,
         );
 
-        if (unit.status === 'available') {
-          await this.developmentsService.updateUnitStatusInSession(
-            unit._id,
+        // Юнит перечитывается в снимке транзакции (после BookingLock): CAS
+        // ниже идёт по его version. До 11.09 использовался юнит, прочитанный
+        // до транзакции, и modifiedCount не проверялся — если version успела
+        // вырасти (пакетное изменение цен), CAS молча не срабатывал: бронь
+        // создана, а юнит оставался available на витрине. Теперь промах
+        // откатывает бронь целиком.
+        const unitInTx = await this.developmentsService.getUnitForOrganization(
+          params.unitId,
+          params.organizationId,
+          session,
+        );
+        if (unitInTx.status === 'sold') {
+          throw new AppException(ErrorCode.BOOKING_OVERLAP, 'Cannot book sold unit');
+        }
+        if (unitInTx.status === 'available') {
+          const { modifiedCount } = await this.developmentsService.updateUnitStatusInSession(
+            unitInTx._id,
             params.organizationId,
-            unit.version,
+            unitInTx.version,
             'reserved',
             ['available'],
             session,
           );
+          if (modifiedCount === 0) {
+            throw new AppException(
+              ErrorCode.VERSION_CONFLICT,
+              `Unit ${unitInTx._id.toString()} was modified concurrently while booking it`,
+            );
+          }
 
           await this.outboxService.publish(
             {
               eventType: 'UnitStatusChanged',
-              aggregateId: unit._id,
+              aggregateId: unitInTx._id,
               aggregateType: 'unit',
-              deduplicationKey: `unit:${unit._id.toString()}:status:reserved:${booking._id.toString()}`,
+              deduplicationKey: `unit:${unitInTx._id.toString()}:status:reserved:${booking._id.toString()}`,
               payload: {
-                unitId: unit._id,
+                unitId: unitInTx._id,
                 organizationId: params.organizationId,
-                buildingId: unit.buildingId,
+                buildingId: unitInTx.buildingId,
                 previousStatus: 'available',
                 newStatus: 'reserved',
               },
@@ -340,42 +362,7 @@ export class BookingsService {
         // по её собственному _id не может вернуть null здесь.
         const response = toBookingResponse(updated!) as unknown as Record<string, unknown>;
 
-        const unit = await this.developmentsService.getUnitForOrganization(booking.unitId, params.organizationId);
-        if (unit.status === 'reserved') {
-          const otherActive = await this.bookingRepository.findOverlappingActiveExcluding(
-            booking.unitId,
-            booking._id,
-            new Date(0),
-            new Date(8640000000000000),
-            session,
-          );
-          if (!otherActive) {
-            await this.developmentsService.updateUnitStatusInSession(
-              unit._id,
-              params.organizationId,
-              unit.version,
-              'available',
-              ['reserved'],
-              session,
-            );
-            await this.outboxService.publish(
-              {
-                eventType: 'UnitStatusChanged',
-                aggregateId: unit._id,
-                aggregateType: 'unit',
-                deduplicationKey: `unit:${unit._id.toString()}:status:available:${booking._id.toString()}`,
-                payload: {
-                  unitId: unit._id,
-                  organizationId: params.organizationId,
-                  buildingId: unit.buildingId,
-                  previousStatus: 'reserved',
-                  newStatus: 'available',
-                },
-              },
-              session,
-            );
-          }
-        }
+        await this.releaseUnitIfFree(booking, params.organizationId, session);
 
         await this.outboxService.publish(
           {
@@ -445,6 +432,182 @@ export class BookingsService {
       bookingId: params.bookingId.toString(),
       reason: params.reason ?? null,
     };
+  }
+
+  /**
+   * Освобождает юнит после того, как бронь перестала его занимать (отмена,
+   * истечение): reserved → available, если на юните не осталось другой
+   * активной брони.
+   *
+   * Юнит читается в снимке ТЕКУЩЕЙ транзакции, результат CAS проверяется.
+   * До 11.09 отмена читала юнит вне транзакции и не смотрела modifiedCount:
+   * если между чтением и записью юнит менялся (пакетное изменение цен
+   * поднимает version), CAS молча не срабатывал — бронь отменена, а юнит
+   * навсегда оставался reserved и пропадал с витрины. Теперь такой промах
+   * откатывает всю транзакцию: бронь и юнит меняются вместе или никак.
+   *
+   * Возвращает true, если юнит освобождён.
+   */
+  private async releaseUnitIfFree(
+    booking: BookingDocument,
+    organizationId: Types.ObjectId,
+    session: ClientSession,
+  ): Promise<boolean> {
+    const unit = await this.developmentsService.getUnitForOrganization(booking.unitId, organizationId, session);
+    if (unit.status !== 'reserved') {
+      return false;
+    }
+
+    // Любая другая активная бронь юнита, независимо от дат: пока она есть,
+    // юнит остаётся reserved — тот же критерий, что всегда был у отмены.
+    const otherActive = await this.bookingRepository.findOverlappingActiveExcluding(
+      booking.unitId,
+      booking._id,
+      new Date(0),
+      new Date(8640000000000000),
+      session,
+    );
+    if (otherActive) {
+      return false;
+    }
+
+    const { modifiedCount } = await this.developmentsService.updateUnitStatusInSession(
+      unit._id,
+      organizationId,
+      unit.version,
+      'available',
+      ['reserved'],
+      session,
+    );
+    if (modifiedCount === 0) {
+      throw new AppException(
+        ErrorCode.VERSION_CONFLICT,
+        `Unit ${unit._id.toString()} was modified concurrently while releasing booking ${booking._id.toString()}`,
+      );
+    }
+
+    await this.outboxService.publish(
+      {
+        eventType: 'UnitStatusChanged',
+        aggregateId: unit._id,
+        aggregateType: 'unit',
+        deduplicationKey: `unit:${unit._id.toString()}:status:available:${booking._id.toString()}`,
+        payload: {
+          unitId: unit._id,
+          organizationId,
+          buildingId: unit.buildingId,
+          previousStatus: 'reserved',
+          newStatus: 'available',
+        },
+      },
+      session,
+    );
+    return true;
+  }
+
+  /**
+   * Истечение броней по сроку. Этап 7 мастер-плана: «бронирования с
+   * транзакционным conflict lock и истечением». До 11.09 бронь не истекала
+   * вовсе: convertToDeal лишь отказывал в переводе просроченной брони, сама
+   * она оставалась pending/booked, юнит — reserved, и он навсегда пропадал с
+   * витрины (публичная проекция берёт только available).
+   *
+   * Сама не расписание: точка входа — apps/api/src/jobs/booking-expire.command.ts,
+   * вызывается снаружи (compose-профиль `scheduled` или cron) — тот же
+   * паттерн, что ActualityService.expireOverdueListings.
+   *
+   * Каждая бронь — своя транзакция. Первая запись в ней —
+   * BookingLock.bumpForUnit (ADR-006), как у book(): истечение и новая бронь
+   * того же юнита не проходят одновременно. Ошибка на одной брони не
+   * останавливает прогон — считается в `errors`, бронь переоценит следующий
+   * прогон. Идемпотентна по построению: истёкшая бронь в выборку больше не
+   * попадает.
+   */
+  async expireOverdueBookings(
+    params: { now?: Date; limit?: number } = {},
+  ): Promise<{ expiredCount: number; releasedUnits: number; errors: number }> {
+    const now = params.now ?? new Date();
+    const limit = params.limit ?? 100;
+    let expiredCount = 0;
+    let releasedUnits = 0;
+    let errors = 0;
+
+    let cursor: Types.ObjectId | undefined;
+    for (;;) {
+      const batch = await this.bookingRepository.findOverdueActive(now, { cursor, limit });
+      if (batch.length === 0) break;
+      cursor = batch[batch.length - 1]!._id;
+
+      for (const candidate of batch) {
+        try {
+          const outcome = await runInTransaction(this.connection, async (session) => {
+            await this.bookingLockRepository.bumpForUnit(candidate.unitId, session);
+
+            const before = await this.bookingRepository.expireIfOverdue(
+              candidate._id,
+              candidate.organizationId,
+              now,
+              session,
+            );
+            if (!before) {
+              // Продлена, отменена или стала сделкой после чтения пачки.
+              return null;
+            }
+
+            const released = await this.releaseUnitIfFree(before, before.organizationId, session);
+
+            await this.outboxService.publish(
+              {
+                eventType: 'BookingExpired',
+                aggregateId: before._id,
+                aggregateType: 'booking',
+                deduplicationKey: `booking:${before._id.toString()}:expired`,
+                payload: {
+                  bookingId: before._id,
+                  unitId: before.unitId,
+                  organizationId: before.organizationId,
+                  leadId: before.leadId ?? null,
+                  manager: before.manager,
+                  expiresAt: before.dateRange.expiresAt,
+                  previousStatus: before.status,
+                  unitReleased: released,
+                },
+              },
+              session,
+            );
+
+            await this.auditService.append(
+              {
+                actor: { type: 'system' },
+                action: 'booking.expire',
+                resource: 'booking',
+                resourceId: before._id,
+                correlationId: `booking-expiry-${before._id.toString()}`,
+                before: { status: before.status, expiresAt: before.dateRange.expiresAt },
+                after: { status: 'expired', unitReleased: released },
+              },
+              session,
+            );
+
+            return { released };
+          });
+
+          if (outcome) {
+            expiredCount += 1;
+            if (outcome.released) releasedUnits += 1;
+          }
+        } catch (error) {
+          errors += 1;
+          this.logger.error(
+            `expireOverdueBookings: ошибка обработки брони ${candidate._id.toString()}: ${(error as Error).message}`,
+          );
+        }
+      }
+
+      if (batch.length < limit) break;
+    }
+
+    return { expiredCount, releasedUnits, errors };
   }
 
   /**

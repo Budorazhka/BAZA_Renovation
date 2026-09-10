@@ -601,8 +601,12 @@ export class DevelopmentsService {
     );
   }
 
-  async getUnitForOrganization(id: Types.ObjectId, organizationId: Types.ObjectId): Promise<UnitDocument> {
-    const unit = await this.unitRepository.findByIdForOrganization(id, organizationId);
+  async getUnitForOrganization(
+    id: Types.ObjectId,
+    organizationId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<UnitDocument> {
+    const unit = await this.unitRepository.findByIdForOrganization(id, organizationId, session);
     if (!unit) {
       throw new NotFoundException('Unit not found');
     }

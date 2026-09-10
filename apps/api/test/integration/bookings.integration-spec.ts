@@ -209,6 +209,10 @@ describe('BOOK-001 follow-up: cancelBooking (real MongoDB transaction)', () => {
     expect(cancelled).not.toHaveProperty('replay');
     if ('replay' in cancelled) throw new Error('unreachable');
     expect(cancelled.status).toBe('rejected');
+    // 11.09.2026: раньше тест проверял только, что бронь снова проходит, но
+    // не статус самого юнита — а book() бронирует и reserved-юнит, так что
+    // «застрявший» reserved этим тестом не ловился.
+    expect((await unitRepository.findById(unit._id))?.status).toBe('available');
 
     // Unit теперь свободен — пересекающаяся бронь на те же даты проходит.
     await expect(
@@ -266,6 +270,148 @@ describe('BOOK-001 follow-up: cancelBooking (real MongoDB transaction)', () => {
         correlationId: 'booking-integration',
       }),
     ).rejects.toMatchObject({ code: 'BOOKING_INVALID_STATE_TRANSITION' });
+  });
+});
+
+describe('Истечение броней по сроку (real MongoDB transaction)', () => {
+  let replSet: MongoMemoryReplSet;
+  let connection: Connection;
+  let bookingsService: BookingsService;
+  let unitRepository: UnitRepository;
+
+  beforeAll(async () => {
+    replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
+    await replSet.waitUntilRunning();
+
+    process.env.MINIO_ENDPOINT ??= 'http://localhost:9000';
+    process.env.MINIO_ACCESS_KEY ??= 'test-access-key';
+    process.env.MINIO_SECRET_KEY ??= 'test-secret-key';
+    process.env.MINIO_BUCKET_PRIVATE ??= 'test-private';
+    process.env.MINIO_BUCKET_PUBLIC ??= 'test-public';
+    process.env.REDIS_URL ??= 'redis://localhost:6379';
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ isGlobal: true }), MongooseModule.forRoot(replSet.getUri()), BookingsModule],
+    }).compile();
+
+    connection = moduleRef.get<Connection>(getConnectionToken());
+    bookingsService = moduleRef.get(BookingsService);
+    unitRepository = moduleRef.get(UnitRepository);
+  }, 120_000);
+
+  afterAll(async () => {
+    await connection?.close();
+    await replSet?.stop();
+  });
+
+  afterEach(async () => {
+    for (const collection of ['bookings', 'booking_locks', 'outbox_events', 'idempotency_records', 'audit_events', 'units']) {
+      await connection.collection(collection).deleteMany({});
+    }
+  });
+
+  async function createUnit(organizationId: Types.ObjectId) {
+    return unitRepository.create({
+      buildingId: new Types.ObjectId(),
+      floorId: new Types.ObjectId(),
+      organizationId,
+      number: 'E-101',
+      kind: 'apartment',
+      area: 42,
+      price: { amountMinorUnits: 100_000, currency: 'USD' },
+    });
+  }
+
+  async function book(unitId: Types.ObjectId, organizationId: Types.ObjectId, startsAt: string, expiresAt: string) {
+    const booking = await bookingsService.book({
+      unitId,
+      organizationId,
+      managerPositionId: new Types.ObjectId(),
+      actorIdentityId: new Types.ObjectId(),
+      startsAt: new Date(startsAt),
+      expiresAt: new Date(expiresAt),
+      idempotencyKey: `expiry-${unitId.toString()}-${startsAt}`,
+      correlationId: 'booking-expiry-integration',
+    });
+    if (!('_id' in booking)) throw new Error('expected a real booking, not a replay');
+    return booking;
+  }
+
+  async function statusOf(bookingId: Types.ObjectId) {
+    return (await connection.collection('bookings').findOne({ _id: bookingId }))?.status;
+  }
+
+  it('истёкшая бронь переходит в expired, юнит снова available и возвращается на витрину событием; повтор ничего не меняет', async () => {
+    const organizationId = new Types.ObjectId();
+    const unit = await createUnit(organizationId);
+    const booking = await book(unit._id, organizationId, '2026-09-01T10:00:00.000Z', '2026-09-01T12:00:00.000Z');
+    expect((await unitRepository.findById(unit._id))?.status).toBe('reserved');
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-01T12:01:00.000Z') }),
+    ).resolves.toEqual({ expiredCount: 1, releasedUnits: 1, errors: 0 });
+
+    expect(await statusOf(booking._id)).toBe('expired');
+    expect((await unitRepository.findById(unit._id))?.status).toBe('available');
+    expect(await connection.collection('outbox_events').countDocuments({ eventType: 'BookingExpired' })).toBe(1);
+    // Этим событием воркер пересобирает проекцию ЖК — юнит снова в каталоге.
+    expect(
+      await connection
+        .collection('outbox_events')
+        .countDocuments({ eventType: 'UnitStatusChanged', 'payload.newStatus': 'available' }),
+    ).toBe(1);
+    expect(
+      await connection.collection('audit_events').countDocuments({ action: 'booking.expire', 'actor.type': 'system' }),
+    ).toBe(1);
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-01T13:00:00.000Z') }),
+    ).resolves.toEqual({ expiredCount: 0, releasedUnits: 0, errors: 0 });
+    expect(await connection.collection('outbox_events').countDocuments({ eventType: 'BookingExpired' })).toBe(1);
+  });
+
+  it('бронь, срок которой ещё не истёк, не трогается', async () => {
+    const organizationId = new Types.ObjectId();
+    const unit = await createUnit(organizationId);
+    const booking = await book(unit._id, organizationId, '2026-09-01T10:00:00.000Z', '2026-09-01T12:00:00.000Z');
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-01T11:59:00.000Z') }),
+    ).resolves.toEqual({ expiredCount: 0, releasedUnits: 0, errors: 0 });
+    expect(await statusOf(booking._id)).toBe('pending');
+    expect((await unitRepository.findById(unit._id))?.status).toBe('reserved');
+  });
+
+  it('юнит остаётся reserved, пока на нём есть другая активная бронь, и освобождается с последней', async () => {
+    const organizationId = new Types.ObjectId();
+    const unit = await createUnit(organizationId);
+    const early = await book(unit._id, organizationId, '2026-09-01T10:00:00.000Z', '2026-09-01T12:00:00.000Z');
+    const late = await book(unit._id, organizationId, '2026-09-01T14:00:00.000Z', '2026-09-01T16:00:00.000Z');
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-01T12:30:00.000Z') }),
+    ).resolves.toEqual({ expiredCount: 1, releasedUnits: 0, errors: 0 });
+    expect(await statusOf(early._id)).toBe('expired');
+    expect(await statusOf(late._id)).toBe('pending');
+    expect((await unitRepository.findById(unit._id))?.status).toBe('reserved');
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-01T16:30:00.000Z') }),
+    ).resolves.toEqual({ expiredCount: 1, releasedUnits: 1, errors: 0 });
+    expect((await unitRepository.findById(unit._id))?.status).toBe('available');
+  });
+
+  it('проходит брони всех организаций за один прогон', async () => {
+    const orgA = new Types.ObjectId();
+    const orgB = new Types.ObjectId();
+    const unitA = await createUnit(orgA);
+    const unitB = await createUnit(orgB);
+    await book(unitA._id, orgA, '2026-09-01T10:00:00.000Z', '2026-09-01T12:00:00.000Z');
+    await book(unitB._id, orgB, '2026-09-01T10:00:00.000Z', '2026-09-01T12:00:00.000Z');
+
+    await expect(
+      bookingsService.expireOverdueBookings({ now: new Date('2026-09-02T00:00:00.000Z'), limit: 1 }),
+    ).resolves.toEqual({ expiredCount: 2, releasedUnits: 2, errors: 0 });
   });
 });
 

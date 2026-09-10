@@ -3,6 +3,12 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type BookingStatus = 'pending' | 'booked' | 'rejected' | 'expired' | 'paid';
 export const ACTIVE_BOOKING_STATUSES: readonly BookingStatus[] = ['pending', 'booked', 'paid'];
+/**
+ * Брони, которые истекают по `dateRange.expiresAt` (BookingsService.
+ * expireOverdueBookings). `paid` сюда не входит: бронь уже стала сделкой,
+ * юнит продан — у неё нет срока, который мог бы истечь.
+ */
+export const EXPIRABLE_BOOKING_STATUSES: readonly BookingStatus[] = ['pending', 'booked'];
 
 const BookingDateRangeSchema = new MongooseSchema(
   {
@@ -53,3 +59,11 @@ BookingSchema.index(
   },
 );
 BookingSchema.index({ organizationId: 1, createdAt: -1 });
+// Поиск просроченных броней фоновой задачей истечения: только брони, которые
+// ещё могут истечь, поэтому индекс не растёт вместе с архивом.
+BookingSchema.index(
+  { 'dateRange.expiresAt': 1 },
+  {
+    partialFilterExpression: { status: { $in: EXPIRABLE_BOOKING_STATUSES } },
+  },
+);

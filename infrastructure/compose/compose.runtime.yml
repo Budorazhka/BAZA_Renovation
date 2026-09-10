@@ -194,6 +194,44 @@ services:
         sleep "$${ACTUALITY_EXPIRE_INTERVAL_SECONDS}";
         done
 
+  # Истечение броней по сроку (11.09.2026). До этого бронь не истекала вовсе:
+  # юнит оставался reserved навсегда и пропадал с витрины. Тот же профиль
+  # `scheduled` и тот же цикл на sh, что у actuality-expire выше, по тем же
+  # причинам.
+  #
+  # Интервал по умолчанию — 5 минут, а не час: бронь — это удержание юнита на
+  # часы или дни, и лишний час в reserved после срока заметен покупателю. Прогон
+  # дешёвый: выборка по частичному индексу dateRange.expiresAt.
+  booking-expire:
+    profiles: ["scheduled"]
+    build:
+      context: ../..
+      dockerfile: infrastructure/docker/Dockerfile.api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongodb:27017/baza?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-dev_redis_password}@redis:6379
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://minio:9000/baza-public}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-dev_minio_access}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-dev_minio_secret}
+      MINIO_BUCKET_PRIVATE: ${MINIO_BUCKET_PRIVATE:-baza-private}
+      MINIO_BUCKET_PUBLIC: ${MINIO_BUCKET_PUBLIC:-baza-public}
+      BOOKING_EXPIRE_INTERVAL_SECONDS: ${BOOKING_EXPIRE_INTERVAL_SECONDS:-300}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        while true; do
+        node apps/api/dist/jobs/booking-expire.command.js || echo "[booking-expire] прогон завершился с ошибками, расписание продолжается";
+        sleep "$${BOOKING_EXPIRE_INTERVAL_SECONDS}";
+        done
+
   admin-web:
     build:
       context: ../..

@@ -68,6 +68,10 @@ const ALLOWED_WITHOUT_ORGANIZATION_ID: Record<string, string> = {
   'listing.repository.ts#findActiveListingsConfirmedBefore':
     'Фоновая задача протухания актуальности (ActualityService.expireOverdueListings, cron-точка входа): ' +
     'намеренно проходит по всем организациям, tenant-контекста у неё нет по определению.',
+  'booking.repository.ts#findOverdueActive':
+    'Фоновая задача истечения броней (BookingsService.expireOverdueBookings, cron-точка входа): ' +
+    'намеренно проходит по всем организациям. Сам перевод в expired (expireIfOverdue) уже фильтрует ' +
+    'по organizationId, взятому из найденной брони.',
   'position.repository.ts#setAvatarAsset':
     'Запись по positionId, владение проверено вызывающим до вызова.',
   'media-asset.repository.ts#findByIds':
