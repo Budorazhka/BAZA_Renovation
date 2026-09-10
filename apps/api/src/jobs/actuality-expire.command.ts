@@ -8,6 +8,12 @@ import 'reflect-metadata';
 // падает на TS2339 до старта bootstrap — найдено реальным прогоном команды,
 // не гипотетически.
 import '@fastify/cookie';
+// То же для @fastify/multipart (req.isMultipart/req.file в
+// lead-import.controller.ts, импорт лидов 03.09.2026): без него
+// `pnpm run actuality:expire-overdue` снова падал на TS2339. Найдено 11.09
+// реальным прогоном соседней booking-expire.command.ts; compose это не ловил —
+// он запускает скомпилированный dist, где main.api.ts в том же проекте.
+import '@fastify/multipart';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
 import { AppModule } from '../app.module';

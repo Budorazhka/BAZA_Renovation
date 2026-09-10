@@ -3,6 +3,7 @@ import 'reflect-metadata';
 // докстринг за причиной) — ts-node типизирует граф ЭТОГО entrypoint'а
 // независимо от main.api.ts.
 import '@fastify/cookie';
+import '@fastify/multipart';
 import { readFileSync } from 'node:fs';
 import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
