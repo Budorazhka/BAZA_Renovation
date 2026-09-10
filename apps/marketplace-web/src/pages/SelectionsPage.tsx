@@ -21,61 +21,20 @@ export interface CollectionItem {
   }[]
 }
 
-const INITIAL_COLLECTIONS: CollectionItem[] = [
-  {
-    id: 'col-1',
-    title: 'Подборка для инвестора (Батуми у моря)',
-    slug: 'batumi-investor-sea',
-    createdAt: '02 сентября 2026',
-    clientName: 'Михаил',
-    properties: [
-      {
-        id: 'p1',
-        title: '2-комн. апартаменты с панорамным видом на море',
-        price: '$85 000',
-        city: 'Батуми',
-        address: 'ул. Шерифа Химшиашвили, 15',
-        area: 65,
-        rooms: 2,
-        slug: 'batumi-flat-sea-view',
-      },
-      {
-        id: 'p2',
-        title: 'Студия под ключ в Orbi City',
-        price: '$48 000',
-        city: 'Батуми',
-        address: 'ул. Пиросмани, 8',
-        area: 33,
-        rooms: 1,
-        slug: 'batumi-studio-orbi',
-      },
-    ],
-  },
-  {
-    id: 'col-2',
-    title: 'Семья в Ваке (Тбилиси долгосрок)',
-    slug: 'tbilisi-vake-family',
-    createdAt: '28 августа 2026',
-    clientName: 'Анна',
-    properties: [
-      {
-        id: 'p3',
-        title: 'Просторная 3-комнатная квартира в Ваке',
-        price: '$1 200 / мес',
-        city: 'Тбилиси',
-        address: 'просп. Чавчавадзе, 42',
-        area: 110,
-        rooms: 3,
-        slug: 'tbilisi-vake-3room',
-      },
-    ],
-  },
-]
-
+// Backend для личных подборок покупателя на маркетплейсе не существует
+// (проверено 10.09.2026): apps/api/src/modules/selections/selections.controller.ts
+// — это CRM-подборки агента для клиента (organization-scoped, требует
+// tenant-сессию сотрудника агентства), а не что-то, к чему может обратиться
+// анонимный/самостоятельный покупатель на marketplace-web. Публичный
+// эндпоинт (public-selections.controller.ts) — только чтение готовой
+// подборки по токену, без создания своих подборок покупателем. Поэтому
+// страница не подключена ни к какому API и не подсовывает захардкоженные
+// подборки ("$85 000", "Orbi City" и т.п.) как настоящие — подборки живут
+// только локально (localStorage), список по умолчанию честно пуст.
 const STORAGE_KEY = 'baza:marketplace:selections'
 
 function loadSavedCollections(): CollectionItem[] {
-  if (typeof window === 'undefined') return INITIAL_COLLECTIONS
+  if (typeof window === 'undefined') return []
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) {
@@ -85,7 +44,7 @@ function loadSavedCollections(): CollectionItem[] {
   } catch {
     // Ignore storage parse error
   }
-  return INITIAL_COLLECTIONS
+  return []
 }
 
 function saveCollections(items: CollectionItem[]) {

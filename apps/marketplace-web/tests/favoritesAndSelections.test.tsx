@@ -215,9 +215,29 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
     })
   })
 
+  /**
+   * INITIAL_COLLECTIONS (захардкоженные "$85 000", "Orbi City" и т.п.) убран
+   * 10.09.2026: backend для личных подборок покупателя не существует
+   * (apps/api/src/modules/selections — CRM-подборки агента, не для
+   * marketplace-покупателя), а фейковые подборки приживались в localStorage
+   * как настоящие. По умолчанию список честно пуст.
+   */
   describe('Управление подборками клиента (SelectionsPage)', () => {
     beforeEach(() => {
       localStorage.clear()
+    })
+
+    it('по умолчанию показывает честное пустое состояние, без захардкоженных подборок', () => {
+      render(
+        <MemoryRouter>
+          <SelectionsPage />
+        </MemoryRouter>,
+      )
+
+      expect(screen.getByText(/У вас пока нет созданных подборок/)).toBeDefined()
+      expect(screen.queryByText(/Orbi City/)).toBeNull()
+      expect(screen.queryByText('$85 000')).toBeNull()
+      expect(localStorage.getItem('baza:marketplace:selections')).toBeNull()
     })
 
     it('создает новую подборку и сохраняет её в localStorage', () => {
@@ -243,6 +263,9 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
         </MemoryRouter>,
       )
 
+      // Список пуст по умолчанию (честный empty state) — сначала создаём
+      // подборку сами, а не полагаемся на захардкоженные фикстуры.
+      fireEvent.click(screen.getByTestId('new-collection-btn'))
       const inputs = screen.getAllByRole('textbox', { name: /Название подборки/i })
       fireEvent.change(inputs[0], { target: { value: 'Обновленное название' } })
 
@@ -258,6 +281,8 @@ describe('Favorites & Selections Acceptance (MKT-SCR-017, MKT-SCR-018)', () => {
         </MemoryRouter>,
       )
 
+      fireEvent.click(screen.getByTestId('new-collection-btn'))
+      fireEvent.click(screen.getByTestId('new-collection-btn'))
       const deleteButtons = screen.getAllByTitle('Удалить подборку')
       const countBefore = deleteButtons.length
       fireEvent.click(deleteButtons[0])
