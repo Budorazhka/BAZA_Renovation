@@ -10,6 +10,7 @@ import { BillingService } from './billing.service';
 import { BillingController } from './billing.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { AuditModule } from '../audit/audit.module';
+import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AuditModule } from '../audit/audit.module';
     ]),
     AuthorizationModule,
     AuditModule,
+    IdempotencyModule,
   ],
   controllers: [BillingController],
   providers: [

@@ -4,6 +4,7 @@ import type { SubscriptionPlanRepository } from './repository/subscription-plan.
 import type { OrganizationSubscriptionRepository } from './repository/organization-subscription.repository';
 import type { BillingLedgerRepository } from './repository/billing-ledger.repository';
 import type { AuditService } from '../audit/audit.service';
+import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { AdminContext } from '../../shared/admin/admin-context';
 import type { TenantContext } from '../../shared/tenant/tenant-context';
 import { AppException } from '../../shared/errors/app-exception';
@@ -15,6 +16,11 @@ function makeAdminContext(overrides: Partial<AdminContext> = {}): AdminContext {
     isSuperAdmin: false,
     ...overrides,
   };
+}
+
+/** Идемпотентность в этих тестах не проверяется — важен сам вызов репозитория. */
+function idem() {
+  return { identityId: new Types.ObjectId(), key: new Types.ObjectId().toString(), requestBody: { probe: 1 } };
 }
 
 function makeTenantContext(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -33,6 +39,7 @@ describe('BillingService', () => {
   let mockSubRepo: Partial<OrganizationSubscriptionRepository>;
   let mockLedgerRepo: Partial<BillingLedgerRepository>;
   let mockAuditService: Partial<AuditService>;
+  let mockIdempotencyService: Partial<IdempotencyService>;
 
   beforeEach(() => {
     mockConnection = {
@@ -121,12 +128,18 @@ describe('BillingService', () => {
       append: jest.fn().mockResolvedValue({} as unknown as never),
     };
 
+    mockIdempotencyService = {
+      checkReplay: jest.fn().mockResolvedValue(null),
+      record: jest.fn().mockResolvedValue(undefined),
+    };
+
     service = new BillingService(
       mockConnection as Connection,
       mockPlanRepo as SubscriptionPlanRepository,
       mockSubRepo as OrganizationSubscriptionRepository,
       mockLedgerRepo as BillingLedgerRepository,
       mockAuditService as AuditService,
+      mockIdempotencyService as IdempotencyService,
     );
   });
 
@@ -191,6 +204,7 @@ describe('BillingService', () => {
           organizationId: orgId,
           planCode: 'agency_pro',
           reason: 'Too short',
+          idempotency: idem(),
         }),
       ).rejects.toThrow(AppException);
     });
@@ -206,6 +220,7 @@ describe('BillingService', () => {
         amountMinorUnits: 29800,
         currency: 'USD',
         reason: 'Payment received via bank transfer invoice #1042',
+        idempotency: idem(),
       });
 
       expect(mockSubRepo.upsertSubscription).toHaveBeenCalled();

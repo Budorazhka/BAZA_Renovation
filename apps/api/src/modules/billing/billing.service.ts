@@ -7,6 +7,7 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import type { TenantContext } from '../../shared/tenant/tenant-context';
 import type { AdminContext } from '../../shared/admin/admin-context';
 import { AuditService } from '../audit/audit.service';
+import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { SubscriptionPlanRepository } from './repository/subscription-plan.repository';
 import { OrganizationSubscriptionRepository } from './repository/organization-subscription.repository';
 import { BillingLedgerRepository } from './repository/billing-ledger.repository';
@@ -149,7 +150,27 @@ export class BillingService {
     private readonly organizationSubscriptionRepository: OrganizationSubscriptionRepository,
     private readonly billingLedgerRepository: BillingLedgerRepository,
     private readonly auditService: AuditService,
+    private readonly idempotencyService: IdempotencyService,
   ) {}
+
+  /**
+   * ИСПРАВЛЕНО 10.09.2026: активация тарифа не была защищена
+   * Idempotency-Key — повторный запрос (ретрай/двойной клик) продлевал
+   * подписку дважды и писал две записи 'plan_renewed' в ledger с суммой.
+   * Тот же паттерн, что AdminAccountController.checkCreateReplay.
+   */
+  checkActivateReplay(
+    identityId: Types.ObjectId,
+    key: string,
+    requestBody: Record<string, unknown>,
+  ): Promise<IdempotentReplay | null> {
+    return this.idempotencyService.checkReplay({
+      identityId,
+      operation: 'adminActivateSubscription',
+      key,
+      requestBody,
+    });
+  }
 
   async seedDefaultPlans(): Promise<void> {
     for (const plan of DEFAULT_PLANS) {
@@ -268,6 +289,7 @@ export class BillingService {
       currency?: string;
       reason: string;
       correlationId?: string;
+      idempotency: { identityId: Types.ObjectId; key: string; requestBody: Record<string, unknown> };
     },
   ): Promise<OrganizationSubscriptionDocument> {
     if (!params.reason || params.reason.trim().length < 10) {
@@ -351,6 +373,18 @@ export class BillingService {
             expiresAt,
           },
           correlationId: params.correlationId || '',
+        },
+        session,
+      );
+
+      await this.idempotencyService.record(
+        {
+          identityId: params.idempotency.identityId,
+          operation: 'adminActivateSubscription',
+          key: params.idempotency.key,
+          requestBody: params.idempotency.requestBody,
+          responseStatus: 200,
+          responseBody: JSON.parse(JSON.stringify(subscription)),
         },
         session,
       );

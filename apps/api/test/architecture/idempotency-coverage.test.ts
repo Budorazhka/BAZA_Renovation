@@ -55,6 +55,8 @@ const REQUIRE_IDEMPOTENCY_KEY: Record<string, string> = {
   'POST /buildings/:buildingId/units/batch': 'пакетный импорт юнитов — повтор создал бы дубликаты лотов',
   'POST /developments/:developmentId/units/batch-price-update': 'массовое изменение цен с Idempotency-Key',
   'POST /admin/accounts': 'дубль админ-аккаунта: второй аккаунт с админ-доступом на ту же identity',
+  'POST /admin/organizations/:organizationId/billing/activate':
+    'ручная активация/продление тарифа — повтор (ретрай/двойной клик) продлил бы подписку дважды и задвоил бы запись в billing ledger',
   'POST /developments/:developmentId/installment-plans': 'создание плана рассрочки — дубль создал бы дублирующий план',
   'PATCH /developments/:developmentId/installment-plans/:id': 'обновление плана рассрочки с Idempotency-Key и expectedVersion',
   'DELETE /developments/:developmentId/installment-plans/:id': 'удаление плана рассрочки с Idempotency-Key и expectedVersion',
@@ -217,8 +219,6 @@ const NO_IDEMPOTENCY_KEY_NEEDED: Record<string, string> = {
   'POST /admin/complaints/:complaintId/resolve': 'условный update по status:pending (CAS), повтор с уже резолюцированной жалобой — 409',
   'POST /admin/organizations/:organizationId/freeze': 'условный update по статусу (заморозка организации)',
   'POST /admin/organizations/:organizationId/unfreeze': 'условный update по статусу (разморозка организации)',
-  'POST /admin/organizations/:organizationId/billing/activate':
-    'ручная активация/продление тарифа администратором с обязательным аудитом, транзакцией и обоснованием (reason >= 10)',
 
   // --- Мессенджеры и чаты ---
   'DELETE /messenger/accounts/:accountId': 'удаление аккаунта мессенджера по id идемпотентно',

@@ -1,4 +1,9 @@
-import { IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+
+// ИСПРАВЛЕНО 10.09.2026: periodDays без верхней границы давал Invalid Date
+// (и падение с 500) на огромных значениях; currency принимала любую строку
+// вместо реальных валют платформы (packages/contracts/src/money.ts).
+const CURRENCIES = ['USD', 'GEL', 'RUB'] as const;
 
 export class ActivateSubscriptionRequestDto {
   @IsString()
@@ -6,6 +11,7 @@ export class ActivateSubscriptionRequestDto {
 
   @IsInt()
   @Min(1)
+  @Max(3650)
   @IsOptional()
   periodDays?: number = 30;
 
@@ -14,9 +20,9 @@ export class ActivateSubscriptionRequestDto {
   @IsOptional()
   amountMinorUnits?: number = 0;
 
-  @IsString()
+  @IsIn(CURRENCIES)
   @IsOptional()
-  currency?: string = 'USD';
+  currency?: (typeof CURRENCIES)[number] = 'USD';
 
   @IsString()
   @MinLength(10)
