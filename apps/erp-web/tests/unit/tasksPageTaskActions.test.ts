@@ -144,7 +144,12 @@ describe('TasksPage: действия над задачей', () => {
     setStatusMock.mockResolvedValue(serverTask({ status: 'in_progress', version: 4 }))
 
     await renderPage()
-    fireEvent.click(screen.getByText('tasks.tasksPage.взять_в_работу'))
+    // findByText, не getByText: между await renderPage() (сам findByText внутри
+    // него) и этой строкой JS отдаёт управление микрозадачам минимум один раз
+    // — в CI (медленнее/под нагрузкой) в этом окне иногда успевает пройти ещё
+    // один ре-рендер эффекта автовыбора задачи, и синхронный getByText не
+    // находит элемент, который появится мгновением позже.
+    fireEvent.click(await screen.findByText('tasks.tasksPage.взять_в_работу'))
 
     await waitFor(() => expect(setStatusMock).toHaveBeenCalledWith('task-1', 3, 'in_progress'))
     // Кнопка сменилась, потому что сервер вернул новый статус, а не потому
@@ -169,11 +174,11 @@ describe('TasksPage: действия над задачей', () => {
     setStatusMock.mockRejectedValue({ response: { status: 403 } })
 
     await renderPage()
-    fireEvent.click(screen.getByText('tasks.tasksPage.взять_в_работу'))
+    fireEvent.click(await screen.findByText('tasks.tasksPage.взять_в_работу'))
 
     await waitFor(() => expect(toastErrorMock).toHaveBeenCalledWith('Нет прав на это действие.'))
     // Кнопка осталась прежней: задача не «взята в работу» ни на сервере, ни на экране.
-    expect(screen.getByText('tasks.tasksPage.взять_в_работу')).toBeTruthy()
+    expect(await screen.findByText('tasks.tasksPage.взять_в_работу')).toBeTruthy()
     expect(screen.queryByText('tasks.tasksPage.вернуть_в_новые')).toBeNull()
   })
 
@@ -183,7 +188,7 @@ describe('TasksPage: действия над задачей', () => {
     await renderPage()
     expect(listAllTasksMock).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByText('tasks.tasksPage.взять_в_работу'))
+    fireEvent.click(await screen.findByText('tasks.tasksPage.взять_в_работу'))
 
     await waitFor(() => expect(listAllTasksMock).toHaveBeenCalledTimes(2))
   })
