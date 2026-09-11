@@ -72,6 +72,31 @@
   сузился до вопроса, была ли эта видимость на самом деле продуманным
   решением). Юнит: `billing.service.spec.ts` (оба места, `_id` в ответе
   отсутствует, ObjectId/Date-поля — строки).
+- **admin-web больше не держит свою копию каталога тарифов.**
+  `OrganizationBillingModal.tsx` хардкодил `AVAILABLE_PLANS` (code/name/
+  defaultDays/price для всех семи планов) — неизбежно разошёлся бы с
+  `DEFAULT_PLANS` backend'а при следующем изменении цен/лимитов. Тенантский
+  `GET /billing/plans` для этого не подходит: он защищён `TenantGuard`
+  (organizationId/positionId), а у admin-сессии их нет вовсе (другая модель
+  аутентификации). Добавлен новый `GET /admin/billing/plans`
+  (`AdminBillingPlansController`, только `AdminGuard` — каталог планов не
+  organizationId-специфичен и не финансовая история конкретной организации,
+  тот же уровень доступа, что у тенантского эндпоинта). Модалка теперь
+  запрашивает каталог и берёт code/name/price/audience оттуда; локально
+  остался только `periodDays`-по-умолчанию при выборе плана — backend не
+  хранит "срок по умолчанию" при плане вообще (`periodDays` — свободное поле
+  формы активации), так что это не тот же класс дублирования: значение
+  физически не может разойтись с "правдой" backend'а, у backend'а такой
+  правды нет. Отображаемое название плана — `name` из каталога плюс перевод
+  `targetAudience` через уже существующий `organizationTypeLabel`, не новая
+  таблица переводов (старые русские названия тиров вроде «Пробный»/«Профи» не
+  воспроизведены — это было цельное название, а не то, что можно честно
+  собрать из полей реального каталога).
+  Тесты: `admin-billing-plans.controller.spec.ts` (делегирование в
+  `BillingService.listPlans`), `organizationBillingModal.test.tsx`
+  (admin-web, тот же `strictFetcher`-паттерн, что `no-mock-data.test.tsx` —
+  дропдаун плана рисуется из ответа `/admin/billing/plans`, не из
+  локального списка).
 
 ## Почему так
 
@@ -103,7 +128,5 @@
    продуманным (прозрачность для владельца, кто и почему менял его тариф)
    или это сам контракт был написан не подумав. Решение владельца/продукта,
    не техническая правка.
-5. Тарифы продублированы в `apps/admin-web/src/components/OrganizationBillingModal.tsx`
-   и разойдутся с `DEFAULT_PLANS`.
-6. Нет разделения plan / entitlement / usage / promotion credit из этапа 9;
+5. Нет разделения plan / entitlement / usage / promotion credit из этапа 9;
    hosted landing — только флаг `landingAccess`.

@@ -4,17 +4,31 @@ import { formatDateTime, organizationTypeLabel } from '../lib/format'
 import type {
   AdminBillingOverview,
   AdminOrganizationListItem,
+  SubscriptionPlan,
 } from '../types/admin'
 
-const AVAILABLE_PLANS = [
-  { code: 'developer_trial', name: 'Developer Trial (Застройщик Пробный)', defaultDays: 14, price: 0 },
-  { code: 'developer_standard', name: 'Developer Standard (Застройщик Стандарт)', defaultDays: 30, price: 99 },
-  { code: 'developer_pro', name: 'Developer Pro (Застройщик Профи)', defaultDays: 30, price: 299 },
-  { code: 'agency_trial', name: 'Agency Trial (Агентство Пробный)', defaultDays: 14, price: 0 },
-  { code: 'agency_pro', name: 'Agency Pro (Агентство Профи)', defaultDays: 30, price: 149 },
-  { code: 'realtor_free', name: 'Realtor Free (Риелтор Бесплатный)', defaultDays: 365, price: 0 },
-  { code: 'realtor_pro', name: 'Realtor Pro (Риелтор Профи)', defaultDays: 30, price: 49 },
-]
+/**
+ * ИСПРАВЛЕНО 11.09.2026: раньше здесь был захардкожен весь каталог
+ * (AVAILABLE_PLANS: code/name/defaultDays/price) — дублировал DEFAULT_PLANS
+ * backend'а, расходился бы с ним при следующем изменении цен/лимитов.
+ * Код/название/цена/audience теперь приходят из GET /admin/billing/plans
+ * (реальный каталог). Здесь остался только "период по умолчанию при выборе
+ * плана" — это чисто UX-подсказка для формы активации, не часть каталога
+ * (backend не хранит "срок по умолчанию" при плане вообще, periodDays —
+ * свободное поле формы), поэтому это НЕ тот же класс дублирования: значение
+ * не может разойтись с "правдой" backend'а, потому что backend такой правды
+ * не имеет.
+ */
+const DEFAULT_PERIOD_DAYS_BY_PLAN_CODE: Record<string, number> = {
+  developer_trial: 14,
+  agency_trial: 14,
+  realtor_free: 365,
+}
+const DEFAULT_PERIOD_DAYS_FALLBACK = 30
+
+function planLabel(plan: SubscriptionPlan): string {
+  return `${plan.name} (${organizationTypeLabel(plan.targetAudience)})`
+}
 
 interface OrganizationBillingModalProps {
   organization: AdminOrganizationListItem | null
@@ -25,11 +39,13 @@ export function OrganizationBillingModal({ organization, onClose }: Organization
   const [overview, setOverview] = useState<AdminBillingOverview | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([])
+  const [plansError, setPlansError] = useState<string | null>(null)
 
   // Form state
   const [planCode, setPlanCode] = useState('agency_pro')
-  const [periodDays, setPeriodDays] = useState(30)
-  const [amount, setAmount] = useState(149)
+  const [periodDays, setPeriodDays] = useState(DEFAULT_PERIOD_DAYS_BY_PLAN_CODE.agency_pro ?? DEFAULT_PERIOD_DAYS_FALLBACK)
+  const [amount, setAmount] = useState(0)
   const [currency, setCurrency] = useState('USD')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -63,14 +79,28 @@ export function OrganizationBillingModal({ organization, onClose }: Organization
     }
   }, [organization?.id])
 
+  // Каталог тарифов не зависит от организации — грузится один раз, не при
+  // каждой смене organization.id, в отличие от loadBilling выше.
+  useEffect(() => {
+    adminApi
+      .listBillingPlans()
+      .then((data) => {
+        setPlans(data)
+        const initial = data.find((p) => p.code === planCode)
+        if (initial) setAmount(initial.pricePerMonth.amountMinorUnits / 100)
+      })
+      .catch(() => setPlansError('Не удалось загрузить каталог тарифов'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (!organization) return null
 
   const handlePlanChange = (newPlanCode: string) => {
     setPlanCode(newPlanCode)
-    const found = AVAILABLE_PLANS.find((p) => p.code === newPlanCode)
+    setPeriodDays(DEFAULT_PERIOD_DAYS_BY_PLAN_CODE[newPlanCode] ?? DEFAULT_PERIOD_DAYS_FALLBACK)
+    const found = plans.find((p) => p.code === newPlanCode)
     if (found) {
-      setPeriodDays(found.defaultDays)
-      setAmount(found.price)
+      setAmount(found.pricePerMonth.amountMinorUnits / 100)
     }
   }
 
@@ -216,12 +246,17 @@ export function OrganizationBillingModal({ organization, onClose }: Organization
                     value={planCode}
                     onChange={(e) => handlePlanChange(e.target.value)}
                   >
-                    {AVAILABLE_PLANS.map((p) => (
+                    {plans.map((p) => (
                       <option key={p.code} value={p.code}>
-                        {p.name}
+                        {planLabel(p)}
                       </option>
                     ))}
                   </select>
+                  {plansError && (
+                    <span className="muted-text" style={{ fontSize: '11px', color: '#f87171' }}>
+                      {plansError}
+                    </span>
+                  )}
                 </div>
 
                 <div className="filter-field">

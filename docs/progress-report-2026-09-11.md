@@ -256,3 +256,19 @@
   вопросом, было ли само это решение в контракте продуманным (остаётся в
   «Что открыто» уже как вопрос владельцу/продукту, не техническая задача).
   [billing](operations/billing-manual-subscriptions.md).
+- **Вне очереди, найдено при чтении «Что открыто» billing-manual-
+  subscriptions.md (было п.5, последний механический пункт модуля).**
+  admin-web (`OrganizationBillingModal.tsx`) держал свою копию каталога
+  тарифов руками — разошёлся бы с `DEFAULT_PLANS` backend'а при следующем
+  изменении цен. Тенантский `GET /billing/plans` не подходит (гейтится
+  `TenantGuard`, у admin-сессии нет organizationId/positionId) — добавлен
+  новый `GET /admin/billing/plans` (только `AdminGuard`, каталог не
+  organizationId-специфичен), модалка теперь берёт code/name/price/audience
+  оттуда. `periodDays`-по-умолчанию при выборе плана остался локальной
+  UX-подсказкой — backend не хранит такого поля у плана вообще, так что
+  разойтись с "правдой" ему физически не с чем. Тесты на обеих сторонах
+  (api: делегирование в `BillingService.listPlans`; admin-web: тот же
+  `strictFetcher`-паттерн non-mock-data, что уже используется для проверки
+  publications-флоу). После этого пункта в billing-manual-subscriptions.md
+  остаются только вопросы, требующие решения владельца/продукта.
+  [billing](operations/billing-manual-subscriptions.md).

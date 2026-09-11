@@ -21,6 +21,7 @@ import type {
   PermissionGrant,
   PermissionScope,
   ResolveComplaintResult,
+  SubscriptionPlan,
   UnfreezeOrganizationResult,
   UnpublishResult,
 } from '../types/admin'
@@ -282,6 +283,13 @@ export function createAdminApi({ baseUrl, fetcher = fetch }: { baseUrl: string; 
         method: 'POST',
         body: JSON.stringify(params),
       })
+    },
+
+    // ИСПРАВЛЕНО 11.09.2026: раньше OrganizationBillingModal держал список
+    // тарифов руками (AVAILABLE_PLANS) — дублировал DEFAULT_PLANS backend'а
+    // и расходился бы с ним при следующем изменении каталога.
+    async listBillingPlans(): Promise<SubscriptionPlan[]> {
+      return request('/admin/billing/plans')
     },
   }
 }

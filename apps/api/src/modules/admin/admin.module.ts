@@ -19,6 +19,7 @@ import { AdminComplaintController } from './admin-complaint.controller';
 import { AdminOrganizationService } from './admin-organization.service';
 import { AdminOrganizationController } from './admin-organization.controller';
 import { AdminBillingController } from './admin-billing.controller';
+import { AdminBillingPlansController } from './admin-billing-plans.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { PublicationModule } from '../publication/publication.module';
 import { PropertyAssetsModule } from '../property-assets/property-assets.module';
@@ -67,6 +68,7 @@ import { BillingModule } from '../billing/billing.module';
     AdminComplaintController,
     AdminOrganizationController,
     AdminBillingController,
+    AdminBillingPlansController,
   ],
   providers: [
     AdminAccountRepository,
