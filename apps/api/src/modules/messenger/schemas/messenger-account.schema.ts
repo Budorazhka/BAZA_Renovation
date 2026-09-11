@@ -35,8 +35,19 @@ export class MessengerAccountDocument extends Document {
   /**
    * Secret token for Telegram Bot API or session identifier.
    * Never returned in public read models.
+   *
+   * ИСПРАВЛЕНО 11.09.2026: `select: false` — тот же принцип, что
+   * `Identity.passwordHash`/`legacyPasswordHash`. Раньше поле попадало в
+   * ЛЮБОЙ `find()`/`findOne()` по умолчанию: `toAccountReadModel` его и так
+   * не отдавал наружу (проверено — единственное место, что читает
+   * документ), но структурной защиты не было — любой будущий код, забывший
+   * это учесть, дамп базы или лог документа целиком утекли бы токеном.
+   * Ничего в кодовой базе `.botToken` с уже загруженного документа не
+   * читает (транспорта нет — токен нигде не используется для реальных
+   * вызовов), поэтому `select: false` ничего не ломает; когда транспорт
+   * появится, вызывающий код запросит его явно через `.select('+botToken')`.
    */
-  @Prop({ required: false, trim: true })
+  @Prop({ required: false, trim: true, select: false })
   botToken?: string;
 
   @Prop({ required: false, trim: true })

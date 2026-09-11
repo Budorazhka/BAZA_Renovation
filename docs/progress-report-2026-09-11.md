@@ -157,3 +157,9 @@
   и применена ко всем четырём операциям записи; подтверждено HTTP-тестом на
   настоящей MongoDB (менеджер против диалога коллеги → 404 на все четыре).
   [messenger](operations/messenger-skeleton.md).
+- **Вне очереди, найдено при чтении «Что открыто» messenger-skeleton.md
+  (следующий пункт).** `MessengerAccount.botToken` не имел `select: false` —
+  попадал в любой `find`/`findOne` по умолчанию; читающего кода на него нет,
+  но структурной защиты тоже не было. Добавлено, тот же принцип, что
+  `Identity.passwordHash`. Проверено на настоящей MongoDB.
+  [messenger](operations/messenger-skeleton.md).
