@@ -75,8 +75,13 @@ export class ListDialogsQueryDto {
   @MaxLength(100)
   search?: string;
 
+  // Непрозрачный составной cursor (base64url от JSON), не ObjectId —
+  // см. decodeDialogListCursor в messenger-dialog.repository.ts. Голый
+  // ObjectId тоже пройдёт валидацию строки и будет принят как legacy-формат
+  // ниже по стеку, как и описано в OpenAPI Cursor-параметре.
   @IsOptional()
-  @IsMongoId()
+  @IsString()
+  @MaxLength(500)
   cursor?: string;
 
   @IsOptional()

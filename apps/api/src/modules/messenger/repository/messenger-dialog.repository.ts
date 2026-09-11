@@ -1,4 +1,4 @@
-﻿import { Injectable } from '@nestjs/common';
+﻿import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { ClientSession, FilterQuery, Model, Types } from 'mongoose';
 import {
@@ -6,6 +6,109 @@ import {
   type DialogLastMessage,
 } from '../schemas/messenger-dialog.schema';
 import type { MessengerPlatform } from '../schemas/messenger-account.schema';
+
+/**
+ * Сортировка списка диалогов — `{pinned: -1, 'lastMessage.sentAt': -1, _id: -1}`
+ * (закреплённые сверху, дальше по свежести последнего сообщения) — НЕ
+ * совпадает с полем, по которому раньше строился курсор (`_id`). Диалог
+ * поднимается в списке при новом сообщении независимо от даты создания, так
+ * что порядок по `_id` и порядок по `lastMessage.sentAt` расходятся
+ * регулярно, не в редких случаях. Курсор по одному `_id` из-за этого либо
+ * терял диалоги (те, что "moved to the next tier" имеют больший `_id`, чем
+ * граница страницы), либо дублировал их (11.09.2026).
+ *
+ * `DialogListCursor` — составной seek-курсор из всех трёх ключей сортировки,
+ * `kind: 'legacy'` — обратная совместимость с уже описанным в OpenAPI
+ * "для newest принимается legacy ObjectId": голый `_id`, старое (неточное,
+ * но не более неточное, чем было) поведение — только для случая, когда
+ * клиент прислал именно ObjectId, а не наш непрозрачный курсор.
+ */
+export type DialogListCursor =
+  | { kind: 'seek'; pinned: boolean; lastMessageSentAt: Date | null; id: Types.ObjectId }
+  | { kind: 'legacy'; id: Types.ObjectId };
+
+interface DialogSeekCursorPayload {
+  pinned: boolean;
+  lastMessageSentAt: string | null;
+  id: string;
+}
+
+function isDialogSeekCursorPayload(value: unknown): value is DialogSeekCursorPayload {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.pinned === 'boolean' &&
+    (candidate.lastMessageSentAt === null || typeof candidate.lastMessageSentAt === 'string') &&
+    typeof candidate.id === 'string' &&
+    Types.ObjectId.isValid(candidate.id)
+  );
+}
+
+export function encodeDialogListCursor(doc: Pick<MessengerDialogDocument, '_id' | 'pinned' | 'lastMessage'>): string {
+  const payload: DialogSeekCursorPayload = {
+    pinned: doc.pinned,
+    lastMessageSentAt: doc.lastMessage ? doc.lastMessage.sentAt.toISOString() : null,
+    id: doc._id.toString(),
+  };
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+export function decodeDialogListCursor(raw: string): DialogListCursor {
+  try {
+    const parsed: unknown = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    if (isDialogSeekCursorPayload(parsed)) {
+      return {
+        kind: 'seek',
+        pinned: parsed.pinned,
+        lastMessageSentAt: parsed.lastMessageSentAt ? new Date(parsed.lastMessageSentAt) : null,
+        id: new Types.ObjectId(parsed.id),
+      };
+    }
+  } catch {
+    // не наш base64/JSON — пробуем legacy-формат ниже, иначе 400
+  }
+  if (Types.ObjectId.isValid(raw)) {
+    return { kind: 'legacy', id: new Types.ObjectId(raw) };
+  }
+  throw new BadRequestException('Некорректный cursor');
+}
+
+/**
+ * Стандартная seek-пагинация для ORDER BY (pinned DESC, lastMessage.sentAt
+ * DESC, _id DESC): "следующий после курсора" = OR из трёх непересекающихся
+ * веток (упасть на тир ниже по pinned; тот же pinned, тир ниже по дате; та
+ * же пара pinned+дата, _id меньше).
+ *
+ * `{$lt: null}` в MongoDB не находит документы с отсутствующим полем (это
+ * особенность операторов сравнения, не сортировки) — поэтому "меньше
+ * cursor-даты, включая отсутствие lastMessage" собрано через
+ * `$not: {$gte: cursorDate}}`, а не `$lt`.
+ */
+function buildDialogSeekCursorClauses(
+  cursor: Extract<DialogListCursor, { kind: 'seek' }>,
+): FilterQuery<MessengerDialogDocument>[] {
+  const clauses: FilterQuery<MessengerDialogDocument>[] = [{ pinned: { $lt: cursor.pinned } }];
+
+  if (cursor.lastMessageSentAt !== null) {
+    clauses.push({
+      pinned: cursor.pinned,
+      'lastMessage.sentAt': { $not: { $gte: cursor.lastMessageSentAt } },
+    });
+    clauses.push({
+      pinned: cursor.pinned,
+      'lastMessage.sentAt': cursor.lastMessageSentAt,
+      _id: { $lt: cursor.id },
+    });
+  } else {
+    clauses.push({
+      pinned: cursor.pinned,
+      lastMessage: { $exists: false },
+      _id: { $lt: cursor.id },
+    });
+  }
+
+  return clauses;
+}
 
 export interface CreateMessengerDialogParams {
   organizationId: Types.ObjectId;
@@ -33,7 +136,7 @@ export interface ListDialogsFilter {
   contactId?: Types.ObjectId;
   dealId?: Types.ObjectId;
   search?: string;
-  cursor?: Types.ObjectId;
+  cursor?: DialogListCursor;
   limit: number;
 }
 
@@ -89,14 +192,27 @@ export class MessengerDialogRepository {
     if (filter.contactId) query.contactId = filter.contactId;
     if (filter.dealId) query.dealId = filter.dealId;
 
+    // search и cursor используют $or независимо друг от друга — оба сразу
+    // в query.$or перезаписали бы друг друга, поэтому каждый идёт своей
+    // веткой внутри $and.
+    const andClauses: FilterQuery<MessengerDialogDocument>[] = [];
+
     if (filter.search) {
       const sanitized = filter.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const reg = new RegExp(sanitized, 'i');
-      query.$or = [{ name: reg }, { clientPhone: reg }, { clientHandle: reg }];
+      andClauses.push({ $or: [{ name: reg }, { clientPhone: reg }, { clientHandle: reg }] });
     }
 
     if (filter.cursor) {
-      query._id = { $lt: filter.cursor };
+      if (filter.cursor.kind === 'legacy') {
+        query._id = { $lt: filter.cursor.id };
+      } else {
+        andClauses.push({ $or: buildDialogSeekCursorClauses(filter.cursor) });
+      }
+    }
+
+    if (andClauses.length > 0) {
+      query.$and = andClauses;
     }
 
     return this.model

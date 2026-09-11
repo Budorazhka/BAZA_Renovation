@@ -187,7 +187,7 @@ export class MessengerController {
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       dealId: dto.dealId ? new Types.ObjectId(dto.dealId) : undefined,
       search: dto.search,
-      cursor: dto.cursor ? new Types.ObjectId(dto.cursor) : undefined,
+      cursor: dto.cursor,
       limit: dto.limit,
     });
   }

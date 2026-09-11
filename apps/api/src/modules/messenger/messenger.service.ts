@@ -7,7 +7,11 @@ import { OutboxService } from '../outbox/outbox.service';
 import { CrmService } from '../crm/crm.service';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { MessengerAccountRepository } from './repository/messenger-account.repository';
-import { MessengerDialogRepository } from './repository/messenger-dialog.repository';
+import {
+  MessengerDialogRepository,
+  decodeDialogListCursor,
+  encodeDialogListCursor,
+} from './repository/messenger-dialog.repository';
 import { MessengerMessageRepository } from './repository/messenger-message.repository';
 import type {
   MessengerAccountDocument,
@@ -65,6 +69,11 @@ export interface MessengerDialogReadModel {
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MessengerDialogListResponse {
+  items: MessengerDialogReadModel[];
+  nextCursor: string | null;
 }
 
 export interface MessengerMessageReadModel {
@@ -337,9 +346,15 @@ export class MessengerService {
     contactId?: Types.ObjectId;
     dealId?: Types.ObjectId;
     search?: string;
-    cursor?: Types.ObjectId;
+    cursor?: string;
     limit: number;
-  }): Promise<MessengerDialogReadModel[]> {
+  }): Promise<MessengerDialogListResponse> {
+    const limit = Math.min(params.limit, 100);
+
+    // Берём на одну запись больше лимита — единственный надёжный способ
+    // узнать, есть ли следующая страница, не полагаясь на "вернулось меньше
+    // limit" (это верно только до тех пор, пока запись не удалили/не
+    // перепривязали между страницами).
     const docs = await this.dialogRepository.listForOrganization({
       organizationId: params.organizationId,
       assignedPositionId: params.assignedPositionId,
@@ -349,11 +364,18 @@ export class MessengerService {
       contactId: params.contactId,
       dealId: params.dealId,
       search: params.search,
-      cursor: params.cursor,
-      limit: Math.min(params.limit, 100),
+      cursor: params.cursor ? decodeDialogListCursor(params.cursor) : undefined,
+      limit: limit + 1,
     });
 
-    return docs.map(toDialogReadModel);
+    const hasMore = docs.length > limit;
+    const page = hasMore ? docs.slice(0, limit) : docs;
+    const lastDoc = page[page.length - 1];
+
+    return {
+      items: page.map(toDialogReadModel),
+      nextCursor: hasMore && lastDoc ? encodeDialogListCursor(lastDoc) : null,
+    };
   }
 
   /**

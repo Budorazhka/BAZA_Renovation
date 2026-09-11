@@ -233,6 +233,69 @@ describe('MessengerService', () => {
     );
   });
 
+  describe('listDialogs: составной seek-курсор вместо курсора по одному _id', () => {
+    // ИСПРАВЛЕНО 11.09.2026: сортировка — pinned, затем свежесть последнего
+    // сообщения, затем _id; курсор раньше фильтровал только по _id, из-за
+    // чего терял и дублировал диалоги. Сама Mongo-семантика курсора
+    // проверена на настоящей базе (messenger-dialogs-pagination.integration-
+    // spec.ts) — здесь только "+1 трюк" сервисного слоя (limit+1 → hasMore →
+    // nextCursor), который не требует реальной Mongo.
+    const orgId = new Types.ObjectId();
+
+    function fakeDialog(pinned: boolean, sentAt: Date | undefined) {
+      return {
+        _id: new Types.ObjectId(),
+        organizationId: orgId,
+        accountId: new Types.ObjectId(),
+        platform: 'telegram',
+        externalChatId: `chat-${new Types.ObjectId().toString()}`,
+        name: 'Клиент',
+        unreadCount: 0,
+        pinned,
+        version: 0,
+        lastMessage: sentAt ? { text: 'привет', sentAt, fromMe: false, author: 'client' } : undefined,
+      };
+    }
+
+    it('репозиторий вернул limit+1 — страница обрезается до limit, nextCursor не пуст', async () => {
+      const docs = [fakeDialog(true, new Date('2026-09-10T10:00:00Z')), fakeDialog(false, undefined), fakeDialog(false, undefined)];
+      (dialogRepo.listForOrganization as jest.Mock).mockResolvedValue(docs);
+
+      const res = await service.listDialogs({ organizationId: orgId, limit: 2 });
+
+      expect(dialogRepo.listForOrganization).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }));
+      expect(res.items).toHaveLength(2);
+      expect(res.items.map((d) => d.id)).toEqual([docs[0]!._id.toString(), docs[1]!._id.toString()]);
+      expect(res.nextCursor).not.toBeNull();
+    });
+
+    it('репозиторий вернул меньше limit+1 — страница вся целиком, nextCursor null', async () => {
+      const docs = [fakeDialog(true, undefined)];
+      (dialogRepo.listForOrganization as jest.Mock).mockResolvedValue(docs);
+
+      const res = await service.listDialogs({ organizationId: orgId, limit: 50 });
+
+      expect(res.items).toHaveLength(1);
+      expect(res.nextCursor).toBeNull();
+    });
+
+    it('входной cursor — легаси ObjectId — декодируется и уходит в репозиторий как {kind: "legacy"}', async () => {
+      (dialogRepo.listForOrganization as jest.Mock).mockResolvedValue([]);
+      const legacyId = new Types.ObjectId();
+
+      await service.listDialogs({ organizationId: orgId, limit: 10, cursor: legacyId.toString() });
+
+      expect(dialogRepo.listForOrganization).toHaveBeenCalledWith(
+        expect.objectContaining({ cursor: { kind: 'legacy', id: legacyId } }),
+      );
+    });
+
+    it('битый cursor — BadRequestException, репозиторий не вызывается', async () => {
+      await expect(service.listDialogs({ organizationId: orgId, limit: 10, cursor: 'мусор' })).rejects.toThrow();
+      expect(dialogRepo.listForOrganization).not.toHaveBeenCalled();
+    });
+  });
+
   describe('own-scope на запись: чужой диалог не даёт писать/перепривязывать/создавать задачу', () => {
     // ИСПРАВЛЕНО 11.09.2026: раньше assignedPositionId проверялся только на
     // чтение (getDialog/listMessages/markDialogRead) — эти четыре метода
