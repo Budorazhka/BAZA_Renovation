@@ -69,7 +69,7 @@ export function ThreadCard({ thread, last }: { thread: ForumThread; last?: boole
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>
             {section && <span style={{ color: 'var(--theme-accent-heading)' }}>{section.name}</span>}
             <span>·</span>
-            <AuthorLine authorId={thread.authorId} />
+            <AuthorLine authorId={thread.authorId} author={thread.author} />
             <span>·</span>
             <span>{thread.createdAgo} {t('community.forum.threadCard.назад')}</span>
             <span className="ml-auto flex items-center gap-3">

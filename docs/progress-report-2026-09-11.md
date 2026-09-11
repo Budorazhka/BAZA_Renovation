@@ -131,4 +131,10 @@
 - **N-03** — заготовка: поля старых id на шести сущностях и вход по паролю старой
   системы с перехешем в argon2 ([legacy-migration](operations/legacy-migration.md)).
   Импортёров нет: копии старой базы нет, bcrypt у старой системы — предположение.
+- **N-08** — тема и ответ подписываются реальным именем автора и организацией
+  (`CommunityService.buildAuthorSnapshot`, читает `Position.currentOccupantName`
+  и `Organization.name`); ERP-адаптер `communityApi.ts` маппит `reactionCount`/
+  `createdAt`/`author` в поля, которые рисуют компоненты, вместо прокидывания
+  сырого ответа под видом мока; страница темы показывает полный текст, не
+  превью. [community](operations/community-forum-exchange.md).
 - **N-04, N-05, N-07** не начаты: ждут решений владельца.

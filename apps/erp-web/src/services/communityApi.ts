@@ -2,8 +2,10 @@ import axios from 'axios';
 import { PLATFORM_API_BASE_URL } from '@/config/backend';
 import {
   type ExchangeIntent,
+  type ExchangeMeta,
   type ExchangeSide,
   type ExchangeStatus,
+  type ForumAuthor,
   type ForumMember,
   type ForumReply,
   type ForumSection,
@@ -76,6 +78,103 @@ function paginate<T>(items: T[], page: number, pageSize: number): PaginatedData<
   };
 }
 
+// ─── Адаптер ответа API → форма, которую рисуют компоненты форума ─────────────
+// До 11.09.2026 (N-08) сырой ответ community.controller.ts прокидывался в UI
+// как есть под именем ForumThread/ForumReply, хотя поля не совпадали:
+// бэкенд отдаёт `reactionCount`/`createdAt`/`author`, компоненты читают
+// `reactions`/`createdAgo`/автора по authorId из локального мока MEMBERS.
+// У настоящих тем (authorId — ObjectId, которого в MEMBERS нет) это молча
+// давало пустые реакции, "undefined назад" и исчезающую подпись автора.
+
+/** Форма ответа community.controller.ts (toCommunityThreadDto/toCommunityReplyDto), не то, что рисует UI. */
+interface RawForumThread {
+  id: string;
+  type: ThreadType;
+  sectionId: string;
+  title: string;
+  excerpt: string;
+  body?: string;
+  authorId: string;
+  author?: ForumAuthor;
+  createdAt?: string;
+  updatedAt?: string;
+  views: number;
+  reactionCount?: number;
+  replyCount: number;
+  tags?: string[];
+  pinned?: boolean;
+  solved?: boolean;
+  exchange?: ExchangeMeta | null;
+}
+
+interface RawForumReply {
+  id: string;
+  threadId: string;
+  authorId: string;
+  author?: ForumAuthor;
+  createdAt?: string;
+  updatedAt?: string;
+  reactionCount?: number;
+  body: string;
+  isBest?: boolean;
+}
+
+/**
+ * Относительное время по ISO-дате с бэкенда ("2 ч", "3 дн"). ForumThread/
+ * ForumReply держат готовую строку, а не сырую дату — карточкам и странице
+ * темы не нужно самим считать разницу по нескольку раз.
+ */
+function formatAgo(iso: string | undefined): string {
+  if (!iso) return '—';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diffMs)) return '—';
+  if (diffMs < 60_000) return 'только что';
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) return `${minutes} мин`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} дн`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} мес`;
+  return `${Math.floor(months / 12)} г`;
+}
+
+function toForumThread(raw: RawForumThread): ForumThread {
+  return {
+    id: raw.id,
+    type: raw.type,
+    sectionId: raw.sectionId,
+    title: raw.title,
+    excerpt: raw.excerpt,
+    body: raw.body,
+    authorId: raw.authorId,
+    author: raw.author,
+    createdAgo: formatAgo(raw.createdAt),
+    lastActiveAgo: formatAgo(raw.updatedAt ?? raw.createdAt),
+    views: raw.views,
+    reactions: raw.reactionCount ?? 0,
+    replyCount: raw.replyCount,
+    tags: raw.tags ?? [],
+    pinned: raw.pinned,
+    solved: raw.solved,
+    exchange: raw.exchange ?? undefined,
+  };
+}
+
+function toForumReply(raw: RawForumReply): ForumReply {
+  return {
+    id: raw.id,
+    threadId: raw.threadId,
+    authorId: raw.authorId,
+    author: raw.author,
+    createdAgo: formatAgo(raw.createdAt),
+    reactions: raw.reactionCount ?? 0,
+    body: raw.body,
+    isBest: raw.isBest,
+  };
+}
+
 // ─── API ────────────────────────────────────────────────────────────────────
 
 export const communityApi = {
@@ -121,7 +220,7 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+          .get<ApiResponse<PaginatedData<RawForumThread>>>('/api/v1/community/threads', {
             // Бэкенд (ListCommunityThreadsQueryDto) ждёт `section`, не `sectionId` —
             // раньше здесь уходил `sectionId`, ValidationPipe с
             // forbidNonWhitelisted отклонял его 400-й, и любое чтение тредов
@@ -135,7 +234,7 @@ export const communityApi = {
               pageSize: params?.pageSize,
             },
           })
-          .then((r) => r.data.data),
+          .then((r) => ({ ...r.data.data, items: r.data.data.items.map(toForumThread) })),
       emptyPage<ForumThread>(params?.page, params?.pageSize),
       'getThreads',
     ),
@@ -144,8 +243,8 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`)
-          .then((r) => r.data.data),
+          .get<ApiResponse<RawForumThread>>(`/api/v1/community/threads/${id}`)
+          .then((r) => (r.data.data ? toForumThread(r.data.data) : null)),
       null as ForumThread | null,
       'getThreadById',
     ),
@@ -176,15 +275,15 @@ export const communityApi = {
     idempotencyKey?: string,
   ) =>
     api
-      .post<ApiResponse<ForumThread>>('/api/v1/community/threads', data, {
+      .post<ApiResponse<RawForumThread>>('/api/v1/community/threads', data, {
         headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() },
       })
-      .then((r) => r.data.data),
+      .then((r) => toForumThread(r.data.data)),
 
   updateThread: (id: string, data: Partial<Pick<ForumThread, 'title' | 'pinned' | 'solved'>>) =>
     api
-      .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}`, data)
-      .then((r) => r.data.data),
+      .patch<ApiResponse<RawForumThread>>(`/api/v1/community/threads/${id}`, data)
+      .then((r) => toForumThread(r.data.data)),
 
   deleteThread: (id: string) =>
     api
@@ -193,8 +292,8 @@ export const communityApi = {
 
   pinThread: (id: string, pinned: boolean) =>
     api
-      .patch<ApiResponse<ForumThread>>(`/api/v1/community/threads/${id}/pin`, { pinned })
-      .then((r) => r.data.data),
+      .patch<ApiResponse<RawForumThread>>(`/api/v1/community/threads/${id}/pin`, { pinned })
+      .then((r) => toForumThread(r.data.data)),
 
   // ─── Ответы ──────────────────────────────────────────────────────────────────
 
@@ -202,25 +301,25 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumReply>>>(`/api/v1/community/threads/${threadId}/replies`, { params })
-          .then((r) => r.data.data),
+          .get<ApiResponse<PaginatedData<RawForumReply>>>(`/api/v1/community/threads/${threadId}/replies`, { params })
+          .then((r) => ({ ...r.data.data, items: r.data.data.items.map(toForumReply) })),
       emptyPage<ForumReply>(params?.page, params?.pageSize),
       'getReplies',
     ),
 
   createReply: (threadId: string, body: string, idempotencyKey?: string) =>
     api
-      .post<ApiResponse<ForumReply>>(
+      .post<ApiResponse<RawForumReply>>(
         `/api/v1/community/threads/${threadId}/replies`,
         { body },
         { headers: { 'idempotency-key': idempotencyKey || newIdempotencyKey() } },
       )
-      .then((r) => r.data.data),
+      .then((r) => toForumReply(r.data.data)),
 
   updateReply: (id: string, body: string) =>
     api
-      .patch<ApiResponse<ForumReply>>(`/api/v1/community/replies/${id}`, { body })
-      .then((r) => r.data.data),
+      .patch<ApiResponse<RawForumReply>>(`/api/v1/community/replies/${id}`, { body })
+      .then((r) => toForumReply(r.data.data)),
 
   deleteReply: (id: string) =>
     api
@@ -309,14 +408,14 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+          .get<ApiResponse<PaginatedData<RawForumThread>>>('/api/v1/community/threads', {
             // Бэкенд не умеет фильтровать треды по автору (ListCommunityThreadsQueryDto
             // такого поля не знает) — тянем более широкую страницу реальных
             // тредов и фильтруем на клиенте, а не подставляем локальный мок.
             params: { pageSize: 200 },
           })
           .then((r) => {
-            const items = (r.data.data?.items ?? []).filter((t) => t.authorId === memberId);
+            const items = (r.data.data?.items ?? []).filter((t) => t.authorId === memberId).map(toForumThread);
             return paginate(items, params?.page ?? 1, params?.pageSize ?? 20);
           }),
       emptyPage<ForumThread>(params?.page, params?.pageSize),
@@ -372,7 +471,7 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/exchange', {
+          .get<ApiResponse<PaginatedData<RawForumThread>>>('/api/v1/community/exchange', {
             // Бэкенд знает `exchangeSide`/`exchangeIntent`, а не `side`/`intentGroup` —
             // `intentGroup` (группа из нескольких intent) на бэкенде не
             // существует вовсе, группируем на клиенте по реальным данным.
@@ -388,7 +487,7 @@ export const communityApi = {
               partner_seek: 'cobroking',
               service_offer: 'service',
             };
-            let items = r.data.data?.items ?? [];
+            let items = (r.data.data?.items ?? []).map(toForumThread);
             if (params?.intentGroup) {
               items = items.filter((t) => t.exchange && GROUP_OF[t.exchange.intent] === params.intentGroup);
             }
@@ -402,7 +501,7 @@ export const communityApi = {
 
   updateExchangeStatus: (threadId: string, status: ExchangeStatus) =>
     api
-      .patch<ApiResponse<ForumThread>>(`/api/v1/community/exchange/${threadId}/status`, { status })
+      .patch<ApiResponse<RawForumThread>>(`/api/v1/community/exchange/${threadId}/status`, { status })
       .then((r) => ({ status: (r.data.data?.exchange?.status as ExchangeStatus) ?? status })),
 
   // ─── Поиск ──────────────────────────────────────────────────────────────────
@@ -411,7 +510,7 @@ export const communityApi = {
     safeGet(
       () =>
         api
-          .get<ApiResponse<PaginatedData<ForumThread>>>('/api/v1/community/threads', {
+          .get<ApiResponse<PaginatedData<RawForumThread>>>('/api/v1/community/threads', {
             // `type: 'threads' | 'members' | 'all'` раньше уходил напрямую в query
             // `type`, а бэкенд трактует `type` как ThreadType (discussion/question/…)
             // — 'all' там не значение enum, 400. Поиск по участникам бэкенд не
@@ -419,7 +518,7 @@ export const communityApi = {
             params: { search: q, page: params?.page, pageSize: params?.pageSize },
           })
           .then((r) => ({
-            threads: r.data.data?.items ?? [],
+            threads: (r.data.data?.items ?? []).map(toForumThread),
             members: [] as ForumMember[],
             total: r.data.data?.total ?? 0,
           })),

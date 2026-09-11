@@ -5,7 +5,7 @@ import { CheckCircle2, ChevronLeft, Eye } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { communityApi } from '@/services/communityApi'
 import { getMember, getSection, THREAD_TYPE_LABEL } from './forumData'
-import type { ForumReply, ForumThread } from './forumData'
+import type { ForumAuthor, ForumReply, ForumThread } from './forumData'
 import {
   AuthorLine,
   cardClass,
@@ -120,7 +120,9 @@ export default function ThreadPage() {
   }
 
   const section = getSection(thread.sectionId)
-  const author = getMember(thread.authorId)
+  // API всегда отдаёт снимок автора (community.service.ts::DEFAULT_AUTHOR_SNAPSHOT
+  // как минимум) — getMember нужен только демо-тредам мока, которых в проде не бывает.
+  const author = thread.author ?? getMember(thread.authorId)
   const best = replies.find((r) => r.isBest)
   const rest = replies.filter((r) => !r.isBest)
   const ex = thread.exchange
@@ -162,9 +164,9 @@ export default function ThreadPage() {
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <MemberAvatar member={author} />
               <div className="min-w-0">
-                <AuthorLine authorId={author.id} />
+                <AuthorLine authorId={thread.authorId} author={thread.author} />
                 <p className="text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>
-                  {author.company} · {thread.createdAgo} {t('community.forum.threadPage.назад')}</p>
+                  {author.company ? `${author.company} · ` : ''}{thread.createdAgo} {t('community.forum.threadPage.назад')}</p>
               </div>
               <span className="ml-auto flex items-center gap-4">
                 <span className="inline-flex items-center gap-1.5 text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>
@@ -209,8 +211,13 @@ export default function ThreadPage() {
             </div>
           )}
 
-          <p className="mt-4 text-[19px] leading-relaxed" style={{ color: 'var(--workspace-text)' }}>
-            {thread.excerpt}
+          {/* Полный текст темы, не превью: до 11.09.2026 (N-08) страница темы
+              показывала thread.excerpt (обрезанное превью для карточек списка) —
+              настоящий текст поста нигде не отображался. thread.body — то же
+              Markdown-сырьё, что принял POST /community/threads; рендерится как
+              простой текст с переносами строк, не как размеченный HTML. */}
+          <p className="mt-4 whitespace-pre-wrap text-[19px] leading-relaxed" style={{ color: 'var(--workspace-text)' }}>
+            {thread.body ?? thread.excerpt}
           </p>
 
           {thread.tags.length > 0 && (
@@ -231,7 +238,7 @@ export default function ThreadPage() {
           >
             <p className="mb-2 inline-flex items-center gap-1.5 text-[16px] uppercase tracking-[0.08em]" style={{ color: GOLD }}>
               <CheckCircle2 size={16} strokeWidth={2} /> {t('community.forum.threadPage.лучший_ответ')}</p>
-            <ReplyBody authorId={best.authorId} createdAgo={best.createdAgo} body={best.body} reactions={best.reactions}
+            <ReplyBody authorId={best.authorId} author={best.author} createdAgo={best.createdAgo} body={best.body} reactions={best.reactions}
               onReaction={() => handleReplyReaction(best.id)} onSetBest={() => handleSetBest(best.id)} isBest />
           </div>
         )}
@@ -243,7 +250,7 @@ export default function ThreadPage() {
         <MotionDiv variants={container} initial="hidden" animate="show" className="flex flex-col gap-2.5">
           {rest.map((r) => (
             <MotionDiv key={r.id} variants={item} className={`${rowClass} p-4`}>
-              <ReplyBody authorId={r.authorId} createdAgo={r.createdAgo} body={r.body} reactions={r.reactions}
+              <ReplyBody authorId={r.authorId} author={r.author} createdAgo={r.createdAgo} body={r.body} reactions={r.reactions}
                 onReaction={() => handleReplyReaction(r.id)} onSetBest={() => handleSetBest(r.id)} />
             </MotionDiv>
           ))}
@@ -277,8 +284,9 @@ export default function ThreadPage() {
   )
 }
 
-function ReplyBody({ authorId, createdAgo, body, reactions, onReaction, onSetBest, isBest }: {
+function ReplyBody({ authorId, author, createdAgo, body, reactions, onReaction, onSetBest, isBest }: {
   authorId: string
+  author?: ForumAuthor
   createdAgo: string
   body: string
   reactions: number
@@ -287,16 +295,16 @@ function ReplyBody({ authorId, createdAgo, body, reactions, onReaction, onSetBes
   isBest?: boolean
 }) {
     const { t } = useI18n();
-  const member = getMember(authorId)
+  const member = author ?? getMember(authorId)
   return (
     <div className="flex gap-3">
       {member && <MemberAvatar member={member} size={32} />}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <AuthorLine authorId={authorId} />
+          <AuthorLine authorId={authorId} author={author} />
           <span className="text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>· {createdAgo}</span>
         </div>
-        <p className="mt-1.5 text-[18px] leading-relaxed" style={{ color: 'var(--workspace-text)' }}>{body}</p>
+        <p className="mt-1.5 whitespace-pre-wrap text-[18px] leading-relaxed" style={{ color: 'var(--workspace-text)' }}>{body}</p>
         <div className="mt-2 flex items-center gap-3">
           <ReactionButton count={reactions} onClick={onReaction} />
           {!isBest && (

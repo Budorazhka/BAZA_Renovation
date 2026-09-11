@@ -12,6 +12,7 @@ import type { CommunityReplyRepository } from './repository/community-reply.repo
 import type { CommunityEventRepository } from './repository/community-event.repository';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { OutboxService } from '../outbox/outbox.service';
+import type { OrganizationsService } from '../organizations/organizations.service';
 import type { CommunityThreadDocument } from './schemas/community-thread.schema';
 import type { CommunityReplyDocument } from './schemas/community-reply.schema';
 import type { CommunitySectionDocument } from './schemas/community-section.schema';
@@ -75,6 +76,11 @@ interface MockOutboxService {
   publish: jest.Mock;
 }
 
+interface MockOrganizationsService {
+  getPositionSummary: jest.Mock;
+  getOrganizationById: jest.Mock;
+}
+
 describe('CommunityService', () => {
   let service: CommunityService;
   let sectionRepo: MockSectionRepo;
@@ -83,6 +89,7 @@ describe('CommunityService', () => {
   let eventRepo: MockEventRepo;
   let idempotencyService: MockIdempotencyService;
   let outboxService: MockOutboxService;
+  let organizationsService: MockOrganizationsService;
 
   const orgId = new Types.ObjectId();
   const positionId = new Types.ObjectId();
@@ -130,6 +137,12 @@ describe('CommunityService', () => {
     outboxService = {
       publish: jest.fn().mockResolvedValue(undefined),
     };
+    // По умолчанию — как позиция без профиля/новая организация: buildAuthorSnapshot
+    // должен откатиться на DEFAULT_AUTHOR_SNAPSHOT, не бросить и не подставить выдумку.
+    organizationsService = {
+      getPositionSummary: jest.fn().mockResolvedValue(null),
+      getOrganizationById: jest.fn().mockResolvedValue(null),
+    };
 
     service = new CommunityService(
       makeTransactionConnection() as never,
@@ -139,6 +152,7 @@ describe('CommunityService', () => {
       eventRepo as unknown as CommunityEventRepository,
       idempotencyService as unknown as IdempotencyService,
       outboxService as unknown as OutboxService,
+      organizationsService as unknown as OrganizationsService,
     );
   });
 
@@ -313,7 +327,9 @@ describe('CommunityService', () => {
       );
     });
 
-    it('без профиля автора не приписывает ему компанию и сегмент', async () => {
+    it('без найденной позиции/организации не приписывает автору компанию и сегмент', async () => {
+      // beforeEach уже мокает organizationsService на null/null — этот тест
+      // фиксирует именно это поведение явно, а не полагается на дефолт мока.
       sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
       threadRepo.create.mockResolvedValue({
         threadId: 't-author',
@@ -329,10 +345,95 @@ describe('CommunityService', () => {
         data: { type: 'discussion', sectionId: 'market', title: 'T', body: 'B' },
       });
 
+      expect(organizationsService.getPositionSummary).toHaveBeenCalledWith(positionId, orgId);
+      expect(organizationsService.getOrganizationById).toHaveBeenCalledWith(orgId);
       const snapshot = threadRepo.create.mock.calls[0]![0].authorSnapshot;
       expect(snapshot.name).toBe('Участник BAZA');
-      expect(snapshot).not.toHaveProperty('company');
-      expect(snapshot).not.toHaveProperty('segment');
+      // Не not.toHaveProperty: buildAuthorSnapshot всегда кладёт ключ company
+      // в объект (значением undefined), Jest считает такой ключ существующим —
+      // проверяем то, что реально уходит в ответ и в БД: значение отсутствует.
+      expect(snapshot.company).toBeUndefined();
+      expect(snapshot.segment).toBeUndefined();
+    });
+
+    it('N-08: подписывает тему реальным именем автора и названием организации', async () => {
+      sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
+      organizationsService.getPositionSummary.mockResolvedValue({
+        fixedRole: 'developer',
+        currentOccupantName: 'Никита Девелопер',
+      });
+      organizationsService.getOrganizationById.mockResolvedValue({ name: 'ГК «Север»', type: 'developer' });
+      threadRepo.create.mockResolvedValue({
+        threadId: 't-real-author',
+        authorIdentityId: identityId,
+        organizationId: orgId,
+      } as unknown as CommunityThreadDocument);
+
+      await service.createThread({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-real-author',
+        data: { type: 'discussion', sectionId: 'market', title: 'T', body: 'B' },
+      });
+
+      expect(threadRepo.create.mock.calls[0]![0].authorSnapshot).toEqual({
+        name: 'Никита Девелопер',
+        company: 'ГК «Север»',
+        segment: 'developer',
+        role: 'member',
+        badges: ['Участник'],
+      });
+    });
+
+    it('N-08: позиция без явно заданного имени подписывает темой роли, а не выдумкой', async () => {
+      // currentOccupantName пуст до первого явного задания (тот же случай,
+      // что у только что созданного владельца — team.service.ts) — не должен
+      // подменяться дефолтным «Участник BAZA», создающим видимость профиля.
+      sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
+      organizationsService.getPositionSummary.mockResolvedValue({ fixedRole: 'owner', currentOccupantName: undefined });
+      organizationsService.getOrganizationById.mockResolvedValue({ name: 'Альфа-недвижимость', type: 'agency' });
+      threadRepo.create.mockResolvedValue({
+        threadId: 't-noname',
+        authorIdentityId: identityId,
+        organizationId: orgId,
+      } as unknown as CommunityThreadDocument);
+
+      await service.createThread({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-noname',
+        data: { type: 'discussion', sectionId: 'market', title: 'T', body: 'B' },
+      });
+
+      const snapshot = threadRepo.create.mock.calls[0]![0].authorSnapshot;
+      expect(snapshot.name).toBe('Участник BAZA');
+      expect(snapshot.company).toBe('Альфа-недвижимость');
+      expect(snapshot.segment).toBe('broker');
+    });
+
+    it('N-08: сбой чтения профиля не блокирует создание темы, откатывается на дефолт', async () => {
+      sectionRepo.findById.mockResolvedValue({ sectionId: 'market', name: 'Рынок' });
+      organizationsService.getPositionSummary.mockRejectedValue(new Error('Mongo timeout'));
+      threadRepo.create.mockResolvedValue({
+        threadId: 't-fallback',
+        authorIdentityId: identityId,
+        organizationId: orgId,
+      } as unknown as CommunityThreadDocument);
+
+      const result = await service.createThread({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-fallback',
+        data: { type: 'discussion', sectionId: 'market', title: 'T', body: 'B' },
+      });
+
+      expect(result.id).toBe('t-fallback');
+      expect(threadRepo.create.mock.calls[0]![0].authorSnapshot).toEqual(
+        expect.objectContaining({ name: 'Участник BAZA' }),
+      );
     });
 
     it('возвращает сохранённый ответ при повторе idempotencyKey', async () => {
@@ -456,6 +557,40 @@ describe('CommunityService', () => {
         expect.anything(),
       );
       expect(result.id).toBe('r-1');
+    });
+
+    it('N-08: подписывает ответ реальным именем автора и названием организации', async () => {
+      threadRepo.findById.mockResolvedValue({ threadId: 't-1', locked: false });
+      organizationsService.getPositionSummary.mockResolvedValue({
+        fixedRole: 'manager',
+        currentOccupantName: 'Мария Ким',
+      });
+      organizationsService.getOrganizationById.mockResolvedValue({ name: 'Сити Экспресс', type: 'agency' });
+      replyRepo.create.mockResolvedValue({
+        replyId: 'r-real-author',
+        threadId: 't-1',
+        body: 'Ответ',
+        authorIdentityId: identityId,
+        authorPositionId: positionId,
+        organizationId: orgId,
+      } as CommunityReplyDocument);
+
+      await service.createReply({
+        threadId: 't-1',
+        organizationId: orgId,
+        positionId,
+        identityId,
+        idempotencyKey: 'idem-reply-real-author',
+        data: { body: 'Ответ' },
+      });
+
+      expect(replyRepo.create.mock.calls[0]![0].authorSnapshot).toEqual({
+        name: 'Мария Ким',
+        company: 'Сити Экспресс',
+        segment: 'broker',
+        role: 'member',
+        badges: ['Участник'],
+      });
     });
 
     it('принимает ответ как лучший автором темы', async () => {

@@ -84,6 +84,27 @@ export class OrganizationsService {
   }
 
   /**
+   * Тот же boundary-принцип, что getOrganizationById выше, для Position:
+   * другие модули не могут импортировать PositionRepository напрямую
+   * (ADR-001). Нужен, чтобы подписать чужой контент (например, тему
+   * community) реальным именем автора, а не выдумкой — тот же
+   * `currentOccupantName`, что уже показывает TeamService (team.service.ts,
+   * TeamUserView.name), а не отдельный «профиль для форума».
+   *
+   * `null`, если позиция не найдена или чужой организации — вызывающий код
+   * сам решает, как откатиться (не бросает NotFoundException: это
+   * вспомогательное обогащение, не критичная проверка владения).
+   */
+  async getPositionSummary(
+    positionId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<{ fixedRole: FixedRole; currentOccupantName?: string } | null> {
+    const position = await this.positionRepository.findByIdForOrganization(positionId, organizationId);
+    if (!position) return null;
+    return { fixedRole: position.fixedRole, currentOccupantName: position.currentOccupantName };
+  }
+
+  /**
    * Публичные поля организаций пачкой: id, название, тип.
    *
    * Нужно публичному каталогу marketplace, который показывает имя застройщика

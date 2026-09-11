@@ -34,6 +34,7 @@ import { communityApi } from '@/services/communityApi'
 import {
   type ExchangeIntent,
   type ExchangeStatus,
+  type ForumAuthor,
   type ForumEvent,
   type ForumMember,
   type ForumSection,
@@ -183,7 +184,9 @@ function initials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase()
 }
 
-export function MemberAvatar({ member, size = 34 }: { member: ForumMember; size?: number }) {
+// Принимает и мок-участника (ForumMember), и реальный снимок автора с API
+// (ForumAuthor) — обоим достаточно имени для инициалов.
+export function MemberAvatar({ member, size = 34 }: { member: { name: string }; size?: number }) {
   return (
     <span
       className="flex shrink-0 items-center justify-center rounded-[6px] text-[16px] leading-none"
@@ -207,19 +210,39 @@ export function VerifiedBadge({ label }: { label: string }) {
   )
 }
 
-export function AuthorLine({ authorId, muted = true }: { authorId: string; muted?: boolean }) {
+/**
+ * `author` — реальный снимок с API (ForumThread.author/ForumReply.author),
+ * приоритетен над мок-справочником: до 11.09.2026 (N-08) имя брали только
+ * по authorId из локального MEMBERS, и у настоящих тем (authorId —
+ * ObjectId бэкенда) подпись автора молча пропадала.
+ */
+export function AuthorLine({ authorId, author, muted = true }: { authorId: string; author?: ForumAuthor; muted?: boolean }) {
   const navigate = useNavigate()
   const member = getMember(authorId)
-  if (!member) return null
+  const name = author?.name ?? member?.name
+  if (!name) return null
+  const badge = author?.badges?.[0] ?? member?.badges[0]
+  const textStyle = { color: muted ? 'var(--workspace-text-muted)' : 'var(--workspace-text)' }
+  // Профиль по id есть только у демо-участников мока: у реального автора
+  // (лидерборд пуст, см. community-forum-exchange.md) переход дал бы
+  // «участник не найден» — не предлагаем ссылку, которой некуда вести.
+  if (!member) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[16px]" style={textStyle}>
+        {name}
+        {badge && <span style={{ color: MINT }}>· {badge}</span>}
+      </span>
+    )
+  }
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); navigate(`${FORUM_BASE}/u/${member.id}`) }}
       className="inline-flex items-center gap-1.5 text-[16px] transition-colors hover:text-[color:var(--theme-accent-heading)]"
-      style={{ color: muted ? 'var(--workspace-text-muted)' : 'var(--workspace-text)' }}
+      style={textStyle}
     >
-      {member.name}
-      {member.badges[0] && <span style={{ color: MINT }}>· {member.badges[0]}</span>}
+      {name}
+      {badge && <span style={{ color: MINT }}>· {badge}</span>}
     </button>
   )
 }

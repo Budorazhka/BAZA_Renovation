@@ -86,7 +86,7 @@ function OrderCard({ thread }: { thread: ForumThread }) {
 
       <div className="mt-3 flex items-center gap-4">
         <span className="text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>
-          <AuthorLine authorId={thread.authorId} />
+          <AuthorLine authorId={thread.authorId} author={thread.author} />
         </span>
         <span className="text-[16px]" style={{ color: 'var(--workspace-text-dim)' }}>· {thread.createdAgo} {t('community.forum.exchangeBoardPage.назад')}</span>
         <span className="ml-auto flex items-center gap-3">

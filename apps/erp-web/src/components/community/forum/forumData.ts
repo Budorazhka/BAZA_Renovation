@@ -68,13 +68,32 @@ export interface ExchangeMeta {
   status: ExchangeStatus
 }
 
+/**
+ * Снимок автора с бэкенда (community.service.ts::AuthorSnapshot),
+ * записанный в тему/ответ в момент публикации. Не идентификатор — только то,
+ * что видно рядом с постом; профиля по authorId у демо-мока для реального
+ * автора нет (см. AuthorLine в forumKit.tsx).
+ */
+export interface ForumAuthor {
+  name: string
+  segment?: string
+  role?: string
+  company?: string
+  city?: string
+  badges?: string[]
+}
+
 export interface ForumThread {
   id: string
   type: ThreadType
   sectionId: string
   title: string
   excerpt: string
+  /** Полный текст темы (Markdown). У демо-тредов ниже (THREADS) не задан — тогда карточка темы показывает excerpt как есть. */
+  body?: string
   authorId: string
+  /** Реальный снимок автора с API. У демо-тредов отсутствует — рендер берёт данные по authorId из MEMBERS. */
+  author?: ForumAuthor
   createdAgo: string
   lastActiveAgo: string
   views: number
@@ -90,6 +109,7 @@ export interface ForumReply {
   id: string
   threadId: string
   authorId: string
+  author?: ForumAuthor
   createdAgo: string
   reactions: number
   body: string

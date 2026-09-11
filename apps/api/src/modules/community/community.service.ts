@@ -7,6 +7,8 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { OutboxService } from '../outbox/outbox.service';
+import { OrganizationsService } from '../organizations/organizations.service';
+import type { OrganizationType } from '../organizations/schemas/organization.schema';
 import { CommunitySectionRepository } from './repository/community-section.repository';
 import { CommunityThreadRepository } from './repository/community-thread.repository';
 import { CommunityReplyRepository } from './repository/community-reply.repository';
@@ -38,6 +40,18 @@ const DEFAULT_AUTHOR_SNAPSHOT: AuthorSnapshot = {
   name: 'Участник BAZA',
   role: 'member',
   badges: ['Участник'],
+};
+
+/**
+ * Тип организации (Organization.type) в сегмент форума. Не совпадает с
+ * ERP-ролью автора (owner/manager/…) — тот же принцип, что и раньше:
+ * `role` в AuthorSnapshot остаётся 'member', сегмент говорит только «кто
+ * это» (застройщик/агентство/частный риэлтор), не должность внутри неё.
+ */
+const SEGMENT_BY_ORGANIZATION_TYPE: Record<OrganizationType, string> = {
+  developer: 'developer',
+  agency: 'broker',
+  independent_realtor: 'agent',
 };
 
 export function toCommunitySectionDto(doc: CommunitySectionDocument) {
@@ -117,10 +131,51 @@ export class CommunityService implements OnModuleInit {
     private readonly eventRepository: CommunityEventRepository,
     private readonly idempotencyService: IdempotencyService,
     private readonly outboxService: OutboxService,
+    private readonly organizationsService: OrganizationsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
     await this.seedDefaultsIfEmpty();
+  }
+
+  /**
+   * N-08 (11.09.2026): контроллер не передаёт снимок профиля вовсе, поэтому
+   * каждая тема и ответ до этого коммита подписывались одним и тем же
+   * DEFAULT_AUTHOR_SNAPSHOT — «Участник BAZA» без имени, даже у застройщика.
+   * Здесь автор получает имя из `Position.currentOccupantName` (тот же
+   * денормализованный источник, что показывает «Команда» в ERP,
+   * team.service.ts::toView) и компанию из названия организации.
+   *
+   * Не бросает и не блокирует создание темы при сбое чтения — это
+   * обогащение подписи, не проверка права публиковать. Пустое или ещё не
+   * заполненное имя позиции (`currentOccupantName` пуст до первого явного
+   * задания — тот же случай, что у только что созданного владельца
+   * организации, team.service.ts) не должно подменяться дефолтным
+   * «Участник BAZA», который создаёт видимость профиля: честнее оставить
+   * компанию известной, а имя — общей подписью роли.
+   */
+  private async buildAuthorSnapshot(
+    organizationId: Types.ObjectId,
+    positionId: Types.ObjectId,
+  ): Promise<AuthorSnapshot> {
+    try {
+      const [position, organization] = await Promise.all([
+        this.organizationsService.getPositionSummary(positionId, organizationId),
+        this.organizationsService.getOrganizationById(organizationId),
+      ]);
+
+      const name = position?.currentOccupantName?.trim();
+      return {
+        name: name && name.length > 0 ? name : DEFAULT_AUTHOR_SNAPSHOT.name,
+        company: organization?.name,
+        segment: organization ? SEGMENT_BY_ORGANIZATION_TYPE[organization.type] : undefined,
+        role: DEFAULT_AUTHOR_SNAPSHOT.role,
+        badges: DEFAULT_AUTHOR_SNAPSHOT.badges,
+      };
+    } catch (error) {
+      this.logger.warn(`buildAuthorSnapshot failed, falling back to default: ${(error as Error).message}`);
+      return DEFAULT_AUTHOR_SNAPSHOT;
+    }
   }
 
   /**
@@ -244,10 +299,12 @@ export class CommunityService implements OnModuleInit {
       params.data.excerpt ||
       params.data.body.slice(0, 160).replace(/[#*_`]/g, '').trim();
 
-    // Компанию и сегмент не подставляем: раньше каждому автору без профиля
-    // приписывалось «Агентство недвижимости / broker», в том числе
-    // застройщикам. Пока снимка профиля нет, показываем только то, что знаем.
-    const snapshot: AuthorSnapshot = params.authorSnapshot ?? DEFAULT_AUTHOR_SNAPSHOT;
+    // N-08: имя и компания берутся из реальной позиции/организации автора
+    // (buildAuthorSnapshot), не из выдуманного «Агентство недвижимости /
+    // broker» — то накрутило бы профиль даже застройщику. params.authorSnapshot
+    // остаётся seam'ом для тестов; в контроллере не передаётся ни разу.
+    const snapshot: AuthorSnapshot =
+      params.authorSnapshot ?? (await this.buildAuthorSnapshot(params.organizationId, params.positionId));
 
     return runInTransaction(this.connection, async (session: ClientSession) => {
       const created = await this.threadRepository.create(
@@ -460,7 +517,9 @@ export class CommunityService implements OnModuleInit {
     }
 
     const replyId = `rep-${Date.now()}-${randomUUID().slice(0, 8)}`;
-    const snapshot: AuthorSnapshot = params.authorSnapshot ?? DEFAULT_AUTHOR_SNAPSHOT;
+    // N-08: тот же реальный снимок, что createThread — см. его комментарий выше.
+    const snapshot: AuthorSnapshot =
+      params.authorSnapshot ?? (await this.buildAuthorSnapshot(params.organizationId, params.positionId));
 
     return runInTransaction(this.connection, async (session: ClientSession) => {
       const created = await this.replyRepository.create(

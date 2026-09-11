@@ -25,6 +25,7 @@ import { CommunityController } from './community.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { OutboxModule } from '../outbox/outbox.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
@@ -37,6 +38,10 @@ import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
     AuthorizationModule,
     OutboxModule,
     IdempotencyModule,
+    // OrganizationsService.getPositionSummary/getOrganizationById — тот же
+    // cross-module паттерн, что DevelopmentsModule (ADR-001): подписать тему
+    // и ответ реальным именем автора и организацией, не дефолтом.
+    OrganizationsModule,
   ],
   controllers: [CommunityController],
   providers: [
