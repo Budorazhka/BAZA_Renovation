@@ -282,4 +282,25 @@ export class MessengerDialogRepository {
     const res = await this.model.deleteOne({ _id: dialogId, organizationId }, { session }).exec();
     return res.deletedCount > 0;
   }
+
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: MessengerService.deleteAccount удалял только сам
+   * аккаунт — диалоги с уже несуществующим accountId оставались висеть
+   * (тот же класс проблемы, что чистка N-02 в community: осиротевшие
+   * данные после удаления родителя). Возвращает id удалённых диалогов —
+   * вызывающий код каскадом чистит их сообщения (MessengerMessageRepository.
+   * deleteByDialogIds).
+   */
+  async deleteByAccountId(
+    organizationId: Types.ObjectId,
+    accountId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<Types.ObjectId[]> {
+    const dialogs = await this.model.find({ organizationId, accountId }, { _id: 1 }, { session }).lean();
+    const dialogIds = dialogs.map((d) => d._id);
+    if (dialogIds.length > 0) {
+      await this.model.deleteMany({ organizationId, accountId }, { session }).exec();
+    }
+    return dialogIds;
+  }
 }

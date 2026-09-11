@@ -323,13 +323,32 @@ export class MessengerService {
         session,
       );
 
+      // Без каскада диалоги/сообщения этого аккаунта оставались бы висеть
+      // с указателем на уже несуществующий accountId — тот же класс
+      // проблемы, что была у community-сидов до чистки N-02.
+      const deletedDialogIds = await this.dialogRepository.deleteByAccountId(
+        params.organizationId,
+        params.accountId,
+        session,
+      );
+      const deletedMessagesCount = await this.messageRepository.deleteByDialogIds(
+        params.organizationId,
+        deletedDialogIds,
+        session,
+      );
+
       await this.auditService.append(
         {
           actor: { type: 'identity', id: params.actorIdentityId },
           action: 'messenger_account.delete',
           resource: 'messenger_account',
           resourceId: params.accountId,
-          before: { name: existing.name, platform: existing.platform },
+          before: {
+            name: existing.name,
+            platform: existing.platform,
+            dialogsDeleted: deletedDialogIds.length,
+            messagesDeleted: deletedMessagesCount,
+          },
           correlationId: params.correlationId,
         },
         session,

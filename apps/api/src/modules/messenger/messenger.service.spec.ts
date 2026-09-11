@@ -49,12 +49,14 @@ describe('MessengerService', () => {
       markAsRead: jest.fn(),
       linkCrm: jest.fn(),
       deleteForOrganization: jest.fn(),
+      deleteByAccountId: jest.fn().mockResolvedValue([]),
     };
 
     messageRepo = {
       create: jest.fn(),
       listForDialog: jest.fn(),
       markDeliveredOrRead: jest.fn(),
+      deleteByDialogIds: jest.fn().mockResolvedValue(0),
     };
 
     auditService = {
@@ -127,6 +129,82 @@ describe('MessengerService', () => {
       }),
       fakeSession,
     );
+  });
+
+  describe('deleteAccount: каскад на диалоги и сообщения', () => {
+    // ИСПРАВЛЕНО 11.09.2026: раньше удалялся только сам аккаунт — диалоги и
+    // сообщения оставались висеть с указателем на уже несуществующий
+    // accountId (тот же класс проблемы, что была у community-сидов до
+    // чистки N-02).
+    it('аккаунт без диалогов — каскад не находит ничего, но всё равно вызывается', async () => {
+      const orgId = new Types.ObjectId();
+      const accountId = new Types.ObjectId();
+      (accountRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: accountId,
+        organizationId: orgId,
+        name: 'Sales Bot',
+        platform: 'telegram',
+      });
+      (accountRepo.deleteForOrganization as jest.Mock).mockResolvedValue(true);
+
+      const result = await service.deleteAccount({
+        organizationId: orgId,
+        accountId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'cor-del-1',
+      });
+
+      expect(result).toBe(true);
+      expect(dialogRepo.deleteByAccountId).toHaveBeenCalledWith(orgId, accountId, fakeSession);
+      expect(messageRepo.deleteByDialogIds).toHaveBeenCalledWith(orgId, [], fakeSession);
+    });
+
+    it('аккаунт с диалогами — сообщения удаляются по id удалённых диалогов, счётчики попадают в аудит', async () => {
+      const orgId = new Types.ObjectId();
+      const accountId = new Types.ObjectId();
+      const dialogIdA = new Types.ObjectId();
+      const dialogIdB = new Types.ObjectId();
+      (accountRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: accountId,
+        organizationId: orgId,
+        name: 'Sales Bot',
+        platform: 'telegram',
+      });
+      (accountRepo.deleteForOrganization as jest.Mock).mockResolvedValue(true);
+      (dialogRepo.deleteByAccountId as jest.Mock).mockResolvedValue([dialogIdA, dialogIdB]);
+      (messageRepo.deleteByDialogIds as jest.Mock).mockResolvedValue(7);
+
+      await service.deleteAccount({
+        organizationId: orgId,
+        accountId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'cor-del-2',
+      });
+
+      expect(messageRepo.deleteByDialogIds).toHaveBeenCalledWith(orgId, [dialogIdA, dialogIdB], fakeSession);
+      expect(auditService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'messenger_account.delete',
+          before: expect.objectContaining({ dialogsDeleted: 2, messagesDeleted: 7 }),
+        }),
+        fakeSession,
+      );
+    });
+
+    it('аккаунт не найден — NotFoundException, каскад не запускается', async () => {
+      (accountRepo.findByIdForOrganization as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.deleteAccount({
+          organizationId: new Types.ObjectId(),
+          accountId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'cor-del-3',
+        }),
+      ).rejects.toThrow('Учётная запись мессенджера не найдена');
+      expect(dialogRepo.deleteByAccountId).not.toHaveBeenCalled();
+      expect(messageRepo.deleteByDialogIds).not.toHaveBeenCalled();
+    });
   });
 
   it('sends text message and updates dialog lastMessage', async () => {

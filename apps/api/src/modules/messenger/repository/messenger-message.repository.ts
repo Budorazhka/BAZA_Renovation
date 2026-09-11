@@ -87,4 +87,19 @@ export class MessengerMessageRepository {
     ).exec();
     return res.modifiedCount;
   }
+
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: каскад из MessengerService.deleteAccount — см.
+   * MessengerDialogRepository.deleteByAccountId. dialogIds может быть
+   * пустым (аккаунт без единого диалога) — тогда deleteMany с пустым $in
+   * просто ничего не находит, отдельная проверка не нужна.
+   */
+  async deleteByDialogIds(
+    organizationId: Types.ObjectId,
+    dialogIds: Types.ObjectId[],
+    session?: ClientSession,
+  ): Promise<number> {
+    const res = await this.model.deleteMany({ organizationId, dialogId: { $in: dialogIds } }, { session }).exec();
+    return res.deletedCount;
+  }
 }
