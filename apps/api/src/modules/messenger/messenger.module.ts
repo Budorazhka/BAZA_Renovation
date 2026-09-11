@@ -12,6 +12,7 @@ import { AuthorizationModule } from '../authorization/authorization.module';
 import { AuditModule } from '../audit/audit.module';
 import { OutboxModule } from '../outbox/outbox.module';
 import { CrmModule } from '../crm/crm.module';
+import { MediaModule } from '../media/media.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
 
 @Module({
@@ -25,6 +26,7 @@ import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
     AuditModule,
     OutboxModule,
     CrmModule,
+    MediaModule,
     IdempotencyModule,
   ],
   controllers: [MessengerController],

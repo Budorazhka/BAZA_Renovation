@@ -115,6 +115,7 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       'contacts',
       'deals',
       'tasks',
+      'media_assets',
       'positions',
       'position_assignments',
       'organizations',
@@ -210,6 +211,26 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       title: 'Сделка CRM',
     });
     return deal._id;
+  }
+
+  // Тот же паттерн прямой вставки, что tasks.integration-spec.ts использует
+  // для проверки attachments у POST /tasks — полноценный upload-флоу здесь
+  // не нужен, важен только итоговый статус/ownerScope документа.
+  async function seedMediaAsset(organizationId: Types.ObjectId, status: 'verified' | 'pending'): Promise<Types.ObjectId> {
+    const assetId = new Types.ObjectId();
+    await connection.collection('media_assets').insertOne({
+      _id: assetId,
+      ownerScope: { type: 'organization', organizationId },
+      status,
+      declaredMimeType: 'application/pdf',
+      sizeBytes: 1000,
+      bucket: 'private',
+      originalPath: `${assetId.toString()}/original.pdf`,
+      variants: [],
+      purpose: 'messenger_attachment',
+      createdAt: new Date(),
+    });
+    return assetId;
   }
 
   it('sendTextMessage: менеджер не может писать в диалог, назначенный коллеге — 404, сообщение не создаётся', async () => {
@@ -367,6 +388,56 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     expect(dialog?.leadId?.toString()).toBe(leadId.toString());
     expect(dialog?.contactId?.toString()).toBe(contactId.toString());
     expect(dialog?.dealId?.toString()).toBe(dealId.toString());
+  });
+
+  it('sendMediaMessage: assetId чужой организации — 404, сообщение не создаётся', async () => {
+    // ИСПРАВЛЕНО 11.09.2026: assetId писался в сообщение без проверки, что
+    // asset вообще существует и принадлежит организации вызывающего.
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const foreignAssetId = await seedMediaAsset(new Types.ObjectId(), 'verified');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/messages/media`,
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
+      payload: { assetId: foreignAssetId.toString(), fileName: 'секрет.pdf' },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(await connection.collection('messenger_messages').countDocuments({})).toBe(0);
+  });
+
+  it('sendMediaMessage: assetId существует, но ещё не verified — 400, сообщение не создаётся', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const pendingAssetId = await seedMediaAsset(organizationId, 'pending');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/messages/media`,
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
+      payload: { assetId: pendingAssetId.toString(), fileName: 'план.pdf' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(await connection.collection('messenger_messages').countDocuments({})).toBe(0);
+  });
+
+  it('sendMediaMessage: assetId своей организации и verified — 201, сообщение создаётся', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const assetId = await seedMediaAsset(organizationId, 'verified');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/messages/media`,
+      headers: { cookie, 'idempotency-key': new Types.ObjectId().toString() },
+      payload: { assetId: assetId.toString(), fileName: 'план.pdf' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(await connection.collection('messenger_messages').countDocuments({})).toBe(1);
   });
 
   it('createTaskFromDialog: менеджер не может создать задачу из чужого диалога — 404', async () => {

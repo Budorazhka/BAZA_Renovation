@@ -196,3 +196,13 @@
   `'createTaskFromDialog'` — новое имя у messenger-пути). Подтверждено HTTP-
   тестом на настоящей MongoDB: общий ключ на обоих эндпоинтах создаёт две
   задачи (201/201, разные id), не 409. [messenger](operations/messenger-skeleton.md).
+- **Вне очереди, найдено при чтении «Что открыто» messenger-skeleton.md (было
+  п.3).** `sendMediaMessage` писал `media.assetId` в сообщение без проверки —
+  та же дыра, что была у `link-crm` с `leadId`/`contactId`/`dealId`: можно
+  было приложить к диалогу asset чужой организации, подобрав `ObjectId`.
+  Теперь используется тот же cross-module accessor, что уже применяет
+  `TeamService` для аватара позиции (`MediaService.getAssetForOwnerScope`):
+  чужой/несуществующий asset — 404, неподтверждённый — 400. `url`-вложения
+  без `assetId` (внешняя ссылка) не затронуты — отдельный, явно
+  задокументированный вопрос продукта, не технический баг. Подтверждено HTTP-
+  тестом на настоящей MongoDB. [messenger](operations/messenger-skeleton.md).

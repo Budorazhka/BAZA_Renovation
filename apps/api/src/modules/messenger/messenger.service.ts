@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { runInTransaction } from '../../shared/transactions/run-in-transaction';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { CrmService } from '../crm/crm.service';
+import { MediaService } from '../media/media.service';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import { MessengerAccountRepository } from './repository/messenger-account.repository';
 import {
@@ -178,6 +179,7 @@ export class MessengerService {
     private readonly auditService: AuditService,
     private readonly outboxService: OutboxService,
     private readonly crmService: CrmService,
+    private readonly mediaService: MediaService,
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
@@ -534,6 +536,27 @@ export class MessengerService {
         throw new NotFoundException('Диалог не найден');
       }
       this.assertDialogOwnership(dialog, params.assignedPositionId);
+
+      // Без этой проверки assetId писался в сообщение как есть — можно было
+      // приложить к чужому диалогу asset чужой организации, подобрав
+      // ObjectId (тот же класс, что был у link-crm leadId/contactId/dealId).
+      // Тот же cross-module accessor, что уже использует TeamService для
+      // аватара позиции — единственная точка доступа к MediaAsset для
+      // внешних модулей (ADR-001/ADR-002). url без assetId (внешняя ссылка,
+      // не наш загруженный файл) этой правкой намеренно не проверяется —
+      // отдельный, ещё не закрытый вопрос, см. messenger-skeleton.md.
+      if (params.media?.assetId) {
+        const asset = await this.mediaService.getAssetForOwnerScope(params.media.assetId, {
+          type: 'organization',
+          organizationId: params.organizationId,
+        });
+        if (!asset) {
+          throw new NotFoundException('Media asset not found');
+        }
+        if (asset.status !== 'verified') {
+          throw new BadRequestException('Media asset is not verified yet');
+        }
+      }
 
       const now = new Date();
       const displayText = params.text || (params.media?.fileName ? `[Файл: ${params.media.fileName}]` : '[Вложение]');

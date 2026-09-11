@@ -9,6 +9,7 @@ import { MessengerMessageRepository } from './repository/messenger-message.repos
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { CrmService } from '../crm/crm.service';
+import { MediaService } from '../media/media.service';
 import { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 
 describe('MessengerService', () => {
@@ -19,6 +20,7 @@ describe('MessengerService', () => {
   let auditService: jest.Mocked<Partial<AuditService>>;
   let outboxService: jest.Mocked<Partial<OutboxService>>;
   let crmService: jest.Mocked<Partial<CrmService>>;
+  let mediaService: jest.Mocked<Partial<MediaService>>;
   let idempotencyService: jest.Mocked<Partial<IdempotencyService>>;
 
   const fakeSession = {
@@ -67,6 +69,10 @@ describe('MessengerService', () => {
       createTask: jest.fn().mockResolvedValue({ id: 'task-123' } as never),
     };
 
+    mediaService = {
+      getAssetForOwnerScope: jest.fn(),
+    };
+
     idempotencyService = {
       record: jest.fn().mockResolvedValue(undefined),
       checkReplay: jest.fn().mockResolvedValue(null),
@@ -82,6 +88,7 @@ describe('MessengerService', () => {
         { provide: AuditService, useValue: auditService },
         { provide: OutboxService, useValue: outboxService },
         { provide: CrmService, useValue: crmService },
+        { provide: MediaService, useValue: mediaService },
         { provide: IdempotencyService, useValue: idempotencyService },
       ],
     }).compile();
@@ -198,6 +205,84 @@ describe('MessengerService', () => {
       expect.objectContaining({ status: 'queued', messageType: 'document' }),
       fakeSession,
     );
+  });
+
+  describe('sendMediaMessage: assetId проверяется на существование и принадлежность организации', () => {
+    // ИСПРАВЛЕНО 11.09.2026: раньше assetId писался в сообщение как есть —
+    // можно было приложить к диалогу asset чужой организации, подобрав
+    // ObjectId (тот же класс, что был у link-crm leadId/contactId/dealId).
+    const orgId = new Types.ObjectId();
+    const dialogId = new Types.ObjectId();
+
+    beforeEach(() => {
+      (dialogRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: dialogId,
+        organizationId: orgId,
+        platform: 'telegram',
+        externalChatId: 'chat-77',
+      });
+    });
+
+    it('assetId из чужой организации (или несуществующий) — NotFoundException, сообщение не создаётся', async () => {
+      (mediaService.getAssetForOwnerScope as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.sendMediaMessage({
+          organizationId: orgId,
+          dialogId,
+          media: { assetId: new Types.ObjectId(), fileName: 'plan.pdf' },
+        }),
+      ).rejects.toThrow('Media asset not found');
+      expect(messageRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('assetId существует, но ещё не verified — BadRequestException, сообщение не создаётся', async () => {
+      (mediaService.getAssetForOwnerScope as jest.Mock).mockResolvedValue({
+        status: 'pending',
+        variants: [],
+        bucket: 'private',
+      });
+
+      await expect(
+        service.sendMediaMessage({
+          organizationId: orgId,
+          dialogId,
+          media: { assetId: new Types.ObjectId(), fileName: 'plan.pdf' },
+        }),
+      ).rejects.toThrow('Media asset is not verified yet');
+      expect(messageRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('assetId из своей организации и verified — сообщение создаётся', async () => {
+      (mediaService.getAssetForOwnerScope as jest.Mock).mockResolvedValue({
+        status: 'verified',
+        variants: [],
+        bucket: 'private',
+      });
+      (messageRepo.create as jest.Mock).mockResolvedValue({
+        _id: new Types.ObjectId(),
+        organizationId: orgId,
+        dialogId,
+        author: 'agent',
+        text: '[Файл: plan.pdf]',
+        messageType: 'document',
+        status: 'queued',
+        sentAt: new Date(),
+      });
+
+      const assetId = new Types.ObjectId();
+      await service.sendMediaMessage({
+        organizationId: orgId,
+        dialogId,
+        media: { assetId, fileName: 'plan.pdf' },
+      });
+
+      expect(mediaService.getAssetForOwnerScope).toHaveBeenCalledWith(assetId, {
+        type: 'organization',
+        organizationId: orgId,
+      });
+      expect(messageRepo.create).toHaveBeenCalled();
+    });
   });
 
   it('creates crm task directly from dialog context', async () => {
