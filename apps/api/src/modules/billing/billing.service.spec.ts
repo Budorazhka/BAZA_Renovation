@@ -115,12 +115,15 @@ describe('BillingService', () => {
       listByOrganizationId: jest.fn().mockResolvedValue([
         {
           _id: new Types.ObjectId(),
+          organizationId: new Types.ObjectId(),
           planCode: 'agency_trial',
           action: 'plan_activated',
           amountMinorUnits: 0,
           currency: 'USD',
           periodDays: 14,
           reason: 'Initial trial period',
+          recordedBy: new Types.ObjectId(),
+          correlationId: 'corr-ledger-1',
           createdAt: new Date(),
         },
       ]),
@@ -237,6 +240,19 @@ describe('BillingService', () => {
       );
       expect(ledger).toHaveLength(1);
     });
+
+    // ИСПРАВЛЕНО 11.09.2026: раньше отдавался сырой Mongoose-документ (_id),
+    // OpenAPI components.schemas.BillingLedgerEntry объявляет id.
+    it('маппит _id в id, ObjectId-поля — в строки (контракт OpenAPI BillingLedgerEntry)', async () => {
+      const tenantContext = makeTenantContext();
+      const ledger = await service.getLedgerForOwner(tenantContext);
+
+      expect(ledger[0]).not.toHaveProperty('_id');
+      expect(typeof ledger[0]?.id).toBe('string');
+      expect(typeof ledger[0]?.organizationId).toBe('string');
+      expect(typeof ledger[0]?.recordedBy).toBe('string');
+      expect(typeof ledger[0]?.createdAt).toBe('string');
+    });
   });
 
   describe('adminActivateSubscription', () => {
@@ -289,6 +305,22 @@ describe('BillingService', () => {
       );
       expect(result.planCode).toBe('agency_pro');
       expect(result.status).toBe('active');
+    });
+  });
+
+  describe('adminGetBillingOverview', () => {
+    // ИСПРАВЛЕНО 11.09.2026: тот же _id -> id маппинг, что у getLedgerForOwner
+    // — components.schemas.AdminBillingOverview.ledger ссылается на тот же
+    // BillingLedgerEntry, что и tenant-эндпоинт.
+    it('ledger внутри обзора тоже маппится в id, не отдаёт сырой _id', async () => {
+      const orgId = new Types.ObjectId();
+      const adminContext = makeAdminContext();
+
+      const overview = await service.adminGetBillingOverview(adminContext, orgId);
+
+      expect(overview.ledger).toHaveLength(1);
+      expect(overview.ledger[0]).not.toHaveProperty('_id');
+      expect(typeof overview.ledger[0]?.id).toBe('string');
     });
   });
 });

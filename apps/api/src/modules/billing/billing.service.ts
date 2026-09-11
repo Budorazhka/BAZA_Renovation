@@ -21,7 +21,7 @@ import type {
   OrganizationSubscriptionDocument,
   SubscriptionStatus,
 } from './schemas/organization-subscription.schema';
-import type { BillingLedgerEntryDocument } from './schemas/billing-ledger-entry.schema';
+import type { BillingAction, BillingLedgerEntryDocument } from './schemas/billing-ledger-entry.schema';
 
 export const DEFAULT_PLANS: Array<{
   code: string;
@@ -156,8 +156,49 @@ export interface OrganizationSubscriptionOverview {
   effectiveLimits: PlanLimits;
 }
 
+/**
+ * ИСПРАВЛЕНО 11.09.2026: getLedgerForOwner/adminGetBillingOverview отдавали
+ * сырые Mongoose-документы — `_id`, не `id`, хотя components.schemas.
+ * BillingLedgerEntry в OpenAPI объявляет именно `id` (тот же класс
+ * расхождения, что уже чинили в messenger — список сообщений/диалогов).
+ * `reason`/`recordedBy` ЗДЕСЬ оставлены как есть намеренно: OpenAPI-схема
+ * этого же BillingLedgerEntry уже явно объявляет оба поля как часть
+ * контракта tenant-эндпоинта (owner видит, кто из админов и почему менял её
+ * тариф) — это не тот же класс проблемы, что _id/id, и не мне решать, что
+ * это была ошибка, раз контракт формально уже про это говорит.
+ */
+export interface BillingLedgerEntryReadModel {
+  id: string;
+  organizationId: string;
+  action: BillingAction;
+  amountMinorUnits: number;
+  currency: string;
+  planCode: string;
+  periodDays: number;
+  reason: string;
+  recordedBy: string;
+  correlationId: string;
+  createdAt: string;
+}
+
+function toBillingLedgerEntryReadModel(doc: BillingLedgerEntryDocument): BillingLedgerEntryReadModel {
+  return {
+    id: doc._id.toString(),
+    organizationId: doc.organizationId.toString(),
+    action: doc.action,
+    amountMinorUnits: doc.amountMinorUnits,
+    currency: doc.currency,
+    planCode: doc.planCode,
+    periodDays: doc.periodDays,
+    reason: doc.reason,
+    recordedBy: doc.recordedBy.toString(),
+    correlationId: doc.correlationId,
+    createdAt: doc.createdAt.toISOString(),
+  };
+}
+
 export interface AdminBillingOverview extends OrganizationSubscriptionOverview {
-  ledger: BillingLedgerEntryDocument[];
+  ledger: BillingLedgerEntryReadModel[];
 }
 
 @Injectable()
@@ -302,11 +343,12 @@ export class BillingService {
   async getLedgerForOwner(
     tenantContext: TenantContext,
     limit = 50,
-  ): Promise<BillingLedgerEntryDocument[]> {
-    return this.billingLedgerRepository.listByOrganizationId(
+  ): Promise<BillingLedgerEntryReadModel[]> {
+    const entries = await this.billingLedgerRepository.listByOrganizationId(
       new Types.ObjectId(tenantContext.organizationId),
       limit,
     );
+    return entries.map(toBillingLedgerEntryReadModel);
   }
 
   async adminActivateSubscription(
@@ -428,11 +470,11 @@ export class BillingService {
     organizationId: Types.ObjectId,
   ): Promise<AdminBillingOverview> {
     const overview = await this.getOrganizationSubscription(organizationId);
-    const ledger = await this.billingLedgerRepository.listByOrganizationId(organizationId, 50);
+    const ledgerEntries = await this.billingLedgerRepository.listByOrganizationId(organizationId, 50);
 
     return {
       ...overview,
-      ledger,
+      ledger: ledgerEntries.map(toBillingLedgerEntryReadModel),
     };
   }
 }
