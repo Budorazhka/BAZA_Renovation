@@ -44,10 +44,7 @@ const SPEC_PATH = join(__dirname, '../../../../docs/api/v1-first-vertical-slice.
  * предупреждает architecture.md, только с другой стороны: не тест без кода, а
  * контракт без кода.
  */
-const SPEC_AHEAD_OF_CODE: Record<string, string> = {
-  'GET /me':
-    'описан в спеке 01.09.2026; контроллер живёт в ветке codex/erp-web и сюда пока не влит',
-};
+const SPEC_AHEAD_OF_CODE: Record<string, string> = {};
 
 /** Маршрут → почему его нет и не должно быть в продуктовом контракте. */
 const INTENTIONALLY_UNDOCUMENTED: Record<string, string> = {
