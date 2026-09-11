@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { lmsApi } from '@/services/lmsApi'
-import { LMS_ITEMS, LMS_COURSES } from '@/data/lms-mock'
 import type { LMSItem, LMSCourse } from '@/data/lms-mock'
 
 /** Копия объекта без серверного id — для create-запросов. */
@@ -10,43 +9,65 @@ function withoutId<T extends { id: string }>(o: T): Omit<T, 'id'> {
   return rest
 }
 
+function describeLoadError(error: unknown): string {
+  const status = (error as { response?: { status?: number } })?.response?.status
+  if (status === 401) return 'Сессия истекла. Войдите заново, чтобы увидеть базу знаний.'
+  if (status === 403) return 'Нет прав на просмотр базы знаний.'
+  if (status) return `Сервер ответил ошибкой ${status}. Материалы не загружены.`
+  return 'Не удалось связаться с сервером. Материалы не загружены.'
+}
+
 /**
  * Библиотека «Обучение» с persistence через lmsApi.
  *
- * Пока LMS-эндпоинты на сервере не подняты, первый GET падает — тогда хук
- * остаётся на сид-данных из моков и работает локально (как до интеграции),
- * чтобы вкладка не ломалась. Как только бэкенд ответит на /api/lms/items,
- * тот же код начнёт читать и писать на сервер без изменений в компонентах.
+ * ИСПРАВЛЕНО 11.09.2026: `LmsModule` на сервере зарегистрирован и отвечает
+ * на `/api/lms/items`/`/api/lms/courses` — предпосылка старого комментария
+ * («пока эндпоинты не подняты») больше не выполняется. Раньше ЛЮБАЯ ошибка
+ * GET (истёкшая сессия, нет прав, 500, обрыв сети — не только «эндпоинта
+ * нет») тихо подменяла реальную библиотеку фиктивными `LMS_ITEMS`/
+ * `LMS_COURSES` без какого-либо признака подмены — тот же класс бага, что
+ * уже закрывался для карточки объекта и реестра задач (см.
+ * roadmap-snapshot-2026-09-05.md §1.1, tasksPageNoSilentMock.test.ts).
+ * Теперь при отказе список остаётся пустым, а `loadError` — человеко-
+ * читаемым описанием причины; `reload()` позволяет повторить попытку.
+ *
+ * Запись (create/update/delete) на локальный фолбэк при отказе GET
+ * по-прежнему переключается через `backendUp` — этот класс проблемы здесь
+ * не тронут, отдельный вопрос (см. docs/operations/lms-knowledge-base.md).
  */
 export function useLmsLibrary() {
-  const [items, setItems] = useState<LMSItem[]>(LMS_ITEMS)
-  const [courses, setCourses] = useState<LMSCourse[]>(LMS_COURSES)
+  const [items, setItems] = useState<LMSItem[]>([])
+  const [courses, setCourses] = useState<LMSCourse[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // true — сервер ответил хотя бы раз; пишем на бэк. false — работаем локально.
   const backendUp = useRef(false)
 
-  useEffect(() => {
-    let alive = true
-    ;(async () => {
-      try {
-        const [serverItems, serverCourses] = await Promise.all([
-          lmsApi.getItems(),
-          lmsApi.getCourses(),
-        ])
-        if (!alive) return
-        backendUp.current = true
-        setItems(serverItems)
-        setCourses(serverCourses)
-      } catch {
-        // Бэкенд LMS ещё недоступен — остаёмся на моках, операции идут локально.
-        backendUp.current = false
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => { alive = false }
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [serverItems, serverCourses] = await Promise.all([
+        lmsApi.getItems(),
+        lmsApi.getCourses(),
+      ])
+      backendUp.current = true
+      setItems(serverItems)
+      setCourses(serverCourses)
+      setLoadError(null)
+    } catch (error) {
+      backendUp.current = false
+      setItems([])
+      setCourses([])
+      setLoadError(describeLoadError(error))
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
 
   // ─── Материалы ───────────────────────────────────────────────────────────────
   const createItem = useCallback(async (item: LMSItem) => {
@@ -102,6 +123,8 @@ export function useLmsLibrary() {
     items,
     courses,
     loading,
+    loadError,
+    reload: load,
     createItem,
     updateItem,
     deleteItem,

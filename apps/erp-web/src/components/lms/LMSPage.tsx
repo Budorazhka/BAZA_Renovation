@@ -1,6 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
-import { toast } from 'sonner'
 import {
   BookOpen,
   MessageSquare,
@@ -16,7 +15,6 @@ import {
   Plus,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useBackendStatus } from '@/hooks/useBackendStatus'
 import type { LMSItem, LMSCourse, TargetRole } from '@/data/lms-mock'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -329,6 +327,8 @@ export function LMSPage() {
     items,
     courses,
     loading,
+    loadError,
+    reload,
     createItem,
     updateItem,
     deleteItem,
@@ -337,16 +337,6 @@ export function LMSPage() {
     deleteCourse,
   } = useLmsLibrary()
 
-  const backendStatus = useBackendStatus()
-  const toastShown = useRef(false)
-
-  useEffect(() => {
-    if (loading || toastShown.current || backendStatus === null) return
-    toastShown.current = true
-    toast(backendStatus ? '🟢 Режим онлайн — связь с сервером установлена' : '⚪ Оффлайн-режим — данные загружены из кэша', {
-      duration: 3000,
-    })
-  }, [backendStatus, loading])
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('title')
   const [openItem, setOpenItem] = useState<LMSItem | null>(null)
@@ -471,6 +461,23 @@ export function LMSPage() {
             <h1 className="text-3xl font-normal text-[color:var(--app-text)]">{t('lms.lMSPage.обучение')}</h1>
           </div>
 
+          {loadError && (
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-md px-3.5 py-3 text-sm"
+              style={{ background: 'rgba(255,180,171,0.08)', color: '#ffb4ab' }}
+            >
+              <span>{loadError}</span>
+              <button
+                type="button"
+                onClick={() => void reload()}
+                className="rounded px-3.5 py-1.5 text-sm"
+                style={{ border: '1px solid rgba(230,195,100,0.4)', color: 'var(--gold)' }}
+              >
+                Повторить
+              </button>
+            </div>
+          )}
+
           {/* Tabs + Add button */}
           <div className="space-y-6">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[color:var(--hub-card-border)]">
@@ -526,13 +533,13 @@ export function LMSPage() {
               />
             ) : (
               <>
-                {displayItems.length === 0 ? (
+                {displayItems.length === 0 && !loadError ? (
                   <div className="flex flex-col items-center justify-center py-20 text-[color:var(--theme-accent-icon-dim)]">
                     <Search className="size-10 mb-4 opacity-40" />
                     <p className="font-medium">{t('lms.lMSPage.ничего_не_найдено')}</p>
                     <p className="text-sm opacity-70">{t('lms.lMSPage.попробуйте_изменить')}</p>
                   </div>
-                ) : (
+                ) : displayItems.length > 0 ? (
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {displayItems.map((item) => (
                       <ItemCard
@@ -544,12 +551,14 @@ export function LMSPage() {
                       />
                     ))}
                   </div>
-                )}
+                ) : null}
 
-                <p className="text-center text-xs text-[color:var(--theme-accent-icon-dim)]">
-                  {displayItems.length}{' '}
-                  {displayItems.length === 1 ? 'материал' : displayItems.length < 5 ? 'материала' : 'материалов'}
-                </p>
+                {!loadError && (
+                  <p className="text-center text-xs text-[color:var(--theme-accent-icon-dim)]">
+                    {displayItems.length}{' '}
+                    {displayItems.length === 1 ? 'материал' : displayItems.length < 5 ? 'материала' : 'материалов'}
+                  </p>
+                )}
               </>
             )}
           </div>
