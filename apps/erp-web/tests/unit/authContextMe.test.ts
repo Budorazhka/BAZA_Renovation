@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const me = vi.fn()
 const login = vi.fn()
 const ensureSelf = vi.fn()
+const developersEnsureSelf = vi.fn()
 
 vi.mock('@/services/platformAuthApi', () => ({
   platformAuthApi: {
@@ -24,7 +25,7 @@ vi.mock('@/services/teamApi', () => ({
 }))
 
 vi.mock('@/services/developersApi', () => ({
-  developersApi: { ensureSelf: vi.fn().mockResolvedValue(null) },
+  developersApi: { ensureSelf: () => developersEnsureSelf() },
 }))
 
 vi.mock('@/services/messengerApi', () => ({
@@ -87,6 +88,7 @@ describe('AuthContext: контекст сессии приходит из GET /
     window.localStorage.clear()
     vi.clearAllMocks()
     login.mockResolvedValue({ identityId: 'id-1', requires2fa: false })
+    developersEnsureSelf.mockResolvedValue(null)
   })
 
   it('организация, роль и права берутся из /me, а не из team-users', async () => {
@@ -108,6 +110,34 @@ describe('AuthContext: контекст сессии приходит из GET /
     expect(screen.getByTestId('role').textContent).toBe('owner')
     expect(screen.getByTestId('position-id').textContent).toBe('pos-7')
     expect(screen.getByTestId('permissions').textContent).toBe('1')
+  })
+
+  // ИСПРАВЛЕНО 11.09.2026 (erp-session-context-me.md, «Что осталось
+  // открытым»): developersApi.ensureSelf() безусловно перетирал companyName
+  // значением profile.title (маркетинговый заголовок публичной карточки
+  // застройщика, не то же самое, что organization.name) — тот же класс
+  // гонки, что уже был у team-users ensureSelf выше, но без такой же охраны
+  // meWon.
+  it('организация из /me не перетирается profile.title от developersApi.ensureSelf', async () => {
+    me.mockResolvedValue(ME_RESPONSE)
+    ensureSelf.mockResolvedValue(null)
+    // Публичная карточка застройщика существует и отдаёт другой заголовок —
+    // /me уже ответил и должен победить.
+    developersEnsureSelf.mockResolvedValue({
+      _id: 'dev-profile-1',
+      title: 'Маркетинговое название карточки',
+      email: 'dev@example.test',
+      status: 'active',
+      rating: 0,
+      author: null,
+      createdAt: null,
+      updatedAt: null,
+    })
+
+    await loginAndSettle()
+
+    await waitFor(() => expect(screen.getByTestId('company-id').textContent).toBe('org-42'))
+    expect(screen.getByTestId('company-name').textContent).toBe('АН Премиум')
   })
 
   it('при недоступном /me реальный пользователь не попадает в мок-компанию c1', async () => {

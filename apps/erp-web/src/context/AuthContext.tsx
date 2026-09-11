@@ -337,9 +337,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .ensureSelf()
       .then((profile) => {
         if (cancelled || !profile) return
-        setCurrentUser((prev) =>
-          prev ? { ...prev, companyName: profile.title || prev.companyName } : prev,
-        )
+        setCurrentUser((prev) => {
+          if (!prev) return prev
+          // ИСПРАВЛЕНО 11.09.2026: тот же принцип meWon, что у team-users
+          // ensureSelf выше — companyName уже авторитетно взят из /me
+          // (organization.name). profile.title — маркетинговый заголовок
+          // публичной карточки застройщика, не то же самое, и может законно
+          // отличаться (см. erp-session-context-me.md). Раньше перезаписывал
+          // безусловно, из-за чего внутренний UI мог показать чужой/другой
+          // текст вместо организации, которую только что подтвердил /me.
+          const meWon = prev.serverPermissions !== undefined
+          return meWon ? prev : { ...prev, companyName: profile.title || prev.companyName }
+        })
       })
       .catch(() => {
         /* API застройщиков недоступен — оставляем companyName из кэша сессии */

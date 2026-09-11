@@ -83,7 +83,7 @@ permission-matrix.md», часть оснований уже перенесен�
 - [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
 - [task-model-audit-followup.md](operations/task-model-audit-followup.md) — четыре вердикта аудита применены: приоритет парой признаков, связь без дубля, провенанс только от сервера; с 11.09 видимость личных задач (`taskCategory`) проверяется на сервере (список, чтение по id, календарь, экспорт), не только клиентом.
 - [task-attachments-media-assets.md](operations/task-attachments-media-assets.md) — вложения задачи стали файлами: ссылки на подтверждённые `MediaAsset` вместо имён без файлов.
-- [erp-session-context-me.md](operations/erp-session-context-me.md) — `GET /me`: организация, позиция и права одним вызовом; реальный пользователь больше не проваливается в мок-компанию `c1`.
+- [erp-session-context-me.md](operations/erp-session-context-me.md) — `GET /me`: организация, позиция и права одним вызовом; реальный пользователь больше не проваливается в мок-компанию `c1`; с 11.09 `companyName` из `/me` больше не перетирается заголовком публичной карточки застройщика.
 - [erp-team-mock-debt-closed.md](operations/erp-team-mock-debt-closed.md) — реестр команды (TEAM-001) снят с мока: write-операции чинят битый маршрут на CRM-backend, localStorage и мок-массив убраны, KPI-контур и лиды осознанно оставлены как есть.
 - [crm-pipeline-activity-timeline.md](operations/crm-pipeline-activity-timeline.md) — таймлайн активности, детект залипших лидов.
 - [crm-deal-core.md](operations/crm-deal-core.md) — ядро сделок, оптимистическая блокировка.
