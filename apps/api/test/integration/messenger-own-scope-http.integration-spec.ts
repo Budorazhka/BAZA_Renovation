@@ -14,6 +14,9 @@ import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplac
 import { AuthService } from '../../src/modules/identity/auth.service';
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
 import { MessengerDialogRepository } from '../../src/modules/messenger/repository/messenger-dialog.repository';
+import { LeadRepository } from '../../src/modules/crm/repository/lead.repository';
+import { ContactRepository } from '../../src/modules/crm/repository/contact.repository';
+import { DealRepository } from '../../src/modules/crm/repository/deal.repository';
 import { RedisService } from '../../src/shared/redis/redis.service';
 import { createRedisMockService } from './support/redis-mock';
 
@@ -37,6 +40,9 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
   let authService: AuthService;
   let organizationsService: OrganizationsService;
   let dialogRepository: MessengerDialogRepository;
+  let leadRepository: LeadRepository;
+  let contactRepository: ContactRepository;
+  let dealRepository: DealRepository;
 
   beforeAll(async () => {
     replSet = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
@@ -90,6 +96,9 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     authService = moduleRef.get(AuthService);
     organizationsService = moduleRef.get(OrganizationsService);
     dialogRepository = moduleRef.get(MessengerDialogRepository);
+    leadRepository = moduleRef.get(LeadRepository);
+    contactRepository = moduleRef.get(ContactRepository);
+    dealRepository = moduleRef.get(DealRepository);
   }, 120_000);
 
   afterAll(async () => {
@@ -102,6 +111,9 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       'messenger_dialogs',
       'messenger_messages',
       'messenger_accounts',
+      'leads',
+      'contacts',
+      'deals',
       'positions',
       'position_assignments',
       'organizations',
@@ -117,16 +129,20 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
 
   const PASSWORD = 'correct horse battery staple';
 
-  async function seedOwnerSession(): Promise<{ cookie: string; organizationId: Types.ObjectId }> {
+  async function seedOwnerSession(): Promise<{
+    cookie: string;
+    organizationId: Types.ObjectId;
+    positionId: Types.ObjectId;
+  }> {
     const login = `owner-${new Types.ObjectId().toString()}@example.test`;
     const identityId = await authService.registerIdentity({ login, password: PASSWORD });
-    const { organizationId } = await organizationsService.createOrganizationWithOwner({
+    const { organizationId, positionId } = await organizationsService.createOrganizationWithOwner({
       type: 'agency',
       name: 'Интеграционное агентство',
       ownerIdentityId: identityId,
     });
     const session = await authService.login({ login, password: PASSWORD, audience: 'erp' });
-    return { cookie: `baza_session=${session.sessionToken}`, organizationId };
+    return { cookie: `baza_session=${session.sessionToken}`, organizationId, positionId };
   }
 
   async function seedManagerSession(
@@ -162,6 +178,37 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       name: 'Клиент Иван',
     });
     return dialog._id;
+  }
+
+  async function seedContact(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
+    const contact = await contactRepository.create({
+      organizationId,
+      name: 'Клиент CRM',
+      phone: '+995500000000',
+      roles: ['buyer'],
+    });
+    return contact._id;
+  }
+
+  async function seedLead(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
+    const contactId = await seedContact(organizationId);
+    const lead = await leadRepository.create({
+      organizationId,
+      contactId,
+      source: { route: 'integration-test' },
+    });
+    return lead._id;
+  }
+
+  async function seedDeal(organizationId: Types.ObjectId, ownerPositionId: Types.ObjectId): Promise<Types.ObjectId> {
+    const contactId = await seedContact(organizationId);
+    const deal = await dealRepository.create({
+      organizationId,
+      contactId,
+      ownerPositionId,
+      title: 'Сделка CRM',
+    });
+    return deal._id;
   }
 
   it('sendTextMessage: менеджер не может писать в диалог, назначенный коллеге — 404, сообщение не создаётся', async () => {
@@ -244,6 +291,81 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     expect(response.statusCode).toBe(404);
     const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
     expect(dialog?.leadId).toBeUndefined();
+  });
+
+  it('linkDialogToCrm: leadId из чужой организации — 404, привязка не меняется', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const { organizationId: foreignOrgId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const foreignLeadId = await seedLead(foreignOrgId);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/link-crm`,
+      headers: { cookie },
+      payload: { leadId: foreignLeadId.toString() },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
+    expect(dialog?.leadId).toBeUndefined();
+  });
+
+  it('linkDialogToCrm: contactId из чужой организации — 404, привязка не меняется', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const { organizationId: foreignOrgId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const foreignContactId = await seedContact(foreignOrgId);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/link-crm`,
+      headers: { cookie },
+      payload: { contactId: foreignContactId.toString() },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
+    expect(dialog?.contactId).toBeUndefined();
+  });
+
+  it('linkDialogToCrm: dealId из чужой организации — 404, привязка не меняется', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const { organizationId: foreignOrgId, positionId: foreignPositionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const foreignDealId = await seedDeal(foreignOrgId, foreignPositionId);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/link-crm`,
+      headers: { cookie },
+      payload: { dealId: foreignDealId.toString() },
+    });
+
+    expect(response.statusCode).toBe(404);
+    const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
+    expect(dialog?.dealId).toBeUndefined();
+  });
+
+  it('linkDialogToCrm: свои leadId/contactId/dealId из той же организации — 201, привязка сохраняется', async () => {
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const leadId = await seedLead(organizationId);
+    const contactId = await seedContact(organizationId);
+    const dealId = await seedDeal(organizationId, positionId);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/link-crm`,
+      headers: { cookie },
+      payload: { leadId: leadId.toString(), contactId: contactId.toString(), dealId: dealId.toString() },
+    });
+
+    expect(response.statusCode).toBe(201);
+    const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
+    expect(dialog?.leadId?.toString()).toBe(leadId.toString());
+    expect(dialog?.contactId?.toString()).toBe(contactId.toString());
+    expect(dialog?.dealId?.toString()).toBe(dealId.toString());
   });
 
   it('createTaskFromDialog: менеджер не может создать задачу из чужого диалога — 404', async () => {

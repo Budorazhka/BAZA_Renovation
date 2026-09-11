@@ -611,6 +611,23 @@ export class MessengerService {
       }
       this.assertDialogOwnership(dialog, params.assignedPositionId);
 
+      // Без этих проверок leadId/contactId/dealId писались в диалог как
+      // есть, без подтверждения, что запись вообще существует и
+      // принадлежит организации вызывающего (11.09.2026): диалог можно
+      // было привязать к CRM-записи чужой организации, подобрав чужой
+      // ObjectId. Own-scope конкретной записи (например лида,
+      // назначенного другому менеджеру) сюда намеренно не входит — это
+      // отдельный, ещё не закрытый вопрос, см. messenger-skeleton.md.
+      if (params.leadId) {
+        await this.crmService.getLeadForOrganization(params.leadId, params.organizationId);
+      }
+      if (params.contactId) {
+        await this.crmService.getContactForOrganization(params.contactId, params.organizationId);
+      }
+      if (params.dealId) {
+        await this.crmService.getDealForOrganization(params.dealId, params.organizationId);
+      }
+
       const updated = await this.dialogRepository.linkCrm(
         params.dialogId,
         params.organizationId,

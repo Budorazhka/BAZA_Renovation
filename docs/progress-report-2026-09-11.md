@@ -163,3 +163,14 @@
   но структурной защиты тоже не было. Добавлено, тот же принцип, что
   `Identity.passwordHash`. Проверено на настоящей MongoDB.
   [messenger](operations/messenger-skeleton.md).
+- **Вне очереди, найдено при чтении «Что открыто» messenger-skeleton.md (п.2).**
+  `link-crm` писал `leadId`/`contactId`/`dealId` в диалог без проверки, что
+  запись вообще существует и принадлежит организации вызывающего — диалог
+  можно было привязать к CRM-записи чужой организации, подобрав произвольный
+  `ObjectId`. Добавлен `CrmService.getDealForOrganization` (зеркалит уже
+  существовавшие `getLeadForOrganization`/`getContactForOrganization`),
+  `MessengerService.linkDialogToCrm` вызывает все три перед записью.
+  Own-scope конкретной записи и `expectedVersion` этой правкой сознательно не
+  закрыты — остаются в «Что открыто». Подтверждено HTTP-тестом на настоящей
+  MongoDB (чужой lead/contact/deal каждый даёт 404, поле не проставляется;
+  свои id из той же организации — 201). [messenger](operations/messenger-skeleton.md).

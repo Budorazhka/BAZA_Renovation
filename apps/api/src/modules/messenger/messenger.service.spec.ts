@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
 import { MessengerService } from './messenger.service';
@@ -359,6 +360,124 @@ describe('MessengerService', () => {
         }),
       ).rejects.toThrow('Диалог не найден');
       expect(crmService.createTask).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('linkDialogToCrm: leadId/contactId/dealId проверяются на существование и принадлежность организации', () => {
+    // ИСПРАВЛЕНО 11.09.2026: раньше leadId/contactId/dealId писались в
+    // dialogRepository.linkCrm как есть, без единой проверки — диалог
+    // можно было привязать к CRM-записи чужой организации, подобрав
+    // произвольный ObjectId. Own-scope конкретной записи (например лида,
+    // назначенного другому менеджеру) сюда намеренно не входит — это
+    // отдельный вопрос, см. messenger-skeleton.md.
+    const orgId = new Types.ObjectId();
+    const dialogId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+
+    beforeEach(() => {
+      (dialogRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: dialogId,
+        organizationId: orgId,
+        platform: 'telegram',
+        externalChatId: 'chat-77',
+        name: 'Мария Клиент',
+        assignedPositionId: ownerPositionId,
+      });
+
+      crmService.getLeadForOrganization = jest.fn();
+      crmService.getContactForOrganization = jest.fn();
+      crmService.getDealForOrganization = jest.fn();
+    });
+
+    it('leadId из чужой организации (или несуществующий) — NotFoundException, привязка не меняется', async () => {
+      (crmService.getLeadForOrganization as jest.Mock).mockRejectedValue(new NotFoundException('Lead not found'));
+
+      await expect(
+        service.linkDialogToCrm({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: ownerPositionId,
+          leadId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'cor-link-lead',
+        }),
+      ).rejects.toThrow('Lead not found');
+      expect(dialogRepo.linkCrm).not.toHaveBeenCalled();
+    });
+
+    it('contactId из чужой организации (или несуществующий) — NotFoundException, привязка не меняется', async () => {
+      (crmService.getContactForOrganization as jest.Mock).mockRejectedValue(
+        new NotFoundException('Contact not found'),
+      );
+
+      await expect(
+        service.linkDialogToCrm({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: ownerPositionId,
+          contactId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'cor-link-contact',
+        }),
+      ).rejects.toThrow('Contact not found');
+      expect(dialogRepo.linkCrm).not.toHaveBeenCalled();
+    });
+
+    it('dealId из чужой организации (или несуществующий) — NotFoundException, привязка не меняется', async () => {
+      (crmService.getDealForOrganization as jest.Mock).mockRejectedValue(new NotFoundException('Deal not found'));
+
+      await expect(
+        service.linkDialogToCrm({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: ownerPositionId,
+          dealId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'cor-link-deal',
+        }),
+      ).rejects.toThrow('Deal not found');
+      expect(dialogRepo.linkCrm).not.toHaveBeenCalled();
+    });
+
+    it('свои leadId/contactId/dealId — проходят проверку, привязка выполняется', async () => {
+      const leadId = new Types.ObjectId();
+      const contactId = new Types.ObjectId();
+      const dealId = new Types.ObjectId();
+      (crmService.getLeadForOrganization as jest.Mock).mockResolvedValue({ _id: leadId } as never);
+      (crmService.getContactForOrganization as jest.Mock).mockResolvedValue({ _id: contactId } as never);
+      (crmService.getDealForOrganization as jest.Mock).mockResolvedValue({ _id: dealId } as never);
+      (dialogRepo.linkCrm as jest.Mock).mockResolvedValue({
+        _id: dialogId,
+        organizationId: orgId,
+        accountId: new Types.ObjectId(),
+        platform: 'telegram',
+        externalChatId: 'chat-77',
+        name: 'Мария Клиент',
+        assignedPositionId: ownerPositionId,
+        unreadCount: 0,
+        pinned: false,
+        leadId,
+        contactId,
+        dealId,
+      });
+
+      const res = await service.linkDialogToCrm({
+        organizationId: orgId,
+        dialogId,
+        assignedPositionId: ownerPositionId,
+        leadId,
+        contactId,
+        dealId,
+        actorIdentityId: new Types.ObjectId(),
+        correlationId: 'cor-link-ok',
+      });
+
+      expect(crmService.getLeadForOrganization).toHaveBeenCalledWith(leadId, orgId);
+      expect(crmService.getContactForOrganization).toHaveBeenCalledWith(contactId, orgId);
+      expect(crmService.getDealForOrganization).toHaveBeenCalledWith(dealId, orgId);
+      expect(res.leadId).toBe(leadId.toString());
+      expect(res.contactId).toBe(contactId.toString());
+      expect(res.dealId).toBe(dealId.toString());
     });
   });
 });

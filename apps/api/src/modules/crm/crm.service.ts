@@ -433,6 +433,25 @@ export class CrmService {
     return contact;
   }
 
+  /**
+   * Тот же cross-module паттерн, что getLeadForOrganization/
+   * getContactForOrganization выше (11.09.2026, найдено при чтении
+   * messenger-skeleton.md: `link-crm` писал leadId/contactId/dealId как
+   * есть, без проверки, что запись вообще существует в организации
+   * вызывающего — диалог можно было привязать к CRM-записи чужой
+   * организации).
+   */
+  async getDealForOrganization(
+    dealId: Types.ObjectId,
+    organizationId: Types.ObjectId,
+  ): Promise<DealDocument> {
+    const deal = await this.dealRepository.findByIdForOrganization(dealId, organizationId);
+    if (!deal) {
+      throw new NotFoundException('Deal not found');
+    }
+    return deal;
+  }
+
   async createDealInSession(
     params: {
       organizationId: Types.ObjectId;
