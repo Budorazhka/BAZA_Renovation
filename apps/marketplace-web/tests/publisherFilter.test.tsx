@@ -55,7 +55,10 @@ describe('Фильтр каталога по застройщику и аген�
       </MemoryRouter>,
     )
 
-    const link = await screen.findByRole('link', { name: PUBLISHER.name })
+    // {timeout: 5000}: дефолтный 1с у findBy* не всегда укладывается в
+    // цепочку монтирования на CI-раннере (тот же класс флейка, что уже
+    // ловили в authRoutes.test.tsx/tasksPageTaskActions.test.ts — 10.09.2026).
+    const link = await screen.findByRole('link', { name: PUBLISHER.name }, { timeout: 5000 })
     expect(link.getAttribute('href')).toBe(`/newconstructions?publisher=${PUBLISHER.id}`)
   })
 
@@ -80,7 +83,7 @@ describe('Фильтр каталога по застройщику и аген�
 
     // Имя компании встречается дважды: в плашке фильтра и в ссылке карточки,
     // поэтому ищем именно внутри плашки, а не по всему документу.
-    const banner = await screen.findByText(/Показаны объекты компании/)
+    const banner = await screen.findByText(/Показаны объекты компании/, {}, { timeout: 5000 })
     expect(banner.textContent).toContain(PUBLISHER.name)
     expect(screen.getByRole('button', { name: 'Показать все компании' })).toBeTruthy()
   })
@@ -99,7 +102,7 @@ describe('Фильтр каталога по застройщику и аген�
       </MemoryRouter>,
     )
 
-    await screen.findByText('ЖК Без компании')
+    await screen.findByText('ЖК Без компании', {}, { timeout: 5000 })
     expect(screen.queryByText(/Показаны объекты компании/)).toBeNull()
     expect(screen.queryByRole('link', { name: PUBLISHER.name })).toBeNull()
   })
