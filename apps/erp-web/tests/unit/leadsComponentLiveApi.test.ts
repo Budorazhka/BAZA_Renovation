@@ -89,7 +89,12 @@ describe('LeadsComponent — лиды на leadsApiV2', () => {
     await renderComponent()
     await waitFor(() => expect(listAllMock).toHaveBeenCalledTimes(1))
 
-    fireEvent.click(screen.getByText('crm.leadsComponent.создать_лида'))
+    // listAllMock резолвится пустым списком — нет "Клиент Один", на который
+    // можно опереться как на сигнал готовности рендера (как в остальных
+    // тестах файла), поэтому синхронный getByText сразу после waitFor по
+    // моку — гонка: промис резолвится раньше, чем React перерисует состояние
+    // с "загрузка" на форму. findByText сам дожидается кнопки в DOM.
+    fireEvent.click(await screen.findByText('crm.leadsComponent.создать_лида', {}, { timeout: 5000 }))
 
     fireEvent.change(screen.getByPlaceholderText('crm.leadsComponent.введите_имя_лида'), {
       target: { value: 'Иван Иванов' },
