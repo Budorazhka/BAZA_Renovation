@@ -86,18 +86,21 @@ positionId текущей сессии из кэша `AuthContext` (`agency.auth
 ## Известные пробелы backend (не создавались в этом проходе)
 
 Оба уже были задокументированы в исходном коде `teamApi.ts` до этого прохода
-(«ещё не реализованы на backend») — здесь только подтверждены сверкой с
-`team.controller.ts` и оставлены как честные 404, а не мок-заглушки:
+(«ещё не реализованы на backend») — были подтверждены сверкой с
+`team.controller.ts` и на момент написания раздела оставались честными 404, не
+мок-заглушками. Закрыты тем же днём (`c2676c6`, 03.09.2026) — эта секция
+писалась раньше того коммита в рамках одного дня и обновлена не была.
 
-- **`GET /team-users/:id` не существует** — `TeamController` содержит только
-  `list()` (все позиции организации). Используется
-  `AccountSettingsPage.tsx` (вне scope TEAM-001) — вызов уже обёрнут в
-  `.catch()`, экран остаётся на данных из `currentUser`.
-- **`POST /team-users/positions` (пустой слот без occupant'а) не
-  существует** — `TeamController.create` принимает только полный
-  `CreateTeamUserDto` (occupant обязателен). Используется кнопкой «Добавить
-  слот менеджера» в `PersonnelPage.tsx` — уже обработано (`setTeamError`), не
-  мок.
+- ~~**`GET /team-users/:id` не существует**~~ — реализован (`c2676c6`):
+  `TeamController.getById`, `position.read`, переиспользует приватный
+  `TeamService.toView` для одной позиции.
+- ~~**`POST /team-users/positions` (пустой слот без occupant'а) не
+  существует**~~ — реализован (`c2676c6`): `TeamController.createSlot` →
+  `TeamService.createVacantSlot`, делегирует уже существующему
+  `OrganizationsService.createVacantPosition`.
+
+Оба описаны в OpenAPI, покрыты `team-users-gaps.integration-spec.ts` (новый
+файл того же коммита).
 
 ## Проверено
 
