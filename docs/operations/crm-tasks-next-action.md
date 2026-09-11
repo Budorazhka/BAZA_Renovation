@@ -122,4 +122,8 @@ Cursor-paginated список (`_id`-курсор, `limit≤100`, default 20). �
 - **`team`-scope для `task.reassign` (rop) не реализован** — используется `organization` (см. §4, сноска 1). Требует модели подчинённости Position, которой в кодовой базе пока нет.
 - **`assignedPositionId` не версионируется отдельно от остального документа** — `reassignTask` использует тот же `version`, что `updateTask`/`completeTask` (единое поле CAS на весь документ, не per-field). Конкурентный `PATCH .../reassign` и `PATCH /tasks/:taskId` на одной задаче корректно конфликтуют друг с другом (одно из двух получит `409`), это осознанный выбор простоты, не пробел.
 - **Никакой outbox/domain-event публикации** (`packages/domain-events`) для Task-событий в этом проходе — только `audit_events`. Другие модули (например, будущий digest/уведомления) не могут сегодня подписаться на `TaskCompleted`/`TaskCreated` через outbox — это следующий шаг, если появится потребитель.
-- **Нет OpenAPI-документации для `GET /leads/:leadId`** (`getLead`) — предсуществующий пробел (не добавлен ни в этом, ни в предыдущем CRM-проходе), `hasOpenNextAction` для одиночного лида задокументирован только в реализации/тестах, не в OpenAPI-спеке per-operation (только как поле `LeadListItem`, используемого `GET /leads`).
+- ~~**Нет OpenAPI-документации для `GET /leads/:leadId`**~~ — устарело: закрыто
+  `e079f8e` (03.09.2026, «закрыт долг документации — 34 маршрута описаны в
+  OpenAPI»), уже после того, как был написан этот пункт (31.08.2026).
+  `GET /leads/{leadId}` (`operationId: getLead`) описан, отдаёт тот же
+  `LeadListItem`, что и `GET /leads` — `hasOpenNextAction` документирован.
