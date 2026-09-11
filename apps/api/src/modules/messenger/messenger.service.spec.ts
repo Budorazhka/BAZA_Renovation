@@ -207,6 +207,62 @@ describe('MessengerService', () => {
     });
   });
 
+  describe('listMessages: {items, nextCursor} вместо голого массива', () => {
+    // ИСПРАВЛЕНО 11.09.2026: контракт по OpenAPI — MessengerMessageListResponse
+    // {items, nextCursor}, тот же "+1 трюк", что у listDialogs.
+    const orgId = new Types.ObjectId();
+    const dialogId = new Types.ObjectId();
+
+    function fakeMessage() {
+      return {
+        _id: new Types.ObjectId(),
+        organizationId: orgId,
+        dialogId,
+        author: 'agent',
+        text: 'привет',
+        messageType: 'text',
+        status: 'queued',
+        sentAt: new Date(),
+      };
+    }
+
+    beforeEach(() => {
+      (dialogRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: dialogId,
+        organizationId: orgId,
+        accountId: new Types.ObjectId(),
+        platform: 'telegram',
+        externalChatId: 'chat-1',
+        name: 'Клиент',
+        unreadCount: 0,
+        pinned: false,
+        version: 0,
+      });
+    });
+
+    it('репозиторий вернул limit+1 — страница обрезается до limit, nextCursor не пуст', async () => {
+      const docs = [fakeMessage(), fakeMessage(), fakeMessage()];
+      (messageRepo.listForDialog as jest.Mock).mockResolvedValue(docs);
+
+      const res = await service.listMessages({ organizationId: orgId, dialogId, limit: 2 });
+
+      expect(messageRepo.listForDialog).toHaveBeenCalledWith(expect.objectContaining({ limit: 3 }));
+      expect(res.items).toHaveLength(2);
+      expect(res.items.map((m) => m.id)).toEqual([docs[0]!._id.toString(), docs[1]!._id.toString()]);
+      expect(res.nextCursor).toBe(docs[1]!._id.toString());
+    });
+
+    it('репозиторий вернул меньше limit+1 — страница вся целиком, nextCursor null', async () => {
+      const docs = [fakeMessage()];
+      (messageRepo.listForDialog as jest.Mock).mockResolvedValue(docs);
+
+      const res = await service.listMessages({ organizationId: orgId, dialogId, limit: 50 });
+
+      expect(res.items).toHaveLength(1);
+      expect(res.nextCursor).toBeNull();
+    });
+  });
+
   it('sends text message and updates dialog lastMessage', async () => {
     const orgId = new Types.ObjectId();
     const dialogId = new Types.ObjectId();

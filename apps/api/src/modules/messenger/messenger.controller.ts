@@ -340,6 +340,7 @@ export class MessengerController {
   }
 
   @Post('dialogs/:dialogId/link-crm')
+  @HttpCode(200)
   @RequirePermission('messenger_dialog', 'link_crm')
   async linkDialogToCrm(
     @Req() req: FastifyRequest,

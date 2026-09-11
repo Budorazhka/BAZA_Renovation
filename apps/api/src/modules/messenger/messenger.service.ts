@@ -77,6 +77,11 @@ export interface MessengerDialogListResponse {
   nextCursor: string | null;
 }
 
+export interface MessengerMessageListResponse {
+  items: MessengerMessageReadModel[];
+  nextCursor: string | null;
+}
+
 export interface MessengerMessageReadModel {
   id: string;
   organizationId: string;
@@ -438,21 +443,34 @@ export class MessengerService {
     assignedPositionId?: Types.ObjectId;
     cursor?: Types.ObjectId;
     limit: number;
-  }): Promise<MessengerMessageReadModel[]> {
+  }): Promise<MessengerMessageListResponse> {
     await this.getDialog({
       organizationId: params.organizationId,
       dialogId: params.dialogId,
       assignedPositionId: params.assignedPositionId,
     });
 
+    const limit = Math.min(params.limit, 200);
+
+    // Тот же "+1 трюк", что у listDialogs: запрашиваем на одну запись
+    // больше лимита — единственный надёжный способ узнать, есть ли
+    // следующая страница, не полагаясь на условность "вернулось меньше
+    // limit".
     const docs = await this.messageRepository.listForDialog({
       organizationId: params.organizationId,
       dialogId: params.dialogId,
       cursor: params.cursor,
-      limit: Math.min(params.limit, 200),
+      limit: limit + 1,
     });
 
-    return docs.map(toMessageReadModel);
+    const hasMore = docs.length > limit;
+    const page = hasMore ? docs.slice(0, limit) : docs;
+    const lastDoc = page[page.length - 1];
+
+    return {
+      items: page.map(toMessageReadModel),
+      nextCursor: hasMore && lastDoc ? lastDoc._id.toString() : null,
+    };
   }
 
   async sendTextMessage(params: {

@@ -14,6 +14,7 @@ import { MarketplaceAccountContextMiddleware } from '../../src/shared/marketplac
 import { AuthService } from '../../src/modules/identity/auth.service';
 import { OrganizationsService } from '../../src/modules/organizations/organizations.service';
 import { MessengerDialogRepository } from '../../src/modules/messenger/repository/messenger-dialog.repository';
+import { MessengerMessageRepository } from '../../src/modules/messenger/repository/messenger-message.repository';
 import { LeadRepository } from '../../src/modules/crm/repository/lead.repository';
 import { ContactRepository } from '../../src/modules/crm/repository/contact.repository';
 import { DealRepository } from '../../src/modules/crm/repository/deal.repository';
@@ -40,6 +41,7 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
   let authService: AuthService;
   let organizationsService: OrganizationsService;
   let dialogRepository: MessengerDialogRepository;
+  let messageRepository: MessengerMessageRepository;
   let leadRepository: LeadRepository;
   let contactRepository: ContactRepository;
   let dealRepository: DealRepository;
@@ -96,6 +98,7 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     authService = moduleRef.get(AuthService);
     organizationsService = moduleRef.get(OrganizationsService);
     dialogRepository = moduleRef.get(MessengerDialogRepository);
+    messageRepository = moduleRef.get(MessengerMessageRepository);
     leadRepository = moduleRef.get(LeadRepository);
     contactRepository = moduleRef.get(ContactRepository);
     dealRepository = moduleRef.get(DealRepository);
@@ -180,6 +183,11 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       name: 'Клиент Иван',
     });
     return dialog._id;
+  }
+
+  async function seedMessage(organizationId: Types.ObjectId, dialogId: Types.ObjectId, text: string): Promise<Types.ObjectId> {
+    const message = await messageRepository.create({ organizationId, dialogId, author: 'agent', text });
+    return message._id;
   }
 
   async function seedContact(organizationId: Types.ObjectId): Promise<Types.ObjectId> {
@@ -296,6 +304,39 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     expect(response.statusCode).toBe(201);
   });
 
+  it('listMessages: отвечает {items, nextCursor} по контракту OpenAPI, не голым массивом', async () => {
+    // ИСПРАВЛЕНО 11.09.2026: раньше GET /dialogs/:id/messages отдавал
+    // голый массив — расхождение с MessengerMessageListResponse в OpenAPI.
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    await seedMessage(organizationId, dialogId, 'Сообщение 1');
+    await seedMessage(organizationId, dialogId, 'Сообщение 2');
+    await seedMessage(organizationId, dialogId, 'Сообщение 3');
+
+    const page1 = await app.inject({
+      method: 'GET',
+      url: `/api/v1/messenger/dialogs/${dialogId}/messages?limit=2`,
+      headers: { cookie },
+    });
+    expect(page1.statusCode).toBe(200);
+    const body1 = JSON.parse(page1.body);
+    expect(body1.items).toHaveLength(2);
+    expect(typeof body1.nextCursor).toBe('string');
+    // newest-first: последнее отправленное сообщение — первым в списке.
+    expect(body1.items[0].text).toBe('Сообщение 3');
+
+    const page2 = await app.inject({
+      method: 'GET',
+      url: `/api/v1/messenger/dialogs/${dialogId}/messages?limit=2&cursor=${body1.nextCursor}`,
+      headers: { cookie },
+    });
+    expect(page2.statusCode).toBe(200);
+    const body2 = JSON.parse(page2.body);
+    expect(body2.items).toHaveLength(1);
+    expect(body2.items[0].text).toBe('Сообщение 1');
+    expect(body2.nextCursor).toBeNull();
+  });
+
   it('linkDialogToCrm: менеджер не может перепривязать чужой диалог — 404, привязка не меняется', async () => {
     const { organizationId } = await seedOwnerSession();
     const { positionId: managerA } = await seedManagerSession(organizationId, 'Менеджер А');
@@ -369,7 +410,11 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     expect(dialog?.dealId).toBeUndefined();
   });
 
-  it('linkDialogToCrm: свои leadId/contactId/dealId из той же организации — 201, привязка сохраняется', async () => {
+  it('linkDialogToCrm: свои leadId/contactId/dealId из той же организации — 200, привязка сохраняется', async () => {
+    // ИСПРАВЛЕНО 11.09.2026: было 201 (дефолт Nest для @Post) — link-crm
+    // обновляет существующий диалог, не создаёт новый ресурс, поэтому по
+    // OpenAPI и REST-конвенции должен быть 200 (см. @HttpCode(200) на
+    // linkDialogToCrm в messenger.controller.ts).
     const { cookie, organizationId, positionId } = await seedOwnerSession();
     const dialogId = await seedDialog(organizationId, positionId);
     const leadId = await seedLead(organizationId);
@@ -383,7 +428,7 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       payload: { leadId: leadId.toString(), contactId: contactId.toString(), dealId: dealId.toString() },
     });
 
-    expect(response.statusCode).toBe(201);
+    expect(response.statusCode).toBe(200);
     const dialog = await connection.collection('messenger_dialogs').findOne({ _id: dialogId });
     expect(dialog?.leadId?.toString()).toBe(leadId.toString());
     expect(dialog?.contactId?.toString()).toBe(contactId.toString());
