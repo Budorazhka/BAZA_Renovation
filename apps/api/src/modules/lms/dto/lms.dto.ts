@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsBoolean,
   IsEnum,
   IsInt,
   IsNotEmpty,
@@ -209,13 +208,23 @@ export class UpsertProgressDto {
   @IsString({ each: true })
   completedItems!: string[];
 
+  /**
+   * Индекс выбранного варианта на каждый вопрос финального теста курса, по
+   * порядку (`finalQuizAnswers[i]` — ответ на `course.finalQuiz.questions[i]`).
+   * До 11.09.2026 клиент присылал уже готовый `finalQuizPassed`/
+   * `finalQuizScore` — сервер ничего не проверял и просто сохранял то, что
+   * прислали: PUT с `{finalQuizPassed: true}` защитывал курс пройденным без
+   * единого правильного ответа. Теперь сервер сам сверяет ответы с
+   * `LmsCourseDocument.finalQuiz` (LmsService.upsertProgress) — эти два поля
+   * читать из тела запроса саму себя не может, только результат сервера.
+   *
+   * Не обязателен: чтобы отметить материалы прочитанными без попытки теста
+   * (частичный прогресс), это поле не передаётся — сервер не трогает
+   * ранее сохранённый результат теста (см. LmsProgressRepository.upsertProgress).
+   */
   @IsOptional()
-  @IsBoolean()
-  finalQuizPassed?: boolean;
-
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(100)
-  finalQuizScore?: number;
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  finalQuizAnswers?: number[];
 }

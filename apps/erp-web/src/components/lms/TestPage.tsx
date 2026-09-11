@@ -57,7 +57,7 @@ export function TestPage() {
             <QuizViewer
               questions={course.finalQuiz.questions}
               passingScore={course.finalQuiz.passingScore}
-              onComplete={(passed, score) => setFinalQuizResult(course.id, passed, score)}
+              onComplete={(passed, score, answers) => setFinalQuizResult(course.id, passed, score, answers)}
             />
           </div>
 

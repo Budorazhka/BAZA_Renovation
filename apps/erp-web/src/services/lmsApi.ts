@@ -21,8 +21,11 @@ import type { ApiResponse, FileEntity } from './developmentApi';
  *
  * Прогресс ученика (привязан к позиции и организации):
  *   GET    /api/v1/lms/progress              → ApiResponse<LMSProgressMap>     (все курсы текущего сотрудника)
- *   PUT    /api/v1/lms/progress/:courseId    → ApiResponse<LMSProgressEntry>   (upsert по курсу)
+ *   PUT    /api/v1/lms/progress/:courseId    → ApiResponse<LMSProgressEntry>   (upsert по курсу, тело — LMSProgressUpdate)
  *   DELETE /api/v1/lms/progress/:courseId    → ApiResponse<{ deleted: boolean }>
+ *
+ * PUT принимает `finalQuizAnswers` (что выбрал учащийся), не готовый
+ * `finalQuizPassed`/`finalQuizScore` — их считает сервер (11.09.2026).
  *
  * localStorage остаётся мгновенным кэшем/фолбэком (см. components/lms/progress.ts).
  */
@@ -53,7 +56,7 @@ export type LMSItemInput = Omit<LMSItem, 'id'>;
 /** Данные курса без серверного id — для создания. */
 export type LMSCourseInput = Omit<LMSCourse, 'id'>;
 
-/** Прогресс пользователя по одному курсу (формат хранения = формат на проводе). */
+/** Прогресс пользователя по одному курсу — то, что отдаёт сервер (результат, не вход). */
 export interface LMSProgressEntry {
   completedItems: string[];
   finalQuizPassed?: boolean;
@@ -61,6 +64,20 @@ export interface LMSProgressEntry {
 }
 /** Карта прогресса: courseId → запись. */
 export type LMSProgressMap = Record<string, LMSProgressEntry>;
+
+/**
+ * Тело `PUT /lms/progress/:courseId` — ИСПРАВЛЕНО 11.09.2026: раньше сюда
+ * писали уже готовые `finalQuizPassed`/`finalQuizScore` (посчитанные в
+ * браузере), сервер сохранял их без проверки. Теперь сервер сам сверяет
+ * `finalQuizAnswers` (что выбрал учащийся) с курсом — `passed`/`score` в
+ * ответе принадлежат только серверу. `finalQuizAnswers` не передаётся, если
+ * вызов не про попытку теста (например, просто отметили материал
+ * прочитанным) — прежний результат теста при этом не трогается.
+ */
+export interface LMSProgressUpdate {
+  completedItems: string[];
+  finalQuizAnswers?: number[];
+}
 
 export interface ListLmsItemsQuery {
   type?: string;
@@ -126,9 +143,9 @@ export const lmsApi = {
       .get<ApiResponse<LMSProgressMap>>('/api/v1/lms/progress')
       .then((r) => r.data.data),
 
-  putProgress: (courseId: string, entry: LMSProgressEntry) =>
+  putProgress: (courseId: string, update: LMSProgressUpdate) =>
     api
-      .put<ApiResponse<LMSProgressEntry>>(`/api/v1/lms/progress/${courseId}`, entry)
+      .put<ApiResponse<LMSProgressEntry>>(`/api/v1/lms/progress/${courseId}`, update)
       .then((r) => r.data.data),
 
   deleteProgress: (courseId: string) =>

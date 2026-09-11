@@ -12,6 +12,7 @@ import {
   LmsProgressRepository,
   type LmsProgressMap,
   type LmsProgressEntryPayload,
+  type QuizGrade,
 } from './repository/lms-progress.repository';
 import {
   CreateLmsItemDto,
@@ -25,6 +26,28 @@ import {
 import { SEED_LMS_ITEMS, SEED_LMS_COURSES } from './lms-seed-data';
 import type { LmsItemDocument } from './schemas/lms-item.schema';
 import type { LmsCourseDocument } from './schemas/lms-course.schema';
+
+/**
+ * Сверяет присланные ответы с `course.finalQuiz` — единственное место,
+ * которое решает, сдан ли тест (LmsService.upsertProgress). `undefined`,
+ * если сверять нечего: у курса нет теста, в нём нет вопросов, или клиент
+ * не прислал `finalQuizAnswers` (вызов не про тест — просто отметили
+ * материал прочитанным).
+ *
+ * Лишние/недостающие ответы (длина `answers` не совпадает с числом
+ * вопросов) не отбрасываются как ошибка: недостающий индекс просто не
+ * совпадёт ни с одним `correct` — вопрос засчитывается неотвеченным
+ * (неверным), как и должно быть, без отдельной проверки длины.
+ */
+function gradeFinalQuiz(course: LmsCourseDocument, answers: number[] | undefined): QuizGrade | undefined {
+  if (!course.finalQuiz || answers === undefined) return undefined;
+  const questions = course.finalQuiz.questions;
+  if (questions.length === 0) return undefined;
+
+  const correctCount = questions.filter((q, i) => answers[i] === q.correct).length;
+  const score = Math.round((correctCount / questions.length) * 100);
+  return { score, passed: score >= course.finalQuiz.passingScore };
+}
 
 export function toLmsItemDto(doc: LmsItemDocument) {
   return {
@@ -40,6 +63,25 @@ export function toLmsItemDto(doc: LmsItemDocument) {
   };
 }
 
+/**
+ * `correct` уходит в ответ как есть — читатель с правом `lms_course.read`
+ * (по сути вся организация, см. DEFAULT_ROLE_GRANTS) видит ключ ответов
+ * финального теста до того, как его пройти. Известный открытый вопрос
+ * (lms-knowledge-base.md, «Что открыто» №1): скрыть его от обычного
+ * читателя нельзя без переделки самого прохождения теста — сейчас
+ * `QuizViewer` (ERP) сверяет выбранный вариант с `correct` ЛОКАЛЬНО, чтобы
+ * показать результат сразу, без ответа сервера. Раздельная выдача
+ * (полный список — автору/редактору курса, вопросы без ответов —
+ * проходящему) потребовала бы сначала перевести прохождение теста на
+ * серверную сверку (см. ниже, upsertProgress) и синхронный ответ от неё —
+ * самостоятельная задача, не входит в этот проход.
+ *
+ * Здесь и сейчас (11.09.2026) закрыт другой участок того же дефекта:
+ * прохождение теста больше не принимает готовый `finalQuizPassed` от
+ * клиента — см. upsertProgress ниже. Раньше PUT с `{finalQuizPassed: true}`
+ * защитывал курс пройденным без единого правильного ответа; теперь сервер
+ * сам сверяет присланные ответы с `finalQuiz.questions[].correct`.
+ */
 export function toLmsCourseDto(doc: LmsCourseDocument) {
   return {
     id: doc.courseId,
@@ -320,6 +362,24 @@ export class LmsService implements OnModuleInit {
     return this.progressRepository.getProgressMapForPosition(organizationId, positionId);
   }
 
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: раньше `finalQuizPassed`/`finalQuizScore`
+   * принимались от клиента как есть и сохранялись без единой проверки —
+   * `PUT /lms/progress/:courseId` с телом `{completedItems: [],
+   * finalQuizPassed: true}` защитывал курс пройденным без единого
+   * правильного ответа, LmsCourseCompleted уходил в outbox по тому же
+   * телу. Теперь клиент присылает `finalQuizAnswers` (что он выбрал),
+   * сервер сам сверяет их с `LmsCourseDocument.finalQuiz`, посчитанным
+   * `finalQuizPassed`/`finalQuizScore` доверяет только он. `correct`
+   * по-прежнему уходит в ответ на чтение курса (см. toLmsCourseDto docstring
+   * — отдельный, ещё не закрытый вопрос), поэтому это не защита от того, кто
+   * подсмотрел ответы, а защита от того, кто пытается засчитать тест, вовсе
+   * его не решая — например, произвольным PATCH-запросом в обход интерфейса.
+   *
+   * `finalQuizAnswers` отсутствует — вызов не про тест (отметили материал
+   * прочитанным): прежний результат теста не трогаем (см. репозиторий).
+   * Курс без финального теста завершается прочтением всех `itemIds`.
+   */
   async upsertProgress(params: {
     organizationId: Types.ObjectId;
     positionId: Types.ObjectId;
@@ -329,22 +389,35 @@ export class LmsService implements OnModuleInit {
     correlationId?: string;
   }): Promise<LmsProgressEntryPayload> {
     return runInTransaction(this.connection, async (session: ClientSession) => {
+      const course = await this.courseRepository.findByIdForOrganization(
+        params.courseId,
+        params.organizationId,
+        session,
+      );
+      if (!course) {
+        throw new AppException(ErrorCode.NOT_FOUND, `LMS course '${params.courseId}' not found`);
+      }
+
+      const quizGrade = gradeFinalQuiz(course, params.data.finalQuizAnswers);
+      const allItemsCompletedWithoutQuiz =
+        !course.finalQuiz && course.itemIds.length > 0
+          ? course.itemIds.every((id) => params.data.completedItems.includes(id))
+          : false;
+
       const progressDoc = await this.progressRepository.upsertProgress(
         {
           organizationId: params.organizationId,
           positionId: params.positionId,
           identityId: params.identityId,
           courseId: params.courseId,
-          entry: {
-            completedItems: params.data.completedItems,
-            finalQuizPassed: params.data.finalQuizPassed,
-            finalQuizScore: params.data.finalQuizScore,
-          },
+          completedItems: params.data.completedItems,
+          quizGrade,
+          allItemsCompletedWithoutQuiz,
         },
         session,
       );
 
-      if (params.data.finalQuizPassed === true) {
+      if (quizGrade?.passed === true) {
         await this.outboxService.publish(
           {
             eventType: 'LmsCourseCompleted',
@@ -355,7 +428,7 @@ export class LmsService implements OnModuleInit {
               positionId: params.positionId.toHexString(),
               identityId: params.identityId.toHexString(),
               courseId: params.courseId,
-              finalQuizScore: params.data.finalQuizScore,
+              finalQuizScore: quizGrade.score,
               completedAt: new Date().toISOString(),
             },
             deduplicationKey: `LmsProgress:${params.organizationId.toHexString()}:${params.positionId.toHexString()}:${params.courseId}:LmsCourseCompleted`,

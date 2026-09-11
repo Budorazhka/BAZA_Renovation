@@ -1,6 +1,6 @@
 import type { LMSCourse } from '@/data/lms-mock'
 import { lmsApi } from '@/services/lmsApi'
-import type { LMSProgressEntry, LMSProgressMap } from '@/services/lmsApi'
+import type { LMSProgressEntry, LMSProgressMap, LMSProgressUpdate } from '@/services/lmsApi'
 
 const STORAGE_KEY = 'lms-progress-v1'
 
@@ -59,10 +59,10 @@ let hydrated = false
 let hydrating: Promise<void> | null = null
 
 /** Фоновая отправка прогресса по курсу на сервер (fire-and-forget). */
-function pushCourse(courseId: string, entry: ProgressEntry) {
+function pushCourse(courseId: string, update: LMSProgressUpdate) {
   if (serverAvailable === false) return
   lmsApi
-    .putProgress(courseId, entry)
+    .putProgress(courseId, update)
     .then(() => { serverAvailable = true })
     .catch(() => { serverAvailable = false })
 }
@@ -107,16 +107,31 @@ export function setItemCompleted(courseId: string, itemId: string, done: boolean
   const entry: ProgressEntry = { ...cur, completedItems: Array.from(set) }
   map[courseId] = entry
   writeMap(map)
-  pushCourse(courseId, entry)
+  // Без finalQuizAnswers: это отметка материала, не попытка теста — сервер
+  // не трогает ранее сохранённый результат теста (см. lmsApi.ts докстринг).
+  pushCourse(courseId, { completedItems: entry.completedItems })
 }
 
-export function setFinalQuizResult(courseId: string, passed: boolean, scorePct: number) {
+/**
+ * `answers` — индекс выбранного варианта на каждый вопрос теста, по порядку
+ * (то, что реально выбрал учащийся в QuizViewer). `passed`/`scorePct` —
+ * локальный подсчёт для мгновенной обратной связи в интерфейсе (тот же
+ * алгоритм, что у сервера, при честном использовании совпадает с ним); что
+ * ЗАСЧИТАНО — решает только сервер, пересчитав `answers` заново
+ * (LmsService.upsertProgress) — локальные `passed`/`scorePct` на это никак
+ * не влияют, даже если кто-то вызовет эту функцию напрямую в обход UI.
+ */
+export function setFinalQuizResult(courseId: string, passed: boolean, scorePct: number, answers: Record<number, number>) {
   const map = readMap()
   const cur = map[courseId] ?? { completedItems: [] }
   const entry: ProgressEntry = { ...cur, finalQuizPassed: passed, finalQuizScore: scorePct }
   map[courseId] = entry
   writeMap(map)
-  pushCourse(courseId, entry)
+  const orderedAnswers = Object.keys(answers)
+    .map(Number)
+    .sort((a, b) => a - b)
+    .map((questionIndex) => answers[questionIndex]!)
+  pushCourse(courseId, { completedItems: entry.completedItems, finalQuizAnswers: orderedAnswers })
 }
 
 export function resetCourseProgress(courseId: string) {

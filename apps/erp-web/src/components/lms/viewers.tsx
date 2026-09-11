@@ -196,7 +196,10 @@ export function QuizViewer({
   passingScore,
 }: {
   questions: QuizQuestion[]
-  onComplete?: (passed: boolean, score: number) => void
+  // answers — что реально выбрал учащийся (индекс варианта по номеру
+  // вопроса); passed/score — только для мгновенной подсказки в интерфейсе,
+  // что засчитано — решает сервер, пересчитав answers заново (progress.ts::setFinalQuizResult).
+  onComplete?: (passed: boolean, score: number, answers: Record<number, number>) => void
   passingScore?: number  // %, для отображения «пройден / не пройден»
 }) {
     const { t } = useI18n();
@@ -209,7 +212,7 @@ export function QuizViewer({
 
   function handleSubmit() {
     setSubmitted(true)
-    onComplete?.(passingScore !== undefined ? scorePct >= passingScore : correctCount === questions.length, scorePct)
+    onComplete?.(passingScore !== undefined ? scorePct >= passingScore : correctCount === questions.length, scorePct, answers)
   }
 
   function handleReset() {

@@ -179,14 +179,26 @@ describe('lmsApi service client', () => {
     expect(result).toEqual(mockProgress);
   });
 
-  it('putProgress() вызывает PUT /api/v1/lms/progress/:courseId', async () => {
+  it('putProgress() отправляет finalQuizAnswers (ответы), не готовый finalQuizPassed/finalQuizScore', async () => {
     const { lmsApi } = await import('@/services/lmsApi');
-    const entry = { completedItems: ['item-1'], finalQuizPassed: true, finalQuizScore: 90 };
-    putMock.mockResolvedValueOnce({ data: { success: true, data: entry } });
+    // Сервер сам считает passed/score из answers (11.09.2026) — в ответе
+    // они уже посчитанные, в запросе их быть не может, DTO их не знает.
+    const update = { completedItems: ['item-1'], finalQuizAnswers: [0, 1, 0] };
+    const graded = { completedItems: ['item-1'], finalQuizPassed: true, finalQuizScore: 100 };
+    putMock.mockResolvedValueOnce({ data: { success: true, data: graded } });
 
-    const result = await lmsApi.putProgress('course-1', entry);
-    expect(putMock).toHaveBeenCalledWith('/api/v1/lms/progress/course-1', entry);
-    expect(result).toEqual(entry);
+    const result = await lmsApi.putProgress('course-1', update);
+    expect(putMock).toHaveBeenCalledWith('/api/v1/lms/progress/course-1', update);
+    expect(result).toEqual(graded);
+  });
+
+  it('putProgress() без finalQuizAnswers отправляет только completedItems (отметка материала прочитанным)', async () => {
+    const { lmsApi } = await import('@/services/lmsApi');
+    const update = { completedItems: ['item-1', 'item-2'] };
+    putMock.mockResolvedValueOnce({ data: { success: true, data: update } });
+
+    await lmsApi.putProgress('course-1', update);
+    expect(putMock).toHaveBeenCalledWith('/api/v1/lms/progress/course-1', update);
   });
 
   it('deleteProgress() вызывает DELETE /api/v1/lms/progress/:courseId', async () => {

@@ -5185,8 +5185,8 @@ export interface components {
         };
         UpsertLmsProgressRequest: {
             completedItems: string[];
-            finalQuizPassed?: boolean;
-            finalQuizScore?: number;
+            /** @description Индекс выбранного варианта на каждый вопрос финального теста, по порядку. До 11.09.2026 запрос нёс уже готовые finalQuizPassed/ finalQuizScore, и сервер сохранял их без проверки — курс можно было защитать пройденным без единого правильного ответа. Теперь сервер сам сверяет ответы с курсом; passed/score в LmsProgressEntry — только результат этой проверки, не отражение входных данных. Не указывается, если вызов не про попытку теста (например, отметили материал прочитанным) — прежний результат теста при этом не трогается. */
+            finalQuizAnswers?: number[];
         };
         LmsDeleteResponse: {
             success: boolean;

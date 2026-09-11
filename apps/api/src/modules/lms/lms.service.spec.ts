@@ -261,43 +261,139 @@ describe('LmsService', () => {
     });
   });
 
-  describe('Progress (Прогресс ученика)', () => {
-    it('upsertProgress сохраняет результат и публикует событие LmsCourseCompleted при сданном тесте', async () => {
-      const progressDoc = {
-        _id: new Types.ObjectId(),
-        courseId: 'course-manager-base',
-        completedItems: ['art-crm-intro', 'quiz-scripts'],
-        finalQuizPassed: true,
-        finalQuizScore: 85,
-      } as unknown as LmsProgressDocument;
-      progressRepo.upsertProgress.mockResolvedValue(progressDoc);
+  describe('Progress (Прогресс ученика): тест проверяется сервером, не клиентом', () => {
+    const quizCourse = {
+      courseId: 'course-manager-base',
+      itemIds: ['art-crm-intro'],
+      finalQuiz: {
+        passingScore: 70,
+        questions: [
+          { question: 'В1', options: ['a', 'b'], correct: 0 },
+          { question: 'В2', options: ['a', 'b'], correct: 1 },
+          { question: 'В3', options: ['a', 'b'], correct: 0 },
+        ],
+      },
+    } as unknown as LmsCourseDocument;
 
+    beforeEach(() => {
+      courseRepo.findByIdForOrganization.mockResolvedValue(quizCourse);
+      progressRepo.upsertProgress.mockImplementation(async (params) => ({
+        _id: new Types.ObjectId(),
+        courseId: params.courseId,
+        completedItems: params.completedItems,
+        finalQuizPassed: params.quizGrade?.passed,
+        finalQuizScore: params.quizGrade?.score,
+      } as unknown as LmsProgressDocument));
+    });
+
+    it('верные ответы: сервер сам считает score/passed и публикует LmsCourseCompleted', async () => {
       const res = await service.upsertProgress({
         organizationId: orgId,
         positionId,
         identityId,
         courseId: 'course-manager-base',
-        data: {
-          completedItems: ['art-crm-intro', 'quiz-scripts'],
-          finalQuizPassed: true,
-          finalQuizScore: 85,
-        },
+        data: { completedItems: ['art-crm-intro'], finalQuizAnswers: [0, 1, 0] },
         correlationId: 'test-corr-1',
       });
 
       expect(res.finalQuizPassed).toBe(true);
-      expect(res.finalQuizScore).toBe(85);
+      expect(res.finalQuizScore).toBe(100);
+      expect(progressRepo.upsertProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ quizGrade: { score: 100, passed: true } }),
+        expect.anything(),
+      );
       expect(outboxService.publish).toHaveBeenCalledWith(
         expect.objectContaining({
           eventType: 'LmsCourseCompleted',
-          aggregateId: progressDoc._id,
-          payload: expect.objectContaining({
-            courseId: 'course-manager-base',
-            finalQuizScore: 85,
-          }),
+          payload: expect.objectContaining({ courseId: 'course-manager-base', finalQuizScore: 100 }),
         }),
         expect.anything(),
       );
+    });
+
+    it('присланный finalQuizPassed:true без верных ответов не защитывает тест (регресс на дыру до 11.09.2026)', async () => {
+      const res = await service.upsertProgress({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        courseId: 'course-manager-base',
+        // finalQuizPassed/finalQuizScore в DTO больше нет вовсе — `as never`
+        // эмулирует именно старый обходной запрос мимо типов TS.
+        data: { completedItems: [], finalQuizPassed: true, finalQuizScore: 100 } as never,
+        correlationId: 'test-corr-2',
+      });
+
+      expect(res.finalQuizPassed).toBeUndefined();
+      expect(outboxService.publish).not.toHaveBeenCalled();
+    });
+
+    it('неверные ответы: passed false с реальным счётом, не с придуманным', async () => {
+      const res = await service.upsertProgress({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        courseId: 'course-manager-base',
+        data: { completedItems: [], finalQuizAnswers: [1, 1, 1] },
+        correlationId: 'test-corr-3',
+      });
+
+      expect(res.finalQuizPassed).toBe(false);
+      expect(res.finalQuizScore).toBe(33);
+      expect(outboxService.publish).not.toHaveBeenCalled();
+    });
+
+    it('без finalQuizAnswers (отметили материал прочитанным) — grade не пересчитывается', async () => {
+      await service.upsertProgress({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        courseId: 'course-manager-base',
+        data: { completedItems: ['art-crm-intro'] },
+        correlationId: 'test-corr-4',
+      });
+
+      expect(progressRepo.upsertProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ quizGrade: undefined }),
+        expect.anything(),
+      );
+      expect(outboxService.publish).not.toHaveBeenCalled();
+    });
+
+    it('курс без финального теста считается пройденным по всем материалам', async () => {
+      courseRepo.findByIdForOrganization.mockResolvedValue({
+        courseId: 'course-no-quiz',
+        itemIds: ['art-1', 'art-2'],
+        finalQuiz: undefined,
+      } as unknown as LmsCourseDocument);
+
+      await service.upsertProgress({
+        organizationId: orgId,
+        positionId,
+        identityId,
+        courseId: 'course-no-quiz',
+        data: { completedItems: ['art-1', 'art-2'] },
+        correlationId: 'test-corr-5',
+      });
+
+      expect(progressRepo.upsertProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ allItemsCompletedWithoutQuiz: true }),
+        expect.anything(),
+      );
+    });
+
+    it('несуществующий courseId — NOT_FOUND, прогресс не пишется', async () => {
+      courseRepo.findByIdForOrganization.mockResolvedValue(null);
+
+      await expect(
+        service.upsertProgress({
+          organizationId: orgId,
+          positionId,
+          identityId,
+          courseId: 'no-such-course',
+          data: { completedItems: [] },
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.NOT_FOUND });
+      expect(progressRepo.upsertProgress).not.toHaveBeenCalled();
     });
 
     it('getProgress возвращает карту прогресса сотрудника', async () => {
