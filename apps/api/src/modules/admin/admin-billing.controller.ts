@@ -23,6 +23,18 @@ export class AdminBillingController {
     @Param('organizationId') organizationIdParam: string,
   ) {
     const adminContext = requireAdminContext(req);
+    // ИСПРАВЛЕНО 11.09.2026: раньше единственной проверкой был AdminGuard
+    // (наличие валидного AdminContext) — тот же класс дыры, что была у
+    // activate до 10.09.2026: любой админ с любым, даже не относящимся к
+    // биллингу грантом мог посмотреть финансовый обзор (тариф, подписку,
+    // журнал начислений) любой организации. Зеркалит уже существующий
+    // manual_ledger.write у activate ниже — permission-matrix.md §4.
+    await this.adminPolicyService.requireGrant({
+      adminContext,
+      resource: 'manual_ledger',
+      action: 'read',
+    });
+
     return this.billingService.adminGetBillingOverview(
       adminContext,
       new Types.ObjectId(organizationIdParam),
