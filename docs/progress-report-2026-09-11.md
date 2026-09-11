@@ -328,3 +328,21 @@
   прогнал на старом коде — 500 отдавал 14 фиктивных материалов вместо
   пустого списка, `loadError`/`reload` не существовали вовсе; после фикса
   все 6 случаев зелёные. [lms-knowledge-base](operations/lms-knowledge-base.md).
+- **Вне очереди, найдено при повторном проходе (task-attachments-media-
+  assets.md, «Что это открывает и чего не даёт»).** Вложения задачи уже
+  хранились как настоящие файлы (закрыто 02.09), но скачать их из карточки
+  было нельзя — storage-примитив (`MediaStorageService.createDownloadUrl`,
+  подписанная GET-ссылка на приватный бакет) существовал, вызывать его было
+  неоткуда. Новый `GET /tasks/:taskId/attachments/:assetId/download`
+  переиспользует `getTask` целиком для авторизации (tenant/own/personal-
+  scope — тот же путь, что и сегодняшний фикс видимости личных задач), затем
+  сверяет `assetId` со списком `task.attachments`: существующий,
+  подтверждённый asset, не привязанный к ЭТОЙ задаче, — тоже 404, не только
+  чужой организации. Новый метод `MediaService.createDownloadUrlForOwnerScope`
+  — единственная точка выдачи такой ссылки другим модулям (`MediaStorageService`
+  не экспортируется из `MediaModule`, ADR-001). `agency_document`-сторона того
+  же пробела не тронута — отдельный, ещё не закрытый вопрос. OpenAPI
+  дополнен, `api-client` перегенерирован. 3 новых интеграционных теста
+  (happy path, asset не из этой задачи, чужая/несуществующая задача) + 2
+  unit на контроллер — все зелёные.
+  [task-attachments-media-assets](operations/task-attachments-media-assets.md).

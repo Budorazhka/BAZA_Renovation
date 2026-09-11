@@ -3084,6 +3084,43 @@ paths:
           description: VERSION_CONFLICT — expectedVersion устарел, обновите и повторите
           $ref: '#/components/responses/Error'
 
+  /tasks/{taskId}/attachments/{assetId}/download:
+    get:
+      operationId: downloadTaskAttachment
+      summary: >
+        Короткоживущая (5 минут) подписанная ссылка на скачивание вложения
+        из приватного бакета. Тот же task.read grant и own/personal-scope,
+        что GET /tasks/{taskId} — если задача не видна вызывающему, до
+        вложения он не доходит. assetId, не входящий в attachments задачи
+        (или задача чужой организации), — 404, тот же non-disclosure
+        принцип, что у самой задачи.
+      tags: [erp-crm]
+      parameters:
+        - name: taskId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: assetId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Ссылка на скачивание
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAttachmentDownloadResponse'
+        '401':
+          description: AUTH_NO_SESSION
+          $ref: '#/components/responses/Error'
+        '403':
+          description: FORBIDDEN — нет task.read
+          $ref: '#/components/responses/Error'
+        '404':
+          description: NOT_FOUND — задача не существует/вне scope, или assetId не входит в её attachments
+          $ref: '#/components/responses/Error'
+
   /tasks/{taskId}/reassign:
     patch:
       operationId: reassignTask
@@ -9012,6 +9049,13 @@ components:
         isOverdue:
           type: boolean
           description: "ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь."
+
+    TaskAttachmentDownloadResponse:
+      type: object
+      required: [url, fileName]
+      properties:
+        url: {type: string, description: "Подписанный GET-URL приватного бакета, живёт 5 минут"}
+        fileName: {type: string, description: "Имя файла со связи задача → вложение, для заголовка скачивания на клиенте"}
 
     TaskListResponse:
       type: object

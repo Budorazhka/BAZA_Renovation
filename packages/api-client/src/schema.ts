@@ -1261,6 +1261,23 @@ export interface paths {
         patch: operations["updateTask"];
         trace?: never;
     };
+    "/tasks/{taskId}/attachments/{assetId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Короткоживущая (5 минут) подписанная ссылка на скачивание вложения из приватного бакета. Тот же task.read grant и own/personal-scope, что GET /tasks/{taskId} — если задача не видна вызывающему, до вложения он не доходит. assetId, не входящий в attachments задачи (или задача чужой организации), — 404, тот же non-disclosure принцип, что у самой задачи. */
+        get: operations["downloadTaskAttachment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{taskId}/reassign": {
         parameters: {
             query?: never;
@@ -4449,6 +4466,12 @@ export interface components {
             triggerType?: string | null;
             /** @description ВЫЧИСЛЯЕМОЕ, не хранимое: dueAt в прошлом при статусе open/in_progress. Хранить нельзя — значение устаревало бы само каждую полночь. */
             isOverdue?: boolean;
+        };
+        TaskAttachmentDownloadResponse: {
+            /** @description Подписанный GET-URL приватного бакета, живёт 5 минут */
+            url: string;
+            /** @description Имя файла со связи задача → вложение, для заголовка скачивания на клиенте */
+            fileName: string;
         };
         TaskListResponse: {
             items: components["schemas"]["TaskView"][];
@@ -8282,6 +8305,35 @@ export interface operations {
             404: components["responses"]["Error"];
             /** @description VERSION_CONFLICT — expectedVersion устарел, обновите и повторите */
             409: components["responses"]["Error"];
+        };
+    };
+    downloadTaskAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ссылка на скачивание */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAttachmentDownloadResponse"];
+                };
+            };
+            /** @description AUTH_NO_SESSION */
+            401: components["responses"]["Error"];
+            /** @description FORBIDDEN — нет task.read */
+            403: components["responses"]["Error"];
+            /** @description NOT_FOUND — задача не существует/вне scope, или assetId не входит в её attachments */
+            404: components["responses"]["Error"];
         };
     };
     reassignTask: {

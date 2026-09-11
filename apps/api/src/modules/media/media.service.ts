@@ -305,6 +305,28 @@ export class MediaService {
   }
 
   /**
+   * Task attachments (CrmService) — единственная точка получения короткоживущей
+   * ссылки на скачивание приватного asset'а: `MediaStorageService` не
+   * экспортируется из `MediaModule` (ADR-001/module-boundaries тест), только
+   * этот метод умеет превратить assetId+ownerScope в подписанный URL. Тот же
+   * tenant-escape-принцип, что `getAssetForOwnerScope` выше: неверный
+   * ownerScope или неподтверждённый asset — `null`, не URL; вызывающий код
+   * сам решает, во что это превратить (обычно NotFoundException — тот же
+   * non-disclosure паттерн, единый 404 для "нет" и "чужой").
+   */
+  async createDownloadUrlForOwnerScope(
+    assetId: Types.ObjectId,
+    expectedOwnerScope: OwnerScope,
+  ): Promise<{ url: string } | null> {
+    const asset = await this.mediaAssetRepository.findById(assetId);
+    if (!asset || !ownerScopesEqual(asset.ownerScope, expectedOwnerScope) || asset.status !== 'verified') {
+      return null;
+    }
+    const url = await this.storage.createDownloadUrl({ bucket: asset.bucket, key: asset.originalPath });
+    return { url };
+  }
+
+  /**
    * Публичный URL variant'а — только для 'public' bucket asset'ов (avatar/
    * фото объекта недвижимости); вызывающий код (TeamService) не должен
    * пытаться получить постоянный URL для 'private' asset'ов (agency_document

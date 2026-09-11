@@ -82,6 +82,31 @@ export class TaskController {
     });
   }
 
+  /**
+   * task-attachments-media-assets.md: "скачать вложение из карточки
+   * нельзя" — единственный недостающий кусок, storage-примитив
+   * (MediaStorageService.createDownloadUrl) уже существовал, вызывать
+   * его было неоткуда. Тот же task.read grant и own/personal-scope, что
+   * getTask (переиспользует его целиком в сервисе) — если задача не видна
+   * вызывающему, до вложения он не доходит.
+   */
+  @Get(':taskId/attachments/:assetId/download')
+  @RequirePermission('task', 'read')
+  async downloadAttachment(
+    @Req() req: FastifyRequest,
+    @Param('taskId', ParseObjectIdPipe) taskId: Types.ObjectId,
+    @Param('assetId', ParseObjectIdPipe) assetId: Types.ObjectId,
+  ) {
+    const tenantContext = requireTenantContext(req);
+    return this.crmService.getTaskAttachmentDownloadUrl({
+      taskId,
+      assetId,
+      organizationId: new Types.ObjectId(tenantContext.organizationId),
+      assignedPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      callerPositionId: new Types.ObjectId(tenantContext.positionId),
+    });
+  }
+
   @Post()
   @HttpCode(201)
   @RequirePermission('task', 'create')

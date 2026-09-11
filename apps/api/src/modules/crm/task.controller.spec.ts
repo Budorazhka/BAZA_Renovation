@@ -117,6 +117,63 @@ describe('TaskController', () => {
     });
   });
 
+  describe('downloadAttachment', () => {
+    it('passes resolved owner position filter to getTaskAttachmentDownloadUrl, same as getTask', async () => {
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const taskId = new Types.ObjectId();
+      const assetId = new Types.ObjectId();
+      const getTaskAttachmentDownloadUrl = jest
+        .fn()
+        .mockResolvedValue({ url: 'https://minio.local/signed', fileName: 'contract.pdf' });
+      const controller = new TaskController(
+        { getTaskAttachmentDownloadUrl } as unknown as CrmService,
+        { matchingScopes: jest.fn().mockResolvedValue(['own']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+      );
+
+      const result = await controller.downloadAttachment(
+        makeRequest(organizationId, positionId) as never,
+        taskId,
+        assetId,
+      );
+
+      expect(getTaskAttachmentDownloadUrl).toHaveBeenCalledWith({
+        taskId,
+        assetId,
+        organizationId,
+        assignedPositionId: positionId,
+        callerPositionId: positionId,
+      });
+      expect(result).toEqual({ url: 'https://minio.local/signed', fileName: 'contract.pdf' });
+    });
+
+    it('does not scope query to position for organization-grant', async () => {
+      const organizationId = new Types.ObjectId();
+      const positionId = new Types.ObjectId();
+      const taskId = new Types.ObjectId();
+      const assetId = new Types.ObjectId();
+      const getTaskAttachmentDownloadUrl = jest
+        .fn()
+        .mockResolvedValue({ url: 'https://minio.local/signed', fileName: 'contract.pdf' });
+      const controller = new TaskController(
+        { getTaskAttachmentDownloadUrl } as unknown as CrmService,
+        { matchingScopes: jest.fn().mockResolvedValue(['organization']) } as unknown as PolicyEvaluatorService,
+      noReplay(),
+      );
+
+      await controller.downloadAttachment(makeRequest(organizationId, positionId) as never, taskId, assetId);
+
+      expect(getTaskAttachmentDownloadUrl).toHaveBeenCalledWith({
+        taskId,
+        assetId,
+        organizationId,
+        assignedPositionId: undefined,
+        callerPositionId: positionId,
+      });
+    });
+  });
+
   describe('createTask', () => {
     it('passes requiredScopePositionId for own-grant user', async () => {
       const organizationId = new Types.ObjectId();

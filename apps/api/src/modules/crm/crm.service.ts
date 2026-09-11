@@ -1003,6 +1003,38 @@ export class CrmService {
   }
 
   /**
+   * GET /tasks/:taskId/attachments/:assetId/download. Переиспользует
+   * getTask целиком (та же tenant/own-scope/personal-видимость проверка,
+   * включая personal-задачи чужой позиции) — если вызывающий не видит
+   * задачу, до списка вложений он не доходит вовсе. assetId, не входящий в
+   * task.attachments, — тот же NotFoundException, что и сама задача:
+   * подобрать чужой assetId и получить ссылку на файл другой задачи (или
+   * другой организации) через это не получится, MediaService.
+   * createDownloadUrlForOwnerScope сам сверяет ownerScope и verified-статус.
+   */
+  async getTaskAttachmentDownloadUrl(params: {
+    taskId: Types.ObjectId;
+    assetId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
+    callerPositionId: Types.ObjectId;
+  }): Promise<{ url: string; fileName: string }> {
+    const task = await this.getTask(params);
+    const attachment = task.attachments.find((item) => item.assetId === params.assetId.toString());
+    if (!attachment) {
+      throw new NotFoundException('Attachment not found');
+    }
+    const download = await this.mediaService.createDownloadUrlForOwnerScope(params.assetId, {
+      type: 'organization',
+      organizationId: params.organizationId,
+    });
+    if (!download) {
+      throw new NotFoundException('Attachment not found');
+    }
+    return { url: download.url, fileName: attachment.fileName };
+  }
+
+  /**
    * POST /tasks. Создание задачи с привязкой к Lead/Contact и аудитом.
    */
   async createTask(params: {

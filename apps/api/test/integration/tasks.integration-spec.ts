@@ -418,6 +418,66 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    describe('GET /tasks/:taskId/attachments/:assetId/download', () => {
+      async function createTaskWithAttachment(cookie: string, organizationId: Types.ObjectId) {
+        const assetId = await seedAsset(organizationId, 'verified');
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/v1/tasks',
+          headers: { cookie, 'idempotency-key': `key-${new Types.ObjectId().toString()}` },
+          payload: { title: 'Собрать документы', attachments: [{ assetId: assetId.toString(), fileName: 'договор.pdf' }] },
+        });
+        expect(res.statusCode).toBe(201);
+        const taskId = (JSON.parse(res.body) as { id: string }).id;
+        return { taskId, assetId };
+      }
+
+      it('отдаёт подписанную ссылку и имя файла для настоящего вложения', async () => {
+        const { cookie, organizationId } = await seedOwnerSession();
+        const { taskId, assetId } = await createTaskWithAttachment(cookie, organizationId);
+
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/tasks/${taskId}/attachments/${assetId.toString()}/download`,
+          headers: { cookie },
+        });
+
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.body) as { url: string; fileName: string };
+        expect(body.fileName).toBe('договор.pdf');
+        expect(typeof body.url).toBe('string');
+        expect(body.url.length).toBeGreaterThan(0);
+      });
+
+      it('assetId, не входящий в attachments этой задачи, — 404', async () => {
+        const { cookie, organizationId } = await seedOwnerSession();
+        const { taskId } = await createTaskWithAttachment(cookie, organizationId);
+        // Настоящий, подтверждённый asset той же организации — просто не привязан к этой задаче.
+        const otherAssetId = await seedAsset(organizationId, 'verified');
+
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/tasks/${taskId}/attachments/${otherAssetId.toString()}/download`,
+          headers: { cookie },
+        });
+
+        expect(res.statusCode).toBe(404);
+      });
+
+      it('чужая/несуществующая задача — 404, тот же non-disclosure, что у GET /tasks/:taskId', async () => {
+        const { cookie } = await seedOwnerSession();
+        const foreignAssetId = await seedAsset(new Types.ObjectId(), 'verified');
+
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/v1/tasks/${new Types.ObjectId().toString()}/attachments/${foreignAssetId.toString()}/download`,
+          headers: { cookie },
+        });
+
+        expect(res.statusCode).toBe(404);
+      });
+    });
+
     it('returns 404 when associating with non-existent or foreign lead', async () => {
       const { cookie } = await seedOwnerSession();
       const foreignLeadId = new Types.ObjectId();
