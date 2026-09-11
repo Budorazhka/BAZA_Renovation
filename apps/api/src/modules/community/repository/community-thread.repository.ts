@@ -174,26 +174,44 @@ export class CommunityThreadRepository {
       .exec();
   }
 
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: find → мутация в JS → save() — классическая
+   * read-modify-write гонка без CAS. Два конкурентных toggle (разные
+   * пользователи или двойной клик) читали одно и то же состояние ДО
+   * первого save(), и второй save() затирал документ целиком поверх
+   * первого — реакция одного из них терялась молча (не дублировалась,
+   * а именно пропадала: idempotency-coverage.test.ts описывал этот
+   * маршрут как идемпотентный, реальность не совпадала).
+   *
+   * Теперь toggle — атомарная условная запись: сначала пробуем "добавить"
+   * с фильтром "меня там ещё нет", если фильтр не совпал (уже есть или
+   * документа нет) — пробуем "убрать" с фильтром "я там есть". Обе ветки —
+   * один findOneAndUpdate, гонка на уровне MongoDB невозможна.
+   */
   async toggleReaction(
     threadId: string,
     userId: string,
     session?: ClientSession,
   ): Promise<{ reactions: number; reacted: boolean }> {
-    const thread = await this.model.findOne({ threadId }).session(session ?? null).exec();
-    if (!thread) return { reactions: 0, reacted: false };
+    const added = await this.model
+      .findOneAndUpdate(
+        { threadId, reactionUserIds: { $ne: userId } },
+        { $addToSet: { reactionUserIds: userId }, $inc: { reactions: 1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (added) return { reactions: added.reactions, reacted: true };
 
-    const hasReacted = thread.reactionUserIds?.includes(userId) ?? false;
-    if (hasReacted) {
-      thread.reactionUserIds = thread.reactionUserIds.filter((id) => id !== userId);
-      thread.reactions = Math.max(0, thread.reactions - 1);
-    } else {
-      if (!thread.reactionUserIds) thread.reactionUserIds = [];
-      thread.reactionUserIds.push(userId);
-      thread.reactions += 1;
-    }
+    const removed = await this.model
+      .findOneAndUpdate(
+        { threadId, reactionUserIds: userId },
+        { $pull: { reactionUserIds: userId }, $inc: { reactions: -1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (removed) return { reactions: Math.max(0, removed.reactions), reacted: false };
 
-    await thread.save({ session });
-    return { reactions: thread.reactions, reacted: !hasReacted };
+    return { reactions: 0, reacted: false };
   }
 
   async updateExchangeStatus(

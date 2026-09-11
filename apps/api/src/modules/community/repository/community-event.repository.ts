@@ -35,28 +35,36 @@ export class CommunityEventRepository {
     return this.model.findOne({ eventId }).session(session ?? null).exec();
   }
 
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: тот же приём, что у CommunityThreadRepository.
+   * toggleReaction — см. её комментарий. find → мутация → save() терял
+   * запись на мероприятие при гонке конкурентных toggle; теперь атомарный
+   * findOneAndUpdate с условным фильтром на обе ветки.
+   */
   async toggleAttendance(
     eventId: string,
     identityId: Types.ObjectId,
     session?: ClientSession,
   ): Promise<{ attending: boolean; attendeeCount: number }> {
-    const event = await this.model.findOne({ eventId }).session(session ?? null).exec();
-    if (!event) return { attending: false, attendeeCount: 0 };
+    const added = await this.model
+      .findOneAndUpdate(
+        { eventId, attendeeIdentityIds: { $ne: identityId } },
+        { $addToSet: { attendeeIdentityIds: identityId }, $inc: { attendeeCount: 1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (added) return { attending: true, attendeeCount: added.attendeeCount };
 
-    const idx = event.attendeeIdentityIds.findIndex((id) => id.equals(identityId));
-    let attending = false;
-    if (idx >= 0) {
-      event.attendeeIdentityIds.splice(idx, 1);
-      event.attendeeCount = Math.max(0, event.attendeeCount - 1);
-      attending = false;
-    } else {
-      event.attendeeIdentityIds.push(identityId);
-      event.attendeeCount += 1;
-      attending = true;
-    }
+    const removed = await this.model
+      .findOneAndUpdate(
+        { eventId, attendeeIdentityIds: identityId },
+        { $pull: { attendeeIdentityIds: identityId }, $inc: { attendeeCount: -1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (removed) return { attending: false, attendeeCount: Math.max(0, removed.attendeeCount) };
 
-    await event.save({ session });
-    return { attending, attendeeCount: event.attendeeCount };
+    return { attending: false, attendeeCount: 0 };
   }
 
   /** Очистка выдуманных мероприятий бывшего засева по их фиксированным id (RETIRED_SEED_EVENT_IDS). */

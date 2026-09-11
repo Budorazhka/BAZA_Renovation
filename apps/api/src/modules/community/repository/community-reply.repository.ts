@@ -112,26 +112,36 @@ export class CommunityReplyRepository {
     return res.deletedCount;
   }
 
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: тот же приём, что у CommunityThreadRepository.
+   * toggleReaction — см. её комментарий. find → мутация → save() терял
+   * реакцию при гонке конкурентных toggle; теперь атомарный
+   * findOneAndUpdate с условным фильтром на обе ветки.
+   */
   async toggleReaction(
     replyId: string,
     userId: string,
     session?: ClientSession,
   ): Promise<{ reactions: number; reacted: boolean }> {
-    const reply = await this.model.findOne({ replyId }).session(session ?? null).exec();
-    if (!reply) return { reactions: 0, reacted: false };
+    const added = await this.model
+      .findOneAndUpdate(
+        { replyId, reactionUserIds: { $ne: userId } },
+        { $addToSet: { reactionUserIds: userId }, $inc: { reactions: 1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (added) return { reactions: added.reactions, reacted: true };
 
-    const hasReacted = reply.reactionUserIds?.includes(userId) ?? false;
-    if (hasReacted) {
-      reply.reactionUserIds = reply.reactionUserIds.filter((id) => id !== userId);
-      reply.reactions = Math.max(0, reply.reactions - 1);
-    } else {
-      if (!reply.reactionUserIds) reply.reactionUserIds = [];
-      reply.reactionUserIds.push(userId);
-      reply.reactions += 1;
-    }
+    const removed = await this.model
+      .findOneAndUpdate(
+        { replyId, reactionUserIds: userId },
+        { $pull: { reactionUserIds: userId }, $inc: { reactions: -1 } },
+        { new: true, session: session ?? null },
+      )
+      .exec();
+    if (removed) return { reactions: Math.max(0, removed.reactions), reacted: false };
 
-    await reply.save({ session });
-    return { reactions: reply.reactions, reacted: !hasReacted };
+    return { reactions: 0, reacted: false };
   }
 
   async markAsBest(

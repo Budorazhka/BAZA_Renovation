@@ -346,3 +346,18 @@
   (happy path, asset не из этой задачи, чужая/несуществующая задача) + 2
   unit на контроллер — все зелёные.
   [task-attachments-media-assets](operations/task-attachments-media-assets.md).
+- **Вне очереди, найдено при повторном проходе (community-forum-exchange.md,
+  «Что открыто» п.5).** `toggleReaction`/`toggleAttendance` (темы, ответы,
+  мероприятия форума) были read-modify-write без CAS — `find` → мутация в
+  JS → `save()`. Два конкурентных toggle читали одно и то же состояние, и
+  более поздний `save()` затирал документ целиком поверх более раннего —
+  реакция терялась молча (страж `idempotency-coverage` описывал маршрут как
+  идемпотентный, реальность не совпадала). Воспроизвёл падение до фикса
+  прямо на настоящей MongoDB: 10 параллельных `Promise.all` от разных
+  участников дали 1-2 реакции из 10, не 10 — затем применил фикс
+  (атомарный `findOneAndUpdate` с условным фильтром на каждую из двух
+  ветвей toggle вместо find+save) и убедился, что все 10 сохраняются.
+  Тот же приём применён во всех трёх репозиториях (темы, ответы,
+  мероприятия) — новый интеграционный файл
+  `community-reaction-race.integration-spec.ts`, 4 теста.
+  [community-forum-exchange](operations/community-forum-exchange.md).
