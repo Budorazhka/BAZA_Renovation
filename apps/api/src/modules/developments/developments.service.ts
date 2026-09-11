@@ -613,6 +613,64 @@ export class DevelopmentsService {
     return unit;
   }
 
+  /**
+   * Решение владельца 11.09.2026: валюта выбирается один раз на весь ЖК,
+   * разные валюты внутри комплекса запрещены. Первый юнит задаёт валюту,
+   * остальные обязаны её повторить.
+   *
+   * Правило живёт на сервере, а не в форме ERP, потому что цена приходит
+   * и из batch-создания, и из генератора шахматки, и из пакетной смены цен.
+   * Причина правила прикладная: `computeDevelopmentPriceFrom` (worker) при
+   * смешанных валютах честно отдаёт `null`, и цена «от» пропадает с
+   * витрины у всего комплекса.
+   *
+   * `excludeUnitId` — при смене цены существующего юнита он сам из
+   * сравнения исключается, иначе запретил бы собственную операцию.
+   */
+  private async assertSingleCurrencyWithinDevelopment(params: {
+    buildingId: Types.ObjectId;
+    organizationId: Types.ObjectId;
+    currencies: Currency[];
+    excludeUnitId?: Types.ObjectId;
+    session?: ClientSession;
+  }): Promise<void> {
+    const incoming = new Set(params.currencies);
+    if (incoming.size > 1) {
+      throw new AppException(
+        ErrorCode.MONEY_CURRENCY_MISMATCH,
+        `Units in one development must share a currency, got: ${[...incoming].sort().join(', ')}`,
+      );
+    }
+
+    const requested = params.currencies[0];
+    if (!requested) {
+      return;
+    }
+
+    const building = await this.buildingRepository.findByIdForOrganization(
+      params.buildingId,
+      params.organizationId,
+    );
+    if (!building) {
+      throw new NotFoundException('Building not found');
+    }
+
+    const developmentBuildings = await this.buildingRepository.listByDevelopmentId(building.developmentId);
+    const existing = await this.unitRepository.listDistinctCurrenciesForBuildings(
+      developmentBuildings.map((b) => b._id),
+      params.organizationId,
+      { excludeUnitId: params.excludeUnitId, session: params.session },
+    );
+
+    const conflicting = existing.filter((currency) => currency !== requested);
+    if (conflicting.length > 0) {
+      throw new AppException(
+        ErrorCode.MONEY_CURRENCY_MISMATCH,
+        `Development already uses ${conflicting.sort().join(', ')}, cannot add ${requested}`,
+      );
+    }
+  }
+
   async createUnit(params: {
     buildingId: Types.ObjectId;
     floorId: Types.ObjectId;
@@ -644,6 +702,12 @@ export class DevelopmentsService {
         throw new NotFoundException('FloorPlan not found');
       }
     }
+
+    await this.assertSingleCurrencyWithinDevelopment({
+      buildingId: params.buildingId,
+      organizationId: params.organizationId,
+      currencies: [params.price.currency],
+    });
 
     return this.createIdempotently(params.idempotency, (session) =>
       this.unitRepository.create(
@@ -684,6 +748,17 @@ export class DevelopmentsService {
     actorPositionId: Types.ObjectId;
     correlationId: string;
   }): Promise<void> {
+    const unit = await this.unitRepository.findByIdForOrganization(params.unitId, params.organizationId);
+    if (!unit) {
+      throw new NotFoundException('Unit not found');
+    }
+    await this.assertSingleCurrencyWithinDevelopment({
+      buildingId: unit.buildingId,
+      organizationId: params.organizationId,
+      currencies: [params.price.currency],
+      excludeUnitId: params.unitId,
+    });
+
     return runInTransaction(this.connection, async (session) => {
       const { modifiedCount } = await this.unitRepository.updatePriceWithVersionCheck(
         params.unitId,
@@ -1302,6 +1377,12 @@ export class DevelopmentsService {
       }
     }
 
+    await this.assertSingleCurrencyWithinDevelopment({
+      buildingId: params.buildingId,
+      organizationId: params.organizationId,
+      currencies: [params.defaultPrice.currency],
+    });
+
     if (params.floorPlanId) {
       const floorPlan = await this.floorPlanRepository.findByIdForOrganization(
         params.floorPlanId,
@@ -1453,6 +1534,12 @@ export class DevelopmentsService {
     if (!building) {
       throw new NotFoundException('Building not found');
     }
+
+    await this.assertSingleCurrencyWithinDevelopment({
+      buildingId: params.buildingId,
+      organizationId: params.organizationId,
+      currencies: params.units.map((u) => u.price.currency),
+    });
 
     return runInTransaction(this.connection, async (session) => {
       const floorNumbers = Array.from(new Set(params.units.map((u) => u.floorNumber)));

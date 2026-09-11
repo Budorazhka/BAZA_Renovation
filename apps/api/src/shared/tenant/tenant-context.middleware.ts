@@ -1,7 +1,9 @@
 import { Injectable, NestMiddleware, UnauthorizedException } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { Types } from 'mongoose';
 import { SessionService } from '../../modules/identity/session.service';
 import { PositionAssignmentService } from '../../modules/organizations/position-assignment.service';
+import { OrganizationRepository } from '../../modules/organizations/repository/organization.repository';
 import type { TenantContext, VerifiedTenantContext } from './tenant-context';
 
 declare module 'fastify' {
@@ -17,6 +19,14 @@ declare module 'fastify' {
      * closes that asymmetry between the two audiences.
      */
     hadSessionCookieErp?: boolean;
+    /**
+     * Сессия и позиция в порядке, но организация заморожена админом
+     * (решение владельца 11.09.2026: заморозка закрывает вход сотрудникам).
+     * Контекст в этом случае не строится, а TenantGuard по флагу отвечает
+     * понятной причиной вместо общего FORBIDDEN: сотрудник должен видеть,
+     * что дело в организации, а не в его собственных правах.
+     */
+    organizationFrozen?: boolean;
   }
 }
 
@@ -35,6 +45,7 @@ export class TenantContextMiddleware implements NestMiddleware {
   constructor(
     private readonly sessionService: SessionService,
     private readonly positionAssignmentService: PositionAssignmentService,
+    private readonly organizationRepository: OrganizationRepository,
   ) {}
 
   async use(req: FastifyRequest, _res: FastifyReply, next: () => void): Promise<void> {
@@ -53,6 +64,17 @@ export class TenantContextMiddleware implements NestMiddleware {
       // Валидная ERP-сессия, но нет активной позиции (например, только что vacated) —
       // не строим tenant context, downstream TenantGuard отклонит запрос как FORBIDDEN,
       // не как AUTH_SESSION_REVOKED (сессия сама по себе валидна).
+      next();
+      return;
+    }
+
+    // Заморозка организации действует на уже выданные сессии сразу, а не
+    // после их истечения: проверка на каждом запросе, а не только на входе.
+    // Отзыв сессий сотрудников такого эффекта не даёт — заново войти они
+    // смогли бы тем же паролем.
+    const organization = await this.organizationRepository.findById(new Types.ObjectId(assignment.organizationId));
+    if (!organization || organization.status !== 'active') {
+      req.organizationFrozen = true;
       next();
       return;
     }

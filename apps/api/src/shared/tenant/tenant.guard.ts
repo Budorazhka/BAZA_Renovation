@@ -26,6 +26,12 @@ export class TenantGuard implements CanActivate {
       if (!req.hadSessionCookieErp) {
         throw new AppException(ErrorCode.AUTH_NO_SESSION, 'No session cookie present on this request');
       }
+      // Заморозка — единственная причина отказа, которую сотруднику
+      // называют прямо: скрывать её незачем (он всё равно узнает от
+      // руководителя), а общий FORBIDDEN отправил бы разбираться в права.
+      if (req.organizationFrozen) {
+        throw new AppException(ErrorCode.ORGANIZATION_FROZEN, 'Organization is frozen, access is suspended');
+      }
       throw new AppException(ErrorCode.FORBIDDEN, 'No active tenant context for this request');
     }
     return true;

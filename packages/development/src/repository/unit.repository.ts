@@ -142,6 +142,37 @@ export class UnitRepository {
   }
 
   /**
+   * Валюты, уже встречающиеся у юнитов набора корпусов. Нужен для правила
+   * владельца от 11.09.2026: в одном ЖК валюта одна, разные валюты внутри
+   * комплекса запрещены. Без этого правила `computeDevelopmentPriceFrom`
+   * (worker) отдавал `priceFrom: null`, и цена «от» пропадала с витрины.
+   *
+   * `excludeUnitId` — для проверки смены цены существующего юнита: сам
+   * юнит из сравнения исключается, иначе он же и запретит смену валюты.
+   */
+  async listDistinctCurrenciesForBuildings(
+    buildingIds: Types.ObjectId[],
+    organizationId: Types.ObjectId,
+    options: { excludeUnitId?: Types.ObjectId; session?: ClientSession } = {},
+  ): Promise<string[]> {
+    if (buildingIds.length === 0) {
+      return [];
+    }
+    const filter: FilterQuery<UnitDocument> = {
+      buildingId: { $in: buildingIds },
+      organizationId,
+    };
+    if (options.excludeUnitId) {
+      filter._id = { $ne: options.excludeUnitId };
+    }
+    const query = this.model.distinct('price.currency', filter);
+    if (options.session) {
+      query.session(options.session);
+    }
+    return (await query.exec()) as string[];
+  }
+
+  /**
    * updateUnitPrice (domain-model.md Модуль 4): пишет новую цену И
    * append'ит priceHistory-запись атомарно в одном updateOne — не два
    * отдельных запроса (иначе окно между "цена уже новая" и "history ещё

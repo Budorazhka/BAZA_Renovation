@@ -71,6 +71,18 @@ const SORT_FIELDS: Record<Exclude<PublicCatalogSort, 'newest'>, { field: string;
  * (ADR-002 требование 2 применён и здесь). Используется API-процессом
  * (upsertPending/unpublish) и worker-процессом (markPublished/markBuildFailed).
  */
+/**
+ * Что видно публике. `status: 'published'` — решение издателя, а
+ * `publisherFrozen` — административная мера: заморозка организации убирает
+ * её объявления с витрины, не меняя их собственного статуса (решение
+ * владельца 11.09.2026).
+ *
+ * Одна константа на все публичные выборки, а не повтор условия в каждой:
+ * забытый фильтр в одном методе означал бы, что замороженная организация
+ * по-прежнему видна ровно на одной странице витрины.
+ */
+export const PUBLICLY_VISIBLE = { status: 'published', publisherFrozen: { $ne: true } } as const;
+
 @Injectable()
 export class MarketplacePublicationRepository {
   constructor(
@@ -147,7 +159,7 @@ export class MarketplacePublicationRepository {
   }
 
   async findBySlug(slug: string): Promise<MarketplacePublicationDocument | null> {
-    return this.model.findOne({ slug, status: 'published' }).exec();
+    return this.model.findOne({ slug, ...PUBLICLY_VISIBLE }).exec();
   }
 
   /**
@@ -221,7 +233,7 @@ export class MarketplacePublicationRepository {
     bbox?: GeoBboxFilter;
     polygon?: GeoPolygonFilter;
   }): Promise<MarketplacePublicationDocument[]> {
-    const filter: Record<string, unknown> = { status: 'published', sourceType: 'development' };
+    const filter: Record<string, unknown> = { ...PUBLICLY_VISIBLE, sourceType: 'development' };
     if (params.cursor) {
       filter._id = { $gt: params.cursor };
     }
@@ -257,7 +269,7 @@ export class MarketplacePublicationRepository {
     propertyType?: string;
     commercialSubtype?: string;
   }): Promise<MarketplacePublicationDocument[]> {
-    const filter: Record<string, unknown> = { status: 'published', sourceType: params.sourceType };
+    const filter: Record<string, unknown> = { ...PUBLICLY_VISIBLE, sourceType: params.sourceType };
     if (params.cursor) {
       filter._id = { $gt: params.cursor };
     }
@@ -327,7 +339,7 @@ export class MarketplacePublicationRepository {
     publisherOrganizationId?: Types.ObjectId;
     sort: PublicCatalogSort;
   }): Promise<PublicCatalogPage> {
-    const baseFilter: Record<string, unknown> = { status: 'published', sourceType: params.sourceType };
+    const baseFilter: Record<string, unknown> = { ...PUBLICLY_VISIBLE, sourceType: params.sourceType };
     if (params.city) baseFilter['searchProjection.city'] = params.city;
     if (params.dealType) baseFilter['searchProjection.dealType'] = params.dealType;
     if (params.propertyType) baseFilter['searchProjection.propertyType'] = params.propertyType;
@@ -495,6 +507,30 @@ export class MarketplacePublicationRepository {
       .updateOne(
         { sourceType, sourceId, status: 'published' },
         { $set: { status: 'unpublished', unpublishedAt: new Date(), unpublishReason } },
+        { session },
+      )
+      .exec();
+    return { modifiedCount: result.modifiedCount };
+  }
+
+  /**
+   * Заморозка и разморозка организации: снимает с витрины или возвращает
+   * на неё все публикации издателя разом, не трогая их собственный
+   * `status` (см. `publisherFrozen` в схеме).
+   *
+   * Затрагивает публикации в любом статусе намеренно: пока организация
+   * заморожена, опубликованная позже запись тоже не должна оказаться на
+   * витрине, а `publisherFrozen` у неё проставит publish-путь.
+   */
+  async setPublisherFrozenForOrganization(
+    organizationId: Types.ObjectId,
+    frozen: boolean,
+    session?: ClientSession,
+  ): Promise<{ modifiedCount: number }> {
+    const result = await this.model
+      .updateMany(
+        { 'publisherScope.organizationId': organizationId },
+        { $set: { publisherFrozen: frozen } },
         { session },
       )
       .exec();

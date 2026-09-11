@@ -25,6 +25,11 @@ import { OutboxModule } from '../outbox/outbox.module';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { MediaModule } from '../media/media.module';
 import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
+import {
+  MarketplacePublicationDocument,
+  MarketplacePublicationSchema,
+  MarketplacePublicationRepository,
+} from '@baza/publication';
 
 @Module({
   imports: [
@@ -34,6 +39,12 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
       { name: PositionAssignmentDocument.name, schema: PositionAssignmentSchema },
       { name: InvitationDocument.name, schema: InvitationSchema },
       { name: PositionProfileDocument.name, schema: PositionProfileSchema },
+      // Заморозка организации снимает её объявления с витрины (решение
+      // владельца 11.09.2026). Репозиторий публикаций провайдится здесь,
+      // а не импортом PublicationModule: тот сам импортирует этот модуль
+      // (имя издателя в каталоге), и импорт в обе стороны дал бы цикл.
+      // Тот же приём уже применён в crm.module.ts.
+      { name: MarketplacePublicationDocument.name, schema: MarketplacePublicationSchema },
     ]),
     IdentityModule,
     AuditModule,
@@ -59,6 +70,7 @@ import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module';
     OrganizationsService,
     DefaultGrantsBackfillService,
     TeamService,
+    MarketplacePublicationRepository,
   ],
   exports: [PositionAssignmentService, OrganizationsService],
 })

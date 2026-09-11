@@ -7,6 +7,9 @@ coverage/
 .env
 .env.local
 .env.*.local
+# Локальная копия .env.runtime.example: в ней хостовые порты конкретной
+# машины (у dev-стека и runtime-стека они пересекаются), не общий конфиг.
+.env.runtime
 .DS_Store
 *.tsbuildinfo
 

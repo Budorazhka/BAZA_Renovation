@@ -65,6 +65,7 @@
 |---|---|---|
 | `VALIDATION_FAILED` | Общая ошибка валидации тела запроса | Любой endpoint, `details.fields` — список невалидных полей (без raw exception) |
 | `MONEY_INVALID_CURRENCY` | Валюта не входит в `USD | GEL | RUB` | Любое поле типа `MoneyAmount` |
+| `MONEY_CURRENCY_MISMATCH` | Валюта не совпадает с валютой, уже принятой в этом ЖК (решение владельца 11.09.2026: одна валюта на комплекс) | `POST /buildings/:id/units`, `PATCH /units/:id/price`, batch-создание юнитов, генератор шахматки |
 | `MEDIA_MIME_MISMATCH` | Magic-byte проверка не совпала с заявленным типом (ADR-008) | `POST /media/:id/confirm` |
 | `MEDIA_NOT_VERIFIED` | Попытка использовать media asset до прохождения verification | Attach фото к Unit/Listing до `status: 'verified'` |
 

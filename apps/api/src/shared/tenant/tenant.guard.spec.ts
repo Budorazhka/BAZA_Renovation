@@ -3,7 +3,9 @@ import { TenantGuard } from './tenant.guard';
 import { ErrorCode } from '../errors/error-codes';
 import './tenant-context.middleware';
 
-function makeContext(req: Partial<{ tenantContext: unknown; hadSessionCookieErp: boolean }>): ExecutionContext {
+function makeContext(
+  req: Partial<{ tenantContext: unknown; hadSessionCookieErp: boolean; organizationFrozen: boolean }>,
+): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => req,
@@ -44,6 +46,18 @@ describe('TenantGuard — 401 vs 403', () => {
       throw new Error('expected canActivate to throw');
     } catch (error) {
       expect((error as { code: ErrorCode }).code).toBe(ErrorCode.FORBIDDEN);
+      expect((error as { getStatus: () => number }).getStatus()).toBe(403);
+    }
+  });
+
+  it('организация заморожена — 403 ORGANIZATION_FROZEN, причина названа прямо', () => {
+    try {
+      guard.canActivate(
+        makeContext({ tenantContext: undefined, hadSessionCookieErp: true, organizationFrozen: true }),
+      );
+      throw new Error('expected canActivate to throw');
+    } catch (error) {
+      expect((error as { code: ErrorCode }).code).toBe(ErrorCode.ORGANIZATION_FROZEN);
       expect((error as { getStatus: () => number }).getStatus()).toBe(403);
     }
   });

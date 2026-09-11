@@ -12,6 +12,7 @@ import { AuthService } from '../identity/auth.service';
 import { AuditService } from '../audit/audit.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PolicyEvaluatorService } from '../authorization/policy-evaluator.service';
+import { MarketplacePublicationRepository } from '@baza/publication';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { DEFAULT_ROLE_GRANTS } from './default-role-grants';
@@ -39,6 +40,7 @@ export class OrganizationsService {
     private readonly auditService: AuditService,
     private readonly outboxService: OutboxService,
     private readonly policyEvaluator: PolicyEvaluatorService,
+    private readonly publicationRepository: MarketplacePublicationRepository,
   ) {}
 
   /**
@@ -924,8 +926,19 @@ export class OrganizationsService {
     }
 
     const previousStatus = org.status;
+    let hiddenPublications = 0;
     await runInTransaction(this.connection, async (session) => {
       await this.organizationRepository.updateStatus(params.id, 'frozen', session);
+      // Решение владельца 11.09.2026: заморозка убирает объявления с
+      // витрины. В той же транзакции, что и смена статуса: иначе возможен
+      // отрезок, где организация уже заморожена, а её объявления ещё
+      // продаются, и наоборот при откате.
+      const { modifiedCount } = await this.publicationRepository.setPublisherFrozenForOrganization(
+        params.id,
+        true,
+        session,
+      );
+      hiddenPublications = modifiedCount;
       await this.auditService.append(
         {
           actor: { type: 'admin_account', id: params.actorId },
@@ -934,7 +947,7 @@ export class OrganizationsService {
           resourceId: params.id,
           reason: params.reason,
           before: { status: previousStatus },
-          after: { status: 'frozen' },
+          after: { status: 'frozen', hiddenPublications },
           correlationId: params.correlationId ?? '',
         },
         session,
@@ -959,8 +972,18 @@ export class OrganizationsService {
     }
 
     const previousStatus = org.status;
+    let restoredPublications = 0;
     await runInTransaction(this.connection, async (session) => {
       await this.organizationRepository.updateStatus(params.id, 'active', session);
+      // Возврат на витрину ровно того, что было опубликовано до заморозки:
+      // собственный status публикаций не трогался, поэтому восстанавливать
+      // нечего, кроме снятия флага.
+      const { modifiedCount } = await this.publicationRepository.setPublisherFrozenForOrganization(
+        params.id,
+        false,
+        session,
+      );
+      restoredPublications = modifiedCount;
       await this.auditService.append(
         {
           actor: { type: 'admin_account', id: params.actorId },
@@ -969,7 +992,7 @@ export class OrganizationsService {
           resourceId: params.id,
           reason: params.reason,
           before: { status: previousStatus },
-          after: { status: 'active' },
+          after: { status: 'active', restoredPublications },
           correlationId: params.correlationId ?? '',
         },
         session,

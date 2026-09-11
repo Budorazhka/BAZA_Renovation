@@ -1,4 +1,5 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { MarketplacePublicationRepository } from '@baza/publication';
 import { Types } from 'mongoose';
 import { OrganizationsService } from './organizations.service';
 import type { OrganizationRepository } from './repository/organization.repository';
@@ -64,6 +65,7 @@ describe('OrganizationsService.assignOccupant', () => {
       { append: auditAppendSpy } as unknown as AuditService,
       { publish: outboxPublishSpy } as unknown as OutboxService,
       { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -98,6 +100,7 @@ describe('OrganizationsService.assignOccupant', () => {
       { append: jest.fn() } as unknown as AuditService,
       { publish: jest.fn() } as unknown as OutboxService,
       { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -137,6 +140,7 @@ describe('OrganizationsService.assignOccupant', () => {
       { append: jest.fn() } as unknown as AuditService,
       { publish: jest.fn() } as unknown as OutboxService,
       { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -177,6 +181,7 @@ describe('OrganizationsService.assignOccupant', () => {
       { append: jest.fn() } as unknown as AuditService,
       { publish: jest.fn() } as unknown as OutboxService,
       { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -220,6 +225,7 @@ describe('OrganizationsService.assignOccupant', () => {
       { append: auditAppendSpy } as unknown as AuditService,
       { publish: outboxPublishSpy } as unknown as OutboxService,
       { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     const result = await service.assignOccupant({
@@ -277,6 +283,7 @@ describe('OrganizationsService.assignOccupantByEmail', () => {
         { append: jest.fn().mockResolvedValue(undefined) } as unknown as AuditService,
         { publish: jest.fn().mockResolvedValue(undefined) } as unknown as OutboxService,
         { grant: jest.fn() } as unknown as PolicyEvaluatorService,
+        { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
       ),
     };
   }
@@ -369,6 +376,7 @@ describe('OrganizationsService.activateInvitation', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
   }
 
@@ -474,6 +482,7 @@ describe('OrganizationsService.createOrganizationWithOwner', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       { grantMany: jest.fn().mockResolvedValue(undefined) } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     const result = await service.createOrganizationWithOwner({
@@ -510,6 +519,7 @@ describe('OrganizationsService.createOrganizationWithOwner', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       { grantMany: grantManySpy } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.createOrganizationWithOwner({ type: 'agency', name: 'Test Agency', ownerIdentityId });
@@ -546,6 +556,7 @@ describe('OrganizationsService.grantPositionPermission', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       { grant: grantSpy } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.grantPositionPermission({
@@ -579,6 +590,7 @@ describe('OrganizationsService.grantPositionPermission', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       { grant: grantSpy } as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -625,6 +637,7 @@ describe('OrganizationsService.vacatePositionByPositionId', () => {
       { append: auditAppendSpy } as unknown as AuditService,
       { publish: outboxPublishSpy } as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.vacatePositionByPositionId({
@@ -681,6 +694,7 @@ describe('OrganizationsService.vacatePositionByPositionId', () => {
       { append: jest.fn() } as unknown as AuditService,
       { publish: jest.fn() } as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -709,6 +723,7 @@ describe('OrganizationsService.vacatePositionByPositionId', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -733,6 +748,7 @@ describe('OrganizationsService.vacatePositionByPositionId', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -770,6 +786,7 @@ describe('OrganizationsService.changePositionParent', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.changePositionParent({ positionId, newParentPositionId: newParentId, expectedOrganizationId: organizationId });
@@ -796,6 +813,7 @@ describe('OrganizationsService.changePositionParent', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.changePositionParent({ positionId, newParentPositionId: null, expectedOrganizationId: organizationId });
@@ -837,6 +855,7 @@ describe('OrganizationsService.changePositionParent', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -859,6 +878,7 @@ describe('OrganizationsService.changePositionParent', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -887,6 +907,7 @@ describe('OrganizationsService.closePosition', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await service.closePosition({ positionId, expectedOrganizationId: organizationId });
@@ -912,6 +933,7 @@ describe('OrganizationsService.closePosition', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -931,6 +953,7 @@ describe('OrganizationsService.closePosition', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
@@ -965,6 +988,7 @@ describe('OrganizationsService.closePosition', () => {
       {} as unknown as AuditService,
       {} as unknown as OutboxService,
       {} as unknown as PolicyEvaluatorService,
+      { setPublisherFrozenForOrganization: jest.fn().mockResolvedValue({ modifiedCount: 0 }) } as unknown as MarketplacePublicationRepository,
     );
 
     await expect(
