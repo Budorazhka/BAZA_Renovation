@@ -46,6 +46,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # 11.09.2026: без кеша каждый прогон — холодный раннер, и test:integration
+      # запускает десятки файлов параллельно (jest по умолчанию — воркер на
+      # ядро), каждый со своим beforeAll → MongoMemoryReplSet.create(). Когда
+      # бинарник mongod ещё не скачан, несколько воркеров одновременно пытаются
+      # его закачать и упираются в баг координации между процессами в
+      # mongodb-memory-server-core@11.2.0: UnableToUnlockLockfileError
+      # (~/.cache/mongodb-binaries/8.2.6.lock «not locked by this process») —
+      # видели дважды за сессию (marketplace-property-assets.integration-spec.ts
+      # на 6226631 и 833aa6e), оба раза только этот один файл и оба раза сам
+      # тест не имеет отношения к пушу. С тёплым кешем ни один воркер вообще не
+      # обращается к сети — MongoBinary.getPath() находит файл на диске.
+      - name: Cache MongoDB binaries for mongodb-memory-server
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            mongodb-binaries-${{ runner.os }}-
+
       - name: Report runner capacity
         run: |
           echo "CPU: $(nproc)"
