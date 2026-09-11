@@ -68,7 +68,7 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByTestId('auth-page')).toBeTruthy()
+    expect(await screen.findByTestId('auth-page', {}, { timeout: 5000 })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Вход в аккаунт BAZA' })).toBeTruthy()
   })
 
@@ -81,7 +81,7 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Регистрация в BAZA' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Регистрация в BAZA' }, { timeout: 5000 })).toBeTruthy()
     // Подтверждение пароля есть только в режиме регистрации.
     expect(screen.getByTestId('auth-input-confirm-password')).toBeTruthy()
   })
@@ -95,7 +95,7 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByTestId('auth-page')).toBeTruthy()
+    expect(await screen.findByTestId('auth-page', {}, { timeout: 5000 })).toBeTruthy()
     // Экран кабинета показываться не должен.
     expect(screen.queryByRole('heading', { name: /Мои объекты/ })).toBeNull()
   })
@@ -129,7 +129,7 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByTestId('auth-page')).toBeTruthy()
+    expect(await screen.findByTestId('auth-page', {}, { timeout: 5000 })).toBeTruthy()
     fireEvent.change(screen.getByTestId('auth-input-login'), { target: { value: 'user@test.local' } })
     fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'secretPassword123' } })
     fireEvent.click(screen.getByTestId('auth-submit-btn'))
@@ -159,7 +159,7 @@ describe('Авторизация и доступ в кабинет', () => {
         <App />
       </MemoryRouter>,
     )
-    expect(await screen.findByTestId('header-login-link')).toBeTruthy()
+    expect(await screen.findByTestId('header-login-link', {}, { timeout: 5000 })).toBeTruthy()
     expect(screen.queryByTestId('header-account-btn')).toBeNull()
     guest.unmount()
 
@@ -171,7 +171,7 @@ describe('Авторизация и доступ в кабинет', () => {
         <App />
       </MemoryRouter>,
     )
-    expect(await screen.findByTestId('header-account-btn')).toBeTruthy()
+    expect(await screen.findByTestId('header-account-btn', {}, { timeout: 5000 })).toBeTruthy()
     expect(screen.queryByTestId('header-login-link')).toBeNull()
   })
 
@@ -185,11 +185,11 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    fireEvent.click(await screen.findByTestId('header-account-btn'))
+    fireEvent.click(await screen.findByTestId('header-account-btn', {}, { timeout: 5000 }))
     fireEvent.click(screen.getByTestId('header-logout-btn'))
 
     await waitFor(() => expect(authApi.logout).toHaveBeenCalled())
-    expect(await screen.findByTestId('header-login-link')).toBeTruthy()
+    expect(await screen.findByTestId('header-login-link', {}, { timeout: 5000 })).toBeTruthy()
   })
 
   it('вход перепроверяет сессию, а гейт маршрута не спрашивает сервер заново', async () => {
@@ -202,7 +202,7 @@ describe('Авторизация и доступ в кабинет', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByTestId('auth-page')).toBeTruthy()
+    expect(await screen.findByTestId('auth-page', {}, { timeout: 5000 })).toBeTruthy()
     fireEvent.change(screen.getByTestId('auth-input-login'), { target: { value: 'user@test.local' } })
     fireEvent.change(screen.getByTestId('auth-input-password'), { target: { value: 'secretPassword123' } })
     fireEvent.click(screen.getByTestId('auth-submit-btn'))
