@@ -162,6 +162,33 @@ cursor). На настоящей MongoDB (семантика `$lt`/`$or`/`$and` 
 `_id` без буста воспроизводит и подтверждает исправление старого бага (и
 потерю, и дубли), плюс отдельный тест на диалог без единого сообщения.
 
+## Исправлено 11.09: `create-task` из диалога больше не делит Idempotency-Key с `POST /tasks`
+
+Оба пути — `POST /tasks` и `POST /messenger/dialogs/:id/create-task` — в итоге
+вызывают один и тот же `CrmService.createTask`, а внутри него `record()`
+использовал захардкоженный `operation: 'createTask'`. Уникальность записи
+идемпотентности — `(identityId, operation, key)`, так что один и тот же
+`Idempotency-Key`, отправленный на оба эндпоинта, попадал в одну и ту же
+запись: второй вызов видел чужой (с точки зрения этого эндпоинта) сохранённый
+`requestHash`, он не совпадал с телом своего запроса (у эндпоинтов разные
+наборы полей), и вместо создания второй, полностью независимой задачи клиент
+получал `IDEMPOTENCY_KEY_CONFLICT` (409).
+
+`CrmService.createTask` теперь принимает `idempotencyOperation` явным
+параметром вместо хардкода — `task.controller.ts` передаёт `'createTask'`
+(без изменений для уже существующего эндпоинта), `MessengerService.
+createTaskFromDialog` передаёт `'createTaskFromDialog'` (новое имя); ранний
+`checkReplay` в `MessengerController.createTaskFromDialog` (до вызова
+сервиса) обновлён на то же имя, иначе он и `record()` разошлись бы сами
+между собой.
+
+Юнит: `messenger.service.spec.ts` и `task.controller.spec.ts` проверяют, что
+каждый вызывающий передаёт своё имя операции. На настоящей MongoDB (полный
+HTTP-путь, тот же файл, что own-scope/link-crm фиксы выше):
+`messenger-own-scope-http.integration-spec.ts` — один и тот же
+`Idempotency-Key` на `POST /tasks` и `POST /messenger/dialogs/:id/create-task`
+создаёт две независимые задачи (201 и 201, разные `id`), не 409.
+
 ## Что открыто
 
 1. Транспорт: подключение Telegram Bot API и выбор провайдера WhatsApp —
@@ -182,8 +209,6 @@ cursor). На настоящей MongoDB (семантика `$lt`/`$or`/`$and` 
    диалогам, до того как `sentAt` сможет расходиться с порядком `_id`.
 5. Отметка прочтения меняет данные, но защищена правом `read`. Удаление аккаунта
    не удаляет его диалоги.
-6. `create-task` использует ту же операцию идемпотентности `createTask`, что и
-   `POST /tasks`: один ключ на двух эндпоинтах даст 409.
-7. Организации, созданные до 10.09, не имеют грантов messenger, пока в окружении
+6. Организации, созданные до 10.09, не имеют грантов messenger, пока в окружении
    не запущена доливка `grants:backfill-defaults` (N-06,
    [default-grants-backfill](default-grants-backfill.md)).

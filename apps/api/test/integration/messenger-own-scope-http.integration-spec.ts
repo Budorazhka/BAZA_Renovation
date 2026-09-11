@@ -114,6 +114,7 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
       'leads',
       'contacts',
       'deals',
+      'tasks',
       'positions',
       'position_assignments',
       'organizations',
@@ -382,5 +383,38 @@ describe('Messenger own-scope — HTTP integration (полный AppModule)', ()
     });
 
     expect(response.statusCode).toBe(404);
+  });
+
+  it('createTaskFromDialog: тот же Idempotency-Key, что уже использован на POST /tasks, — не 409, независимая вторая задача', async () => {
+    // ИСПРАВЛЕНО 11.09.2026: оба эндпоинта в итоге вызывают CrmService.
+    // createTask, и internal record() использовал захардкоженный
+    // operation: 'createTask' — один и тот же Idempotency-Key на двух
+    // разных HTTP-путях ловил (identityId, 'createTask', key) чужого
+    // эндпоинта и давал IDEMPOTENCY_KEY_CONFLICT (409) вместо двух
+    // независимых задач, потому что тела запросов у них разные.
+    const { cookie, organizationId, positionId } = await seedOwnerSession();
+    const dialogId = await seedDialog(organizationId, positionId);
+    const sharedKey = new Types.ObjectId().toString();
+
+    const fromTasksEndpoint = await app.inject({
+      method: 'POST',
+      url: '/api/v1/tasks',
+      headers: { cookie, 'idempotency-key': sharedKey },
+      payload: { title: 'Задача через общий /tasks' },
+    });
+    expect(fromTasksEndpoint.statusCode).toBe(201);
+
+    const fromDialogEndpoint = await app.inject({
+      method: 'POST',
+      url: `/api/v1/messenger/dialogs/${dialogId}/create-task`,
+      headers: { cookie, 'idempotency-key': sharedKey },
+      payload: { title: 'Задача через диалог мессенджера' },
+    });
+
+    expect(fromDialogEndpoint.statusCode).toBe(201);
+    const taskFromTasks = JSON.parse(fromTasksEndpoint.body);
+    const taskFromDialog = JSON.parse(fromDialogEndpoint.body);
+    expect(taskFromDialog.id).not.toBe(taskFromTasks.id);
+    expect(await connection.collection('tasks').countDocuments({})).toBe(2);
   });
 });

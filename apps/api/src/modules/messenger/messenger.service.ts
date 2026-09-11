@@ -716,6 +716,11 @@ export class MessengerService {
       correlationId: params.correlationId,
       idempotencyKey: params.idempotencyKey,
       idempotencyRequestBody: params.idempotencyRequestBody,
+      // ИСПРАВЛЕНО 11.09.2026: отдельное имя операции от POST /tasks
+      // (task.controller.ts передаёт 'createTask') — иначе один и тот же
+      // Idempotency-Key на двух разных эндпоинтах даёт ложный 409
+      // IDEMPOTENCY_KEY_CONFLICT, см. docstring CrmService.createTask.
+      idempotencyOperation: 'createTaskFromDialog',
     });
   }
 }

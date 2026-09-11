@@ -2728,6 +2728,7 @@ describe('CRM-004: Task outbox events', () => {
           correlationId: string;
           idempotencyKey: string;
           idempotencyRequestBody: Record<string, unknown>;
+          idempotencyOperation: string;
         }): Promise<unknown>;
       };
     }
@@ -2760,6 +2761,7 @@ describe('CRM-004: Task outbox events', () => {
         correlationId: 'corr-1',
       idempotencyKey: 'test-key',
       idempotencyRequestBody: { probe: 1 },
+      idempotencyOperation: 'createTask',
       });
 
       expect(publish).toHaveBeenCalledTimes(1);
@@ -2804,6 +2806,7 @@ describe('CRM-004: Task outbox events', () => {
           correlationId: 'corr-1',
       idempotencyKey: 'test-key',
       idempotencyRequestBody: { probe: 1 },
+      idempotencyOperation: 'createTask',
         }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(publish).not.toHaveBeenCalled();

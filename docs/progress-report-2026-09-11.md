@@ -185,3 +185,14 @@
   по контракту OpenAPI (список сообщений и код ответа `link-crm` остаются
   расхождением). Конкретный сценарий потери и дублей воспроизведён и
   подтверждён на настоящей MongoDB. [messenger](operations/messenger-skeleton.md).
+- **Вне очереди, найдено при чтении «Что открыто» messenger-skeleton.md (было
+  п.6).** `POST /tasks` и `POST /messenger/dialogs/:id/create-task` в итоге
+  вызывают один и тот же `CrmService.createTask`, а внутри него `operation`
+  идемпотентности был захардкожен в `'createTask'` — один и тот же
+  `Idempotency-Key`, отправленный на оба эндпоинта, ловил чужую запись и давал
+  `IDEMPOTENCY_KEY_CONFLICT` (409) вместо двух независимых задач. Теперь
+  `idempotencyOperation` — явный параметр, каждый вызывающий называет свою
+  операцию (`'createTask'` без изменений у существующего эндпоинта,
+  `'createTaskFromDialog'` — новое имя у messenger-пути). Подтверждено HTTP-
+  тестом на настоящей MongoDB: общий ключ на обоих эндпоинтах создаёт две
+  задачи (201/201, разные id), не 409. [messenger](operations/messenger-skeleton.md).

@@ -1024,6 +1024,17 @@ export class CrmService {
     idempotencyKey: string;
     /** Собирается контроллером — см. createLead: хеш checkReplay и record обязан совпадать. */
     idempotencyRequestBody: Record<string, unknown>;
+    /**
+     * ИСПРАВЛЕНО 11.09.2026: раньше operation был захардкожен в 'createTask'
+     * здесь же — POST /tasks и messenger create-task-from-dialog (два разных
+     * HTTP-эндпоинта, оба вызывают этот метод) делили один и тот же
+     * (identityId, operation, key), хотя у клиента это два разных вызова с
+     * разными телами. Один и тот же Idempotency-Key на обоих эндпоинтах давал
+     * IDEMPOTENCY_KEY_CONFLICT (409) вместо двух независимых задач. Теперь
+     * каждый вызывающий называет свою операцию явно — так же, как checkReplay
+     * ДО этого метода уже делает каждый контроллер сам.
+     */
+    idempotencyOperation: string;
   }): Promise<CrmTaskReadModel> {
     // Вложения — чужой модуль (Media), поэтому проверка до транзакции и через
     // публичный сервис, а не репозиторий (ADR-001). Asset обязан принадлежать
@@ -1158,7 +1169,7 @@ export class CrmService {
       await this.idempotencyService.record(
         {
           identityId: params.actorIdentityId,
-          operation: 'createTask',
+          operation: params.idempotencyOperation,
           key: params.idempotencyKey,
           requestBody: params.idempotencyRequestBody,
           responseStatus: 201,

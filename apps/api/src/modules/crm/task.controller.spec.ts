@@ -136,6 +136,10 @@ describe('TaskController', () => {
           requiredScopePositionId: positionId,
           title: 'Follow up',
           correlationId: 'req-corr-123',
+          // ИСПРАВЛЕНО 11.09.2026: своё имя операции идемпотентности —
+          // messenger create-task-from-dialog передаёт 'createTaskFromDialog',
+          // иначе общий Idempotency-Key на двух эндпоинтах давал ложный 409.
+          idempotencyOperation: 'createTask',
         }),
       );
     });

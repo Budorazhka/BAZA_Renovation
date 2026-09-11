@@ -229,6 +229,10 @@ describe('MessengerService', () => {
       expect.objectContaining({
         title: 'Перезвонить клиенту из WhatsApp',
         leadId,
+        // ИСПРАВЛЕНО 11.09.2026: своё имя операции идемпотентности,
+        // отличное от 'createTask' у POST /tasks — иначе общий
+        // Idempotency-Key на двух эндпоинтах давал ложный 409.
+        idempotencyOperation: 'createTaskFromDialog',
       }),
     );
   });

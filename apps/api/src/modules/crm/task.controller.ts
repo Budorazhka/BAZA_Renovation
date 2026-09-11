@@ -119,6 +119,7 @@ export class TaskController {
       actorIdentityId,
       idempotencyKey,
       idempotencyRequestBody,
+      idempotencyOperation: 'createTask',
       requiredScopePositionId: await this.ownerFilterForAction(tenantContext.positionId, 'create'),
       title: dto.title,
       description: dto.description,

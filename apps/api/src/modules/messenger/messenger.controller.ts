@@ -387,9 +387,15 @@ export class MessengerController {
       isImportant: dto.isImportant ?? null,
     };
 
+    // ИСПРАВЛЕНО 11.09.2026: было 'createTask' — тот же operation, что
+    // POST /tasks (task.controller.ts). Одинаковый Idempotency-Key на двух
+    // разных эндпоинтах ловил чужую запись по (identityId, operation, key) и
+    // давал IDEMPOTENCY_KEY_CONFLICT вместо двух независимых задач — тела
+    // запросов у них разные (см. CreateTaskDto vs CreateTaskFromDialogDto),
+    // поэтому дальше чем "конфликт хешей" это даже не доходило.
     const replay = await this.idempotencyService.checkReplay({
       identityId: actorIdentityId,
-      operation: 'createTask',
+      operation: 'createTaskFromDialog',
       key: idempotencyKey,
       requestBody: idempotencyRequestBody,
     });
