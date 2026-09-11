@@ -1,218 +1,241 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { marketplaceApi } from '../api/marketplace-api'
+import { DevelopmentCard } from '../components/DevelopmentCard'
+import { ListingCard } from '../components/ListingCard'
+import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketplace'
 
 /**
- * Главная страница: информационная витрина, без списка объектов с фильтрами.
+ * Главная страница по утверждённому фрейму Figma `Home page` v4 long
+ * (`3428:55239`, 1920x5544), решение владельца в
+ * docs/discovery/marketplace-screen-build-spec.md, строка MKT-SCR-001.
  *
- * Решение владельца от 04.09.2026 по образцу действующего baza.sale: главная
- * рассказывает о платформе и разводит по разделам, а работа с каталогом
- * (фильтры, сортировка, карта, пагинация) живёт в самих разделах —
- * `/newconstructions`, `/secondary`, `/rent`. До этого обе роли исполнял один
- * маршрут `/`: под информационными блоками сразу же шёл рабочий каталог.
+ * До 12.09.2026 здесь стояла страница, собранная не по этому фрейму:
+ * hero с формой поиска вместо логотипа и слогана, пять одинаковых
+ * иконочных плашек вместо категорий с фотографиями, свои тексты вместо
+ * макетных и, главное, ни одного реального объекта — ни «Горячих
+ * предложений», ни «Новых объявлений квартир», хотя обе секции в макете
+ * занимают вместе 1529px из 5544px.
  *
- * В Figma это тоже два разных фрейма: `Home page` (`3428:55239`, 1920x5544) и
- * `search result` (`236:27197`, 1920x1216).
+ * Порядок секций фрейма (сверху вниз, ID дочерних узлов `3428:55241`):
+ *   `3851:56175` hero 1920x905      — логотип, слоган, фотополотно
+ *   `3428:55271` категории 1920x523 — пять карточек с фото и счётчиками
+ *   `3428:55292` «Почему выбирают BAZA.sale?» 1920x352
+ *   `3428:55382` промо 1920x500     — продать объект + «Горячие предложения»
+ *   `3428:55605` «Горячие предложения» 1920x746 — 4 карточки ЖК 424x626
+ *   `3428:55845` «Новые объявления квартир» 1920x783 — 4 карточки 424x663
+ *   `3428:56071` «Каталог проверенных риелторов» 1920x334
+ *   `3428:56103` «Рейтинг застройщиков» 1920x347
+ *   `3428:56129` footer 3 1920x640
+ *
+ * Две секции с людьми и компаниями (`3428:56071`, `3428:56103`) здесь
+ * не собираются: публичного API ни для риэлторов, ни для застройщиков нет
+ * (`/public/*` — это developments, listings и selections). Рисовать их на
+ * выдуманных людях запрещает то же правило, по которому 11.09 вычищали
+ * засев community. Секции появятся вместе со своим backend.
  */
-export function HomePage() {
-  const navigate = useNavigate()
-  const [cityInput, setCityInput] = useState('')
 
-  function submitCity(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const city = cityInput.trim()
-    // Поиск с главной ведёт в раздел новостроек: главная сама ничего не ищет.
-    navigate(city ? `/newconstructions?city=${encodeURIComponent(city)}` : '/newconstructions')
-  }
+const CATEGORY_LINKS = [
+  { title: 'Новостройки', to: '/newconstructions', kind: 'developments' as const },
+  { title: 'Вторичка', to: '/secondary', kind: 'listings' as const, dealType: 'sale' as const },
+  { title: 'Аренда', to: '/rent', kind: 'listings' as const, dealType: 'rent_long' as const },
+  { title: 'Проекты', to: '/newconstructions?stage=under_construction', kind: 'developments' as const },
+  { title: 'Коммерция', to: '/secondary?propertyType=commercial', kind: 'listings' as const, propertyType: 'commercial' as const },
+]
+
+interface HomeData {
+  developments: PublicDevelopmentCard[]
+  listings: PublicListingCard[]
+  counts: Record<string, number | null>
+}
+
+const EMPTY: HomeData = { developments: [], listings: [], counts: {} }
+
+/**
+ * Обложка объявления. У ЖК фотографий в публичном ответе нет вовсе
+ * (`PublicDevelopmentCard` — это slug, имя, локация, цена, состав квартир),
+ * хотя в макете обложка карточки ЖК — фотография. Пробел в API, отмечен в
+ * документе работы; пока единственный источник настоящих фотографий на
+ * главной — объявления.
+ */
+function coverOf(item: PublicListingCard | undefined): string | null {
+  const media = item?.media ?? []
+  const cover = media.find((m) => m.role === 'cover') ?? media[0]
+  return cover?.url ?? null
+}
+
+export function HomePage() {
+  const [data, setData] = useState<HomeData>(EMPTY)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    async function load() {
+      try {
+        // Счётчики категорий берём из тех же выборок: `total` уже приходит
+        // в ответе списка, отдельных запросов ради цифры в скобках не надо.
+        const [developments, sale, rent, commercial] = await Promise.all([
+          marketplaceApi.listDevelopments({ limit: 4 }, { signal: controller.signal }),
+          marketplaceApi.listListings({ limit: 4, dealType: 'sale' }, { signal: controller.signal }),
+          marketplaceApi.listListings({ limit: 1, dealType: 'rent_long' }, { signal: controller.signal }),
+          marketplaceApi.listListings({ limit: 1, propertyType: 'commercial' }, { signal: controller.signal }),
+        ])
+
+        setData({
+          developments: developments.items,
+          listings: sale.items,
+          counts: {
+            Новостройки: developments.total ?? null,
+            Вторичка: sale.total ?? null,
+            Аренда: rent.total ?? null,
+            Проекты: developments.total ?? null,
+            Коммерция: commercial.total ?? null,
+          },
+        })
+        setLoadError(null)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        // Пустые секции вместо выдуманных карточек: страница честно
+        // показывает, что данные не пришли, и даёт повторить.
+        setData(EMPTY)
+        setLoadError(error instanceof Error ? error.message : 'Не удалось загрузить объекты')
+      }
+    }
+
+    void load()
+    return () => controller.abort()
+  }, [])
+
+  const heroCover = coverOf(data.listings[0])
 
   return (
-    <div className="figma-home">
-      {/* Section 1: Hero Block (Figma 1035:16926 / 3851:56175) */}
-      <section className="home-hero figma-home-hero" aria-labelledby="home-hero-title">
-        <div className="figma-home-hero__bg-pattern" aria-hidden="true" />
-        <div className="home-hero__copy" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <p className="home-hero__eyebrow figma-home-hero__eyebrow">
-            <span aria-hidden="true">✦</span> Проверенная недвижимость в Грузии
+    <div className="home">
+      {/* Hero — Figma 3851:56175 (1920x905): логотип 557x180, слоган 50px, фото 1920x596 */}
+      <section className="home-hero" aria-labelledby="home-title">
+        <div className="home-hero__head">
+          <p className="home-hero__wordmark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="72" height="72" fill="none" stroke="currentColor" strokeWidth="1.6">
+              <path d="M3 21h18M5 21V8l7-5 7 5v13M9 21v-6h6v6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>BAZA<span className="home-hero__wordmark-dot">.sale</span></span>
           </p>
-          <h1 id="home-hero-title" className="figma-home-hero__title">
-            Поиск недвижимости <span>в Грузии</span>
+          <h1 id="home-title" className="home-hero__slogan">
+            Лучший способ найти недвижимость
           </h1>
-          <p className="figma-home-hero__subtitle">
-            Единая база проверенных жилых комплексов, квартир и коммерческих объектов без скрытых комиссий
+        </div>
+
+        {/*
+          * Фотополотно макета (`2851 1`, 1920x596) рисуется только когда
+          * фотография действительно есть. Пустая плита во весь экран хуже
+          * её отсутствия: она читается как незагрузившийся блок.
+          */}
+        {heroCover ? (
+          <div className="home-hero__canvas">
+            <img src={heroCover} alt="" loading="eager" />
+          </div>
+        ) : null}
+      </section>
+
+      {/* Категории — Figma 3428:55271 (1920x523): пять карточек разной ширины с фото */}
+      <section className="home-categories" aria-label="Категории недвижимости">
+        <div className="home-categories__row">
+          {CATEGORY_LINKS.map((category) => {
+            const count = data.counts[category.title]
+            // Фотография категории — обложка настоящего объявления этой
+            // категории. Своих иллюстраций у нас нет: картинки макета лежат
+            // в исходном .fig, которого в репозитории нет.
+            const cover = coverOf(data.listings[0])
+            return (
+              <Link key={category.title} to={category.to} className="home-category">
+                <span className="home-category__head">
+                  <span className="home-category__title">{category.title}</span>
+                  {count !== null && count !== undefined ? (
+                    <span className="home-category__count">({count})</span>
+                  ) : null}
+                </span>
+                <span className={`home-category__photo${cover ? '' : ' home-category__photo--empty'}`}>
+                  {cover ? <img src={cover} alt="" loading="lazy" /> : null}
+                </span>
+              </Link>
+            )
+          })}
+        </div>
+      </section>
+
+      {/* Почему выбирают — Figma 3428:55292 (1920x352) */}
+      <section className="home-why" aria-labelledby="home-why-title">
+        <div className="home-why__intro">
+          <h2 id="home-why-title" className="home-section__title">Почему выбирают BAZA.sale?</h2>
+          <p className="home-section__lead">Тысячи клиентов ежемесячно находят жильё на нашей платформе</p>
+        </div>
+        <ul className="home-why__list">
+          <li>
+            <h3>Большой выбор</h3>
+            <p>Объявления, которые регулярно обновляются</p>
+          </li>
+          <li>
+            <h3>Проверенные агенты</h3>
+            <p>База проверенных риэлторов с реальными отзывами</p>
+          </li>
+          <li>
+            <h3>Удобный поиск</h3>
+            <p>Множество фильтров и карта объектов</p>
+          </li>
+        </ul>
+      </section>
+
+      {/* Промо — Figma 3428:55382 (1920x500): зелёный блок 670x500 + баннер 1040x500 */}
+      <section className="home-promo" aria-label="Разместить объект и горячие предложения">
+        <div className="home-promo__sell">
+          <h2>Хотите продать квартиру, дом или участок?</h2>
+          <p>Бесплатно разместите своё объявление на BAZA, и вы быстро найдёте покупателей</p>
+          <Link to="/publish" className="home-promo__button">Разместить объект</Link>
+        </div>
+        <div className="home-promo__sale">
+          <p className="home-promo__sale-kicker">Уникальные предложения по стоимости и комиссиям только для партнёров</p>
+          <p className="home-promo__sale-title">Горячие предложения</p>
+          <p className="home-promo__sale-word">SALE</p>
+          <p className="home-promo__sale-value">до 30%</p>
+        </div>
+      </section>
+
+      {/* Горячие предложения — Figma 3428:55605 (1920x746), 4 карточки ЖК */}
+      <section className="home-rail" aria-labelledby="home-hot-title">
+        <div className="home-rail__head">
+          <h2 id="home-hot-title" className="home-rail__title">Горячие предложения</h2>
+          <Link to="/newconstructions" className="home-rail__all">Смотреть все</Link>
+        </div>
+        {data.developments.length > 0 ? (
+          <div className="home-rail__items">
+            {data.developments.slice(0, 4).map((item) => (
+              <DevelopmentCard key={item.slug} item={item} />
+            ))}
+          </div>
+        ) : (
+          <p className="home-rail__empty">
+            {loadError ? 'Объекты сейчас не загрузились.' : 'Пока нет опубликованных жилых комплексов.'}
           </p>
-
-          <div className="home-hero__search-card figma-home-search-box">
-            <div className="home-hero__tabs figma-home-search-tabs" role="tablist" aria-label="Тип операции">
-              <Link
-                className="home-hero__tab figma-home-search-tab is-active"
-                role="tab"
-                aria-selected="true"
-                to="/newconstructions"
-              >
-                Новостройки
-              </Link>
-              <Link className="home-hero__tab figma-home-search-tab" role="tab" aria-selected="false" to="/secondary">
-                Купить вторичку
-              </Link>
-              <Link className="home-hero__tab figma-home-search-tab" role="tab" aria-selected="false" to="/rent">
-                Снять
-              </Link>
-            </div>
-            <form className="home-search figma-home-search-bar" onSubmit={submitCity} role="search" aria-label="Поиск по городу">
-              <label htmlFor="city" className="visually-hidden">Город</label>
-              <input
-                id="city"
-                name="city"
-                type="search"
-                autoComplete="address-level2"
-                value={cityInput}
-                onChange={(event) => setCityInput(event.target.value)}
-                placeholder="Например, Батуми, Тбилиси или название ЖК"
-              />
-              <button type="submit" className="figma-home-search-btn" aria-label="Найти объекты в городе">
-                Найти
-              </button>
-            </form>
-          </div>
-        </div>
+        )}
       </section>
 
-      {/* Section 2: Category Matrix (Figma 3428:55271 & 3854:69048) */}
-      <section className="figma-home-container" aria-label="Категории недвижимости">
-        <div className="figma-home-categories-grid">
-          <Link to="/newconstructions" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 21h18" />
-                <path d="M5 21V7l8-4v18" />
-                <path d="M13 9l6 3v9" />
-                <path d="M9 9h1" />
-                <path d="M9 13h1" />
-                <path d="M9 17h1" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="figma-category-card__title">Новостройки</h2>
-              <span className="figma-category-card__count">Жилые комплексы от застройщиков</span>
-            </div>
-            <span className="figma-category-card__arrow">Смотреть ЖК →</span>
-          </Link>
-
-          <Link to="/secondary" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 2l-2 2m-1.5 1.5L14 9l-3-3 1.5-1.5 4-4L21 2z" />
-                <path d="M15.5 7.5L8.5 14.5" />
-                <circle cx="6.5" cy="17.5" r="3.5" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="figma-category-card__title">Вторичка</h2>
-              <span className="figma-category-card__count">Квартиры с готовым ремонтом</span>
-            </div>
-            <span className="figma-category-card__arrow">Смотреть квартиры →</span>
-          </Link>
-
-          <Link to="/secondary?propertyType=house" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-10.5z" />
-                <path d="M9 22V12h6v10" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="figma-category-card__title">Дома и виллы</h2>
-              <span className="figma-category-card__count">Частные резиденции и таунхаусы</span>
-            </div>
-            <span className="figma-category-card__arrow">Смотреть дома →</span>
-          </Link>
-
-          <Link to="/secondary?propertyType=commercial" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l1.5-5h15L21 9v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z" />
-                <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
-                <path d="M9 22V14h6v8" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="figma-category-card__title">Коммерция</h2>
-              <span className="figma-category-card__count">Офисы, торговые площади, склады</span>
-            </div>
-            <span className="figma-category-card__arrow">Смотреть коммерцию →</span>
-          </Link>
-
-          <Link to="/secondary?propertyType=land" className="figma-category-card">
-            <div className="figma-category-card__icon" aria-hidden="true">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M8 18l4-7 4 7" />
-                <path d="M2 20l5-9 5 9" />
-                <path d="M14 20l4-5 4 5" />
-                <path d="M2 20h20" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="figma-category-card__title">Земельные участки</h2>
-              <span className="figma-category-card__count">Участки под застройку и инвестиции</span>
-            </div>
-            <span className="figma-category-card__arrow">Смотреть участки →</span>
-          </Link>
+      {/* Новые объявления квартир — Figma 3428:55845 (1920x783), 4 карточки вторички */}
+      <section className="home-rail" aria-labelledby="home-new-title">
+        <div className="home-rail__head">
+          <h2 id="home-new-title" className="home-rail__title">Новые объявления квартир</h2>
+          <Link to="/secondary" className="home-rail__all">Смотреть все</Link>
         </div>
-      </section>
-
-      {/* Section 3: Ecosystem Highlights (Figma 3428:55292) */}
-      <section className="figma-home-container" aria-label="Преимущества платформы">
-        <div className="figma-home-metrics">
-          <div className="figma-metric-item">
-            <div className="figma-metric-item__icon" aria-hidden="true">✓</div>
-            <div>
-              <div className="figma-metric-item__value">0% комиссия</div>
-              <p className="figma-metric-item__desc">Покупка новостроек напрямую по официальным ценам застройщиков</p>
-            </div>
+        {data.listings.length > 0 ? (
+          <div className="home-rail__items">
+            {data.listings.slice(0, 4).map((item) => (
+              <ListingCard key={item.slug} item={item} />
+            ))}
           </div>
-
-          <div className="figma-metric-item">
-            <div className="figma-metric-item__icon" aria-hidden="true">★</div>
-            <div>
-              <div className="figma-metric-item__value">100% проверка</div>
-              <p className="figma-metric-item__desc">Юридическая проверка документации и разрешений на строительство</p>
-            </div>
-          </div>
-
-          <div className="figma-metric-item">
-            <div className="figma-metric-item__icon" aria-hidden="true">⚡</div>
-            <div>
-              <div className="figma-metric-item__value">Экосистема BAZA</div>
-              <p className="figma-metric-item__desc">Прямой контакт с отделами продаж застройщиков и проверенными риэлторами</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Section 4: Partner Promos (Figma 3428:56103) */}
-      <section className="figma-home-container home-hero__promos" aria-label="Возможности BAZA">
-        <div className="figma-home-promos">
-          <Link className="figma-home-banner" to="/publish">
-            <div>
-              <span className="figma-home-banner__badge">Для собственников и риэлторов</span>
-              <h2 className="figma-home-banner__title">Хотите продать квартиру, дом или участок?</h2>
-              <p className="figma-home-banner__text">
-                Бесплатно разместите свое объявление на BAZA и найдите покупателей среди тысяч пользователей.
-              </p>
-            </div>
-            <span className="figma-home-banner__cta">Разместить объект →</span>
-          </Link>
-
-          <Link className="figma-home-banner figma-home-banner--green" to="/secondary">
-            <div>
-              <span className="figma-home-banner__badge">Для партнеров</span>
-              <h2 className="figma-home-banner__title">Эксклюзивные предложения от BAZA</h2>
-              <p className="figma-home-banner__text">
-                Уникальные условия инвестирования, скидки от застройщиков и партнерские комиссии.
-              </p>
-            </div>
-            <span className="figma-home-banner__cta">Смотреть предложения →</span>
-          </Link>
-        </div>
+        ) : (
+          <p className="home-rail__empty">
+            {loadError ? 'Объявления сейчас не загрузились.' : 'Пока нет опубликованных объявлений.'}
+          </p>
+        )}
       </section>
     </div>
   )

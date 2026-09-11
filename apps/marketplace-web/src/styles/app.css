@@ -88,12 +88,18 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .address { color: var(--color-ink-muted); font-size: var(--text-sm); line-height: 1.45; margin: 0; }
 .card-footer { display: flex; align-items: center; justify-content: space-between; border-top: var(--rule) solid var(--color-line); color: var(--color-ink-muted); font-size: var(--text-sm); margin-top: var(--space-3); padding-top: var(--space-3); gap: var(--space-3); }
 .arrow { color: var(--color-accent); font-size: var(--text-lg); }
-.building-placeholder { position: relative; isolation: isolate; height: 190px; overflow: hidden; background: var(--color-accent-soft); }
-.building-placeholder__sun { position: absolute; z-index: -3; top: 24px; right: 18%; width: 52px; aspect-ratio: 1; border-radius: 999px; background: var(--color-paper); opacity: 0.78; }
-.building-placeholder__tower { position: absolute; z-index: -2; bottom: 22px; display: block; width: 34%; background: var(--color-accent); box-shadow: inset 0 0 0 6px var(--color-building-window); }
-.building-placeholder__tower--left { left: 14%; height: 108px; }
-.building-placeholder__tower--right { right: 12%; height: 150px; background: var(--color-ink); }
-.building-placeholder__ground { position: absolute; z-index: -1; right: -5%; bottom: 0; left: -5%; height: 26px; border-radius: 50% 50% 0 0; background: var(--color-paper-raised); }
+/*
+ * Плейсхолдер обложки: объект без фотографии. Спокойный силуэт дома на
+ * светлом фоне вместо прежних цветных «башен» — они читались как элемент
+ * дизайна и в ряду карточек выглядели ошибкой вёрстки, а не отсутствием
+ * снимка. У публичной карточки ЖК фотографий нет вовсе (пробел API), так
+ * что этот блок сейчас виден на каждой карточке ЖК.
+ */
+.building-placeholder { position: relative; display: grid; place-items: center; height: 190px; overflow: hidden; background: var(--color-accent-soft); }
+.building-placeholder::after { content: ''; width: 56px; height: 56px; background: currentColor; color: var(--color-accent); opacity: 0.32; -webkit-mask: var(--placeholder-house) center / contain no-repeat; mask: var(--placeholder-house) center / contain no-repeat; }
+.building-placeholder__sun,
+.building-placeholder__tower,
+.building-placeholder__ground { display: none; }
 
 .state-panel { margin-top: var(--space-5); padding: var(--space-10); border: var(--rule) dashed var(--color-line); border-radius: var(--radius-md); color: var(--color-ink-muted); text-align: center; }
 .state-panel--error { color: var(--color-error); border-color: var(--color-error); background: #fef2f2; }

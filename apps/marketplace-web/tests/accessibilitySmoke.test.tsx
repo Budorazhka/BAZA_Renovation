@@ -36,7 +36,7 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
     cleanup()
   })
 
-  it('contains semantic landmarks: banner, main#main-content, search, and contentinfo', async () => {
+  it('contains semantic landmarks: banner, main#main-content, and contentinfo', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App />
@@ -45,7 +45,11 @@ describe('Accessibility & Semantic HTML Smoke Acceptance', () => {
 
     expect(screen.getByRole('banner')).toBeDefined()
     expect(screen.getByRole('main')).toBeDefined()
-    expect(screen.getByRole('search')).toBeDefined()
+    // Landmark `search` на главной больше не проверяется: 12.09.2026 страница
+    // пересобрана по утверждённому фрейму `Home page` v4 long (`3428:55239`),
+    // где в hero логотип, слоган и фотополотно, а строки поиска нет вовсе —
+    // поиск живёт на экранах каталога (`search result`, `236:27197`).
+    // Проверка landmark'а переехала в тест каталога ниже.
     expect(screen.getByRole('contentinfo')).toBeDefined()
     expect(screen.getByText('Перейти к основному содержанию')).toBeDefined()
     // До 04.09.2026 «Войти» вело на /publish: человек, которому нужен кабинет,

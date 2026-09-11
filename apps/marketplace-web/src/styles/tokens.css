@@ -50,6 +50,14 @@
   --color-error-bg: #fdf2f2;
   --color-focus: #169600;
 
+  /*
+   * Силуэт дома для обложек без фотографии (карточки ЖК, плитки категорий).
+   * Разметка URL-кодирована: незакодированные < и > внутри url() ломают
+   * разбор значения, и маска молча не применяется — блок тогда выглядит
+   * залитым прямоугольником.
+   */
+  --placeholder-house: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 21h18M5 21V9l7-5 7 5v12M10 21v-6h4v6'/%3E%3C/svg%3E");
+
   /* ==========================================================================
      Typography (Figma UI Kit: Section 40:4545 'Стили текста')
      Real font families: Comfortaa (controls, labels) and Plus Jakarta Sans (headings, numbers).

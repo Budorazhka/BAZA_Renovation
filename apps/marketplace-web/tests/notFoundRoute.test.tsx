@@ -48,7 +48,7 @@ describe('Неизвестный маршрут', () => {
 
     expect(await screen.findByRole('heading', { name: 'Такой страницы нет' })).toBeTruthy()
     // Заголовок главной на этом экране появляться не должен.
-    expect(screen.queryByRole('heading', { name: /Поиск недвижимости/ })).toBeNull()
+    expect(screen.queryByRole('heading', { name: /Лучший способ найти недвижимость/i })).toBeNull()
   })
 
   it('предлагает уйти в каталог и на главную', async () => {
@@ -70,7 +70,7 @@ describe('Неизвестный маршрут', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: /Поиск недвижимости/ })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: /Лучший способ найти недвижимость/i })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Такой страницы нет' })).toBeNull()
   })
 })

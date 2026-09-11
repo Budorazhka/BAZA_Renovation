@@ -1,468 +1,418 @@
-/* ==========================================================================
-   Figma Home Page: 3428:55239 & mob_home: 1035:18101 (MKT-SCR-001)
-   Tokens from tokens.css:
-   - Primary forest: #169600
-   - Accent purple: #7065f0
-   - Dark: #151515, Muted: #555454, Soft: #f1f7eb
-   - Radii: 10px (cards), 30px (pills), 100px (buttons/circles)
-   ========================================================================== */
+/*
+ * Главная страница — вёрстка по утверждённому фрейму Figma `Home page` v4 long
+ * (`3428:55239`, 1920x5544). Размеры ниже взяты из узлов фрейма, а не подобраны
+ * на глаз: контейнер 1760 (`похожие` 1760x626), карточка ЖК 424x626, карточка
+ * вторички 424x663, hero 1920x905 с фотополотном 1920x596, категории 1920x523,
+ * промо 670+1040 из 1920.
+ *
+ * Раскладка резиновая: фиксированные ширины макета переведены в пропорции,
+ * чтобы страница держалась и на 1440, и на 375. Брейкпоинты — те же, что
+ * объявлены в DESIGN.md (680px и ниже).
+ */
 
-.figma-home {
+.home {
   display: flex;
   flex-direction: column;
-  gap: 64px;
-  padding-bottom: 64px;
+  gap: clamp(48px, 5vw, 96px);
+  padding-bottom: clamp(56px, 6vw, 112px);
 }
 
-@media (max-width: 768px) {
-  .figma-home {
-    gap: 40px;
-    padding-bottom: 40px;
-  }
-}
+/* ============================================================ hero 3851:56175 */
 
-.figma-home-container {
-  max-width: 1740px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 0 24px;
-}
-
-@media (max-width: 768px) {
-  .figma-home-container {
-    padding: 0 16px;
-  }
-}
-
-/* ==========================================================================
-   Section 1: Hero Block (Figma 1035:16926 / 3851:56175)
-   ========================================================================== */
-.figma-home-hero {
-  position: relative;
-  background: linear-gradient(135deg, #0e1e12 0%, #15291b 50%, #1a3824 100%);
-  border-radius: var(--radius-card, 10px);
-  padding: 64px 48px;
-  color: #ffffff;
-  overflow: hidden;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.12);
+.home-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: clamp(28px, 3.5vw, 62px);
+  padding-top: clamp(32px, 4vw, 64px);
+}
+
+.home-hero__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(12px, 1.5vw, 24px);
+  padding-inline: 16px;
   text-align: center;
 }
 
-@media (max-width: 768px) {
-  .figma-home-hero {
-    padding: 36px 20px;
-    border-radius: 0;
-  }
-}
-
-.figma-home-hero__bg-pattern {
-  position: absolute;
-  inset: 0;
-  opacity: 0.08;
-  background-image: radial-gradient(#ffffff 1px, transparent 1px);
-  background-size: 24px 24px;
-  pointer-events: none;
-}
-
-.figma-home-hero__eyebrow {
-  display: inline-flex;
+/* Логотип в hero — `logo` 557x180: иконка 100x100 и надпись 100px. */
+.home-hero__wordmark {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 6px 16px;
-  border-radius: var(--radius-button, 30px);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  margin-bottom: 20px;
-}
-
-.figma-home-hero__title {
-  margin: 0 0 16px;
-  font-family: var(--font-brand, 'Comfortaa', sans-serif);
-  font-size: 44px;
+  gap: clamp(8px, 1vw, 18px);
+  margin: 0;
+  color: var(--color-brand-green);
+  font-family: var(--font-display);
+  font-size: clamp(40px, 5.2vw, 100px);
   font-weight: 700;
-  line-height: 1.15;
+  line-height: 1;
   letter-spacing: -0.02em;
-  max-width: 860px;
 }
 
-.figma-home-hero__title span {
-  color: #55e236;
+.home-hero__wordmark svg {
+  width: clamp(32px, 3.8vw, 72px);
+  height: auto;
 }
 
-@media (max-width: 768px) {
-  .figma-home-hero__title {
-    font-size: 28px;
-  }
+.home-hero__wordmark-dot {
+  font-weight: 500;
 }
 
-.figma-home-hero__subtitle {
-  margin: 0 0 36px;
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.82);
-  max-width: 640px;
-  line-height: 1.5;
-}
-
-@media (max-width: 768px) {
-  .figma-home-hero__subtitle {
-    font-size: 15px;
-    margin-bottom: 24px;
-  }
-}
-
-/* Search Card in Hero (Figma 2231:25682 / 320x60) */
-.figma-home-search-box {
-  width: 100%;
-  max-width: 820px;
-  background: #ffffff;
-  border-radius: var(--radius-card, 10px);
-  padding: 8px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.figma-home-search-tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid var(--color-border-subtle, #e5e7eb);
-  padding: 4px 8px;
-}
-
-.figma-home-search-tab {
-  padding: 8px 18px;
-  border-radius: var(--radius-button, 30px);
-  font-size: 13px;
+/* Слоган — `Заголовок` 50px, #151515, в макете капсом. */
+.home-hero__slogan {
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: clamp(22px, 2.6vw, 50px);
   font-weight: 600;
-  text-decoration: none;
-  color: var(--color-neutral-secondary, #555454);
-  background: transparent;
-  transition: all 0.15s ease;
-  border: none;
-  cursor: pointer;
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+
+/* Фотополотно — `2851 1` 1920x596: во всю ширину, пропорция 1920:596. */
+.home-hero__canvas {
+  width: 100%;
+  aspect-ratio: 1920 / 596;
+  max-height: 596px;
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--color-paper);
+}
+
+.home-hero__canvas img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+/* ====================================================== категории 3428:55271 */
+
+.home-categories {
+  width: min(1760px, 100% - 32px);
+  margin-inline: auto;
 }
 
 /*
- * Селектор нарочно длиннее необходимого. Тот же элемент несёт класс
- * `home-hero__tab`, а в app.css правило `.home-hero__tab.is-active` красит
- * текст в зелёный — при равной специфичности выигрывало оно, потому что
- * app.css подключается позже. Активная вкладка получалась зелёным по зелёному:
- * плашка есть, надписи не видно.
+ * В макете пять карточек разной ширины (390/470/410/450/450) — суммарно шире
+ * полотна, то есть ряд задуман прокручиваемым. Здесь то же поведение: на
+ * широком экране пропорции макета сохраняются через flex-grow, на узком ряд
+ * прокручивается по горизонтали, а не ломает страницу.
  */
-.figma-home-search-tabs .figma-home-search-tab.is-active {
-  background: var(--color-primary-forest, #169600);
-  color: #ffffff;
-}
-
-.figma-home-search-bar {
+.home-categories__row {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px;
+  gap: clamp(12px, 1.2vw, 24px);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  padding-bottom: 8px;
 }
 
-.figma-home-search-bar input {
-  flex: 1;
-  border: none;
-  outline: none;
-  padding: 12px 16px;
-  font-size: 15px;
-  font-family: inherit;
-  color: var(--color-neutral-primary, #151515);
-}
-
-.figma-home-search-btn {
-  background: var(--color-primary-forest, #169600);
-  color: #ffffff;
-  border: none;
-  border-radius: var(--radius-card, 10px);
-  padding: 14px 28px;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  white-space: nowrap;
-}
-
-.figma-home-search-btn:hover {
-  background: #127900;
-}
-
-@media (max-width: 600px) {
-  .figma-home-search-bar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-/* ==========================================================================
-   Section 2: Categories (Figma 3428:55271 & 3854:69048)
-   ========================================================================== */
-.figma-home-categories-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-}
-
-@media (max-width: 1200px) {
-  .figma-home-categories-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .figma-home-categories-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-}
-
-@media (max-width: 480px) {
-  .figma-home-categories-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.figma-category-card {
-  position: relative;
-  background: var(--color-background-white, #ffffff);
-  border: 1px solid var(--color-border-subtle, #e5e7eb);
-  border-radius: var(--radius-card, 10px);
-  padding: 24px 20px;
+.home-category {
+  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  min-height: 220px;
-  text-decoration: none;
-  color: inherit;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  transition: all 0.2s ease;
-}
-
-.figma-category-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-  border-color: var(--color-primary-forest, #169600);
-}
-
-.figma-category-card__icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: var(--color-background-soft, #f1f7eb);
-  color: var(--color-primary-forest, #169600);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  margin-bottom: 16px;
-}
-
-.figma-category-card__title {
-  margin: 0 0 6px;
-  font-size: 18px;
-  font-weight: 700;
-  font-family: var(--font-brand, 'Comfortaa', sans-serif);
-  color: var(--color-neutral-primary, #151515);
-}
-
-.figma-category-card__count {
-  font-size: 13px;
-  color: var(--color-neutral-secondary, #555454);
-}
-
-.figma-category-card__arrow {
-  margin-top: 12px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary-forest, #169600);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-/* ==========================================================================
-   Section 3: Metrics / Ecosystem Highlights (Figma 3428:55292)
-   ========================================================================== */
-.figma-home-metrics {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  background: var(--color-background-soft, #f1f7eb);
-  border-radius: var(--radius-card, 10px);
-  padding: 36px 40px;
-}
-
-@media (max-width: 860px) {
-  .figma-home-metrics {
-    grid-template-columns: 1fr;
-    padding: 24px 20px;
-    gap: 20px;
-  }
-}
-
-.figma-metric-item {
-  display: flex;
   gap: 16px;
-  align-items: flex-start;
+  flex: 1 1 calc((100% - 4 * clamp(12px, 1.2vw, 24px)) / 5);
+  min-width: 240px;
+  min-width: 0;
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--color-paper-raised);
+  color: var(--color-ink);
+  text-decoration: none;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.figma-metric-item__icon {
+.home-category:hover,
+.home-category:focus-visible {
+  transform: translateY(-2px);
+}
+
+.home-category__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+/* Название категории 30px, счётчик 22px — `3428:55274` / `3428:55275`. */
+.home-category__title {
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.7vw, 30px);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.home-category__count {
+  color: var(--color-ink-muted);
+  font-size: clamp(16px, 1.2vw, 22px);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-category__photo {
+  display: block;
+  flex: 1;
+  aspect-ratio: 350 / 311;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--color-paper);
+}
+
+.home-category__photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+/* Категория без фотографии: тот же силуэт дома, что на карточках объектов. */
+.home-category__photo--empty {
+  display: grid;
+  place-items: center;
+}
+
+.home-category__photo--empty::after {
+  content: '';
+  display: block;
   width: 48px;
   height: 48px;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-primary-forest, #169600);
-  font-size: 20px;
-  flex-shrink: 0;
+  background: var(--color-accent);
+  opacity: 0.28;
+  -webkit-mask: var(--placeholder-house) center / contain no-repeat;
+  mask: var(--placeholder-house) center / contain no-repeat;
 }
 
-.figma-metric-item__value {
-  font-size: 24px;
-  font-weight: 700;
-  font-family: var(--font-brand, 'Comfortaa', sans-serif);
-  color: var(--color-neutral-primary, #151515);
-  margin: 0 0 4px;
-}
+/* =================================================== почему выбирают 3428:55292 */
 
-.figma-metric-item__desc {
-  font-size: 14px;
-  color: var(--color-neutral-secondary, #555454);
-  line-height: 1.4;
-  margin: 0;
-}
-
-/* ==========================================================================
-   Section 4 & 5: Showcase Section Headers
-   ========================================================================== */
-.figma-home-section-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.figma-home-section-title {
-  margin: 0;
-  font-size: 28px;
-  font-weight: 700;
-  font-family: var(--font-brand, 'Comfortaa', sans-serif);
-  color: var(--color-neutral-primary, #151515);
-}
-
-@media (max-width: 768px) {
-  .figma-home-section-title {
-    font-size: 22px;
-  }
-}
-
-.figma-home-section-link {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary-forest, #169600);
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: gap 0.15s ease;
-}
-
-.figma-home-section-link:hover {
-  gap: 10px;
-}
-
-/* ==========================================================================
-   Section 6: Promo Banners (Figma 3428:56103)
-   ========================================================================== */
-.figma-home-promos {
+.home-why {
+  width: min(1760px, 100% - 32px);
+  margin-inline: auto;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(280px, 493px) minmax(0, 978px);
+  gap: clamp(24px, 4vw, 96px);
+  align-items: start;
 }
 
-@media (max-width: 860px) {
-  .figma-home-promos {
-    grid-template-columns: 1fr;
-  }
-}
-
-.figma-home-banner {
-  background: var(--color-background-white, #ffffff);
-  border: 1px solid var(--color-border-subtle, #e5e7eb);
-  border-radius: var(--radius-card, 10px);
-  padding: 32px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  min-height: 220px;
-  text-decoration: none;
-  color: inherit;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.figma-home-banner:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
-}
-
-.figma-home-banner--green {
-  background: linear-gradient(135deg, #f1f7eb 0%, #e3f2d8 100%);
-  border-color: #cde6bb;
-}
-
-.figma-home-banner__badge {
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: var(--radius-button, 30px);
-  background: rgba(22, 150, 0, 0.12);
-  color: var(--color-primary-forest, #169600);
-  font-size: 12px;
+.home-section__title {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.6vw, 50px);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 12px;
-  align-self: flex-start;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
-.figma-home-banner__title {
+.home-section__lead {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: clamp(16px, 1.05vw, 20px);
+  line-height: 1.5;
+  max-width: 65ch;
+}
+
+.home-why__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: clamp(20px, 2vw, 40px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.home-why__list h3 {
   margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 700;
-  font-family: var(--font-brand, 'Comfortaa', sans-serif);
-  color: var(--color-neutral-primary, #151515);
+  font-family: var(--font-display);
+  font-size: clamp(18px, 1.2vw, 20px);
+  font-weight: 600;
 }
 
-.figma-home-banner__text {
-  margin: 0 0 20px;
-  font-size: 14px;
-  color: var(--color-neutral-secondary, #555454);
+.home-why__list p {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: clamp(15px, 1.05vw, 20px);
   line-height: 1.5;
 }
 
-.figma-home-banner__cta {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary-forest, #169600);
+/* ========================================================= промо 3428:55382 */
+
+.home-promo {
+  width: min(1760px, 100% - 32px);
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(280px, 670fr) minmax(0, 1040fr);
+  gap: clamp(16px, 1.6vw, 32px);
+}
+
+.home-promo__sell,
+.home-promo__sale {
+  border-radius: 8px;
+  padding: clamp(24px, 2.4vw, 48px);
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  min-height: clamp(240px, 26vw, 500px);
+}
+
+.home-promo__sell {
+  background: var(--color-brand-green);
+  color: #ffffff;
+}
+
+.home-promo__sell h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(22px, 1.7vw, 30px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.home-promo__sell p {
+  margin: 0;
+  font-size: clamp(16px, 1.25vw, 24px);
+  line-height: 1.45;
+  max-width: 40ch;
+}
+
+.home-promo__button {
+  align-self: flex-start;
+  padding: 14px 28px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--color-brand-green);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.home-promo__button:hover,
+.home-promo__button:focus-visible {
+  background: var(--color-paper);
+}
+
+.home-promo__sale {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.home-promo__sale-kicker {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: clamp(15px, 1.05vw, 20px);
+  line-height: 1.45;
+  max-width: 45ch;
+}
+
+.home-promo__sale-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.5vw, 27px);
+  font-weight: 600;
+}
+
+/* `SALE` 131px и `до 30%` 60px — самые крупные знаки макета. */
+.home-promo__sale-word {
+  margin: 0;
+  color: var(--color-brand-green);
+  font-family: var(--font-display);
+  font-size: clamp(56px, 7vw, 131px);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+}
+
+.home-promo__sale-value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.2vw, 60px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ============================== рельсы объектов 3428:55605 и 3428:55845 */
+
+.home-rail {
+  width: min(1760px, 100% - 32px);
+  margin-inline: auto;
+}
+
+.home-rail__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: clamp(16px, 1.6vw, 32px);
+}
+
+/* Заголовок рельсы 28px, ссылка «Смотреть все» 22px — `3428:55609` / `3428:55611`. */
+.home-rail__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(20px, 1.6vw, 28px);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.home-rail__all {
+  color: var(--color-brand-green);
+  font-size: clamp(16px, 1.15vw, 22px);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.home-rail__all:hover,
+.home-rail__all:focus-visible {
+  text-decoration: underline;
+}
+
+/* Четыре карточки 424px в ряд — ровно как `похожие` 1760x626 в макете. */
+.home-rail__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: clamp(16px, 1.4vw, 24px);
+}
+
+.home-rail__empty {
+  margin: 0;
+  padding: 32px;
+  border-radius: 8px;
+  background: var(--color-paper);
+  color: var(--color-ink-muted);
+  font-size: 16px;
+}
+
+/* ================================================================ адаптив */
+
+@media (max-width: 680px) {
+  .home-why {
+    grid-template-columns: 1fr;
+  }
+
+  .home-promo {
+    grid-template-columns: 1fr;
+  }
+
+  .home-hero__canvas {
+    aspect-ratio: 4 / 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-category {
+    transition: none;
+  }
+
+  .home-category:hover,
+  .home-category:focus-visible {
+    transform: none;
+  }
 }
