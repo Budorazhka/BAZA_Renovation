@@ -65,6 +65,37 @@ describe('IdentityRepository.setPasswordAndActivate', () => {
   });
 });
 
+describe('IdentityRepository.findByNormalizedLoginWithPasswordHash', () => {
+  it('запрашивает и passwordHash, и legacyPasswordHash (auth-flow должен видеть оба одним чтением)', async () => {
+    const execSpy = jest.fn().mockResolvedValue(null);
+    const selectSpy = jest.fn().mockReturnValue({ exec: execSpy });
+    const findOneSpy = jest.fn().mockReturnValue({ select: selectSpy });
+    const repository = new IdentityRepository({ findOne: findOneSpy } as never);
+
+    await repository.findByNormalizedLoginWithPasswordHash('someone@example.com');
+
+    expect(findOneSpy).toHaveBeenCalledWith({ normalizedLogin: 'someone@example.com' });
+    expect(selectSpy).toHaveBeenCalledWith('+passwordHash +legacyPasswordHash');
+  });
+});
+
+describe('IdentityRepository.upgradeLegacyPasswordHash', () => {
+  it('`[identity-legacy-migration]`: $set новый passwordHash, $unset legacyPasswordHash атомарно', async () => {
+    const id = new Types.ObjectId();
+    const execSpy = jest.fn().mockResolvedValue({ modifiedCount: 1 });
+    const updateOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+    const repository = new IdentityRepository({ updateOne: updateOneSpy } as never);
+
+    await repository.upgradeLegacyPasswordHash(id, 'new-argon2-hash');
+
+    // Только пока старый хеш ещё на месте: пароль, сменённый параллельно, не затирается.
+    expect(updateOneSpy).toHaveBeenCalledWith(
+      { _id: id, legacyPasswordHash: { $exists: true } },
+      { $set: { passwordHash: 'new-argon2-hash' }, $unset: { legacyPasswordHash: 1 } },
+    );
+  });
+});
+
 describe('IdentityRepository.findByNormalizedLogin', () => {
   it('ищет без пароля (не auth-путь, existence-check)', async () => {
     const execSpy = jest.fn().mockResolvedValue(null);

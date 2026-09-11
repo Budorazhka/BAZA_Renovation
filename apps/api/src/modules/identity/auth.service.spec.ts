@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import * as argon2 from 'argon2';
+import * as bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
 import { AuthService } from './auth.service';
 import { ErrorCode } from '../../shared/errors/error-codes';
@@ -150,6 +151,135 @@ describe('AuthService.login', () => {
     await expect(
       service.login({ login: identity.normalizedLogin, password: 'anything', audience: 'marketplace' }),
     ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.AUTH_INVALID_CREDENTIALS }));
+  });
+
+  /**
+   * `[identity-legacy-migration]`: passwordHash отсутствует (Identity
+   * импортирована из старой системы), legacyPasswordHash есть — bcrypt-
+   * проверка успешна, апгрейд на argon2 должен произойти прозрачно, без
+   * дополнительного шага со стороны пользователя.
+   */
+  it('legacy bcrypt логин: успешен, апгрейдит на argon2 и очищает legacyPasswordHash', async () => {
+    const identityId = new Types.ObjectId();
+    const legacyPasswordHash = await bcrypt.hash('old-password-123', 10);
+    const identity = {
+      _id: identityId,
+      normalizedLogin: 'legacy@example.com',
+      passwordHash: undefined,
+      legacyPasswordHash,
+      status: 'active',
+      twoFactorMethod: 'none',
+    };
+    const upgradeLegacyPasswordHashSpy = jest.fn().mockResolvedValue(undefined);
+    const createSessionSpy = jest.fn().mockResolvedValue({ token: 'raw-token', expiresAt: new Date() });
+
+    const service = new AuthService(
+      {
+        findByNormalizedLoginWithPasswordHash: jest.fn().mockResolvedValue(identity),
+        upgradeLegacyPasswordHash: upgradeLegacyPasswordHashSpy,
+      } as unknown as IdentityRepository,
+      {} as unknown as ProductAccessRepository,
+      { createSession: createSessionSpy } as unknown as SessionService,
+    );
+
+    const result = await service.login({
+      login: identity.normalizedLogin,
+      password: 'old-password-123',
+      audience: 'marketplace',
+    });
+
+    expect(result.identityId).toBe(identityId);
+    expect(upgradeLegacyPasswordHashSpy).toHaveBeenCalledTimes(1);
+    const [upgradedId, newPasswordHash] = upgradeLegacyPasswordHashSpy.mock.calls[0] as [
+      typeof identityId,
+      string,
+    ];
+    expect(upgradedId).toBe(identityId);
+    expect(newPasswordHash).not.toBe(legacyPasswordHash);
+    await expect(argon2.verify(newPasswordHash, 'old-password-123')).resolves.toBe(true);
+    expect(createSessionSpy).toHaveBeenCalled();
+  });
+
+  it('legacy bcrypt логин с неверным паролем: AUTH_INVALID_CREDENTIALS, без апгрейда и без раскрытия legacy-состояния', async () => {
+    const legacyPasswordHash = await bcrypt.hash('old-password-123', 10);
+    const identity = {
+      _id: new Types.ObjectId(),
+      normalizedLogin: 'legacy@example.com',
+      passwordHash: undefined,
+      legacyPasswordHash,
+      status: 'active',
+      twoFactorMethod: 'none',
+    };
+    const upgradeLegacyPasswordHashSpy = jest.fn();
+
+    const service = new AuthService(
+      {
+        findByNormalizedLoginWithPasswordHash: jest.fn().mockResolvedValue(identity),
+        upgradeLegacyPasswordHash: upgradeLegacyPasswordHashSpy,
+      } as unknown as IdentityRepository,
+      {} as unknown as ProductAccessRepository,
+      { createSession: jest.fn() } as unknown as SessionService,
+    );
+
+    await expect(
+      service.login({ login: identity.normalizedLogin, password: 'wrong-password', audience: 'marketplace' }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.AUTH_INVALID_CREDENTIALS }));
+
+    expect(upgradeLegacyPasswordHashSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['не-bcrypt хеш, на котором bcryptjs бросает', `$2x$10$${'a'.repeat(53)}`],
+    ['md5 вместо bcrypt', 'e10adc3949ba59abbe56e057f20f883e'],
+  ])('legacy-хеш другого формата (%s): AUTH_INVALID_CREDENTIALS, а не 500', async (_label, legacyPasswordHash) => {
+    const upgradeLegacyPasswordHashSpy = jest.fn();
+    const service = new AuthService(
+      {
+        findByNormalizedLoginWithPasswordHash: jest.fn().mockResolvedValue({
+          _id: new Types.ObjectId(),
+          normalizedLogin: 'legacy@example.com',
+          passwordHash: undefined,
+          legacyPasswordHash,
+          status: 'active',
+          twoFactorMethod: 'none',
+        }),
+        upgradeLegacyPasswordHash: upgradeLegacyPasswordHashSpy,
+      } as unknown as IdentityRepository,
+      {} as unknown as ProductAccessRepository,
+      { createSession: jest.fn() } as unknown as SessionService,
+    );
+
+    await expect(
+      service.login({ login: 'legacy@example.com', password: 'anything', audience: 'marketplace' }),
+    ).rejects.toMatchObject(expect.objectContaining({ code: ErrorCode.AUTH_INVALID_CREDENTIALS }));
+    expect(upgradeLegacyPasswordHashSpy).not.toHaveBeenCalled();
+  });
+
+  it('обычный argon2-логин не затронут: legacyPasswordHash игнорируется, если passwordHash уже задан', async () => {
+    const identity = await makeIdentity();
+    const upgradeLegacyPasswordHashSpy = jest.fn();
+    const createSessionSpy = jest.fn().mockResolvedValue({ token: 'raw-token', expiresAt: new Date() });
+
+    const service = new AuthService(
+      {
+        findByNormalizedLoginWithPasswordHash: jest
+          .fn()
+          .mockResolvedValue({ ...identity, legacyPasswordHash: await bcrypt.hash('irrelevant', 10) }),
+        upgradeLegacyPasswordHash: upgradeLegacyPasswordHashSpy,
+      } as unknown as IdentityRepository,
+      { hasActiveAccess: jest.fn() } as unknown as ProductAccessRepository,
+      { createSession: createSessionSpy } as unknown as SessionService,
+    );
+
+    const result = await service.login({
+      login: identity.normalizedLogin,
+      password: 'correct-horse-battery-staple',
+      audience: 'marketplace',
+    });
+
+    expect(result.identityId).toBe(identity._id);
+    expect(upgradeLegacyPasswordHashSpy).not.toHaveBeenCalled();
+    expect(createSessionSpy).toHaveBeenCalled();
   });
 
   it('twoFactorMethod !== none: AUTH_2FA_REQUIRED, session НЕ создаётся', async () => {

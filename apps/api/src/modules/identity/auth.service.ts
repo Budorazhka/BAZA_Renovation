@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { ClientSession, Types } from 'mongoose';
 import * as argon2 from 'argon2';
+import * as bcrypt from 'bcryptjs';
 import { AppException } from '../../shared/errors/app-exception';
 import { ErrorCode } from '../../shared/errors/error-codes';
 import { IdentityRepository } from './repository/identity.repository';
@@ -45,21 +46,58 @@ export class AuthService {
     const normalizedLogin = login.trim().toLowerCase();
     const identity = await this.identityRepository.findByNormalizedLoginWithPasswordHash(normalizedLogin);
 
-    if (!identity || identity.status !== 'active' || !identity.passwordHash) {
+    if (!identity || identity.status !== 'active' || (!identity.passwordHash && !identity.legacyPasswordHash)) {
       // Тот же AUTH_INVALID_CREDENTIALS и для "логин не существует", и для
       // "деактивирован", и для "pending_invite без пароля" — не раскрываем
       // гостю факт существования/состояния аккаунта (anti-enumeration
       // принцип). !identity.passwordHash — явная проверка (invite-flow,
       // ИЗМЕНЕНО): passwordHash теперь optional на схеме, argon2.verify(
       // undefined, ...) не самодостаточная защита, упала бы с TypeError,
-      // не с ожидаемым false.
+      // не с ожидаемым false. legacyPasswordHash расширяет то же условие
+      // (ИЗМЕНЕНО, identity-legacy-migration) — Identity без обоих хешей
+      // не может пройти ни одним путём ниже.
       throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS, 'Invalid login or password');
     }
 
-    const passwordValid = await argon2.verify(identity.passwordHash, password);
-    if (!passwordValid) {
+    if (identity.passwordHash) {
+      const passwordValid = await argon2.verify(identity.passwordHash, password);
+      if (!passwordValid) {
+        throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS, 'Invalid login or password');
+      }
+      return identity;
+    }
+
+    // `[identity-legacy-migration]`: passwordHash отсутствует, но
+    // legacyPasswordHash есть — Identity импортирована из старой системы
+    // (bcrypt) и ещё ни разу не логинилась здесь. Проверяем bcrypt'ом,
+    // не argon2 — старый хеш в принципе не пройдёт argon2.verify (другой
+    // формат), это не альтернативная попытка того же пароля, а другой
+    // алгоритм хеширования той же сущности "правильный пароль".
+    //
+    // Что старая система хеширует именно bcrypt — ПРЕДПОЛОЖЕНИЕ (11.09.2026),
+    // не проверено на копии базы: см. docs/operations/legacy-migration.md.
+    // Хеш другого формата bcryptjs либо отклоняет (false), либо бросает
+    // («Invalid salt revision» на `$2x$`) — второе без try/catch стало бы 500
+    // вместо «неверный логин или пароль».
+    let legacyPasswordValid = false;
+    try {
+      legacyPasswordValid = await bcrypt.compare(password, identity.legacyPasswordHash!);
+    } catch {
+      legacyPasswordValid = false;
+    }
+    if (!legacyPasswordValid) {
+      // Тот же AUTH_INVALID_CREDENTIALS, что и обычный неверный пароль —
+      // не раскрываем гостю, что аккаунт находится в переходном
+      // legacy-состоянии (тот же non-disclosure принцип, что и у
+      // pending_invite выше).
       throw new AppException(ErrorCode.AUTH_INVALID_CREDENTIALS, 'Invalid login or password');
     }
+
+    // Успешная legacy-проверка — единственный момент, когда Identity
+    // переходит на argon2 необратимо: fallback-ветка выше для неё больше
+    // недостижима на следующем логине (passwordHash уже будет задан).
+    const passwordHash = await argon2.hash(password);
+    await this.identityRepository.upgradeLegacyPasswordHash(identity._id, passwordHash);
 
     return identity;
   }

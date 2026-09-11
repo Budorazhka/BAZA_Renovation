@@ -49,6 +49,26 @@ export class ListingDocument extends Document {
   @Prop()
   lastConfirmedAt?: Date;
 
+  /**
+   * `[listing-legacy-migration]`: id объявления вторичного рынка в старой
+   * системе — ключ идемпотентности для будущего одноразового скрипта
+   * переноса, тот же принцип, что lead.schema.ts::legacyId. Опционально —
+   * только у мигрированных объявлений оно есть, обычная публикация через
+   * ERP/marketplace-visitka его никогда не заполняет.
+   *
+   * Индекс — глобальный unique (не составной с publisherScope):
+   * publisherScope — discriminated union (`organization` |
+   * `marketplace_account`, см. @baza/tenant-scope), а не единый плоский
+   * organizationId-ключ, как у Lead/Development/Building/Unit — составную
+   * scoping-пару, которую lead.schema.ts строит из organizationId, здесь
+   * нельзя воспроизвести тем же способом (два разных возможных поля scope
+   * вместо одного). Глобальная уникальность legacyId по одиночному полю не
+   * зависит от формы scope и `sparse:true` для одиночного поля безопасен
+   * (не подвержен ловушке compound-индекса из lead.schema.ts).
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
   /** Дата последней правки. Отсутствует у объявлений, которые ни разу не правили. */
   declare updatedAt?: Date;
@@ -56,6 +76,7 @@ export class ListingDocument extends Document {
 
 export const ListingSchema = SchemaFactory.createForClass(ListingDocument);
 ListingSchema.index({ 'publisherScope.organizationId': 1 }, { sparse: true });
+ListingSchema.index({ legacyId: 1 }, { unique: true, sparse: true });
 // Owner/realtor marketplace publishing wizard: обслуживает
 // findByIdForIdentity/listForAssetIdentity — та же sparse-стратегия, что
 // organizationId-индекс выше.

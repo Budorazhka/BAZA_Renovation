@@ -34,6 +34,26 @@ export class IdentityDocument extends Document {
   @Prop({ select: false })
   passwordHash?: string;
 
+  /**
+   * `[identity-legacy-migration]`: bcrypt-хеш пароля, унаследованный из
+   * старой системы (здесь — argon2, см. auth.service.ts::verifyCredentials).
+   * Что там именно bcrypt — предположение, не проверенное на копии базы
+   * (docs/operations/legacy-migration.md). Отдельное поле, НЕ переиспользует
+   * `passwordHash` — формат хеша (bcrypt vs argon2) должен быть однозначен
+   * по имени поля, а не определяться эвристикой над содержимым строки.
+   * `select:false` по тому же принципу, что `passwordHash` выше — не
+   * должен утекать в обычные find/toJSON.
+   *
+   * Существует только в переходном окне после одноразового импорта
+   * мигрированной Identity и ДО первого успешного логина владельца этим
+   * старым паролем: verifyCredentials переносит его в `passwordHash`
+   * (argon2) при первой успешной bcrypt-проверке и удаляет это поле —
+   * fallback-путь срабатывает не больше одного раза на Identity, дальше
+   * она полностью на argon2, как и любая обычная Identity.
+   */
+  @Prop({ select: false })
+  legacyPasswordHash?: string;
+
   @Prop({ required: true, enum: ['active', 'deactivated', 'pending_invite'], default: 'active' })
   status!: IdentityStatus;
 
@@ -43,7 +63,31 @@ export class IdentityDocument extends Document {
   @Prop()
   deactivatedAt?: Date;
 
+  /**
+   * `[identity-legacy-migration]`: id учётной записи в старой системе —
+   * ключ идемпотентности для будущего одноразового скрипта переноса.
+   * Старая система хранила ДВЕ разных коллекции пользователей (platform +
+   * CRM), которые здесь сливаются в одну Identity — при повторном прогоне
+   * импорта скрипт обязан находить уже созданную Identity по legacyId и
+   * обновлять её, а не заводить дубль (тот же принцип, что
+   * lead.schema.ts::legacyId). Опционально — только у мигрированных
+   * Identity оно есть, обычная регистрация (registerIdentity/
+   * findOrCreatePendingIdentity) его никогда не заполняет.
+   *
+   * Индекс — глобальный unique (не составной, `sparse:true` безопасен):
+   * Identity, в отличие от Lead, не имеет organizationId (не tenant-scoped
+   * сущность, см. докстринг класса выше) — глобальная уникальность login'а
+   * здесь и так норма (см. normalizedLogin). `sparse` для одиночного поля
+   * не подвержен ловушке составного индекса из lead.schema.ts (там
+   * `sparse` ломался из-за ВТОРОГО поля индекса, всегда присутствующего) —
+   * здесь поле в индексе одно, `sparse` просто пропускает документы без
+   * legacyId.
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
 export const IdentitySchema = SchemaFactory.createForClass(IdentityDocument);
+IdentitySchema.index({ legacyId: 1 }, { unique: true, sparse: true });

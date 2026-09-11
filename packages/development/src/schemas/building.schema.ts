@@ -48,6 +48,20 @@ export class BuildingDocument extends Document {
   @Prop({ type: PolygonSchema, required: false })
   polygon?: GeoPolygon;
 
+  /**
+   * `[building-legacy-migration]`: id корпуса (EstateBuilding) в старой
+   * системе — ключ идемпотентности для будущего одноразового скрипта
+   * переноса, тот же принцип, что lead.schema.ts::legacyId. Опционально —
+   * только у мигрированных корпусов оно есть.
+   *
+   * `partialFilterExpression`, НЕ `sparse:true` — та же причина, что
+   * development.schema.ts::legacyId (composite sparse индекс на паре, где
+   * organizationId присутствует всегда, индексирует любой немигрированный
+   * Building с `legacyId: null` и роняет E11000 на втором таком корпусе).
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
@@ -55,3 +69,7 @@ export const BuildingSchema = SchemaFactory.createForClass(BuildingDocument);
 
 BuildingSchema.index({ developmentId: 1 });
 BuildingSchema.index({ organizationId: 1 });
+BuildingSchema.index(
+  { organizationId: 1, legacyId: 1 },
+  { unique: true, partialFilterExpression: { legacyId: { $exists: true } } },
+);

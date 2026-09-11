@@ -81,6 +81,21 @@ export class UnitDocument extends Document {
   @Prop({ required: true, default: 0 })
   version!: number;
 
+  /**
+   * `[unit-legacy-migration]`: id объекта (EstateNewconstructionsApartment/
+   * EstateApartment) в старой системе — ключ идемпотентности для будущего
+   * одноразового скрипта переноса, тот же принцип, что
+   * lead.schema.ts::legacyId. Опционально — только у мигрированных юнитов
+   * оно есть.
+   *
+   * `partialFilterExpression`, НЕ `sparse:true` — та же причина, что
+   * development.schema.ts::legacyId (composite sparse индекс на паре, где
+   * organizationId присутствует всегда, индексирует любой немигрированный
+   * Unit с `legacyId: null` и роняет E11000 на втором таком юните).
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
@@ -90,3 +105,7 @@ UnitSchema.index({ buildingId: 1, kind: 1, status: 1 });
 UnitSchema.index({ floorId: 1 });
 UnitSchema.index({ organizationId: 1, status: 1 });
 UnitSchema.index({ floorPlanId: 1 });
+UnitSchema.index(
+  { organizationId: 1, legacyId: 1 },
+  { unique: true, partialFilterExpression: { legacyId: { $exists: true } } },
+);

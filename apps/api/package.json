@@ -36,6 +36,7 @@
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/platform-fastify": "^11.2.3",
     "argon2": "^0.41.1",
+    "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "exceljs": "^4.4.0",

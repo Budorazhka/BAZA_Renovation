@@ -115,6 +115,25 @@ export class DevelopmentDocument extends Document {
   @Prop({ required: true, default: 0 })
   version!: number;
 
+  /**
+   * `[development-legacy-migration]`: id ЖК (Estate) в старой системе —
+   * ключ идемпотентности для будущего одноразового скрипта переноса, тот
+   * же принцип, что lead.schema.ts::legacyId. Опционально — только у
+   * мигрированных ЖК оно есть, обычное создание Development через ERP его
+   * никогда не заполняет.
+   *
+   * Индекс ниже — `partialFilterExpression`, НЕ `sparse:true`, по той же
+   * причине, что задокументирована в lead.schema.ts: составной `sparse`
+   * индекс на `{organizationId, legacyId}` индексировал бы КАЖДЫЙ
+   * Development организации (organizationId присутствует всегда) с
+   * `legacyId: null`, и второй немигрированный Development той же
+   * организации падал бы на E11000. `partialFilterExpression:
+   * {legacyId: {$exists: true}}` индексирует только документы, где поле
+   * реально установлено.
+   */
+  @Prop({ required: false })
+  legacyId?: string;
+
   declare createdAt: Date;
 }
 
@@ -123,3 +142,7 @@ export const DevelopmentSchema = SchemaFactory.createForClass(DevelopmentDocumen
 DevelopmentSchema.index({ organizationId: 1, status: 1 });
 DevelopmentSchema.index({ 'location.geo': '2dsphere' });
 DevelopmentSchema.index({ 'location.city': 1, status: 1 });
+DevelopmentSchema.index(
+  { organizationId: 1, legacyId: 1 },
+  { unique: true, partialFilterExpression: { legacyId: { $exists: true } } },
+);
