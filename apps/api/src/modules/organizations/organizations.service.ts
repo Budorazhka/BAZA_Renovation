@@ -497,20 +497,27 @@ export class OrganizationsService {
    * teamApi.ts::assignOccupant(positionId, {name, email, loginEmail, phone?,
    * telegram?}) — email-based invite-flow, обёртка над уже существующим
    * assignOccupant(identityId), не дублирует его транзакционную логику.
-   * Two-phase: (1) резолвит email в identityId ВНЕ транзакции через
-   * AuthService.findOrCreatePendingIdentity (создание Identity — коллекция
-   * Identity-модуля, ADR-001 модульная граница, тот же принцип, что
-   * grantErpAccess ПОСЛЕ коммита в других командах этого файла — здесь
-   * ДО, потому что assignOccupant ниже требует уже существующий
-   * identityId как обязательный параметр); (2) делегирует assignOccupant,
-   * которая делает саму transactional работу (assignment+audit+outbox).
+   * Identity резолвится ВНЕ транзакции через AuthService.findOrCreatePendingIdentity
+   * (создание Identity — коллекция Identity-модуля, ADR-001 модульная
+   * граница, тот же принцип, что grantErpAccess ПОСЛЕ коммита в других
+   * командах этого файла — здесь ДО, потому что assignOccupant ниже требует
+   * уже существующий identityId как обязательный параметр).
    *
-   * Для НОВОЙ identity (isNew:true) — создаёт Invitation с одноразовым
-   * токеном (TTL 7 дней) ПОСЛЕ успешного assignOccupant — приглашённый
-   * получает доступ к позиции сразу (assignOccupant уже выполнил grantErpAccess),
-   * но залогиниться не может, пока не поставит пароль через
-   * POST /invite/:token/activate (login() отклоняет pending_invite Identity
-   * явно, см. auth.service.ts).
+   * assignOccupant и (для новой identity) создание Invitation — ОДНОЙ
+   * транзакцией: обе коллекции принадлежат Organizations, ADR-001 здесь не
+   * нарушается. ИСПРАВЛЕНО 11.09.2026: раньше Invitation создавался вторым,
+   * не связанным шагом после уже закоммиченного assignOccupant — падение
+   * между ними оставляло занятую позицию с грантами и ERP-доступом, но без
+   * Invitation, то есть без способа поставить пароль и войти (тот же класс
+   * ошибки, что уже был исправлен для createOccupiedPosition, см.
+   * team-user-atomicity.md). Теперь оба шага в одной сессии: либо оба, либо
+   * ни одного.
+   *
+   * Для НОВОЙ identity (isNew:true) — Invitation с одноразовым токеном (TTL
+   * 7 дней). Приглашённый получает доступ к позиции сразу (grantErpAccess —
+   * после коммита, ниже), но залогиниться не может, пока не поставит пароль
+   * через POST /invite/:token/activate (login() отклоняет pending_invite
+   * Identity явно, см. auth.service.ts).
    */
   async assignOccupantByEmail(params: {
     positionId: Types.ObjectId;
@@ -523,35 +530,52 @@ export class OrganizationsService {
   }): Promise<{ assignmentId: Types.ObjectId; linkedExisting: boolean; inviteToken: string | null; inviteTokenExpiresAt: Date | null }> {
     const { identityId, isNew } = await this.authService.findOrCreatePendingIdentity(params.loginEmail);
 
-    const assignmentId = await this.assignOccupant({
-      positionId: params.positionId,
-      identityId,
-      occupantDisplayName: params.name,
-      actorIdentityId: params.actorIdentityId,
-      expectedOrganizationId: params.expectedOrganizationId,
-      correlationId: params.correlationId,
-    });
-
-    if (!isNew) {
-      return { assignmentId, linkedExisting: true, inviteToken: null, inviteTokenExpiresAt: null };
-    }
-
     // Сырой токен — только в ответе клиенту (менеджер копирует ссылку) и в
     // теле письма/чата, никогда не в БД (та же причина, что sessionToken/
     // hashed cookie-паттерн в SessionService) — hash сравнивается на
-    // activate, не сырой токен.
+    // activate, не сырой токен. Генерируется до транзакции: чистая функция,
+    // не даёт транзакции ничего, кроме повода быть длиннее.
     const rawToken = randomBytes(32).toString('hex');
     const tokenHash = createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
-    await this.invitationRepository.create({
-      organizationId: params.expectedOrganizationId,
-      positionId: params.positionId,
-      identityId,
-      tokenHash,
-      email: params.email,
-      expiresAt,
+    const assignmentId = await runInTransaction(this.connection, async (session) => {
+      const id = await this.assignOccupant({
+        positionId: params.positionId,
+        identityId,
+        occupantDisplayName: params.name,
+        actorIdentityId: params.actorIdentityId,
+        expectedOrganizationId: params.expectedOrganizationId,
+        correlationId: params.correlationId,
+        session,
+      });
+
+      if (isNew) {
+        await this.invitationRepository.create(
+          {
+            organizationId: params.expectedOrganizationId,
+            positionId: params.positionId,
+            identityId,
+            tokenHash,
+            email: params.email,
+            expiresAt,
+          },
+          session,
+        );
+      }
+
+      return id;
     });
+
+    // ProductAccess — коллекция Identity-модуля, поэтому после коммита, а не
+    // внутри него (ADR-001). assignOccupant с переданной session этот шаг
+    // сама пропускает (см. её комментарий про params.session) и оставляет
+    // его вызывающему — тот же паттерн, что createOccupiedPosition.
+    await this.authService.grantErpAccess(identityId);
+
+    if (!isNew) {
+      return { assignmentId, linkedExisting: true, inviteToken: null, inviteTokenExpiresAt: null };
+    }
 
     return { assignmentId, linkedExisting: false, inviteToken: rawToken, inviteTokenExpiresAt: expiresAt };
   }

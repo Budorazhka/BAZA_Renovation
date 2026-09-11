@@ -118,7 +118,7 @@ permission-matrix.md», часть оснований уже перенесен�
 - [admin-control-plane.md](operations/admin-control-plane.md) — панель: аккаунты, гранты, аудит.
 - [admin-duplicate-candidates-review.md](operations/admin-duplicate-candidates-review.md) — очередь модерации дублей.
 - [first-super-admin-bootstrap.md](operations/first-super-admin-bootstrap.md) — создание первого супер-админа.
-- [team-user-atomicity.md](operations/team-user-atomicity.md) — создание сотрудника: позиция, гранты, назначение и профиль одной транзакцией.
+- [team-user-atomicity.md](operations/team-user-atomicity.md) — создание сотрудника: позиция, гранты, назначение и профиль одной транзакцией; invite-flow (assignOccupantByEmail) — назначение и Invitation тоже одной транзакцией.
 - [legacy-migration.md](operations/legacy-migration.md) — перенос со старой системы: пока только лиды и заготовка (поля старых id, вход по старому паролю с перехешем); ждёт копию старой базы.
 - [default-grants-backfill.md](operations/default-grants-backfill.md) — разовая команда доливает стартовые гранты ролей в существующие должности; отозванное вручную и суженное не трогает. Запускать после релиза с новыми грантами и после переноса организаций.
 
