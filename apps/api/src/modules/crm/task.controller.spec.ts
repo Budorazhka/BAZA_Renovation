@@ -37,6 +37,7 @@ describe('TaskController', () => {
       expect(listTasks).toHaveBeenCalledWith({
         organizationId,
         assignedPositionId: positionId,
+        callerPositionId: positionId,
         leadId: undefined,
         contactId: undefined,
         status: undefined,
@@ -63,6 +64,7 @@ describe('TaskController', () => {
       expect(listTasks).toHaveBeenCalledWith({
         organizationId,
         assignedPositionId: undefined,
+        callerPositionId: positionId,
         leadId: undefined,
         contactId: undefined,
         status: undefined,
@@ -110,6 +112,7 @@ describe('TaskController', () => {
         taskId,
         organizationId,
         assignedPositionId: positionId,
+        callerPositionId: positionId,
       });
     });
   });

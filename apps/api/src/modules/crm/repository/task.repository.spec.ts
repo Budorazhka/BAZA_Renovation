@@ -74,6 +74,26 @@ describe('TaskRepository', () => {
 
       expect(findOneSpy).toHaveBeenCalledWith({ _id: id, organizationId }, null, { session: fakeSession });
     });
+
+    // ИСПРАВЛЕНО 11.09.2026 (task-model-audit-followup.md): callerPositionId
+    // — новый необязательный последний параметр, не передаётся путями записи
+    // (только getTask) — см. докстринг у самого метода.
+    it('applies personal-task visibility $or only when callerPositionId is passed', async () => {
+      const id = new Types.ObjectId();
+      const organizationId = new Types.ObjectId();
+      const callerPositionId = new Types.ObjectId();
+      const execSpy = jest.fn().mockResolvedValue({ _id: id });
+      const findOneSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const repository = new TaskRepository({ findOne: findOneSpy } as never);
+
+      await repository.findByIdForOrganization(id, organizationId, undefined, undefined, callerPositionId);
+
+      expect(findOneSpy).toHaveBeenCalledWith({
+        _id: id,
+        organizationId,
+        $or: [{ taskCategory: { $ne: 'personal' } }, { assignedPositionId: callerPositionId }],
+      });
+    });
   });
 
   describe('listForOrganization', () => {
@@ -81,6 +101,7 @@ describe('TaskRepository', () => {
       const organizationId = new Types.ObjectId();
       const cursor = new Types.ObjectId();
       const assignedPositionId = new Types.ObjectId();
+      const callerPositionId = new Types.ObjectId();
       const leadId = new Types.ObjectId();
       const dueBefore = new Date();
 
@@ -92,6 +113,7 @@ describe('TaskRepository', () => {
 
       await repository.listForOrganization(organizationId, {
         assignedPositionId,
+        callerPositionId,
         leadId,
         status: 'open',
         dueBefore,
@@ -106,9 +128,33 @@ describe('TaskRepository', () => {
         assignedPositionId,
         leadId,
         dueAt: { $lte: dueBefore },
+        $or: [{ taskCategory: { $ne: 'personal' } }, { assignedPositionId: callerPositionId }],
       });
       expect(sortSpy).toHaveBeenCalledWith({ _id: -1 });
       expect(limitSpy).toHaveBeenCalledWith(21);
+    });
+
+    // ИСПРАВЛЕНО 11.09.2026 (task-model-audit-followup.md, седьмое
+    // наблюдение аудита): личные задачи чужого исполнителя видимы не были —
+    // сервер отдавал их целиком, видимость держал только клиент.
+    it('исключает чужие personal-задачи даже без own-scope сужения (organization-scope грант)', async () => {
+      const organizationId = new Types.ObjectId();
+      const callerPositionId = new Types.ObjectId();
+
+      const execSpy = jest.fn().mockResolvedValue([]);
+      const limitSpy = jest.fn().mockReturnValue({ exec: execSpy });
+      const sortSpy = jest.fn().mockReturnValue({ limit: limitSpy });
+      const findSpy = jest.fn().mockReturnValue({ sort: sortSpy });
+      const repository = new TaskRepository({ find: findSpy } as never);
+
+      // Нет assignedPositionId — organization-scope грант, весь список
+      // организации без own-сужения.
+      await repository.listForOrganization(organizationId, { callerPositionId, limit: 50 });
+
+      expect(findSpy).toHaveBeenCalledWith({
+        organizationId,
+        $or: [{ taskCategory: { $ne: 'personal' } }, { assignedPositionId: callerPositionId }],
+      });
     });
   });
 

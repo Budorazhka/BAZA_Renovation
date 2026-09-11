@@ -949,6 +949,7 @@ export class CrmService {
   async listTasks(params: {
     organizationId: Types.ObjectId;
     assignedPositionId?: Types.ObjectId;
+    callerPositionId: Types.ObjectId;
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
     status?: TaskStatus;
@@ -959,6 +960,7 @@ export class CrmService {
   }): Promise<{ items: CrmTaskReadModel[]; nextCursor: string | null }> {
     const rows = await this.taskRepository.listForOrganization(params.organizationId, {
       assignedPositionId: params.assignedPositionId,
+      callerPositionId: params.callerPositionId,
       leadId: params.leadId,
       contactId: params.contactId,
       status: params.status,
@@ -985,11 +987,14 @@ export class CrmService {
     taskId: Types.ObjectId;
     organizationId: Types.ObjectId;
     assignedPositionId?: Types.ObjectId;
+    callerPositionId: Types.ObjectId;
   }): Promise<CrmTaskReadModel> {
     const task = await this.taskRepository.findByIdForOrganization(
       params.taskId,
       params.organizationId,
       params.assignedPositionId,
+      undefined,
+      params.callerPositionId,
     );
     if (!task) {
       throw new NotFoundException('Task not found');
@@ -3800,6 +3805,7 @@ export class CrmService {
     startDate: Date;
     endDate: Date;
     scopePositionId?: Types.ObjectId;
+    callerPositionId: Types.ObjectId;
   }): Promise<{ events: CrmCalendarEventReadModel[]; tasks: CrmUnifiedCalendarTaskReadModel[] }> {
     const [events, tasks] = await Promise.all([
       this.calendarEventRepository.listForRange(params.organizationId, {
@@ -3809,6 +3815,7 @@ export class CrmService {
       }),
       this.taskRepository.listForOrganization(params.organizationId, {
         assignedPositionId: params.scopePositionId,
+        callerPositionId: params.callerPositionId,
         dueAfter: params.startDate,
         dueBefore: params.endDate,
         // Практический верхний предел одного запроса объединённого вида —

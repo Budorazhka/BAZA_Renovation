@@ -81,7 +81,7 @@ permission-matrix.md», часть оснований уже перенесен�
 - [erp-tasks-live-api.md](operations/erp-tasks-live-api.md) — реестр задач ERP снят с мока: чтение, завершение и создание через Platform API.
 - [erp-tasks-mock-debt-closed.md](operations/erp-tasks-mock-debt-closed.md) — статус «В работе» стал достижим, виджет дашборда снят с мока, `hasOpenNextAction` перестал гаснуть при взятии задачи в работу.
 - [erp-tasks-actions-parity.md](operations/erp-tasks-actions-parity.md) — экран догнал сервер: взять в работу, отметить подзадачу, сменить исполнителя.
-- [task-model-audit-followup.md](operations/task-model-audit-followup.md) — три вердикта аудита применены: приоритет парой признаков, связь без дубля, провенанс только от сервера.
+- [task-model-audit-followup.md](operations/task-model-audit-followup.md) — четыре вердикта аудита применены: приоритет парой признаков, связь без дубля, провенанс только от сервера; с 11.09 видимость личных задач (`taskCategory`) проверяется на сервере (список, чтение по id, календарь, экспорт), не только клиентом.
 - [task-attachments-media-assets.md](operations/task-attachments-media-assets.md) — вложения задачи стали файлами: ссылки на подтверждённые `MediaAsset` вместо имён без файлов.
 - [erp-session-context-me.md](operations/erp-session-context-me.md) — `GET /me`: организация, позиция и права одним вызовом; реальный пользователь больше не проваливается в мок-компанию `c1`.
 - [erp-team-mock-debt-closed.md](operations/erp-team-mock-debt-closed.md) — реестр команды (TEAM-001) снят с мока: write-операции чинят битый маршрут на CRM-backend, localStorage и мок-массив убраны, KPI-контур и лиды осознанно оставлены как есть.

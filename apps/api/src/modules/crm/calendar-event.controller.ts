@@ -76,6 +76,7 @@ export class CalendarEventController {
       startDate: new Date(dto.startDate),
       endDate: new Date(dto.endDate),
       scopePositionId: await this.scopeFilterForAction(tenantContext.positionId, 'read'),
+      callerPositionId: new Types.ObjectId(tenantContext.positionId),
     });
   }
 

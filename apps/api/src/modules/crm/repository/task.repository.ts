@@ -10,6 +10,17 @@ import {
 
 export interface ListTasksFilter {
   assignedPositionId?: Types.ObjectId;
+  /**
+   * ИСПРАВЛЕНО 11.09.2026 (task-model-audit-followup.md, седьмое наблюдение
+   * аудита): личные задачи (`taskCategory: 'personal'`) видны только своему
+   * исполнителю — сервер раньше отдавал их org-wide грантам целиком,
+   * видимость держал только клиент. Отличается от `assignedPositionId` выше:
+   * тот сужает ВЕСЬ список (own-scope грант), этот — только `personal`-
+   * записи чужих исполнителей, даже при organization-scope гранте. Всегда
+   * обязателен — звонящий код обязан явно передать позицию вызывающего, не
+   * полагаться на дефолт.
+   */
+  callerPositionId: Types.ObjectId;
   leadId?: Types.ObjectId;
   contactId?: Types.ObjectId;
   status?: TaskStatus;
@@ -84,15 +95,29 @@ export class TaskRepository {
     return created!;
   }
 
+  /**
+   * `callerPositionId` — новый, необязательный, ПОСЛЕДНИЙ параметр (не
+   * трогает порядок уже существующих вызовов с `session`): передаётся
+   * только со стороны чтения (getTask), где нужна проверка видимости
+   * personal-задачи (см. ListTasksFilter.callerPositionId выше). Пути
+   * записи (updateTask/completeTask/reassignTask/changeStage) его не
+   * передают — тот же класс задачи, что own-scope конкретной записи в
+   * link-crm мессенджера: сознательно отложено, не тот же баг, что
+   * видимость в списке/чтении, см. task-model-audit-followup.md.
+   */
   async findByIdForOrganization(
     id: Types.ObjectId,
     organizationId: Types.ObjectId,
     assignedPositionId?: Types.ObjectId,
     session?: ClientSession,
+    callerPositionId?: Types.ObjectId,
   ): Promise<TaskDocument | null> {
     const filter: FilterQuery<TaskDocument> = { _id: id, organizationId };
     if (assignedPositionId) {
       filter.assignedPositionId = assignedPositionId;
+    }
+    if (callerPositionId) {
+      filter.$or = [{ taskCategory: { $ne: 'personal' } }, { assignedPositionId: callerPositionId }];
     }
     if (session) {
       return this.model.findOne(filter, null, { session }).exec();
@@ -132,6 +157,15 @@ export class TaskRepository {
       if (filter.dueAfter) dueFilter.$gte = filter.dueAfter;
       queryFilter.dueAt = dueFilter;
     }
+
+    // Личная задача чужого исполнителя не проходит, даже если
+    // filter.assignedPositionId выше не сузил список вовсе (organization-
+    // scope грант). Рабочие задачи (taskCategory !== 'personal') это условие
+    // пропускает без исключений.
+    queryFilter.$or = [
+      { taskCategory: { $ne: 'personal' } },
+      { assignedPositionId: filter.callerPositionId },
+    ];
 
     return this.model
       .find(queryFilter)

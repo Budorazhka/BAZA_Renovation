@@ -194,7 +194,13 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
    */
   async function seedTask(
     organizationId: Types.ObjectId,
-    overrides?: { title?: string; status?: string; assignedPositionId?: Types.ObjectId; leadId?: Types.ObjectId },
+    overrides?: {
+      title?: string;
+      status?: string;
+      assignedPositionId?: Types.ObjectId;
+      leadId?: Types.ObjectId;
+      taskCategory?: 'work' | 'personal';
+    },
   ): Promise<Types.ObjectId> {
     const taskId = new Types.ObjectId();
     await connection.collection('tasks').insertOne({
@@ -204,6 +210,7 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       status: overrides?.status ?? 'open',
       assignedPositionId: overrides?.assignedPositionId,
       leadId: overrides?.leadId,
+      taskCategory: overrides?.taskCategory ?? 'work',
       version: 0,
       createdAt: new Date(),
     });
@@ -927,6 +934,89 @@ describe('CRM Tasks / Next Action — HTTP Integration (AppModule)', () => {
       const byId = new Map(items.map((item) => [item.id, item.hasOpenNextAction]));
       expect(byId.get(leadWithTask.toString())).toBe(true);
       expect(byId.get(leadWithoutTask.toString())).toBe(false);
+    });
+  });
+
+  /**
+   * ИСПРАВЛЕНО 11.09.2026 (task-model-audit-followup.md, седьмое наблюдение
+   * аудита): видимость личных задач (taskCategory:'personal') держал
+   * только клиент — сервер отдавал их целиком любому organization-scope
+   * гранту (owner/administrator). Полный HTTP-путь на настоящей MongoDB —
+   * реальные PermissionGrant-документы (manager: task.read own-scope,
+   * owner: organization-scope), не моки.
+   */
+  describe('taskCategory: видимость личных задач — сервер, не только клиент', () => {
+    it('GET /tasks: owner (organization-scope) не видит личную задачу менеджера, но видит его рабочую', async () => {
+      const { cookie: ownerCookie, organizationId } = await seedOwnerSession();
+      const { positionId: managerPositionId } = await seedManagerSession(organizationId);
+      const personalTask = await seedTask(organizationId, {
+        title: 'Личное — купить подарок',
+        assignedPositionId: managerPositionId,
+        taskCategory: 'personal',
+      });
+      const workTask = await seedTask(organizationId, {
+        title: 'Позвонить клиенту',
+        assignedPositionId: managerPositionId,
+        taskCategory: 'work',
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/api/v1/tasks', headers: { cookie: ownerCookie } });
+
+      expect(res.statusCode).toBe(200);
+      const ids = (JSON.parse(res.body).items as Array<{ id: string }>).map((t) => t.id);
+      expect(ids).toContain(workTask.toString());
+      expect(ids).not.toContain(personalTask.toString());
+    });
+
+    it('GET /tasks: менеджер (own-scope) видит свою личную задачу', async () => {
+      const { organizationId } = await seedOwnerSession();
+      const { cookie: managerCookie, positionId: managerPositionId } = await seedManagerSession(organizationId);
+      const personalTask = await seedTask(organizationId, {
+        title: 'Личное — купить подарок',
+        assignedPositionId: managerPositionId,
+        taskCategory: 'personal',
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/api/v1/tasks', headers: { cookie: managerCookie } });
+
+      expect(res.statusCode).toBe(200);
+      const ids = (JSON.parse(res.body).items as Array<{ id: string }>).map((t) => t.id);
+      expect(ids).toContain(personalTask.toString());
+    });
+
+    it('GET /tasks/:taskId: owner напрямую по id не читает чужую личную задачу — 404, не раскрывает существование', async () => {
+      const { cookie: ownerCookie, organizationId } = await seedOwnerSession();
+      const { positionId: managerPositionId } = await seedManagerSession(organizationId);
+      const personalTask = await seedTask(organizationId, {
+        assignedPositionId: managerPositionId,
+        taskCategory: 'personal',
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tasks/${personalTask.toString()}`,
+        headers: { cookie: ownerCookie },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('GET /tasks/:taskId: менеджер по id читает свою личную задачу — 200', async () => {
+      const { organizationId } = await seedOwnerSession();
+      const { cookie: managerCookie, positionId: managerPositionId } = await seedManagerSession(organizationId);
+      const personalTask = await seedTask(organizationId, {
+        assignedPositionId: managerPositionId,
+        taskCategory: 'personal',
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/tasks/${personalTask.toString()}`,
+        headers: { cookie: managerCookie },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).id).toBe(personalTask.toString());
     });
   });
 });

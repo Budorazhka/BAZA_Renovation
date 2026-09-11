@@ -56,6 +56,7 @@ export class TaskController {
     return this.crmService.listTasks({
       organizationId,
       assignedPositionId,
+      callerPositionId: new Types.ObjectId(tenantContext.positionId),
       leadId: dto.leadId ? new Types.ObjectId(dto.leadId) : undefined,
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       status: dto.status,
@@ -77,6 +78,7 @@ export class TaskController {
       taskId,
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       assignedPositionId: await this.ownerFilterForAction(tenantContext.positionId, 'read'),
+      callerPositionId: new Types.ObjectId(tenantContext.positionId),
     });
   }
 

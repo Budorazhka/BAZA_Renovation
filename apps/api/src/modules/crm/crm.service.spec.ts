@@ -3324,4 +3324,32 @@ describe('CrmService.getTeamPerformanceReport', () => {
       { date: '2026-09-01', leads: 3, deals: 1, completedTasks: 4 },
     ]);
   });
+
+  // ИСПРАВЛЕНО 11.09.2026 (task-model-audit-followup.md, седьмое наблюдение
+  // аудита): объединённый календарь — тот же источник задач, что GET /tasks
+  // (TaskRepository.listForOrganization), поэтому тот же риск отдать личные
+  // задачи чужого исполнителя org-wide гранту. callerPositionId обязан дойти
+  // до репозитория, не потеряться по пути.
+  describe('getUnifiedCalendar', () => {
+    it('передаёт callerPositionId в TaskRepository.listForOrganization (видимость personal-задач)', async () => {
+      const organizationId = new Types.ObjectId();
+      const callerPositionId = new Types.ObjectId();
+      const startDate = new Date('2026-09-01T00:00:00Z');
+      const endDate = new Date('2026-09-30T00:00:00Z');
+      const listForOrganization = jest.fn().mockResolvedValue([]);
+      const listForRange = jest.fn().mockResolvedValue([]);
+
+      const service = createTestCrmService({
+        taskRepository: { listForOrganization },
+        calendarEventRepository: { listForRange },
+      });
+
+      await service.getUnifiedCalendar({ organizationId, startDate, endDate, callerPositionId });
+
+      expect(listForOrganization).toHaveBeenCalledWith(
+        organizationId,
+        expect.objectContaining({ callerPositionId }),
+      );
+    });
+  });
 });

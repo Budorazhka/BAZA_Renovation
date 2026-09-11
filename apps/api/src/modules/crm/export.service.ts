@@ -69,7 +69,7 @@ export class ExportService {
     }
 
     const ownerPositionId = await this.ownerFilter(params.positionId, permission);
-    const rows = await this.collectRows(params.entity, params.organizationId, ownerPositionId);
+    const rows = await this.collectRows(params.entity, params.organizationId, ownerPositionId, params.positionId);
 
     // Выгрузка персональных данных (телефоны, email контактов) — событие,
     // которое должно остаться в истории: кто именно и что именно выгрузил.
@@ -107,6 +107,7 @@ export class ExportService {
     entity: ExportEntity,
     organizationId: Types.ObjectId,
     ownerPositionId: Types.ObjectId | undefined,
+    callerPositionId: Types.ObjectId,
   ): Promise<XlsxCell[][]> {
     // limit+1 — чтобы отличить «ровно потолок» от «больше потолка».
     const limit = MAX_EXPORT_ROWS + 1;
@@ -128,6 +129,7 @@ export class ExportService {
         const { items } = await this.crmService.listTasks({
           organizationId,
           assignedPositionId: ownerPositionId,
+          callerPositionId,
           limit,
         });
         return this.mapRows(items, taskRow);

@@ -64,6 +64,36 @@
   [task-attachments-media-assets.md](task-attachments-media-assets.md).
 - **`reminderOffsetsMinutes`** — продуктовая развилка: подключать Notifications
   раньше плана или признать, что чипы врут; отказ от чипов меняет вид.
-- **`taskCategory`** — правило видимости личных задач держит клиент, сервер
-  отдаёт личные задачи любого сотрудника org-wide ролям. Седьмое наблюдение
-  аудита, в мою таблицу не вошло; требует серверного фильтра.
+- ~~**`taskCategory`**~~ — закрыто 11.09.2026, см. ниже.
+
+## Исправлено 11.09: видимость личных задач — сервер, не только клиент
+
+Правило видимости `taskCategory: 'personal'` держал клиент (`isMyScope` в
+`TasksPage.tsx`) — сервер отдавал личные задачи любого сотрудника целиком
+любому organization-scope гранту (`task.read`, у owner/administrator/director).
+Утечка касалась не только `GET /tasks`, но и всех мест, где список задач
+строится через `TaskRepository.listForOrganization`/`findByIdForOrganization`:
+объединённый календарь (`GET /crm/calendar/unified`) и XLSX-выгрузка задач
+(`export.run`) — выгрузка была даже опаснее прямого чтения: постоянный файл
+на диске у того, кто его скачал.
+
+Правило теперь в самом запросе к MongoDB, не в контроллере поверх готового
+списка: `taskCategory !== 'personal' OR assignedPositionId === callerPositionId`
+(`callerPositionId` — позиция вызывающего, отдельно от `assignedPositionId`
+own-scope сужения выше — то сужает весь список при own-грант, это только
+`personal`-записи чужих исполнителей, даже при organization-scope). Для
+`findByIdForOrganization` (`GET /tasks/:taskId`) — тот же принцип, но только
+на чтение: пути записи (update/complete/reassign/changeStage) `callerPositionId`
+не передают. Own-scope конкретной personal-задачи на запись — тот же класс
+вопроса, что own-scope-of-target-entity в `link-crm` мессенджера: сознательно
+отложено, не тот же баг, что видимость при чтении.
+
+Юнит: `task.repository.spec.ts` (`$or`-условие в обоих методах, включая
+кейс без own-scope сужения — organization-scope грант),
+`crm.service.spec.ts` (`callerPositionId` доходит до репозитория из
+`getUnifiedCalendar`), `task.controller.spec.ts`,
+`export.service.spec.ts`. На настоящей MongoDB (полный HTTP-путь, реальные
+PermissionGrant-документы — manager: `task.read` own-scope, owner:
+organization-scope): `tasks.integration-spec.ts` — owner не видит личную
+задачу менеджера ни в списке, ни по прямому id (404, non-disclosure), но
+видит его рабочую задачу; менеджер видит свою личную задачу в обоих случаях.

@@ -272,3 +272,18 @@
   publications-флоу). После этого пункта в billing-manual-subscriptions.md
   остаются только вопросы, требующие решения владельца/продукта.
   [billing](operations/billing-manual-subscriptions.md).
+- **Вне очереди, найдено при чтении docs/operations/*.md на предмет
+  оставшихся открытых пунктов за пределами уже пройденных сегодня модулей
+  (седьмое наблюдение аудита из task-model-audit-followup.md, не вошедшее в
+  таблицу трёх применённых вердиктов 02.09).** Видимость личных задач
+  (`taskCategory: 'personal'`) держал только клиент — сервер отдавал личные
+  задачи любого сотрудника целиком любому organization-scope гранту
+  (`task.read` у owner/administrator/director). Утечка касалась не только
+  `GET /tasks`, но и объединённого календаря и XLSX-выгрузки задач (выгрузка
+  даже опаснее — постоянный файл на диске). Правило теперь в самом
+  Mongo-запросе (`TaskRepository.listForOrganization`/
+  `findByIdForOrganization`), не в контроллере поверх готового списка.
+  Own-scope конкретной personal-задачи на запись (update/complete/reassign)
+  сознательно не тронут — отдельный, ещё не закрытый вопрос. Подтверждено
+  HTTP-тестом на настоящей MongoDB с реальными PermissionGrant-документами.
+  [task-model-audit-followup](operations/task-model-audit-followup.md).
