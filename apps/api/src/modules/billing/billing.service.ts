@@ -7,6 +7,7 @@ import { ErrorCode } from '../../shared/errors/error-codes';
 import type { TenantContext } from '../../shared/tenant/tenant-context';
 import type { AdminContext } from '../../shared/admin/admin-context';
 import { AuditService } from '../audit/audit.service';
+import { OrganizationsService } from '../organizations/organizations.service';
 import { IdempotencyService, type IdempotentReplay } from '../../shared/idempotency/idempotency.service';
 import { SubscriptionPlanRepository } from './repository/subscription-plan.repository';
 import { OrganizationSubscriptionRepository } from './repository/organization-subscription.repository';
@@ -130,6 +131,25 @@ export const DEFAULT_PLANS: Array<{
   },
 ];
 
+/**
+ * ИСПРАВЛЕНО 11.09.2026: getOrganizationSubscription раньше при первой
+ * подписке хардкодил planCode: 'agency_trial' для ЛЮБОЙ организации без
+ * подписки, включая застройщика — тот получал targetAudience:'agency' и
+ * agency-лимиты (maxActiveListings:30) вместо developer_trial (лимит 20,
+ * свой набор фич). independent_realtor соответствия «trial»-плана нет
+ * вовсе в каталоге — realtor_free (постоянно бесплатный тариф) ближайший
+ * содержательно верный вариант, не выдумка. Длительность триала (сейчас
+ * 14 дней для всех, отдельно от выбора кода плана) этой правкой намеренно
+ * не тронута — «согласованный 7-дневный trial» из мастер-плана этапа 9
+ * расходится с кодом, но это отдельный, не закрытый вопрос (см.
+ * billing-manual-subscriptions.md «Что открыто»).
+ */
+const TRIAL_PLAN_CODE_BY_ORGANIZATION_TYPE: Record<TargetAudience, string> = {
+  developer: 'developer_trial',
+  agency: 'agency_trial',
+  independent_realtor: 'realtor_free',
+};
+
 export interface OrganizationSubscriptionOverview {
   subscription: OrganizationSubscriptionDocument;
   plan: SubscriptionPlanDocument | null;
@@ -150,6 +170,7 @@ export class BillingService {
     private readonly organizationSubscriptionRepository: OrganizationSubscriptionRepository,
     private readonly billingLedgerRepository: BillingLedgerRepository,
     private readonly auditService: AuditService,
+    private readonly organizationsService: OrganizationsService,
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
@@ -209,11 +230,20 @@ export class BillingService {
     let subscription = await this.organizationSubscriptionRepository.findByOrganizationId(organizationId);
 
     if (!subscription) {
+      const organization = await this.organizationsService.getOrganizationById(organizationId);
+      // Организация не найдена — сюда доходить не должно (organizationId
+      // всегда из проверенного tenantContext/AdminContext выше по стеку),
+      // но метод не обязан сам решать эту проблему: agency_trial как и
+      // раньше, не бросать здесь несвойственную этому месту ошибку.
+      const planCode = organization
+        ? TRIAL_PLAN_CODE_BY_ORGANIZATION_TYPE[organization.type]
+        : 'agency_trial';
+
       const startedAt = new Date();
       const expiresAt = new Date(startedAt.getTime() + 14 * 24 * 60 * 60 * 1000);
       subscription = await this.organizationSubscriptionRepository.upsertSubscription({
         organizationId,
-        planCode: 'agency_trial',
+        planCode,
         status: 'trial',
         startedAt,
         expiresAt,

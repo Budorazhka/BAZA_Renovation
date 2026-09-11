@@ -234,3 +234,15 @@
   (зеркалит уже существующий `manual_ledger.write` у активации; в матрицу
   добавлена отсутствовавшая строка «Manual ledger read»).
   [billing](operations/billing-manual-subscriptions.md).
+- **Вне очереди, найдено при чтении «Что открыто» billing-manual-
+  subscriptions.md (было п.3).** Первая подписка организации хардкодила
+  `planCode: 'agency_trial'` для ЛЮБОЙ организации без подписки, включая
+  застройщика — тот получал бы agency-лимиты (`maxActiveListings:30`)
+  вместо `developer_trial` (лимит 20, свой набор фич). Код плана теперь
+  выбирается по реальному типу организации: `developer` → `developer_trial`,
+  `agency` → `agency_trial` (без изменений), `independent_realtor` →
+  `realtor_free` (в каталоге нет trial-плана для риэлтора). Длительность
+  триала (14 дней для всех) и то, что `GET /billing/subscription` создаёт
+  запись при чтении, — сознательно не тронуты, остаются открытыми вопросами.
+  Подтверждено на настоящей MongoDB (реальный `DEFAULT_PLANS`, не мок).
+  [billing](operations/billing-manual-subscriptions.md).

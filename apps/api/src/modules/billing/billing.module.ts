@@ -11,6 +11,7 @@ import { BillingController } from './billing.controller';
 import { AuthorizationModule } from '../authorization/authorization.module';
 import { AuditModule } from '../audit/audit.module';
 import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
+import { OrganizationsModule } from '../organizations/organizations.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { IdempotencyModule } from '../../shared/idempotency/idempotency.module';
     AuthorizationModule,
     AuditModule,
     IdempotencyModule,
+    OrganizationsModule,
   ],
   controllers: [BillingController],
   providers: [

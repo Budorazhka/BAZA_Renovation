@@ -4,6 +4,7 @@ import type { SubscriptionPlanRepository } from './repository/subscription-plan.
 import type { OrganizationSubscriptionRepository } from './repository/organization-subscription.repository';
 import type { BillingLedgerRepository } from './repository/billing-ledger.repository';
 import type { AuditService } from '../audit/audit.service';
+import type { OrganizationsService } from '../organizations/organizations.service';
 import type { IdempotencyService } from '../../shared/idempotency/idempotency.service';
 import type { AdminContext } from '../../shared/admin/admin-context';
 import type { TenantContext } from '../../shared/tenant/tenant-context';
@@ -39,6 +40,7 @@ describe('BillingService', () => {
   let mockSubRepo: Partial<OrganizationSubscriptionRepository>;
   let mockLedgerRepo: Partial<BillingLedgerRepository>;
   let mockAuditService: Partial<AuditService>;
+  let mockOrganizationsService: Partial<OrganizationsService>;
   let mockIdempotencyService: Partial<IdempotencyService>;
 
   beforeEach(() => {
@@ -128,6 +130,14 @@ describe('BillingService', () => {
       append: jest.fn().mockResolvedValue({} as unknown as never),
     };
 
+    // Дефолт — agency, тот же тариф, что все существующие тесты этого файла
+    // уже ожидают (agency_trial/agency_pro) — не переписывать их ради
+    // добавления параметра. Тесты на выбор кода тарифа по типу организации —
+    // отдельный describe ниже, переопределяют этот мок явно.
+    mockOrganizationsService = {
+      getOrganizationById: jest.fn().mockResolvedValue({ _id: new Types.ObjectId(), type: 'agency' }),
+    };
+
     mockIdempotencyService = {
       checkReplay: jest.fn().mockResolvedValue(null),
       record: jest.fn().mockResolvedValue(undefined),
@@ -139,6 +149,7 @@ describe('BillingService', () => {
       mockSubRepo as OrganizationSubscriptionRepository,
       mockLedgerRepo as BillingLedgerRepository,
       mockAuditService as AuditService,
+      mockOrganizationsService as OrganizationsService,
       mockIdempotencyService as IdempotencyService,
     );
   });
@@ -160,6 +171,40 @@ describe('BillingService', () => {
       expect(overview.subscription.planCode).toBe('agency_trial');
       expect(overview.subscription.status).toBe('trial');
       expect(overview.effectiveLimits.maxActiveListings).toBe(100);
+    });
+
+    // ИСПРАВЛЕНО 11.09.2026: раньше planCode для первой подписки был
+    // захардкожен в 'agency_trial' для ЛЮБОЙ организации — застройщик
+    // получал бы agency-лимиты и agency-брендинг вместо своих.
+    it('developer организация получает developer_trial, не agency_trial', async () => {
+      const orgId = new Types.ObjectId();
+      (mockOrganizationsService.getOrganizationById as jest.Mock).mockResolvedValue({ _id: orgId, type: 'developer' });
+
+      const overview = await service.getOrganizationSubscription(orgId);
+
+      expect(mockOrganizationsService.getOrganizationById).toHaveBeenCalledWith(orgId);
+      expect(overview.subscription.planCode).toBe('developer_trial');
+    });
+
+    it('independent_realtor организация получает realtor_free (в каталоге нет trial-плана для риэлтора)', async () => {
+      const orgId = new Types.ObjectId();
+      (mockOrganizationsService.getOrganizationById as jest.Mock).mockResolvedValue({
+        _id: orgId,
+        type: 'independent_realtor',
+      });
+
+      const overview = await service.getOrganizationSubscription(orgId);
+
+      expect(overview.subscription.planCode).toBe('realtor_free');
+    });
+
+    it('организация не найдена — сохраняется прежнее поведение (agency_trial), а не падает', async () => {
+      const orgId = new Types.ObjectId();
+      (mockOrganizationsService.getOrganizationById as jest.Mock).mockResolvedValue(null);
+
+      const overview = await service.getOrganizationSubscription(orgId);
+
+      expect(overview.subscription.planCode).toBe('agency_trial');
     });
 
     it('returns existing subscription if already present', async () => {
