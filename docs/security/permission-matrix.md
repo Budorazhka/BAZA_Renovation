@@ -97,7 +97,7 @@ Deny-by-default: отсутствие явного grant означает отк
 | `messenger_message.send.own` | ✓ | ✓ | ✓ | ✓ | — | — |
 | `messenger_message.send.organization` | ✓ | ✓ | ✓ | — | — | — |
 
-**Расхождение с кодом (11.09.2026).** `.own` у `messenger_message.send`, `messenger_dialog.link_crm` и у создания задачи из диалога не применяется: контроллер сужает выборку по владельцу только для чтения. Менеджер с `.own` может писать в чужие диалоги своей организации. См. [operations/messenger-skeleton.md](../operations/messenger-skeleton.md).
+**Исправлено 11.09.2026.** `.own` у `messenger_message.send`, `messenger_dialog.link_crm` и у создания задачи из диалога раньше не применялся: контроллер сужал выборку по владельцу только для чтения, менеджер с `.own` мог писать в чужие диалоги своей организации. Проверка объединена и применена ко всем операциям записи. См. [operations/messenger-skeleton.md](../operations/messenger-skeleton.md).
 
 ### 1.7. LMS (Этап 11)
 

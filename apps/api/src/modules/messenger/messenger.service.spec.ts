@@ -231,4 +231,134 @@ describe('MessengerService', () => {
       }),
     );
   });
+
+  describe('own-scope на запись: чужой диалог не даёт писать/перепривязывать/создавать задачу', () => {
+    // ИСПРАВЛЕНО 11.09.2026: раньше assignedPositionId проверялся только на
+    // чтение (getDialog/listMessages/markDialogRead) — эти четыре метода
+    // мутировали любой диалог организации независимо от own-scope.
+    const orgId = new Types.ObjectId();
+    const dialogId = new Types.ObjectId();
+    const ownerPositionId = new Types.ObjectId();
+    const otherPositionId = new Types.ObjectId();
+
+    function mockDialog(assignedPositionId: Types.ObjectId | undefined) {
+      (dialogRepo.findByIdForOrganization as jest.Mock).mockResolvedValue({
+        _id: dialogId,
+        organizationId: orgId,
+        platform: 'telegram',
+        externalChatId: 'chat-99',
+        name: 'Иван Клиент',
+        assignedPositionId,
+      });
+    }
+
+    it('sendTextMessage: диалог назначен другой позиции — NotFoundException, сообщение не создаётся', async () => {
+      mockDialog(ownerPositionId);
+
+      await expect(
+        service.sendTextMessage({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: otherPositionId,
+          text: 'Попытка обхода',
+        }),
+      ).rejects.toThrow('Диалог не найден');
+      expect(messageRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('sendTextMessage: свой диалог — own-scope не мешает отправить', async () => {
+      mockDialog(ownerPositionId);
+      (messageRepo.create as jest.Mock).mockResolvedValue({
+        _id: new Types.ObjectId(),
+        organizationId: orgId,
+        dialogId,
+        author: 'agent',
+        text: 'Добрый день!',
+        messageType: 'text',
+        status: 'queued',
+        sentAt: new Date(),
+      });
+
+      const res = await service.sendTextMessage({
+        organizationId: orgId,
+        dialogId,
+        assignedPositionId: ownerPositionId,
+        text: 'Добрый день!',
+      });
+
+      expect(res.text).toBe('Добрый день!');
+    });
+
+    it('sendTextMessage: диалог ещё не взят в работу (assignedPositionId не задан) — own-scope не блокирует', async () => {
+      mockDialog(undefined);
+      (messageRepo.create as jest.Mock).mockResolvedValue({
+        _id: new Types.ObjectId(),
+        organizationId: orgId,
+        dialogId,
+        author: 'agent',
+        text: 'Здравствуйте!',
+        messageType: 'text',
+        status: 'queued',
+        sentAt: new Date(),
+      });
+
+      await expect(
+        service.sendTextMessage({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: otherPositionId,
+          text: 'Здравствуйте!',
+        }),
+      ).resolves.toMatchObject({ text: 'Здравствуйте!' });
+    });
+
+    it('sendMediaMessage: диалог назначен другой позиции — NotFoundException', async () => {
+      mockDialog(ownerPositionId);
+
+      await expect(
+        service.sendMediaMessage({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: otherPositionId,
+          media: { fileName: 'plan.pdf', url: 'https://example.test/plan.pdf' },
+        }),
+      ).rejects.toThrow('Диалог не найден');
+      expect(messageRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('linkDialogToCrm: диалог назначен другой позиции — NotFoundException, привязка не меняется', async () => {
+      mockDialog(ownerPositionId);
+
+      await expect(
+        service.linkDialogToCrm({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: otherPositionId,
+          leadId: new Types.ObjectId(),
+          actorIdentityId: new Types.ObjectId(),
+          correlationId: 'cor-link',
+        }),
+      ).rejects.toThrow('Диалог не найден');
+      expect(dialogRepo.linkCrm).not.toHaveBeenCalled();
+    });
+
+    it('createTaskFromDialog: диалог назначен другой позиции — NotFoundException, задача не создаётся', async () => {
+      mockDialog(ownerPositionId);
+
+      await expect(
+        service.createTaskFromDialog({
+          organizationId: orgId,
+          dialogId,
+          assignedPositionId: otherPositionId,
+          actorIdentityId: new Types.ObjectId(),
+          actorPositionId: otherPositionId,
+          title: 'Попытка обхода',
+          correlationId: 'cor-task-2',
+          idempotencyKey: 'idemp-2',
+          idempotencyRequestBody: {},
+        }),
+      ).rejects.toThrow('Диалог не найден');
+      expect(crmService.createTask).not.toHaveBeenCalled();
+    });
+  });
 });

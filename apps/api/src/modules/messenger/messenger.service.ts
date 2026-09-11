@@ -356,6 +356,26 @@ export class MessengerService {
     return docs.map(toDialogReadModel);
   }
 
+  /**
+   * Own-scope сужение для диалога (ADR-002-style non-disclosure: чужой диалог
+   * той же организации — тот же `NotFoundException`, что диалог из чужой
+   * организации, не отдельный 403, который раскрывал бы сам факт его
+   * существования). Диалог без `assignedPositionId` (ещё не взят в работу)
+   * own-scope НЕ блокирует — тот же принцип, что у непринятого лида: свободные
+   * диалоги открыты любому в организации, пока их не забрал кто-то конкретный.
+   *
+   * ИСПРАВЛЕНО 11.09.2026: раньше эту проверку делал только getDialog (и
+   * то, что вызывает его — listMessages/markDialogRead) — sendTextMessage/
+   * sendMediaMessage/linkDialogToCrm/createTaskFromDialog own-scope не
+   * проверяли вовсе, хотя каждый из них читает диалог тем же
+   * findByIdForOrganization прямо перед мутацией.
+   */
+  private assertDialogOwnership(dialog: MessengerDialogDocument, assignedPositionId?: Types.ObjectId): void {
+    if (assignedPositionId && dialog.assignedPositionId && !dialog.assignedPositionId.equals(assignedPositionId)) {
+      throw new NotFoundException('Диалог не найден');
+    }
+  }
+
   async getDialog(params: {
     organizationId: Types.ObjectId;
     dialogId: Types.ObjectId;
@@ -365,9 +385,7 @@ export class MessengerService {
     if (!doc) {
       throw new NotFoundException('Диалог не найден');
     }
-    if (params.assignedPositionId && doc.assignedPositionId && !doc.assignedPositionId.equals(params.assignedPositionId)) {
-      throw new NotFoundException('Диалог не найден');
-    }
+    this.assertDialogOwnership(doc, params.assignedPositionId);
     return toDialogReadModel(doc);
   }
 
@@ -397,6 +415,7 @@ export class MessengerService {
   async sendTextMessage(params: {
     organizationId: Types.ObjectId;
     dialogId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
     senderPositionId?: Types.ObjectId;
     actorIdentityId?: Types.ObjectId;
     text: string;
@@ -409,6 +428,7 @@ export class MessengerService {
       if (!dialog) {
         throw new NotFoundException('Диалог не найден');
       }
+      this.assertDialogOwnership(dialog, params.assignedPositionId);
 
       const now = new Date();
       const message = await this.messageRepository.create(
@@ -476,6 +496,7 @@ export class MessengerService {
   async sendMediaMessage(params: {
     organizationId: Types.ObjectId;
     dialogId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
     senderPositionId?: Types.ObjectId;
     actorIdentityId?: Types.ObjectId;
     text?: string;
@@ -490,6 +511,7 @@ export class MessengerService {
       if (!dialog) {
         throw new NotFoundException('Диалог не найден');
       }
+      this.assertDialogOwnership(dialog, params.assignedPositionId);
 
       const now = new Date();
       const displayText = params.text || (params.media?.fileName ? `[Файл: ${params.media.fileName}]` : '[Вложение]');
@@ -575,6 +597,7 @@ export class MessengerService {
   async linkDialogToCrm(params: {
     organizationId: Types.ObjectId;
     dialogId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
     leadId?: Types.ObjectId;
     contactId?: Types.ObjectId;
     dealId?: Types.ObjectId;
@@ -586,6 +609,7 @@ export class MessengerService {
       if (!dialog) {
         throw new NotFoundException('Диалог не найден');
       }
+      this.assertDialogOwnership(dialog, params.assignedPositionId);
 
       const updated = await this.dialogRepository.linkCrm(
         params.dialogId,
@@ -614,6 +638,7 @@ export class MessengerService {
   async createTaskFromDialog(params: {
     organizationId: Types.ObjectId;
     dialogId: Types.ObjectId;
+    assignedPositionId?: Types.ObjectId;
     actorIdentityId: Types.ObjectId;
     actorPositionId: Types.ObjectId;
     title: string;
@@ -629,6 +654,7 @@ export class MessengerService {
     if (!dialog) {
       throw new NotFoundException('Диалог не найден');
     }
+    this.assertDialogOwnership(dialog, params.assignedPositionId);
 
     const descWithDialog = [
       params.description?.trim(),

@@ -44,15 +44,31 @@ export class MessengerController {
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
+  /**
+   * ИСПРАВЛЕНО 11.09.2026: раньше вызывался только для чтения (listDialogs/
+   * getDialog/listMessages/markDialogRead) — отправка сообщений, link-crm и
+   * создание задачи из диалога own-scope не проверяли вовсе. Менеджер с
+   * грантом `own` на `messenger_message.send`/`messenger_dialog.link_crm`
+   * (единственная роль с `own` на эти права, см. default-role-grants.ts)
+   * мог писать в чужие диалоги своей организации и перепривязывать их к
+   * другому лиду/сделке — `@RequirePermission` проверяет только сам факт
+   * наличия гранта, не то, что каждый из этих действий должен применяться к
+   * назначенному ЕМУ диалогу.
+   *
+   * `resource` — своя пара resource/action для КАЖДОГО права: own-scope на
+   * `messenger_message.send` и `messenger_dialog.link_crm` — это два разных
+   * гранта с независимым scope, не один и тот же `messenger_dialog.read`.
+   */
   private async ownerFilterForAction(
     positionId: string,
     action: string,
+    resource: string = 'messenger_dialog',
   ): Promise<Types.ObjectId | undefined> {
     const positionObjectId = new Types.ObjectId(positionId);
     const scopes = await this.policyEvaluator.matchingScopes({
       subjectType: 'position',
       subjectId: positionObjectId,
-      resource: 'messenger_dialog',
+      resource,
       action,
     });
     return scopes.some((scope) => scope === 'organization' || scope === 'global')
@@ -224,6 +240,8 @@ export class MessengerController {
     }
     const tenantContext = requireTenantContext(req);
     const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    // 'send', не 'read': own-scope здесь — отдельный грант messenger_message.send.
+    const assignedPositionId = await this.ownerFilterForAction(tenantContext.positionId, 'send', 'messenger_message');
     const idempotencyRequestBody = { dialogId: dialogId.toString(), text: dto.text };
 
     const replay = await this.idempotencyService.checkReplay({
@@ -239,6 +257,7 @@ export class MessengerController {
     return this.messengerService.sendTextMessage({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       dialogId,
+      assignedPositionId,
       senderPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId,
       text: dto.text,
@@ -261,6 +280,7 @@ export class MessengerController {
     }
     const tenantContext = requireTenantContext(req);
     const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    const assignedPositionId = await this.ownerFilterForAction(tenantContext.positionId, 'send', 'messenger_message');
     const idempotencyRequestBody = {
       dialogId: dialogId.toString(),
       text: dto.text ?? null,
@@ -284,6 +304,7 @@ export class MessengerController {
     return this.messengerService.sendMediaMessage({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       dialogId,
+      assignedPositionId,
       senderPositionId: new Types.ObjectId(tenantContext.positionId),
       actorIdentityId,
       text: dto.text,
@@ -326,9 +347,13 @@ export class MessengerController {
     @Body() dto: LinkDialogCrmDto,
   ) {
     const tenantContext = requireTenantContext(req);
+    // Тот же resource, что у getDialog/listDialogs — messenger_dialog.link_crm
+    // own-scope у manager (default-role-grants.ts), в отличие от send выше.
+    const assignedPositionId = await this.ownerFilterForAction(tenantContext.positionId, 'link_crm');
     return this.messengerService.linkDialogToCrm({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       dialogId,
+      assignedPositionId,
       leadId: dto.leadId ? new Types.ObjectId(dto.leadId) : undefined,
       contactId: dto.contactId ? new Types.ObjectId(dto.contactId) : undefined,
       dealId: dto.dealId ? new Types.ObjectId(dto.dealId) : undefined,
@@ -350,6 +375,9 @@ export class MessengerController {
     }
     const tenantContext = requireTenantContext(req);
     const actorIdentityId = new Types.ObjectId(tenantContext.identityId);
+    // Тот же грант, что открывает сам диалог: нельзя создать задачу из
+    // диалога, который own-scope и так не даёт увидеть.
+    const assignedPositionId = await this.ownerFilterForAction(tenantContext.positionId, 'read');
     const idempotencyRequestBody = {
       dialogId: dialogId.toString(),
       title: dto.title,
@@ -372,6 +400,7 @@ export class MessengerController {
     return this.messengerService.createTaskFromDialog({
       organizationId: new Types.ObjectId(tenantContext.organizationId),
       dialogId,
+      assignedPositionId,
       actorIdentityId,
       actorPositionId: new Types.ObjectId(tenantContext.positionId),
       title: dto.title,
