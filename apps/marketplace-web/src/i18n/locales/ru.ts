@@ -819,7 +819,9 @@ export const ru = {
       warehouse: 'Склад',
     },
     propertyType: {
+      commercial: 'Коммерческая',
       legend: 'Тип недвижимости',
+      residential: 'Жилая',
     },
     search: {
       aria: 'Поиск по запросам',

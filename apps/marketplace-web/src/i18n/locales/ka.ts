@@ -819,7 +819,9 @@ export const ka = {
       warehouse: 'საწყობი',
     },
     propertyType: {
+      commercial: 'კომერციული',
       legend: 'უძრავი ქონების ტიპი',
+      residential: 'საცხოვრებელი',
     },
     search: {
       aria: 'მოთხოვნების ძიება',

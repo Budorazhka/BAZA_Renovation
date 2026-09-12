@@ -819,7 +819,9 @@ export const en = {
       warehouse: 'Warehouse',
     },
     propertyType: {
+      commercial: 'Commercial',
       legend: 'Property type',
+      residential: 'Residential',
     },
     search: {
       aria: 'Search requests',
