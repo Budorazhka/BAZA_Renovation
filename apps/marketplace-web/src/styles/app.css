@@ -95,11 +95,8 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
  * снимка. У публичной карточки ЖК фотографий нет вовсе (пробел API), так
  * что этот блок сейчас виден на каждой карточке ЖК.
  */
-.building-placeholder { position: relative; display: grid; place-items: center; height: 190px; overflow: hidden; background: var(--color-accent-soft); }
-.building-placeholder::after { content: ''; width: 56px; height: 56px; background: currentColor; color: var(--color-accent); opacity: 0.32; -webkit-mask: var(--placeholder-house) center / contain no-repeat; mask: var(--placeholder-house) center / contain no-repeat; }
-.building-placeholder__sun,
-.building-placeholder__tower,
-.building-placeholder__ground { display: none; }
+.building-placeholder { position: relative; display: grid; place-items: center; height: 190px; overflow: hidden; background: radial-gradient(120% 90% at 50% 100%, #dff0d5 0%, #f3f9ee 55%, #fbfdf9 100%); }
+.building-placeholder img { width: 78%; height: 84%; object-fit: contain; filter: drop-shadow(0 12px 16px rgba(21, 21, 21, 0.14)); }
 
 .state-panel { margin-top: var(--space-5); padding: var(--space-10); border: var(--rule) dashed var(--color-line); border-radius: var(--radius-md); color: var(--color-ink-muted); text-align: center; }
 .state-panel--error { color: var(--color-error); border-color: var(--color-error); background: #fef2f2; }

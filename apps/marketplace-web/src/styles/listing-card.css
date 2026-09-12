@@ -9,7 +9,7 @@
  *   адрес:     Comfortaa Bold 16 #151515
  *   линии:     #f1f7eb, 1.5
  *   факты:     Comfortaa Bold 18, значки 20x20, распределены по ширине
- *   кнопки:    177x42, radius 100, «Позвонить» — #7065f0
+ *   кнопки:    177x42, radius 100, «Позвонить» — фирменный зелёный (в макете #7065f0, заменён по просьбе владельца 12.09.2026)
  */
 
 .listing-card {
@@ -59,7 +59,7 @@
 
 .listing-card__pill {
   left: 14px;
-  background: var(--color-accent-purple);
+  background: rgba(21, 21, 21, 0.78);
   color: #ffffff;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .listing-card__btn--call {
-  background: var(--color-accent-purple);
+  background: var(--color-brand-green);
   color: #ffffff;
   box-shadow:
     0 2px 5px rgba(22, 150, 0, 0.1),
@@ -272,11 +272,11 @@
 
 .listing-card__btn--call:hover,
 .listing-card__btn--call:focus-visible {
-  background: #5d51e6;
+  background: var(--color-brand-green-hover);
 }
 
 .listing-card__btn--call:disabled {
-  background: #c9c5f5;
+  background: #b9dcae;
   cursor: not-allowed;
 }
 
@@ -295,4 +295,28 @@
   .listing-card__actions {
     grid-template-columns: 1fr;
   }
+}
+
+/*
+ * Вся карточка ведёт в объект: ссылка названия растянута на карточку
+ * псевдоэлементом, а кнопки и прочие ссылки лежат выше неё. Прежняя
+ * карточка кликалась целиком, и новая не должна требовать попасть
+ * именно в заголовок.
+ */
+.listing-card {
+  position: relative;
+}
+
+.listing-card__title a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.listing-card__head-actions,
+.listing-card__actions,
+.listing-card__publisher {
+  position: relative;
+  z-index: 2;
 }

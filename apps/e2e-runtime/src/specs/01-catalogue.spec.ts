@@ -56,7 +56,7 @@ test.describe('marketplace catalogue', () => {
     // Счётчик требуется безусловно: beforeAll публикует ЖК, поэтому пустая
     // выдача здесь означала бы настоящую поломку, а не бедное окружение.
     await expect(page.getByTestId('catalogue-count')).toBeVisible();
-    await expect(page.locator('.development-card').first()).toBeVisible();
+    await expect(page.locator('.dev-card').first()).toBeVisible();
   });
 
   test('switches to the listings tab via URL query param and reflects it in the tab UI', async ({ page }) => {
@@ -65,7 +65,9 @@ test.describe('marketplace catalogue', () => {
     const response = await responsePromise;
     expect(response.status()).toBe(200);
 
-    await expect(page.getByRole('tab', { name: 'Вторичка и аренда' })).toHaveAttribute('aria-selected', 'true');
+    // Разделы шапки с 12.09.2026 — ссылки с aria-current, а не вкладки
+    // с подписью, расходящейся с видимым текстом.
+    await expect(page.getByRole('link', { name: 'Вторичка', exact: true })).toHaveAttribute('aria-current', 'page');
   });
 
   test('city filter re-queries the API with the city parameter', async ({ page }) => {
@@ -163,7 +165,7 @@ test.describe('marketplace catalogue', () => {
     // потому что засев называл ЖК длинным email'ом и заголовок занимал три
     // строки. С коротким именем центр съехал на нессылочную область, и тест
     // упал — хотя переход работает.
-    await page.locator('.development-card').first().getByRole('link', { name: 'Подробнее' }).click();
+    await page.locator('.dev-card').first().getByRole('link', { name: 'Подробнее' }).click();
     await expect(page).toHaveURL(/\/developments\//);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   });

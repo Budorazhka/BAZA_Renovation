@@ -12,7 +12,7 @@
  *   адрес:    Comfortaa Bold 16 #151515
  *   линии:    #f1f7eb, толщина 1.5
  *   плашка срока: #eea651, radius 30, padding 12/15, Comfortaa Bold 14
- *   кнопки:   177x42, radius 100, padding 15/30; «Позвонить» — #7065f0
+ *   кнопки:   177x42, radius 100, padding 15/30; «Позвонить» — фирменный зелёный (в макете #7065f0, заменён по просьбе владельца 12.09.2026)
  */
 
 .dev-card {
@@ -90,6 +90,29 @@
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
+}
+
+/* Быстрый просмотр планировок: белая пилюля в правом нижнем углу обложки. */
+.dev-card .dev-card__quick {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-brand-green);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(21, 21, 21, 0.12);
+  transition: background-color 160ms ease;
+}
+
+.dev-card .dev-card__quick:hover:not(:disabled) {
+  background: #ffffff;
+  transform: none;
 }
 
 /* ── сведения ────────────────────────────────────────────────────────── */
@@ -289,7 +312,7 @@
 }
 
 .dev-card__btn--call {
-  background: #7065f0;
+  background: var(--color-brand-green);
   color: #ffffff;
   box-shadow:
     0 2px 5px rgba(22, 150, 0, 0.1),
@@ -298,11 +321,11 @@
 
 .dev-card__btn--call:hover,
 .dev-card__btn--call:focus-visible {
-  background: #5d51e6;
+  background: var(--color-brand-green-hover);
 }
 
 .dev-card__btn--call:disabled {
-  background: #c9c5f5;
+  background: #b9dcae;
   cursor: not-allowed;
 }
 
@@ -321,4 +344,29 @@
   .dev-card__actions {
     grid-template-columns: 1fr;
   }
+}
+
+/*
+ * Вся карточка ведёт в объект: ссылка названия растянута на карточку
+ * псевдоэлементом, а кнопки и прочие ссылки лежат выше неё. Прежняя
+ * карточка кликалась целиком, и новая не должна требовать попасть
+ * именно в заголовок.
+ */
+.dev-card {
+  position: relative;
+}
+
+.dev-card__title a::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.dev-card__head-actions,
+.dev-card__actions,
+.dev-card__publisher,
+.dev-card__quick {
+  position: relative;
+  z-index: 2;
 }

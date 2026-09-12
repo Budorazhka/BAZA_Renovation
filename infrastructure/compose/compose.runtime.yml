@@ -56,7 +56,11 @@ services:
       retries: 20
 
   minio-init:
-    image: minio/mc:latest
+    # Утилита mc входит в образ сервера MinIO. Отдельный образ minio/mc
+    # Docker Hub перестал отдавать («pull access denied»), и 12.09.2026 на
+    # этом падал runtime-гейт ещё до запуска стека. Тот же образ, что у
+    # сервера, уже скачан к этому шагу — лишней загрузки нет.
+    image: minio/minio:latest
     restart: "no"
     depends_on:
       minio:

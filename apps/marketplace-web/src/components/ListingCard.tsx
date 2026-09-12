@@ -54,6 +54,8 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
         )} за m²`
       : null
 
+  const placeholderKind =
+    item.propertyType === 'commercial' ? 'commercial' : item.dealType === 'sale' ? 'sale' : 'rent'
   const isFavorite = slug ? favorites.isFavorite({ targetType: 'listing', slug }) : false
   const detailHref = slug ? `/listings/${slug}` : undefined
 
@@ -88,13 +90,13 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
             {cover ? (
               <img src={cover} alt="" loading="lazy" onError={() => setImgError(true)} />
             ) : (
-              <BuildingPlaceholder />
+              <BuildingPlaceholder kind={placeholderKind} />
             )}
           </Link>
         ) : cover ? (
           <img src={cover} alt="" loading="lazy" onError={() => setImgError(true)} />
         ) : (
-          <BuildingPlaceholder />
+          <BuildingPlaceholder kind={placeholderKind} />
         )}
 
         {item.isMls ? <span className="listing-card__pill" data-testid="badge-mls">MLS</span> : null}

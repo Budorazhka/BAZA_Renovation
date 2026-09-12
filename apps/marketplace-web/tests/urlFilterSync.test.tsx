@@ -68,7 +68,11 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
       )
     })
 
-    expect(screen.getByRole('tab', { name: 'Вторичка и аренда', selected: true })).toBeDefined()
+    // С 12.09.2026 разделы шапки — ссылки с aria-current, а не вкладки с
+    // подписью, отличной от видимого текста («Вторичка и аренда» при
+    // надписи «Вторичка»). Проверяется то же: раздел объявлений отмечен
+    // текущим, когда каталог открыт на вкладке объявлений.
+    expect(screen.getByRole('link', { name: 'Вторичка' }).getAttribute('aria-current')).toBe('page')
     expect(screen.getByRole('button', { name: 'Купить' }).className).toContain('is-active')
     expect(screen.getByRole('button', { name: 'Квартиры' }).className).toContain('is-active')
   })
@@ -84,7 +88,7 @@ describe('URL Filter Synchronization & Navigation Acceptance', () => {
       expect(marketplaceApi.listDevelopments).toHaveBeenCalled()
     })
 
-    const listingsTab = screen.getByRole('tab', { name: 'Вторичка и аренда' })
+    const listingsTab = screen.getByRole('link', { name: 'Вторичка' })
     fireEvent.click(listingsTab)
 
     await waitFor(() => {

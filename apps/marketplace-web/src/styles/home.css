@@ -22,6 +22,31 @@
  * контейнере 1440 с полями, поэтому главная выходит на всю ширину окна:
  * в макете её полотно 1920, а поля секций (80) отсчитываются от края.
  */
+/*
+ * В app.css есть общие правила заголовков: `h1 { max-width: 13ch }` и
+ * `h1, h2 { letter-spacing: -0.04em }`. Слоган главной из-за них сжимался
+ * до 373px и, не переносясь, вываливался вправо от центра. На главной
+ * кегли и трекинг задаёт макет, поэтому общие ограничения снимаются.
+ */
+.home h1,
+.home h2,
+.home h3 {
+  max-width: none;
+  letter-spacing: normal;
+}
+
+/*
+ * `main` держит поля 22/48 цвета фона страницы: над hero и под последней
+ * рельсой они просвечивали бледно-зелёными полосами на белой главной.
+ */
+main:has(> .home) {
+  padding-block: 0;
+}
+
+body:has(.home) .bz-footer {
+  margin-top: 0;
+}
+
 .home {
   position: relative;
   left: 50%;
@@ -31,6 +56,7 @@
   display: flex;
   flex-direction: column;
   gap: clamp(24px, 2.5vw, 48px);
+  padding-bottom: clamp(48px, 5vw, 96px);
   background: var(--color-paper-raised);
   overflow-x: hidden;
 }
@@ -129,42 +155,47 @@
   padding: clamp(32px, 3.5vw, 64px) var(--home-gutter);
 }
 
+/*
+ * Пять плиток в ряд, без полосы прокрутки. В макете сумма их ширин
+ * (390+470+410+450+450) шире полотна и ряд уходит за край — на живой
+ * странице это выглядело обрезанной пятой плиткой и полосой прокрутки
+ * под рядом. Сохраняем пропорции макета долями сетки, но помещаем всё.
+ */
 .home-categories__row {
-  display: flex;
-  gap: clamp(10px, 0.99vw, 19px);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  /* Тень карточек 20px по радиусу не должна срезаться контейнером прокрутки. */
-  padding: 12px 2px 24px;
-  margin: -12px -2px -24px;
+  display: grid;
+  grid-template-columns: 390fr 470fr 410fr 450fr 450fr;
+  gap: clamp(12px, 1.25vw, 24px);
 }
 
 /*
- * `3428:55272` и соседние: белая карточка, radius 30, обводка 3px #dbdbdb,
- * тень 0 4 20 #5c5c5c/15%, padding 30, VERTICAL gap 30, cross CENTER.
- * flex-basis приходит из разметки: у каждой категории своя ширина макета.
+ * `3428:55272` и соседние: белая карточка, radius 30, обводка, мягкая
+ * тень, внутренние поля 30, содержимое по центру. Обводка светлее макетной
+ * (#dbdbdb в 3px выглядела рамкой вокруг картинки, а не краем карточки).
  */
 .home-category {
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(16px, 1.56vw, 30px);
-  flex: 0 0 auto;
-  max-width: 100%;
-  padding: clamp(16px, 1.56vw, 30px);
-  border: 3px solid #dbdbdb;
+  gap: clamp(12px, 1.2vw, 22px);
+  min-width: 0;
+  padding: clamp(18px, 1.56vw, 30px) clamp(14px, 1.3vw, 26px) clamp(14px, 1.2vw, 22px);
+  border: 2px solid #ebefe7;
   border-radius: 30px;
   background: var(--color-paper-raised);
-  box-shadow: 0 4px 20px rgba(92, 92, 92, 0.15);
+  box-shadow: 0 4px 20px rgba(92, 92, 92, 0.1);
   color: var(--color-ink);
   text-decoration: none;
-  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    box-shadow 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 260ms ease,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .home-category:hover,
 .home-category:focus-visible {
-  box-shadow: 0 8px 28px rgba(22, 150, 0, 0.22);
+  border-color: #cfe7c2;
+  box-shadow: 0 16px 36px rgba(22, 150, 0, 0.16);
+  transform: translateY(-4px);
 }
 
 /* `3428:55273` 211x83: VERTICAL, gap 20, cross CENTER */
@@ -193,14 +224,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Фотография категории: 330x311 … 369x350 — пропорция близка к 350/311 */
+/* Иллюстрация: прозрачная, целиком, без подложки. */
 .home-category__photo {
   display: block;
   width: 100%;
-  aspect-ratio: 350 / 311;
-  overflow: hidden;
-  border-radius: 20px;
-  background: var(--color-accent-soft);
+  aspect-ratio: 4 / 3;
 }
 
 .home-category__photo img {
@@ -208,23 +236,20 @@
   width: 100%;
   height: 100%;
   max-width: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  filter: drop-shadow(0 14px 18px rgba(21, 21, 21, 0.12));
+  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.home-category__photo--empty {
-  display: grid;
-  place-items: center;
+.home-category:hover .home-category__photo img,
+.home-category:focus-visible .home-category__photo img {
+  transform: scale(1.05);
 }
 
-.home-category__photo--empty::after {
-  content: '';
-  display: block;
-  width: clamp(40px, 3.1vw, 60px);
-  height: clamp(40px, 3.1vw, 60px);
-  background: var(--color-accent);
-  opacity: 0.28;
-  -webkit-mask: var(--placeholder-house) center / contain no-repeat;
-  mask: var(--placeholder-house) center / contain no-repeat;
+@media (max-width: 1200px) {
+  .home-categories__row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* ═════════════════════════════ «Почему выбирают» `3428:55292` 1920x352
@@ -616,8 +641,15 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .home-category {
+  .home-category,
+  .home-category__photo img {
     transition: none;
+  }
+
+  .home-category:hover,
+  .home-category:focus-visible,
+  .home-category:hover .home-category__photo img {
+    transform: none;
   }
 }
 
@@ -811,17 +843,38 @@
 
   /* `215:7733` mobile menu: зелёная панель 375x69, скругление 40 сверху */
   .home-mobile__nav {
-    position: sticky;
+    /* `215:7733` в макете — панель внизу экрана, а не блок в конце списка. */
+    position: fixed;
+    right: 0;
     bottom: 0;
-    z-index: 5;
+    left: 0;
+    z-index: 40;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-inline: -10px;
-    padding: 10px 30px;
+    padding: 10px 30px calc(10px + env(safe-area-inset-bottom));
     border-radius: 40px 40px 0 0;
     background: var(--color-brand-green);
+    box-shadow: 0 -8px 24px rgba(22, 150, 0, 0.18);
+  }
+
+  .home-mobile__nav a {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 49px;
+    color: #ffffff;
+  }
+
+  .home-mobile__nav svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* Место под панелью, чтобы она не закрывала конец страницы и подвал. */
+  body:has(.home) .bz-footer {
+    padding-bottom: 88px;
   }
 
   .home-mobile__nav img {

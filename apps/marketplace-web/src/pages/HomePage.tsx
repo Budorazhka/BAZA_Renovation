@@ -35,11 +35,9 @@ interface CategorySpec {
   /** Ширина карточки в макете: 390/470/410/450/450 из ряда 1920. */
   width: number
   /**
-   * Иллюстрация категории из самого макета: файлы извлечены из
-   * `Batumi Real Estate Project.fig` по хэшу заливки соответствующего
-   * прямоугольника (`3428:55276`, `3428:55286`, `3428:55281`,
-   * `3854:69058`, `3854:69064`) и пережаты под веб.
-   * Инструмент — analysis_tools/extract_images.js.
+   * Иллюстрация категории — 3D-картинка от владельца (12.09.2026) с
+   * прозрачным фоном, WebP. Первые, извлечённые из макета, при пережатии в
+   * JPEG потеряли прозрачность и легли на плитки чёрными прямоугольниками.
    */
   photo: string
 }
@@ -50,23 +48,23 @@ const CATEGORIES: CategorySpec[] = [
     to: '/newconstructions',
     countKey: 'developments',
     width: 390,
-    photo: '/figma/category-new-buildings.jpg',
+    photo: '/figma/category-new-buildings.webp',
   },
-  { title: 'Вторичка', to: '/secondary', countKey: 'sale', width: 470, photo: '/figma/category-secondary.jpg' },
-  { title: 'Аренда', to: '/rent', countKey: 'rent', width: 410, photo: '/figma/category-rent.jpg' },
+  { title: 'Вторичка', to: '/secondary', countKey: 'sale', width: 470, photo: '/figma/category-secondary.webp' },
+  { title: 'Аренда', to: '/rent', countKey: 'rent', width: 410, photo: '/figma/category-rent.webp' },
   {
     title: 'Проекты',
     to: '/newconstructions',
     countKey: 'developments',
     width: 450,
-    photo: '/figma/category-projects.jpg',
+    photo: '/figma/category-projects.webp',
   },
   {
     title: 'Коммерция',
     to: '/secondary?propertyType=commercial',
     countKey: 'commercial',
     width: 450,
-    photo: '/figma/category-commercial.jpg',
+    photo: '/figma/category-commercial.webp',
   },
 ]
 
@@ -183,12 +181,7 @@ export function HomePage() {
           {CATEGORIES.map((category) => {
             const count = data.counts[category.countKey]
             return (
-              <Link
-                key={category.title}
-                to={category.to}
-                className="home-category"
-                style={{ flexBasis: `${category.width}px` }}
-              >
+              <Link key={category.title} to={category.to} className="home-category">
                 <span className="home-category__head">
                   <span className="home-category__title">{category.title}</span>
                   {count !== undefined ? <span className="home-category__count">({count})</span> : null}
@@ -358,7 +351,22 @@ export function HomePage() {
         <nav className="home-mobile__nav" aria-label="Основная навигация">
           <Link to="/" aria-label="Главная"><img src="/figma/nav-home.svg" alt="" width={48} height={49} /></Link>
           <Link to="/newconstructions" aria-label="Поиск объектов"><img src="/figma/nav-search.svg" alt="" width={48} height={49} /></Link>
-          <Link to="/favorites" aria-label="Избранное"><img src="/figma/nav-favorites.svg" alt="" width={48} height={49} /></Link>
+          {/*
+            * В макете третий пункт — шестерёнка настроек, но настроек в
+            * продукте нет, а пункт ведёт в избранное: значок — сердце, в той
+            * же обводке 1.5, что остальные значки панели.
+            */}
+          <Link to="/favorites" aria-label="Избранное">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.3l7.8-7.8 1-1.1a5.5 5.5 0 0 0 0-7.8z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </Link>
           <Link to="/account" aria-label="Кабинет"><img src="/figma/nav-account.svg" alt="" width={48} height={49} /></Link>
         </nav>
       </div>

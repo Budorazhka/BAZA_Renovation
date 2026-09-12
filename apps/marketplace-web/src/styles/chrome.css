@@ -1,0 +1,680 @@
+/*
+ * Шапка и подвал витрины (Header.tsx, Footer.tsx), собраны заново 12.09.2026.
+ *
+ * Свои классы `bz-header*` / `bz-footer*` и отдельный файл, подключаемый
+ * последним, — намеренно. Прежняя вёрстка жила на правилах из app.css
+ * (`.site-header` описан там трижды), figma-surface.css и header-footer.css,
+ * которые перебивали друг друга. Кроме того, в app.css есть общее правило
+ * `button { background: зелёный; … } button:hover { transform: translateY(-1px) }`:
+ * оно красило и подбрасывало при наведении каждую кнопку шапки и подвала.
+ * Здесь кнопки явно сбрасывают и то и другое.
+ *
+ * Геометрия шапки — компонент `Property 1=Default` (`299:4629`): 1920x74,
+ * поля 15/50, скругление 50 снизу, «+ Разместить» — пилюля 44 с полями 20,
+ * «Войти» — контурная пилюля 44 со значком 24 и скруглением 8.
+ */
+
+/* ═════════════════════════════════════════════════════════════ шапка */
+
+.bz-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.bz-header__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(16px, 2vw, 40px);
+  min-height: 74px;
+  padding: 15px clamp(16px, 2.6vw, 50px);
+  border-radius: 0 0 50px 50px;
+  background: var(--color-brand-green);
+  color: #ffffff;
+  box-shadow: 0 6px 24px rgba(22, 150, 0, 0.14);
+}
+
+.bz-header a:focus-visible,
+.bz-header button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+}
+
+/* логотип: знак из макета и надпись Plus Jakarta Sans Bold 28 */
+.bz-header__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.bz-header__logo-mark {
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-header__logo:hover .bz-header__logo-mark {
+  transform: translateY(-2px);
+}
+
+.bz-header__logo-text {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+/* разделы: шаг 30, у активного и под курсором — подчёркивание */
+.bz-header__nav {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(14px, 1.56vw, 30px);
+  min-width: 0;
+}
+
+.bz-header__nav-link {
+  position: relative;
+  padding-block: 6px;
+  color: rgba(255, 255, 255, 0.86);
+  font-family: var(--font-body);
+  font-size: clamp(14px, 0.94vw, 18px);
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 180ms ease;
+}
+
+.bz-header__nav-link::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: #ffffff;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-header__nav-link:hover,
+.bz-header__nav-link.is-active {
+  color: #ffffff;
+}
+
+.bz-header__nav-link:hover::after,
+.bz-header__nav-link.is-active::after {
+  transform: scaleX(1);
+}
+
+/* правый блок `299:4640`: шаг 15 */
+.bz-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
+.bz-header__publish {
+  display: inline-flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 100px;
+  background: #ffffff;
+  color: var(--color-brand-green);
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.bz-header__publish:hover {
+  background: var(--color-accent-soft);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+}
+
+/* «Войти» / «Кабинет»: контурная пилюля со значком в квадрате */
+.bz-header .bz-header__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 18px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 100px;
+  background: transparent;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 180ms ease;
+}
+
+.bz-header .bz-header__account:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  transform: none;
+}
+
+.bz-header__account--pending {
+  width: 124px;
+  opacity: 0.45;
+}
+
+.bz-header__account-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--color-brand-green);
+}
+
+.bz-header__account-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* язык, валюта, город: текст на зелёном без подложки */
+.bz-header .bz-header__select,
+.bz-header .bz-header__city {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: opacity 160ms ease;
+}
+
+.bz-header .bz-header__select:hover:not(:disabled),
+.bz-header .bz-header__city:hover:not(:disabled) {
+  background: transparent;
+  opacity: 0.82;
+  transform: none;
+}
+
+.bz-header .bz-header__city {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.bz-header__pin {
+  width: 15px;
+  height: 19px;
+}
+
+.bz-header__chevron {
+  width: 11px;
+  height: 8px;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[aria-expanded='true'] > .bz-header__chevron {
+  transform: rotate(180deg);
+}
+
+/* выпадающие списки */
+.bz-header__menu-wrap {
+  position: relative;
+}
+
+.bz-header__dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+  padding: 8px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 18px 44px rgba(21, 21, 21, 0.16), 0 2px 6px rgba(21, 21, 21, 0.06);
+  animation: bz-dropdown-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-header__dropdown--right {
+  right: 0;
+  left: auto;
+}
+
+.bz-header .bz-header__dropdown a,
+.bz-header .bz-header__dropdown button {
+  display: block;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.bz-header .bz-header__dropdown a:hover,
+.bz-header .bz-header__dropdown button:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+  color: var(--color-brand-green);
+  transform: none;
+}
+
+.bz-header .bz-header__dropdown a:focus-visible,
+.bz-header .bz-header__dropdown button:focus-visible {
+  outline: 2px solid var(--color-brand-green);
+  outline-offset: 0;
+}
+
+@keyframes bz-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* бургер и выезжающее меню — для узких экранов */
+.bz-header .bz-header__burger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  padding: 0 11px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 100px;
+  background: transparent;
+}
+
+.bz-header .bz-header__burger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  transform: none;
+}
+
+.bz-header__burger span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: #ffffff;
+}
+
+.bz-header__drawer {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: clamp(12px, 2.6vw, 50px);
+  left: clamp(12px, 2.6vw, 50px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(21, 21, 21, 0.18);
+  animation: bz-dropdown-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-header__drawer-links,
+.bz-header__drawer-account {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bz-header__drawer-account {
+  padding-top: 12px;
+  border-top: 1px solid var(--color-line);
+}
+
+.bz-header .bz-header__drawer a,
+.bz-header .bz-header__drawer button {
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+}
+
+.bz-header .bz-header__drawer a.is-active {
+  color: var(--color-brand-green);
+  background: var(--color-accent-soft);
+}
+
+.bz-header .bz-header__drawer a:hover,
+.bz-header .bz-header__drawer button:hover:not(:disabled) {
+  background: var(--color-accent-soft);
+  transform: none;
+}
+
+.bz-header .bz-header__drawer .bz-header__drawer-cta {
+  padding: 15px;
+  border-radius: 100px;
+  background: var(--color-brand-green);
+  color: #ffffff;
+  text-align: center;
+}
+
+.bz-header .bz-header__drawer .bz-header__drawer-cta:hover {
+  background: var(--color-brand-green-hover);
+}
+
+@media (max-width: 1500px) {
+  /*
+   * Ноутбучные 1280–1500: всё остаётся на месте, но плотнее. Замер на 1280:
+   * логотип 124, правый блок ~520, разделам остаётся ~540 — ровно на семь
+   * пунктов кеглем 14 с шагом 14.
+   */
+  .bz-header__bar {
+    gap: 16px;
+    padding-inline: 24px;
+  }
+
+  .bz-header__nav {
+    gap: 14px;
+  }
+
+  .bz-header__actions {
+    gap: 8px;
+  }
+
+  .bz-header__publish {
+    padding: 0 16px;
+  }
+
+  .bz-header .bz-header__account {
+    padding: 0 14px 0 8px;
+  }
+}
+
+@media (max-width: 1240px) {
+  /* Ниже семи разделам и правому блоку тесно: разделы уходят в меню. */
+  .bz-header__nav {
+    display: none;
+  }
+
+  .bz-header .bz-header__burger {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 760px) {
+  .bz-header__bar {
+    min-height: 64px;
+    padding: 10px 14px;
+    border-radius: 0 0 24px 24px;
+  }
+
+  .bz-header__logo-mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .bz-header__logo-text {
+    font-size: 24px;
+  }
+
+  .bz-header__publish,
+  .bz-header .bz-header__account,
+  .bz-header__menu-wrap {
+    display: none;
+  }
+}
+
+/* ═════════════════════════════════════════════════════════════ подвал */
+
+.bz-footer {
+  margin-top: clamp(48px, 6vw, 96px);
+  border-top: 1px solid #e4ebdd;
+  background: #ffffff;
+  color: var(--color-ink);
+}
+
+.bz-footer__inner {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(32px, 3vw, 52px);
+  width: min(1760px, 100% - 2 * clamp(16px, 4.17vw, 80px));
+  margin-inline: auto;
+  padding-block: clamp(40px, 4vw, 72px) 28px;
+}
+
+.bz-footer__top {
+  display: grid;
+  grid-template-columns: minmax(240px, 360px) minmax(0, 1fr);
+  gap: clamp(32px, 5vw, 96px);
+}
+
+.bz-footer__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.bz-footer__logo svg {
+  width: 32px;
+  height: 32px;
+  fill: var(--color-brand-green);
+}
+
+.bz-footer__logo-dot {
+  color: var(--color-brand-green);
+  font-weight: 700;
+}
+
+.bz-footer__tagline {
+  max-width: 34ch;
+  margin: 16px 0 24px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.bz-footer__socials {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bz-footer__socials a {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-brand-green);
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.bz-footer__socials a:hover {
+  background: var(--color-brand-green);
+  color: #ffffff;
+}
+
+.bz-footer__socials svg {
+  width: 20px;
+  height: 20px;
+}
+
+.bz-footer__catalogue {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 28px 32px;
+}
+
+.bz-footer__services {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px 32px;
+  padding-top: clamp(28px, 2.6vw, 44px);
+  border-top: 1px solid #e4ebdd;
+}
+
+.bz-footer__title {
+  margin: 0 0 14px;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.bz-footer__links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Наведение — только цвет и тонкое подчёркивание, растущее слева. */
+/*
+ * Строчная ссылка, а не inline-flex: во flex-обёртке длинный текст
+ * («Политика конфиденциальности») не переносился и на 375px вылезал за
+ * колонку, давая всей странице горизонтальную прокрутку.
+ */
+.bz-footer__links a {
+  display: inline;
+  /* Старые правила для `nav a` запрещают перенос — здесь он нужен. */
+  white-space: normal;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  padding-bottom: 1px;
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0 1px;
+  color: var(--color-ink-muted);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.4;
+  text-decoration: none;
+  transition: color 180ms ease, background-size 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-footer__links a:hover {
+  background-size: 100% 1px;
+  color: var(--color-brand-green);
+}
+
+.bz-footer__badge {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: 1px;
+  padding: 2px 7px;
+  border-radius: 100px;
+  background: var(--color-brand-green);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.bz-footer__bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e4ebdd;
+  color: #737a6f;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.bz-footer__bottom p {
+  margin: 0;
+}
+
+@media (max-width: 1100px) {
+  .bz-footer__top {
+    grid-template-columns: 1fr;
+  }
+
+  .bz-footer__catalogue {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bz-footer__services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .bz-footer__catalogue,
+  .bz-footer__services {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 20px;
+  }
+
+  .bz-footer__links a {
+    font-size: 14px;
+  }
+
+  .bz-footer__bottom {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bz-header__nav-link::after,
+  .bz-header__chevron,
+  .bz-header__logo-mark,
+  .bz-footer__links a {
+    transition: none;
+  }
+
+  .bz-header__dropdown,
+  .bz-header__drawer {
+    animation: none;
+  }
+}

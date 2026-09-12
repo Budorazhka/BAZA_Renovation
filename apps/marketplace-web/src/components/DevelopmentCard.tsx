@@ -11,9 +11,28 @@ export interface DevelopmentCardProps {
   className?: string
 }
 
-/** Обложка без фотографии: у публичной карточки ЖК поля media нет вовсе. */
-export function BuildingPlaceholder() {
-  return <div className="building-placeholder" aria-hidden="true" />
+export type PlaceholderKind = 'development' | 'sale' | 'rent' | 'commercial'
+
+const PLACEHOLDER_ART: Record<PlaceholderKind, string> = {
+  development: '/figma/category-new-buildings.webp',
+  sale: '/figma/category-secondary.webp',
+  rent: '/figma/category-rent.webp',
+  commercial: '/figma/category-commercial.webp',
+}
+
+/**
+ * Обложка без фотографии. У публичной карточки ЖК поля media нет вовсе, а у
+ * тестовых объявлений фото не залиты, поэтому заглушку видно часто.
+ * Раньше это была пустая бледная плита — ряд карточек выглядел
+ * незагрузившимся. Теперь в обложке 3D-иллюстрация раздела на мягком фоне:
+ * по стилю она очевидно рисунок, а не снимок объекта.
+ */
+export function BuildingPlaceholder({ kind = 'development' }: { kind?: PlaceholderKind }) {
+  return (
+    <div className="building-placeholder" aria-hidden="true">
+      <img src={PLACEHOLDER_ART[kind]} alt="" loading="lazy" />
+    </div>
+  )
 }
 
 const MONEY_FORMAT = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
@@ -133,6 +152,17 @@ export function DevelopmentCard({
         </span>
 
         {item.classType ? <span className="dev-card__class">{item.classType}</span> : null}
+
+        {/*
+          * Быстрый просмотр планировок — там, где каталог его предлагает.
+          * Отдельная пилюля на обложке, а не кнопка в ряду действий: иначе
+          * «Подробнее» открывало бы окно вместо карточки комплекса.
+          */}
+        {onQuickView && slug ? (
+          <button type="button" className="dev-card__quick" onClick={handleQuickViewClick}>
+            Планировки
+          </button>
+        ) : null}
       </div>
 
       {/* сведения `3428:55626`: VERTICAL gap 20, padding 10 */}
@@ -226,17 +256,19 @@ export function DevelopmentCard({
               Позвонить
             </button>
           )}
+          {/*
+            * Второй кнопкой в макете «Написать», но писать продавцу с витрины
+            * пока некуда — мессенджер без канала. «Подробнее» ведёт в карточку,
+            * где есть и планировки, и раскрытие контакта; так же устроена
+            * карточка объявления.
+            */}
           {detailHref ? (
-            <Link
-              to={`${detailHref}#units`}
-              className="dev-card__btn dev-card__btn--outline"
-              onClick={handleQuickViewClick}
-            >
-              Планировки
+            <Link to={detailHref} className="dev-card__btn dev-card__btn--outline">
+              Подробнее
             </Link>
           ) : (
-            <button type="button" className="dev-card__btn dev-card__btn--outline" onClick={handleQuickViewClick}>
-              Планировки
+            <button type="button" className="dev-card__btn dev-card__btn--outline" disabled>
+              Подробнее
             </button>
           )}
         </div>

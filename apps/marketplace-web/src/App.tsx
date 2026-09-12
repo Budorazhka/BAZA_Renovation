@@ -51,6 +51,8 @@ import './styles/my-properties.css'
 import './styles/favorites-selections.css'
 import './styles/requests.css'
 import './styles/home.css'
+// Шапка и подвал: подключаются последними, чтобы не проигрывать старым правилам.
+import './styles/chrome.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 import { I18nProvider } from './i18n'
 import type {
