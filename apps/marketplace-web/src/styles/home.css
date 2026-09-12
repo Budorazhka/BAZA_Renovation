@@ -21,6 +21,8 @@
   flex-direction: column;
   /* Между секциями макет не задаёт зазора: секции сами несут свою высоту. */
   gap: 0;
+  /* Фотополотно hero шире контейнера: прокрутке всей страницы взяться неоткуда. */
+  overflow-x: hidden;
 }
 
 /* ═════════════════════════════ hero `3851:56175` 1920x905
@@ -83,9 +85,17 @@
   text-wrap: balance;
 }
 
-/* `3851:56183` фотополотно 1920x596 */
+/*
+ * `3851:56183` фотополотно 1920x596 — во всю ширину окна. Страница живёт
+ * в контейнере 1440 с полями, поэтому полотно выносится за него приёмом
+ * с отрицательными полями, иначе фотография макета оказывается врезкой.
+ */
 .home-hero__photo {
-  width: 100%;
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100vw;
+  max-width: 100vw;
   aspect-ratio: 1920 / 596;
   overflow: hidden;
 }
@@ -282,11 +292,8 @@
 .home-advantage__icon {
   display: block;
   width: clamp(72px, 7.24vw, 139px);
-  height: clamp(72px, 7.24vw, 139px);
-  background: var(--color-accent);
-  opacity: 0.9;
-  -webkit-mask: var(--placeholder-house) center / contain no-repeat;
-  mask: var(--placeholder-house) center / contain no-repeat;
+  height: auto;
+  max-width: 100%;
 }
 
 /* `3428:55324`: Plus Jakarta Sans Bold 20px */
@@ -387,21 +394,32 @@
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  min-height: clamp(300px, 26.04vw, 500px);
-  padding: clamp(24px, 2.08vw, 40px);
+  aspect-ratio: 1040 / 500;
+  min-height: clamp(220px, 26.04vw, 500px);
   border-radius: 30px;
-  background:
-    linear-gradient(90deg, var(--color-paper-raised) 0 38%, var(--color-brand-green) 38% 100%);
+  background: var(--color-paper-raised);
   box-shadow: 4px 10px 40px rgba(22, 150, 0, 0.2);
   overflow: hidden;
 }
 
+/* `3428:55408`: иллюстрация занимает весь баннер, тексты лежат поверх. */
+.home-promo__sale-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* `3428:55598` 329x353 в правой части баннера (x 652 из 1040). */
 .home-promo__sale-body {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: clamp(6px, 0.78vw, 15px);
-  width: min(329px, 55%);
+  gap: clamp(8px, 0.94vw, 18px);
+  width: min(360px, 36%);
+  margin-right: clamp(12px, 5.67vw, 59px);
   color: #ffffff;
 }
 
@@ -418,9 +436,9 @@
 .home-promo__sale-word {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(56px, 6.82vw, 131px);
+  font-size: clamp(44px, 6.82vw, 131px);
   font-weight: 800;
-  line-height: 1;
+  line-height: 1.08;
   letter-spacing: -0.01em;
 }
 
@@ -471,12 +489,9 @@
 
 .home-rail__badge {
   display: block;
-  width: clamp(28px, 2.45vw, 47px);
-  height: clamp(28px, 2.45vw, 47px);
+  width: clamp(24px, 2.45vw, 47px);
+  height: auto;
   flex: none;
-  background: var(--color-accent);
-  -webkit-mask: var(--rail-badge-flame) center / contain no-repeat;
-  mask: var(--rail-badge-flame) center / contain no-repeat;
 }
 
 /* `3428:55611`: Comfortaa Bold 22px, зелёный, со стрелкой 24x24 */
@@ -551,12 +566,20 @@
   }
 
   .home-promo__sale {
-    background: var(--color-brand-green);
+    aspect-ratio: auto;
+    align-items: flex-end;
     justify-content: flex-start;
+    padding: 24px;
+  }
+
+  .home-promo__sale-art {
+    object-position: left center;
   }
 
   .home-promo__sale-body {
-    width: 100%;
+    width: min(329px, 100%);
+    margin-right: 0;
+    text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35);
   }
 }
 

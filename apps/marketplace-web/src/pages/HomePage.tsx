@@ -33,21 +33,66 @@ interface CategorySpec {
   countKey: 'developments' | 'sale' | 'rent' | 'commercial'
   /** Ширина карточки в макете: 390/470/410/450/450 из ряда 1920. */
   width: number
+  /**
+   * Иллюстрация категории из самого макета: файлы извлечены из
+   * `Batumi Real Estate Project.fig` по хэшу заливки соответствующего
+   * прямоугольника (`3428:55276`, `3428:55286`, `3428:55281`,
+   * `3854:69058`, `3854:69064`) и пережаты под веб.
+   * Инструмент — analysis_tools/extract_images.js.
+   */
+  photo: string
 }
 
 const CATEGORIES: CategorySpec[] = [
-  { title: 'Новостройки', to: '/newconstructions', countKey: 'developments', width: 390 },
-  { title: 'Вторичка', to: '/secondary', countKey: 'sale', width: 470 },
-  { title: 'Аренда', to: '/rent', countKey: 'rent', width: 410 },
-  { title: 'Проекты', to: '/newconstructions', countKey: 'developments', width: 450 },
-  { title: 'Коммерция', to: '/secondary?propertyType=commercial', countKey: 'commercial', width: 450 },
+  {
+    title: 'Новостройки',
+    to: '/newconstructions',
+    countKey: 'developments',
+    width: 390,
+    photo: '/figma/category-new-buildings.jpg',
+  },
+  { title: 'Вторичка', to: '/secondary', countKey: 'sale', width: 470, photo: '/figma/category-secondary.jpg' },
+  { title: 'Аренда', to: '/rent', countKey: 'rent', width: 410, photo: '/figma/category-rent.jpg' },
+  {
+    title: 'Проекты',
+    to: '/newconstructions',
+    countKey: 'developments',
+    width: 450,
+    photo: '/figma/category-projects.jpg',
+  },
+  {
+    title: 'Коммерция',
+    to: '/secondary?propertyType=commercial',
+    countKey: 'commercial',
+    width: 450,
+    photo: '/figma/category-commercial.jpg',
+  },
 ]
 
-/** Три довода из `3428:55298`: иконка 139x139, заголовок 20px, текст 20px. */
+/** Фотополотно hero (`3851:56183`) — та же картинка, что в макете. */
+const HERO_PHOTO = '/figma/hero-city.jpg'
+
+/**
+ * Три довода из `3428:55298`: иконка 139x139, заголовок 20px, текст 20px.
+ * Иллюстрации — те же, что в макете: собраны из векторной геометрии узлов
+ * `3428:55300`, `3428:55327`, `3428:55362` (analysis_tools/vector_to_svg.js).
+ */
 const ADVANTAGES = [
-  { title: 'Большой выбор', text: 'Объявления, которые регулярно обновляются' },
-  { title: 'Проверенные агенты', text: 'База проверенных риелторов с реальными отзывами' },
-  { title: 'Удобный поиск', text: 'Множество фильтров и карта объектов' },
+  {
+    title: 'Большой выбор',
+    text: 'Объявления, которые регулярно обновляются',
+    icon: '/figma/advantage-choice.svg',
+  },
+  {
+    title: 'Проверенные агенты',
+    text: 'База проверенных риелторов с реальными отзывами',
+    icon: '/figma/advantage-agents.svg',
+  },
+  {
+    title: 'Удобный поиск',
+    text: 'Множество фильтров и карта объектов',
+    icon: '/figma/advantage-search.svg',
+  },
 ]
 
 interface HomeData {
@@ -107,7 +152,9 @@ export function HomePage() {
     return () => controller.abort()
   }, [])
 
-  const heroCover = coverOf(data.listings[0])
+  // Обложка первого объявления, если она есть, иначе фотография макета:
+  // пустой плиты во весь экран на главной быть не должно.
+  const heroPhoto = coverOf(data.listings[0]) ?? HERO_PHOTO
 
   return (
     <div className="home">
@@ -129,11 +176,9 @@ export function HomePage() {
           <h1 id="home-title" className="home-hero__slogan">Лучший способ найти недвижимость</h1>
         </div>
 
-        {heroCover ? (
-          <div className="home-hero__photo">
-            <img src={heroCover} alt="" loading="eager" />
-          </div>
-        ) : null}
+        <div className="home-hero__photo">
+          <img src={heroPhoto} alt="" loading="eager" />
+        </div>
       </section>
 
       {/* категории `3428:55271`: HORIZONTAL gap 19, карточки radius 30, border 3px, тень */}
@@ -141,7 +186,6 @@ export function HomePage() {
         <div className="home-categories__row">
           {CATEGORIES.map((category) => {
             const count = data.counts[category.countKey]
-            const cover = coverOf(data.listings[0])
             return (
               <Link
                 key={category.title}
@@ -153,8 +197,8 @@ export function HomePage() {
                   <span className="home-category__title">{category.title}</span>
                   {count !== undefined ? <span className="home-category__count">({count})</span> : null}
                 </span>
-                <span className={`home-category__photo${cover ? '' : ' home-category__photo--empty'}`}>
-                  {cover ? <img src={cover} alt="" loading="lazy" /> : null}
+                <span className="home-category__photo">
+                  <img src={category.photo} alt="" loading="lazy" />
                 </span>
               </Link>
             )
@@ -172,7 +216,7 @@ export function HomePage() {
         <ul className="home-why__list">
           {ADVANTAGES.map((advantage) => (
             <li key={advantage.title} className="home-advantage">
-              <span className="home-advantage__icon" aria-hidden="true" />
+              <img className="home-advantage__icon" src={advantage.icon} alt="" width={139} height={139} loading="lazy" />
               <h3 className="home-advantage__title">{advantage.title}</h3>
               <p className="home-advantage__text">{advantage.text}</p>
             </li>
@@ -190,7 +234,13 @@ export function HomePage() {
           <Link to="/publish" className="home-promo__sell-button">+ Разместить объявление</Link>
         </div>
 
+        {/*
+          * `3428:55408` 1040x500: иллюстрация макета целиком (дом с лупой,
+          * карточки риэлторов, зелёная диагональ), тексты лежат поверх неё
+          * в правой части, как узлы `3428:55598`.
+          */}
         <div className="home-promo__sale">
+          <img className="home-promo__sale-art" src="/figma/promo-sale.svg" alt="" loading="lazy" />
           <div className="home-promo__sale-body">
             <p className="home-promo__sale-kicker">Горячие предложения</p>
             <p className="home-promo__sale-word">SALE</p>
@@ -203,7 +253,7 @@ export function HomePage() {
       <section className="home-rail" aria-labelledby="home-hot-title">
         <div className="home-rail__head">
           <h2 id="home-hot-title" className="home-rail__title">
-            <span className="home-rail__badge" aria-hidden="true" />
+            <img className="home-rail__badge" src="/figma/rail-badge.svg" alt="" width={47} height={60} />
             Горячие предложения
           </h2>
           <Link to="/newconstructions" className="home-rail__all">
@@ -230,7 +280,7 @@ export function HomePage() {
       <section className="home-rail" aria-labelledby="home-new-title">
         <div className="home-rail__head">
           <h2 id="home-new-title" className="home-rail__title">
-            <span className="home-rail__badge" aria-hidden="true" />
+            <img className="home-rail__badge" src="/figma/rail-badge.svg" alt="" width={47} height={60} />
             Новые объявления квартир
           </h2>
           <Link to="/secondary" className="home-rail__all">
