@@ -1,5 +1,6 @@
 import React, { FormEvent, useState } from 'react'
 import type { CharacteristicsFormData, PropertyType, CommercialSubtype } from '../../model/types'
+import { useI18n } from '../../../../i18n'
 
 interface CharacteristicsStepProps {
   data: CharacteristicsFormData
@@ -10,19 +11,19 @@ interface CharacteristicsStepProps {
   error: string | null
 }
 
-const PROPERTY_TYPES: { type: PropertyType; label: string }[] = [
-  { type: 'apartment', label: 'Квартира' },
-  { type: 'house', label: 'Дом / Коттедж' },
-  { type: 'commercial', label: 'Коммерческая' },
-  { type: 'land', label: 'Земельный участок' },
+const PROPERTY_TYPES: { type: PropertyType; labelKey: string }[] = [
+  { type: 'apartment', labelKey: 'filters.propertyType.apartment' },
+  { type: 'house', labelKey: 'format.typeHouse' },
+  { type: 'commercial', labelKey: 'filters.propertyType.commercial' },
+  { type: 'land', labelKey: 'requests.kind.land' },
 ]
 
-const COMMERCIAL_SUBTYPES: { subtype: CommercialSubtype; label: string }[] = [
-  { subtype: 'office', label: 'Офис' },
-  { subtype: 'retail', label: 'Торговая площадь' },
-  { subtype: 'warehouse', label: 'Склад' },
-  { subtype: 'business', label: 'Готовый бизнес' },
-  { subtype: 'free_purpose', label: 'Свободное назначение' },
+const COMMERCIAL_SUBTYPES: { subtype: CommercialSubtype; labelKey: string }[] = [
+  { subtype: 'office', labelKey: 'filters.commercial.office' },
+  { subtype: 'retail', labelKey: 'filters.commercial.retail' },
+  { subtype: 'warehouse', labelKey: 'filters.commercial.warehouse' },
+  { subtype: 'business', labelKey: 'filters.commercial.business' },
+  { subtype: 'free_purpose', labelKey: 'filters.commercial.freePurpose' },
 ]
 
 export function CharacteristicsStep({
@@ -33,6 +34,7 @@ export function CharacteristicsStep({
   isLoading,
   error,
 }: CharacteristicsStepProps) {
+  const { t } = useI18n()
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleSubmit = async (e: FormEvent) => {
@@ -40,17 +42,17 @@ export function CharacteristicsStep({
     setValidationError(null)
 
     if (!data.area || Number(data.area) <= 0) {
-      setValidationError('Укажите корректную площадь объекта (м²)')
+      setValidationError(t('characteristics.errorArea'))
       return
     }
 
     if (!data.representativePhone.trim()) {
-      setValidationError('Укажите контактный телефон представителя (+995...)')
+      setValidationError(t('characteristics.errorPhone'))
       return
     }
 
     if (data.floor !== '' && data.totalFloors !== '' && Number(data.floor) > Number(data.totalFloors)) {
-      setValidationError('Этаж не может быть выше этажности здания')
+      setValidationError(t('characteristics.errorFloor'))
       return
     }
 
@@ -60,10 +62,8 @@ export function CharacteristicsStep({
   return (
     <section className="wizard-step wizard-step--characteristics" data-testid="wizard-step-characteristics" aria-labelledby="char-heading">
       <div className="wizard-step__header">
-        <h2 id="char-heading">Шаг 2: Характеристики объекта</h2>
-        <p className="wizard-step__subtitle">
-          Заполните параметры объекта недвижимости и телефон для связи с покупателями
-        </p>
+        <h2 id="char-heading">{t('characteristics.heading')}</h2>
+        <p className="wizard-step__subtitle">{t('characteristics.subtitle')}</p>
       </div>
 
       {(validationError || error) && (
@@ -74,9 +74,9 @@ export function CharacteristicsStep({
 
       <form onSubmit={handleSubmit} className="wizard-form" noValidate>
         <div className="wizard-field">
-          <label>Тип недвижимости *</label>
-          <div className="wizard-chips-group" role="group" aria-label="Тип недвижимости">
-            {PROPERTY_TYPES.map(({ type, label }) => (
+          <label>{t('characteristics.propertyTypeLabel')}</label>
+          <div className="wizard-chips-group" role="group" aria-label={t('filters.propertyTypeAria')}>
+            {PROPERTY_TYPES.map(({ type, labelKey }) => (
               <button
                 key={type}
                 type="button"
@@ -84,7 +84,7 @@ export function CharacteristicsStep({
                 onClick={() => onChange({ propertyType: type, commercialSubtype: type === 'commercial' ? 'office' : undefined })}
                 data-testid={`property-type-${type}`}
               >
-                {label}
+                {t(labelKey)}
               </button>
             ))}
           </div>
@@ -92,9 +92,9 @@ export function CharacteristicsStep({
 
         {data.propertyType === 'commercial' && (
           <div className="wizard-field">
-            <label>Формат коммерческого помещения</label>
-            <div className="wizard-chips-group" role="group" aria-label="Формат коммерции">
-              {COMMERCIAL_SUBTYPES.map(({ subtype, label }) => (
+            <label>{t('characteristics.commercialFormatLabel')}</label>
+            <div className="wizard-chips-group" role="group" aria-label={t('filters.commercialAria')}>
+              {COMMERCIAL_SUBTYPES.map(({ subtype, labelKey }) => (
                 <button
                   key={subtype}
                   type="button"
@@ -102,7 +102,7 @@ export function CharacteristicsStep({
                   onClick={() => onChange({ commercialSubtype: subtype })}
                   data-testid={`commercial-subtype-${subtype}`}
                 >
-                  {label}
+                  {t(labelKey)}
                 </button>
               ))}
             </div>
@@ -111,7 +111,7 @@ export function CharacteristicsStep({
 
         <div className="wizard-form-grid">
           <div className="wizard-field">
-            <label htmlFor="char-area">Общая площадь (м²) *</label>
+            <label htmlFor="char-area">{t('characteristics.areaLabel')}</label>
             <input
               id="char-area"
               type="number"
@@ -119,7 +119,7 @@ export function CharacteristicsStep({
               step="0.1"
               value={data.area}
               onChange={(e) => onChange({ area: e.target.value === '' ? '' : parseFloat(e.target.value) })}
-              placeholder="Например, 65"
+              placeholder={t('characteristics.areaPlaceholder')}
               required
               data-testid="characteristics-input-area"
             />
@@ -127,7 +127,7 @@ export function CharacteristicsStep({
 
           {data.propertyType !== 'land' && (
             <div className="wizard-field">
-              <label htmlFor="char-rooms">Количество комнат</label>
+              <label htmlFor="char-rooms">{t('characteristics.roomsLabel')}</label>
               <input
                 id="char-rooms"
                 type="number"
@@ -135,7 +135,7 @@ export function CharacteristicsStep({
                 step="1"
                 value={data.rooms}
                 onChange={(e) => onChange({ rooms: e.target.value === '' ? '' : parseInt(e.target.value, 10) })}
-                placeholder="Например, 2"
+                placeholder={t('characteristics.roomsPlaceholder')}
                 data-testid="characteristics-input-rooms"
               />
             </div>
@@ -145,7 +145,7 @@ export function CharacteristicsStep({
         {data.propertyType !== 'land' && (
           <div className="wizard-form-grid">
             <div className="wizard-field">
-              <label htmlFor="char-floor">Этаж</label>
+              <label htmlFor="char-floor">{t('characteristics.floorLabel')}</label>
               <input
                 id="char-floor"
                 type="number"
@@ -158,7 +158,7 @@ export function CharacteristicsStep({
             </div>
 
             <div className="wizard-field">
-              <label htmlFor="char-total-floors">Всего этажей в здании</label>
+              <label htmlFor="char-total-floors">{t('characteristics.totalFloorsLabel')}</label>
               <input
                 id="char-total-floors"
                 type="number"
@@ -173,7 +173,7 @@ export function CharacteristicsStep({
         )}
 
         <div className="wizard-field">
-          <label htmlFor="char-phone">Телефон представителя *</label>
+          <label htmlFor="char-phone">{t('characteristics.phoneLabel')}</label>
           <input
             id="char-phone"
             type="tel"
@@ -184,9 +184,7 @@ export function CharacteristicsStep({
             required
             data-testid="characteristics-input-phone"
           />
-          <p className="wizard-field-hint">
-            Телефон используется для связи с клиентами и проверки на дубликаты
-          </p>
+          <p className="wizard-field-hint">{t('characteristics.phoneHint')}</p>
         </div>
 
         <div className="wizard-actions">
@@ -197,7 +195,7 @@ export function CharacteristicsStep({
             disabled={isLoading}
             data-testid="characteristics-back-btn"
           >
-            ← Назад
+            {t('wizard.back')}
           </button>
           <button
             type="submit"
@@ -206,7 +204,7 @@ export function CharacteristicsStep({
             aria-busy={isLoading}
             data-testid="characteristics-next-btn"
           >
-            {isLoading ? 'Сохранение объекта...' : 'Далее: Условия сделки →'}
+            {isLoading ? t('characteristics.saving') : t('characteristics.next')}
           </button>
         </div>
       </form>

@@ -1,4 +1,5 @@
 import React from 'react'
+import { useI18n } from '../i18n'
 
 export type ObjectSaleStatus =
   | 'for_sale'
@@ -26,40 +27,40 @@ export interface ActualityBadgeProps {
 
 const SALE_STATUS_CONFIG: Record<
   ObjectSaleStatus,
-  { label: string; bg: string; color: string; border: string }
+  { labelKey: string; bg: string; color: string; border: string }
 > = {
   for_sale: {
-    label: 'В продаже',
+    labelKey: 'statusBadge.forSale',
     bg: '#E8F5E9',
     color: '#1BA800',
     border: '#A5D6A7',
   },
   booked: {
-    label: 'Забронировано',
+    labelKey: 'statusBadge.booked',
     bg: '#FFF8E1',
     color: '#F57F17',
     border: '#FFE082',
   },
   sold: {
-    label: 'Продано',
+    labelKey: 'statusBadge.sold',
     bg: '#FBE9E7',
     color: '#D84315',
     border: '#FFAB91',
   },
   moderation: {
-    label: 'На модерации',
+    labelKey: 'statusBadge.moderation',
     bg: '#E1F5FE',
     color: '#0288D1',
     border: '#81D4FA',
   },
   draft: {
-    label: 'Черновик',
+    labelKey: 'statusBadge.draft',
     bg: '#F5F5F5',
     color: '#616161',
     border: '#E0E0E0',
   },
   archived: {
-    label: 'В архиве',
+    labelKey: 'statusBadge.archived',
     bg: '#ECEFF1',
     color: '#546E7A',
     border: '#B0BEC5',
@@ -70,6 +71,7 @@ const SALE_STATUS_CONFIG: Record<
  * SaleStatusBadge Component (Figma: ComponentSet статус Node ID 5071:68767)
  */
 export function SaleStatusBadge({ status, className = '' }: SaleStatusBadgeProps) {
+  const { t } = useI18n()
   const cfg = SALE_STATUS_CONFIG[status] || SALE_STATUS_CONFIG.draft
   return (
     <span
@@ -80,31 +82,31 @@ export function SaleStatusBadge({ status, className = '' }: SaleStatusBadgeProps
         borderColor: cfg.border,
       }}
     >
-      {cfg.label}
+      {t(cfg.labelKey)}
     </span>
   )
 }
 
 const ACTUALITY_CONFIG: Record<
   ObjectActualityState,
-  { label: string; icon: string; bg: string; color: string; border: string }
+  { labelKey: string; icon: string; bg: string; color: string; border: string }
 > = {
   up_to_date: {
-    label: 'Актуально',
+    labelKey: 'statusBadge.upToDate',
     icon: '✓',
     bg: '#E8F5E9',
     color: '#1BA800',
     border: '#A5D6A7',
   },
   needs_attention: {
-    label: 'Требует внимания',
+    labelKey: 'statusBadge.needsAttention',
     icon: '⚠',
     bg: '#FFF8E1',
     color: '#F57F17',
     border: '#FFE082',
   },
   needs_update: {
-    label: 'Нужно обновить',
+    labelKey: 'statusBadge.needsUpdate',
     icon: '↺',
     bg: '#FFEBEE',
     color: '#C62828',
@@ -120,6 +122,7 @@ export function ActualityBadge({
   className = '',
   onConfirm,
 }: ActualityBadgeProps) {
+  const { t } = useI18n()
   const cfg = ACTUALITY_CONFIG[state] || ACTUALITY_CONFIG.up_to_date
   return (
     <button
@@ -133,12 +136,12 @@ export function ActualityBadge({
         borderColor: cfg.border,
         cursor: onConfirm ? 'pointer' : 'default',
       }}
-      title={onConfirm ? 'Нажмите, чтобы подтвердить актуальность' : undefined}
+      title={onConfirm ? t('statusBadge.confirmHint') : undefined}
     >
       <span aria-hidden="true" style={{ fontWeight: 'bold' }}>
         {cfg.icon}
       </span>
-      <span>{cfg.label}</span>
+      <span>{t(cfg.labelKey)}</span>
     </button>
   )
 }

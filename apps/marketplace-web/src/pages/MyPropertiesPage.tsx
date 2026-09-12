@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { publishingApi, type OwnerListing, type OwnerPropertyAsset } from '../features/publishing/api/publishing-api'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import { listingPropertyTypeLabel } from '../lib/format'
+import { useI18n } from '../i18n'
+import type { Translate } from '../i18n'
 import {
   SaleStatusBadge,
   ActualityBadge,
@@ -52,7 +54,7 @@ export interface MyPropertyItem {
  * модерации и актуальность выводятся из статуса объявления, счётчики просмотров
  * не выводятся вовсе.
  */
-function toItem(asset: OwnerPropertyAsset, listing: OwnerListing): MyPropertyItem {
+function toItem(asset: OwnerPropertyAsset, listing: OwnerListing, t?: Translate): MyPropertyItem {
   const price = listing.price
   const amount = Math.round(price.amountMinorUnits / 100)
   return {
@@ -62,7 +64,7 @@ function toItem(asset: OwnerPropertyAsset, listing: OwnerListing): MyPropertyIte
     // Тип объекта — человеку, а не как в API: в заголовке стояло сырое
     // `apartment`. Тот же переводчик, что на публичных страницах, чтобы кабинет
     // и каталог называли одно и то же одинаково.
-    title: `${listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype)}, ${asset.location.address}`,
+    title: `${listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype, t)}, ${asset.location.address}`,
     dealType: listing.dealType,
     propertyType: asset.propertyType,
     priceFormatted: `${amount.toLocaleString('ru-RU')} ${price.currency}`,
@@ -79,6 +81,7 @@ function toItem(asset: OwnerPropertyAsset, listing: OwnerListing): MyPropertyIte
 }
 
 export function MyPropertiesPage() {
+  const { t } = useI18n()
   // Кабинет снят с фикстур 04.09.2026: раньше здесь лежал массив выдуманных
   // объектов, включая счётчики просмотров и контактов, показанные как настоящие.
   const [properties, setProperties] = useState<MyPropertyItem[]>([])
@@ -93,12 +96,12 @@ export function MyPropertiesPage() {
         const rows = await Promise.all(
           assets.map(async (asset) => {
             const listings = await publishingApi.listListingsForAsset(asset._id)
-            return listings.map((listing) => toItem(asset, listing))
+            return listings.map((listing) => toItem(asset, listing, t))
           }),
         )
         if (!cancelled) setProperties(rows.flat())
       } catch {
-        if (!cancelled) setLoadError('Не удалось загрузить ваши объекты. Попробуйте обновить страницу.')
+        if (!cancelled) setLoadError(t('myProperties.loadError'))
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -106,6 +109,7 @@ export function MyPropertiesPage() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- перечитывать список при смене языка не нужно
   }, [])
   const [statusFilter, setStatusFilter] = useState<'all' | ObjectSaleStatus>('all')
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
@@ -113,8 +117,8 @@ export function MyPropertiesPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useSeoMetadata({
-    title: 'Кабинет риелтора — Мои объекты | BAZA',
-    description: 'Управление объектами недвижимости, редактирование объявлений и подтверждение актуальности.',
+    title: t('myProperties.seoTitle'),
+    description: t('myProperties.seoDescription'),
   })
 
   // Handlers
@@ -179,43 +183,41 @@ export function MyPropertiesPage() {
       {/* Top Header */}
       <div className="figma-account-header">
         <div>
-          <h1 className="figma-account-header__title">Мои объекты</h1>
-          <p className="figma-account-header__desc">
-            Управление опубликованными объектами и контроль актуальности базы.
-          </p>
+          <h1 className="figma-account-header__title">{t('myProperties.title')}</h1>
+          <p className="figma-account-header__desc">{t('myProperties.subtitle')}</p>
         </div>
         <Link to="/publish" className="figma-account-add-btn" data-testid="account-add-property-cta">
-          + Добавить объект
+          {t('myProperties.add')}
         </Link>
       </div>
 
       {/* Metrics Ribbon */}
-      <div className="figma-account-metrics-bar" aria-label="Сводная статистика объектов">
+      <div className="figma-account-metrics-bar" aria-label={t('myProperties.metricsAria')}>
         <div className="figma-account-metric-card">
           <span className="figma-account-metric-card__value">{properties.length}</span>
-          <span className="figma-account-metric-card__label">Всего объектов</span>
+          <span className="figma-account-metric-card__label">{t('myProperties.metricTotal')}</span>
         </div>
         <div className="figma-account-metric-card">
           <span className="figma-account-metric-card__value" style={{ color: '#1BA800' }}>
             {countForSale}
           </span>
-          <span className="figma-account-metric-card__label">В активной продаже</span>
+          <span className="figma-account-metric-card__label">{t('myProperties.metricForSale')}</span>
         </div>
         <div className="figma-account-metric-card">
           <span className="figma-account-metric-card__value" style={{ color: '#0288D1' }}>
             {countModeration}
           </span>
-          <span className="figma-account-metric-card__label">На модерации</span>
+          <span className="figma-account-metric-card__label">{t('myProperties.metricModeration')}</span>
         </div>
         <div className="figma-account-metric-card">
           <span className="figma-account-metric-card__value">{totalViews.toLocaleString('ru-RU')}</span>
-          <span className="figma-account-metric-card__label">Просмотров объявлений</span>
+          <span className="figma-account-metric-card__label">{t('myProperties.metricViews')}</span>
         </div>
       </div>
 
       {/* Control Bar (Status tabs + View Mode + Search) */}
       <div className="figma-account-controls">
-        <div className="figma-account-status-tabs" role="tablist" aria-label="Фильтрация по статусу">
+        <div className="figma-account-status-tabs" role="tablist" aria-label={t('myProperties.statusFilterAria')}>
           <button
             type="button"
             className={`figma-account-tab-btn${statusFilter === 'all' ? ' is-active' : ''}`}
@@ -223,7 +225,7 @@ export function MyPropertiesPage() {
             role="tab"
             aria-selected={statusFilter === 'all'}
           >
-            Все ({properties.length})
+            {t('myProperties.tabAll', { count: properties.length })}
           </button>
           <button
             type="button"
@@ -232,7 +234,7 @@ export function MyPropertiesPage() {
             role="tab"
             aria-selected={statusFilter === 'for_sale'}
           >
-            В продаже ({countForSale})
+            {t('myProperties.tabForSale', { count: countForSale })}
           </button>
           <button
             type="button"
@@ -241,7 +243,7 @@ export function MyPropertiesPage() {
             role="tab"
             aria-selected={statusFilter === 'moderation'}
           >
-            На модерации ({countModeration})
+            {t('myProperties.tabModeration', { count: countModeration })}
           </button>
           <button
             type="button"
@@ -250,7 +252,7 @@ export function MyPropertiesPage() {
             role="tab"
             aria-selected={statusFilter === 'booked'}
           >
-            Бронь ({countBooked})
+            {t('myProperties.tabBooked', { count: countBooked })}
           </button>
           <button
             type="button"
@@ -259,17 +261,17 @@ export function MyPropertiesPage() {
             role="tab"
             aria-selected={statusFilter === 'archived'}
           >
-            Архив ({countArchived})
+            {t('myProperties.tabArchived', { count: countArchived })}
           </button>
         </div>
 
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <input
             type="search"
-            placeholder="Поиск по адресу или названию..."
+            placeholder={t('myProperties.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Поиск по моим объектам"
+            aria-label={t('myProperties.searchAria')}
             style={{
               padding: '8px 14px',
               borderRadius: '8px',
@@ -280,22 +282,22 @@ export function MyPropertiesPage() {
             }}
           />
 
-          <div className="figma-account-view-toggles" role="radiogroup" aria-label="Вид отображения">
+          <div className="figma-account-view-toggles" role="radiogroup" aria-label={t('myProperties.viewModeAria')}>
             <button
               type="button"
               className={`figma-account-view-btn${viewMode === 'cards' ? ' is-active' : ''}`}
               onClick={() => setViewMode('cards')}
-              aria-label="Отображение карточками"
+              aria-label={t('myProperties.viewCardsAria')}
             >
-              Карточки
+              {t('myProperties.viewCards')}
             </button>
             <button
               type="button"
               className={`figma-account-view-btn${viewMode === 'table' ? ' is-active' : ''}`}
               onClick={() => setViewMode('table')}
-              aria-label="Отображение таблицей"
+              aria-label={t('myProperties.viewTableAria')}
             >
-              Таблица
+              {t('myProperties.viewTable')}
             </button>
           </div>
         </div>
@@ -303,7 +305,7 @@ export function MyPropertiesPage() {
 
       {/* Content Rendering: Big Cards or Table */}
       {viewMode === 'cards' ? (
-        <div className="figma-account-big-cards" aria-label="Список объектов">
+        <div className="figma-account-big-cards" aria-label={t('myProperties.listAria')}>
           {filteredProperties.map((item) => (
             <article key={item.id} className="figma-account-big-card">
               {/* Media preview */}
@@ -331,14 +333,16 @@ export function MyPropertiesPage() {
                 <p className="figma-account-card-address">
                   📍 {item.city}, {item.address}
                   {[
-                    item.propertyType !== 'land' && item.rooms ? `${item.rooms} комн.` : null,
-                    item.area ? `${item.area} м²` : null,
+                    item.propertyType !== 'land' && item.rooms ? t('card.rooms', { count: item.rooms }) : null,
+                    item.area ? t('card.area', { area: item.area }) : null,
                     item.propertyType !== 'land' && item.floor
-                      ? `${item.floor}${item.totalFloors ? `/${item.totalFloors}` : ''} эт.`
+                      ? item.totalFloors
+                        ? t('card.floorOfTotal', { floor: item.floor, total: item.totalFloors })
+                        : t('card.floor', { floor: item.floor })
                       : null,
                   ]
                     .filter(Boolean)
-                    .map((chip, i) => ` · ${chip}`)
+                    .map((chip) => ` · ${chip}`)
                     .join('')}
                 </p>
 
@@ -352,15 +356,15 @@ export function MyPropertiesPage() {
                   <div className="figma-account-card-stats-row">
                     <div className="figma-account-stat-item">
                       <span>👁</span>
-                      <span><strong>{item.viewsCount}</strong> просмотров</span>
+                      <span><strong>{item.viewsCount}</strong> {t('myProperties.statViewsSuffix')}</span>
                     </div>
                     <div className="figma-account-stat-item">
                       <span>📞</span>
-                      <span><strong>{item.leadsCount}</strong> контактов</span>
+                      <span><strong>{item.leadsCount}</strong> {t('myProperties.statLeadsSuffix')}</span>
                     </div>
                     <div className="figma-account-stat-item">
                       <span>♥</span>
-                      <span><strong>{item.favoritesCount}</strong> в избранном</span>
+                      <span><strong>{item.favoritesCount}</strong> {t('myProperties.statFavoritesSuffix')}</span>
                     </div>
                   </div>
                 )}
@@ -372,7 +376,7 @@ export function MyPropertiesPage() {
                   to={item.slug ? `/listings/${item.slug}` : '#'}
                   className="figma-account-action-btn figma-account-action-btn--primary"
                 >
-                  Смотреть на сайте ↗
+                  {t('myProperties.viewOnSite')}
                 </Link>
                 {/*
                   Правка ведёт на реальные id объекта и объявления. Раньше
@@ -384,7 +388,7 @@ export function MyPropertiesPage() {
                     to={`/account/properties/${item.assetId}/listings/${item.listingId}/edit`}
                     className="figma-account-action-btn"
                   >
-                    Редактировать
+                    {t('myProperties.edit')}
                   </Link>
                 )}
                 <button
@@ -392,14 +396,14 @@ export function MyPropertiesPage() {
                   className="figma-account-action-btn"
                   onClick={() => handleCopyLink(item)}
                 >
-                  {copiedId === item.id ? '✓ Скопировано' : 'Поделиться 🔗'}
+                  {copiedId === item.id ? t('myProperties.copied') : t('myProperties.share')}
                 </button>
                 <button
                   type="button"
                   className="figma-account-action-btn"
                   onClick={() => handleToggleStatus(item.id)}
                 >
-                  {item.status === 'for_sale' ? 'Снять с продажи ⏸' : 'Опубликовать ▶'}
+                  {item.status === 'for_sale' ? t('myProperties.unpublish') : t('myProperties.publish')}
                 </button>
               </div>
             </article>
@@ -407,16 +411,16 @@ export function MyPropertiesPage() {
         </div>
       ) : (
         <div className="figma-account-table-wrapper">
-          <table className="figma-account-table" aria-label="Таблица моих объектов">
+          <table className="figma-account-table" aria-label={t('myProperties.tableAria')}>
             <thead>
               <tr>
-                <th>Объект</th>
-                <th>Локация</th>
-                <th>Цена</th>
-                <th>Статус</th>
-                <th>Актуальность</th>
-                <th>Просмотры</th>
-                <th>Действия</th>
+                <th>{t('myProperties.colObject')}</th>
+                <th>{t('myProperties.colLocation')}</th>
+                <th>{t('myProperties.colPrice')}</th>
+                <th>{t('myProperties.colStatus')}</th>
+                <th>{t('myProperties.colActuality')}</th>
+                <th>{t('myProperties.colViews')}</th>
+                <th>{t('myProperties.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -426,8 +430,8 @@ export function MyPropertiesPage() {
                     <strong style={{ display: 'block' }}>{item.title}</strong>
                     <span style={{ fontSize: '12px', color: '#757575' }}>
                       {[
-                        item.propertyType !== 'land' && item.rooms ? `${item.rooms} комн.` : null,
-                        item.area ? `${item.area} м²` : null,
+                        item.propertyType !== 'land' && item.rooms ? t('card.rooms', { count: item.rooms }) : null,
+                        item.area ? t('card.area', { area: item.area }) : null,
                       ]
                         .filter(Boolean)
                         .join(' · ')}
@@ -457,7 +461,7 @@ export function MyPropertiesPage() {
                         className="figma-account-action-btn"
                         style={{ padding: '4px 8px', fontSize: '12px' }}
                         onClick={() => handleToggleStatus(item.id)}
-                        title={item.status === 'for_sale' ? 'Снять' : 'Опубликовать'}
+                        title={item.status === 'for_sale' ? t('myProperties.unpublishShort') : t('myProperties.publish')}
                       >
                         {item.status === 'for_sale' ? '⏸' : '▶'}
                       </button>

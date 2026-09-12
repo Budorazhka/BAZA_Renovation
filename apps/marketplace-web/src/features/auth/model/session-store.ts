@@ -1,4 +1,19 @@
 import { authApi } from '../api/auth-api'
+import { getStoredLanguage, en, ka, ru } from '../../../i18n'
+
+/**
+ * Плоский модуль, не React: язык читается по ключу localStorage, как в
+ * useSeoMetadata.ts и marketplace-api.ts.
+ */
+const SESSION_ERROR_DICTS = {
+  ru: ru.sessionErrors,
+  en: en.sessionErrors,
+  ka: ka.sessionErrors,
+}
+
+function sessionErrors() {
+  return SESSION_ERROR_DICTS[getStoredLanguage()]
+}
 
 export interface SessionState {
   isAuthenticated: boolean
@@ -81,7 +96,7 @@ export function refreshSession(force = false): Promise<void> {
       publish({
         isAuthenticated: false,
         isChecking: false,
-        error: err instanceof Error ? err.message : 'Ошибка проверки сессии',
+        error: err instanceof Error ? err.message : sessionErrors().checkFailed,
       })
     } finally {
       inFlight = null
@@ -108,7 +123,7 @@ export async function signIn(login: string, password: string) {
       ...state,
       isAuthenticated: false,
       isChecking: false,
-      error: err instanceof Error ? err.message : 'Не удалось войти в аккаунт',
+      error: err instanceof Error ? err.message : sessionErrors().loginFailed,
     })
     throw err
   }
@@ -123,7 +138,7 @@ export async function signUpAndSignIn(login: string, password: string) {
     publish({
       ...state,
       isChecking: false,
-      error: err instanceof Error ? err.message : 'Не удалось создать аккаунт',
+      error: err instanceof Error ? err.message : sessionErrors().registerFailed,
     })
     throw err
   }
@@ -143,7 +158,7 @@ export async function signOut() {
     publish({
       isAuthenticated: false,
       isChecking: false,
-      error: err instanceof Error ? err.message : 'Не удалось завершить сессию на сервере',
+      error: err instanceof Error ? err.message : sessionErrors().logoutFailed,
     })
   }
 }

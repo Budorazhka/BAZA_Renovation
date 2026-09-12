@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { resolveMapStyleUrl, DEFAULT_MAP_STYLE_URL } from '../../../lib/map-config'
+import { useI18n } from '../../../i18n'
 
 type Coordinates = [number, number]
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -23,6 +24,7 @@ function isValidCoordinates(coordinates: Coordinates): boolean {
  * map and avoiding an unapproved public OSM tile fallback.
  */
 export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPickerProps) {
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<MapLibreMap | null>(null)
   const markerRef = useRef<MapLibreMarker | null>(null)
@@ -70,9 +72,9 @@ export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPick
         const point = marker.getLngLat()
         updateCoordinates([point.lng, point.lat])
       })
-      map.on('error', () => setMapError('Не удалось загрузить слой карты. Проверьте VITE_MAP_STYLE_URL.'))
+      map.on('error', () => setMapError(t('map.errorLoad')))
     } catch {
-      setMapError('Не удалось загрузить слой карты.')
+      setMapError(t('publishingMapPicker.errorLoadShort'))
       return
     }
 
@@ -91,17 +93,17 @@ export function PublishingMapPicker({ coordinates, onChange }: PublishingMapPick
   if (!styleUrl) {
     return (
       <div className="publishing-map-picker publishing-map-picker--unconfigured" role="status" data-testid="publishing-map-unconfigured">
-        <strong>Карта пока не подключена</strong>
-        <span>Задайте VITE_MAP_STYLE_URL для OSM-compatible провайдера в окружении marketplace-web.</span>
+        <strong>{t('map.notConfigured')}</strong>
+        <span>{t('map.notConfiguredHint')}</span>
       </div>
     )
   }
 
   return (
     <div className="publishing-map-picker" data-testid="publishing-map-picker">
-      <div ref={containerRef} className="publishing-map-picker__canvas" aria-label="Карта выбора точки объекта" />
+      <div ref={containerRef} className="publishing-map-picker__canvas" aria-label={t('publishingMapPicker.canvasAria')} />
       {mapError ? <p className="publishing-map-picker__error" role="alert">{mapError}</p> : null}
-      <p className="publishing-map-picker__hint">Кликните по карте или перетащите метку на точку объекта.</p>
+      <p className="publishing-map-picker__hint">{t('publishingMapPicker.hint')}</p>
     </div>
   )
 }

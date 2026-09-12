@@ -1,6 +1,23 @@
 import { useEffect } from 'react'
 import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketplace'
 import { listingPrice, listingTitle, listingAddress, developmentTitle, developmentAddress } from '../lib/format'
+import { en, getStoredLanguage, ka, ru } from '../i18n'
+import type { Language, Translate } from '../i18n'
+
+const SEO_DICTS: Record<Language, { title: string; description: string }> = {
+  ru: { title: ru.seo.defaultTitle, description: ru.seo.defaultDescription },
+  en: { title: en.seo.defaultTitle, description: en.seo.defaultDescription },
+  ka: { title: ka.seo.defaultTitle, description: ka.seo.defaultDescription },
+}
+
+/**
+ * Заголовок и описание вкладки по умолчанию, когда экран не задаёт своих.
+ * Читаются по языку вне React: `document.title` выставляется в эффекте ниже
+ * ещё до того, как страница успевает вызвать `useI18n`.
+ */
+function defaultSeo() {
+  return SEO_DICTS[getStoredLanguage()]
+}
 
 export interface SeoConfig {
   title?: string
@@ -16,9 +33,6 @@ export interface SeoConfig {
    */
   noindex?: boolean
 }
-
-const DEFAULT_TITLE = 'BAZA.sale · каталог объектов недвижимости'
-const DEFAULT_DESCRIPTION = 'Проверенные новостройки, вторичная недвижимость и аренда без комиссии и посредников.'
 
 function setMetaTag(name: string, content: string, attribute: 'name' | 'property' = 'name') {
   if (typeof document === 'undefined') return
@@ -84,8 +98,9 @@ export function useSeoMetadata(config: SeoConfig) {
   useEffect(() => {
     if (typeof document === 'undefined') return
 
-    const title = config.title ? `${config.title} — BAZA.sale` : DEFAULT_TITLE
-    const description = config.description?.trim() || DEFAULT_DESCRIPTION
+    const seo = defaultSeo()
+    const title = config.title ? `${config.title} — BAZA.sale` : seo.title
+    const description = config.description?.trim() || seo.description
     const canonical =
       config.canonicalUrl || (typeof window !== 'undefined' ? window.location.href.split('?')[0] : '')
 
@@ -105,8 +120,8 @@ export function useSeoMetadata(config: SeoConfig) {
     setJsonLd(config.jsonLd)
 
     return () => {
-      document.title = DEFAULT_TITLE
-      setMetaTag('description', DEFAULT_DESCRIPTION)
+      document.title = seo.title
+      setMetaTag('description', seo.description)
       removeMetaTag('og:title', 'property')
       removeMetaTag('og:description', 'property')
       removeMetaTag('og:image', 'property')
@@ -122,11 +137,13 @@ export function useSeoMetadata(config: SeoConfig) {
  * Strict whitelist: only public price, address, image URLs and description.
  * Storage keys, organization IDs, source IDs and internal phone numbers are never included.
  */
-export function buildListingJsonLd(item: PublicListingCard, origin = ''): Record<string, unknown> {
+export function buildListingJsonLd(item: PublicListingCard, origin = '', t?: Translate): Record<string, unknown> {
   const images = (item.media || []).map((m) => m.url).filter(Boolean)
   const title = item.seo?.title?.trim() || listingTitle(item)
   const address = listingAddress(item)
-  const description = item.seo?.description?.trim() || `${title} по адресу ${address}`
+  const description =
+    item.seo?.description?.trim() ||
+    (t ? t('seo.jsonLd.listingDescription', { title, address }) : `${title} — ${address}`)
   const url = item.slug ? `${origin}/listings/${item.slug}` : undefined
 
   return {
@@ -154,10 +171,14 @@ export function buildListingJsonLd(item: PublicListingCard, origin = ''): Record
 /**
  * Builds safe, non-disclosure JSON-LD for a residential development.
  */
-export function buildDevelopmentJsonLd(item: PublicDevelopmentCard, origin = ''): Record<string, unknown> {
+export function buildDevelopmentJsonLd(item: PublicDevelopmentCard, origin = '', t?: Translate): Record<string, unknown> {
   const title = developmentTitle(item)
   const address = developmentAddress(item)
-  const description = item.description?.trim() || `Жилой комплекс ${title} в городе ${item.location?.city || ''}`
+  const description =
+    item.description?.trim() ||
+    (t
+      ? t('seo.jsonLd.developmentDescription', { title, city: item.location?.city || '' })
+      : `${title} — ${item.location?.city || ''}`)
   const url = item.slug ? `${origin}/developments/${item.slug}` : undefined
 
   return {

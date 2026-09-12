@@ -143,12 +143,12 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
   return (
     <header className="bz-header" role="banner">
       <div className="bz-header__bar">
-        <Link to="/" className="bz-header__logo" aria-label="BAZA, каталог объектов недвижимости">
+        <Link to="/" className="bz-header__logo" aria-label={t('header.logoAria')}>
           <LogoMark />
           <span className="bz-header__logo-text">BAZA</span>
         </Link>
 
-        <nav className="bz-header__nav" aria-label="Основная навигация">
+        <nav className="bz-header__nav" aria-label={t('home.mobile.navAria')}>
           {navItems.map((item) => (
             <Link
               key={item.label}
@@ -175,7 +175,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
               <button
                 className="bz-header__account"
                 type="button"
-                aria-label="Меню аккаунта"
+                aria-label={t('header.accountMenuAria')}
                 aria-expanded={openMenu === 'account'}
                 data-testid="header-account-btn"
                 onClick={() => toggle('account')}
@@ -225,9 +225,9 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             </button>
             {openMenu === 'lang' ? (
               <div className="bz-header__dropdown" role="menu">
-                <button type="button" role="menuitem" onClick={() => handleLangSelect('RU')}>RU (Русский)</button>
-                <button type="button" role="menuitem" onClick={() => handleLangSelect('EN')}>EN (English)</button>
-                <button type="button" role="menuitem" onClick={() => handleLangSelect('KA')}>KA (ქართული)</button>
+                <button type="button" role="menuitem" onClick={() => handleLangSelect('RU')}>RU ({t('header.langRussian')})</button>
+                <button type="button" role="menuitem" onClick={() => handleLangSelect('EN')}>EN ({t('header.langEnglish')})</button>
+                <button type="button" role="menuitem" onClick={() => handleLangSelect('KA')}>KA ({t('header.langGeorgian')})</button>
               </div>
             ) : null}
           </div>
@@ -236,7 +236,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             <button
               className="bz-header__select"
               type="button"
-              aria-label="Выбрать валюту"
+              aria-label={t('header.selectCurrency')}
               aria-expanded={openMenu === 'currency'}
               onClick={() => toggle('currency')}
             >
@@ -256,7 +256,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             <button
               className="bz-header__city"
               type="button"
-              aria-label="Выбрать город"
+              aria-label={t('header.selectCity')}
               aria-expanded={openMenu === 'city'}
               onClick={() => toggle('city')}
             >
@@ -268,9 +268,9 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
             </button>
             {openMenu === 'city' ? (
               <div className="bz-header__dropdown bz-header__dropdown--right" role="menu">
-                <button type="button" role="menuitem" onClick={() => handleCitySelect('Тбилиси')}>Тбилиси</button>
-                <button type="button" role="menuitem" onClick={() => handleCitySelect('Батуми')}>Батуми</button>
-                <button type="button" role="menuitem" onClick={() => handleCitySelect('Бакуриани')}>Бакуриани</button>
+                <button type="button" role="menuitem" onClick={() => handleCitySelect('Тбилиси')}>{t('header.cityTbilisi')}</button>
+                <button type="button" role="menuitem" onClick={() => handleCitySelect('Батуми')}>{t('header.cityBatumi')}</button>
+                <button type="button" role="menuitem" onClick={() => handleCitySelect('Бакуриани')}>{t('header.cityBakuriani')}</button>
               </div>
             ) : null}
           </div>
@@ -278,7 +278,7 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
           <button
             className="bz-header__burger"
             type="button"
-            aria-label="Меню навигации"
+            aria-label={t('header.navMenuAria')}
             aria-expanded={mobileMenuOpen}
             onClick={() => setMobileMenuOpen((open) => !open)}
           >
@@ -290,8 +290,8 @@ export function Header({ onCityChange, onCurrencyChange, onLanguageChange }: Hea
       </div>
 
       {mobileMenuOpen ? (
-        <div className="bz-header__drawer" role="dialog" aria-label="Мобильное меню">
-          <nav className="bz-header__drawer-links" aria-label="Разделы">
+        <div className="bz-header__drawer" role="dialog" aria-label={t('header.mobileMenuAria')}>
+          <nav className="bz-header__drawer-links" aria-label={t('header.sectionsAria')}>
             {navItems.map((item) => (
               <Link key={item.label} to={item.to} className={item.active ? 'is-active' : undefined}>
                 {item.label}

@@ -1,6 +1,7 @@
 import { useReducer, useCallback, useEffect, useRef } from 'react'
 import { wizardReducer, initialWizardState } from './wizard-reducer'
 import { publishingApi, PublishingApiError } from '../api/publishing-api'
+import { useI18n } from '../../../i18n'
 import type {
   LocationFormData,
   CharacteristicsFormData,
@@ -10,6 +11,7 @@ import type {
 } from './types'
 
 export function usePublishingWizard(isAuthenticated: boolean) {
+  const { t } = useI18n()
   const [state, dispatch] = useReducer(wizardReducer, {
     ...initialWizardState,
     isAuthenticated,
@@ -69,16 +71,16 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       dispatch({ type: 'SET_ASSET_ID', assetId: asset._id })
       dispatch({ type: 'SET_STEP', step: 'deal' })
     } catch (err: any) {
-      dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка создания объекта недвижимости' })
+      dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorCreateAsset') })
     } finally {
       dispatch({ type: 'SET_LOADING', isLoading: false })
     }
-  }, [state.location, state.characteristics])
+  }, [state.location, state.characteristics, t])
 
   // Step 3 -> 4: Submit deal terms and create/activate Listing
   const submitDealTerms = useCallback(async () => {
     if (!state.assetId) {
-      dispatch({ type: 'SET_ERROR', error: 'Объект недвижимости не создан' })
+      dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorAssetMissing') })
       return
     }
 
@@ -91,11 +93,11 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       dispatch({ type: 'SET_LISTING_ID', listingId: listing._id })
       dispatch({ type: 'SET_STEP', step: 'media' })
     } catch (err: any) {
-      dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка создания коммерческого предложения' })
+      dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorCreateListing') })
     } finally {
       dispatch({ type: 'SET_LOADING', isLoading: false })
     }
-  }, [state.assetId, state.deal])
+  }, [state.assetId, state.deal, t])
 
   // Media upload (3-phase vertical): intent -> binary PUT -> confirm.
   // pendingUploadsRef keeps the browser-only File and the phase-1 intent
@@ -110,7 +112,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     async (tempId: string, fromPhase: 'intent' | 'upload' | 'confirm') => {
       const pending = pendingUploadsRef.current.get(tempId)
       if (!state.assetId || !pending) {
-        dispatch({ type: 'SET_ERROR', error: 'Объект недвижимости не найден' })
+        dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorAssetNotFound') })
         return
       }
       const { file, role } = pending
@@ -169,18 +171,18 @@ export function usePublishingWizard(isAuthenticated: boolean) {
           id: tempId,
           payload: { status: 'rejected', failedPhase: currentPhase },
         })
-        dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка загрузки фотографии' })
+        dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorUploadPhoto') })
       } finally {
         dispatch({ type: 'SET_UPLOADING_MEDIA', isUploading: false })
       }
     },
-    [state.assetId],
+    [state.assetId, t],
   )
 
   const uploadPhoto = useCallback(
     async (file: File) => {
       if (!state.assetId) {
-        dispatch({ type: 'SET_ERROR', error: 'Объект недвижимости не найден' })
+        dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorAssetNotFound') })
         return
       }
 
@@ -200,20 +202,20 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       dispatch({ type: 'ADD_MEDIA_ITEM', item: newMediaItem })
       await runUploadPhases(tempId, 'intent')
     },
-    [state.assetId, state.mediaItems.length, runUploadPhases],
+    [state.assetId, state.mediaItems.length, runUploadPhases, t],
   )
 
   const retryPhoto = useCallback(
     async (tempId: string) => {
       const pending = pendingUploadsRef.current.get(tempId)
       if (!pending) {
-        dispatch({ type: 'SET_ERROR', error: 'Не удалось найти файл для повторной загрузки. Выберите файл заново.' })
+        dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorRetryFile') })
         return
       }
       const item = state.mediaItems.find((i) => i.id === tempId)
       await runUploadPhases(tempId, item?.failedPhase || 'intent')
     },
-    [state.mediaItems, runUploadPhases],
+    [state.mediaItems, runUploadPhases, t],
   )
 
   const deletePhoto = useCallback(
@@ -248,10 +250,10 @@ export function usePublishingWizard(isAuthenticated: boolean) {
         }))
         dispatch({ type: 'SET_MEDIA_ITEMS', items: mappedItems })
       } catch (err: any) {
-        dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка удаления фотографии' })
+        dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorDeletePhoto') })
       }
     },
-    [state.assetId, state.mediaItems],
+    [state.assetId, state.mediaItems, t],
   )
 
   const setCoverPhoto = useCallback(
@@ -271,10 +273,10 @@ export function usePublishingWizard(isAuthenticated: boolean) {
         }))
         dispatch({ type: 'SET_MEDIA_ITEMS', items: mappedItems })
       } catch (err: any) {
-        dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка назначения обложки' })
+        dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorSetCover') })
       }
     },
-    [state.assetId],
+    [state.assetId, t],
   )
 
   // Step 4 -> 5: Load duplicates and actuality before review
@@ -291,11 +293,11 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       dispatch({ type: 'SET_ACTUALITY', actuality })
       dispatch({ type: 'SET_STEP', step: 'review' })
     } catch (err: any) {
-      dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка получения статуса проверки' })
+      dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorActualityStatus') })
     } finally {
       dispatch({ type: 'SET_LOADING', isLoading: false })
     }
-  }, [state.assetId, state.listingId])
+  }, [state.assetId, state.listingId, t])
 
   // Submit Duplicate Override
   const isOverrideInFlightRef = useRef(false)
@@ -306,7 +308,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
       if (isOverrideInFlightRef.current) return
 
       if (!state.overrideReason || state.overrideReason.trim().length < 10) {
-        dispatch({ type: 'SET_ERROR', error: 'Укажите причину подтверждения (не менее 10 символов)' })
+        dispatch({ type: 'SET_ERROR', error: t('reviewDedupe.errorReason') })
         return
       }
 
@@ -320,13 +322,13 @@ export function usePublishingWizard(isAuthenticated: boolean) {
           dispatch({ type: 'SET_DUPLICATES', candidates: duplicates })
         }
       } catch (err: any) {
-        dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка снятия блокировки дубликата' })
+        dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorOverride') })
       } finally {
         isOverrideInFlightRef.current = false
         dispatch({ type: 'SET_SUBMITTING_OVERRIDE', isSubmitting: false })
       }
     },
-    [state.overrideReason, state.assetId],
+    [state.overrideReason, state.assetId, t],
   )
 
   // Polling ref
@@ -356,12 +358,12 @@ export function usePublishingWizard(isAuthenticated: boolean) {
     if (isPublishInFlightRef.current) return
 
     if (!state.assetId || !state.listingId) {
-      dispatch({ type: 'SET_ERROR', error: 'Идентификаторы объявления не найдены' })
+      dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorIdsMissing') })
       return
     }
 
     if (state.hasDuplicateBlock) {
-      dispatch({ type: 'SET_ERROR', error: 'Необходимо подтвердить отсутствие дубликата' })
+      dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorConfirmNoDuplicate') })
       return
     }
 
@@ -405,7 +407,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
             stopPolling()
             dispatch({ type: 'SET_PUBLICATION_STATUS', status: 'publication_pending' })
             dispatch({ type: 'SET_STEP', step: 'review' })
-            dispatch({ type: 'SET_ERROR', error: 'Публикация занимает дольше обычного. Повторите проверку позже.' })
+            dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorTimeout') })
             isPublishInFlightRef.current = false
             dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
             return
@@ -429,7 +431,7 @@ export function usePublishingWizard(isAuthenticated: boolean) {
               status: 'build_failed',
             })
             dispatch({ type: 'SET_STEP', step: 'review' })
-            dispatch({ type: 'SET_ERROR', error: 'Ошибка генерации публикации объявления' })
+            dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorBuildFailed') })
             isPublishInFlightRef.current = false
             dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
           }
@@ -449,15 +451,15 @@ export function usePublishingWizard(isAuthenticated: boolean) {
           dispatch({ type: 'SET_DUPLICATES', candidates: duplicates })
         }
         dispatch({ type: 'SET_STEP', step: 'review' })
-        dispatch({ type: 'SET_ERROR', error: 'Обнаружен возможный дубликат объявления. Заполните подтверждение.' })
+        dispatch({ type: 'SET_ERROR', error: t('publishingWizard.errorDuplicateOnPublish') })
       } else {
         dispatch({ type: 'SET_STEP', step: 'review' })
-        dispatch({ type: 'SET_ERROR', error: err.message || 'Ошибка публикации объявления' })
+        dispatch({ type: 'SET_ERROR', error: err.message || t('publishingWizard.errorPublish') })
       }
       isPublishInFlightRef.current = false
       dispatch({ type: 'SET_PUBLISHING', isPublishing: false })
     }
-  }, [state.assetId, state.listingId, state.hasDuplicateBlock, state.actualityState, stopPolling])
+  }, [state.assetId, state.listingId, state.hasDuplicateBlock, state.actualityState, stopPolling, t])
 
   // A logout mid-publish must not let the in-flight status poll keep running
   // against the just-cleared session and later dispatch a stale result (e.g.

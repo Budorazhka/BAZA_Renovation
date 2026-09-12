@@ -7,6 +7,7 @@ import {
   type OwnerPropertyAsset,
 } from '../features/publishing/api/publishing-api'
 import { listingPropertyTypeLabel } from '../lib/format'
+import { useI18n } from '../i18n'
 import '../features/publishing/styles/publishing.css'
 import '../features/auth/styles/auth.css'
 
@@ -22,6 +23,7 @@ import '../features/auth/styles/auth.css'
 export function EditListingPage() {
   const { assetId = '', listingId = '' } = useParams()
   const navigate = useNavigate()
+  const { t } = useI18n()
 
   const [asset, setAsset] = useState<OwnerPropertyAsset | null>(null)
   const [listing, setListing] = useState<OwnerListing | null>(null)
@@ -50,7 +52,7 @@ export function EditListingPage() {
       ])
       const found = listings.find((item) => item._id === listingId) ?? null
       if (!found) {
-        setLoadError('Объявление не найдено или принадлежит другому аккаунту.')
+        setLoadError(t('editListing.notFound'))
         return
       }
       setAsset(loadedAsset)
@@ -67,13 +69,13 @@ export function EditListingPage() {
     } catch (error) {
       setLoadError(
         error instanceof PublishingApiError && error.status === 404
-          ? 'Объявление не найдено или принадлежит другому аккаунту.'
-          : 'Не удалось загрузить объявление. Попробуйте ещё раз.',
+          ? t('editListing.notFound')
+          : t('editListing.loadFailed'),
       )
     } finally {
       setIsLoading(false)
     }
-  }, [assetId, listingId])
+  }, [assetId, listingId, t])
 
   useEffect(() => {
     void load()
@@ -94,7 +96,7 @@ export function EditListingPage() {
 
     const amountUnits = numberOrUndefined(amount)
     if (amountUnits === undefined || amountUnits < 0) {
-      setSaveError('Укажите цену числом')
+      setSaveError(t('editListing.errorPriceNumber'))
       return
     }
 
@@ -111,21 +113,17 @@ export function EditListingPage() {
         representativePhone: phone.trim() || undefined,
       })
       setListing(result.listing)
-      setSavedNote(
-        result.rebuildRequested
-          ? 'Сохранено. Объявление опубликовано, поэтому каталог обновится в течение минуты.'
-          : 'Сохранено.',
-      )
+      setSavedNote(result.rebuildRequested ? t('editListing.savedRebuild') : t('editListing.saved'))
     } catch (error) {
       if (error instanceof PublishingApiError && error.status === 409) {
         // Ровно тот случай, ради которого на сервере стоит сверка версии: кто-то
         // изменил это же объявление, пока форма была открыта. Затирать чужую
         // правку нельзя, поэтому предлагаем перечитать.
-        setSaveError('Объявление изменено из другого места. Обновите страницу и повторите правку.')
+        setSaveError(t('editListing.errorConflict'))
       } else if (error instanceof PublishingApiError && error.status === 400) {
-        setSaveError('Сервер отклонил значения. Проверьте цену и характеристики.')
+        setSaveError(t('editListing.errorRejected'))
       } else {
-        setSaveError('Не удалось сохранить. Попробуйте ещё раз.')
+        setSaveError(t('editListing.errorSaveFailed'))
       }
     } finally {
       setIsSaving(false)
@@ -135,7 +133,7 @@ export function EditListingPage() {
   if (isLoading) {
     return (
       <div className="state-panel" role="status" aria-busy="true">
-        <p>Загружаем объявление…</p>
+        <p>{t('editListing.loading')}</p>
       </div>
     )
   }
@@ -143,9 +141,9 @@ export function EditListingPage() {
   if (loadError || !asset || !listing) {
     return (
       <div className="state-panel state-panel--error" role="alert">
-        <p>{loadError ?? 'Объявление недоступно.'}</p>
+        <p>{loadError ?? t('editListing.unavailable')}</p>
         <Link to="/account/properties" className="clear-filter-btn">
-          Вернуться к моим объектам
+          {t('editListing.backToProperties')}
         </Link>
       </div>
     )
@@ -154,7 +152,7 @@ export function EditListingPage() {
   return (
     <section className="edit-listing" aria-labelledby="edit-listing-title">
       <h1 id="edit-listing-title" className="edit-listing__title">
-        Редактирование объявления
+        {t('editListing.title')}
       </h1>
 
       {/*
@@ -163,24 +161,21 @@ export function EditListingPage() {
       */}
       <dl className="edit-listing__fixed">
         <div>
-          <dt>Адрес</dt>
+          <dt>{t('editListing.address')}</dt>
           <dd>
             {asset.location.city}, {asset.location.address}
           </dd>
         </div>
         <div>
-          <dt>Тип объекта</dt>
-          <dd>{listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype)}</dd>
+          <dt>{t('editListing.propertyType')}</dt>
+          <dd>{listingPropertyTypeLabel(asset.propertyType, asset.commercialSubtype, t)}</dd>
         </div>
         <div>
-          <dt>Тип сделки</dt>
-          <dd>{listing.dealType === 'sale' ? 'Продажа' : 'Аренда'}</dd>
+          <dt>{t('editListing.dealType')}</dt>
+          <dd>{listing.dealType === 'sale' ? t('format.dealSale') : t('editListing.rent')}</dd>
         </div>
       </dl>
-      <p className="edit-listing__fixed-note">
-        Адрес, тип объекта и тип сделки изменить нельзя: по ним система проверяет объявление на
-        дубли. Если объект другой, разместите новое объявление.
-      </p>
+      <p className="edit-listing__fixed-note">{t('editListing.fixedNote')}</p>
 
       {saveError && (
         <div className="wizard-alert wizard-alert--error" role="alert" data-testid="edit-listing-error">
@@ -195,7 +190,7 @@ export function EditListingPage() {
 
       <form className="wizard-form" onSubmit={handleSubmit} noValidate>
         <div className="wizard-field">
-          <label htmlFor="edit-price">Цена *</label>
+          <label htmlFor="edit-price">{t('editListing.price')}</label>
           <input
             id="edit-price"
             type="number"
@@ -209,7 +204,7 @@ export function EditListingPage() {
         </div>
 
         <div className="wizard-field">
-          <label htmlFor="edit-currency">Валюта</label>
+          <label htmlFor="edit-currency">{t('editListing.currency')}</label>
           <select
             id="edit-currency"
             value={currency}
@@ -223,7 +218,7 @@ export function EditListingPage() {
         </div>
 
         <div className="wizard-field">
-          <label htmlFor="edit-area">Площадь, м²</label>
+          <label htmlFor="edit-area">{t('editListing.area')}</label>
           <input
             id="edit-area"
             type="number"
@@ -238,7 +233,7 @@ export function EditListingPage() {
         {asset.propertyType !== 'land' && (
           <>
             <div className="wizard-field">
-              <label htmlFor="edit-rooms">Комнат</label>
+              <label htmlFor="edit-rooms">{t('editListing.rooms')}</label>
               <input
                 id="edit-rooms"
                 type="number"
@@ -251,7 +246,7 @@ export function EditListingPage() {
             </div>
 
             <div className="wizard-field">
-              <label htmlFor="edit-floor">Этаж</label>
+              <label htmlFor="edit-floor">{t('editListing.floor')}</label>
               <input
                 id="edit-floor"
                 type="number"
@@ -263,7 +258,7 @@ export function EditListingPage() {
             </div>
 
             <div className="wizard-field">
-              <label htmlFor="edit-total-floors">Этажей в доме</label>
+              <label htmlFor="edit-total-floors">{t('editListing.totalFloors')}</label>
               <input
                 id="edit-total-floors"
                 type="number"
@@ -278,7 +273,7 @@ export function EditListingPage() {
         )}
 
         <div className="wizard-field">
-          <label htmlFor="edit-phone">Телефон в объявлении</label>
+          <label htmlFor="edit-phone">{t('editListing.phone')}</label>
           <input
             id="edit-phone"
             type="tel"
@@ -297,7 +292,7 @@ export function EditListingPage() {
             aria-busy={isSaving}
             data-testid="edit-submit-btn"
           >
-            {isSaving ? 'Сохраняем…' : 'Сохранить изменения'}
+            {isSaving ? t('editListing.saving') : t('editListing.save')}
           </button>
           <button
             type="button"
@@ -305,14 +300,14 @@ export function EditListingPage() {
             onClick={() => navigate('/account/properties')}
             disabled={isSaving}
           >
-            Отмена
+            {t('editListing.cancel')}
           </button>
         </div>
       </form>
 
       {listing.updatedAt && (
         <p className="edit-listing__updated">
-          Последнее изменение: {new Date(listing.updatedAt).toLocaleString('ru-RU')}
+          {t('editListing.lastUpdated', { date: new Date(listing.updatedAt).toLocaleString('ru-RU') })}
         </p>
       )}
     </section>

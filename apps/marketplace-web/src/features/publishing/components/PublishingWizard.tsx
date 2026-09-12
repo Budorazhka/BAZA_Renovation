@@ -8,17 +8,19 @@ import { DealPricingStep } from './steps/DealPricingStep'
 import { MediaUploadStep } from './steps/MediaUploadStep'
 import { ReviewDedupeStep } from './steps/ReviewDedupeStep'
 import { PublicationProgressStep } from './steps/PublicationProgressStep'
+import { useI18n } from '../../../i18n'
 import '../styles/publishing.css'
 
 const STEPS_NAV = [
-  { id: 'location', label: 'Адрес' },
-  { id: 'characteristics', label: 'Параметры' },
-  { id: 'deal', label: 'Стоимость' },
-  { id: 'media', label: 'Фото' },
-  { id: 'review', label: 'Проверка' },
+  { id: 'location', labelKey: 'publishingWizard.stepAddress' },
+  { id: 'characteristics', labelKey: 'publishingWizard.stepParams' },
+  { id: 'deal', labelKey: 'publishingWizard.stepPrice' },
+  { id: 'media', labelKey: 'publishingWizard.stepPhoto' },
+  { id: 'review', labelKey: 'publishingWizard.stepReview' },
 ]
 
 export function PublishingWizard() {
+  const { t } = useI18n()
   const { isAuthenticated, isChecking, error: authError, login, registerAndLogin, logout } = useAuthSession()
   const {
     state,
@@ -44,7 +46,7 @@ export function PublishingWizard() {
     return (
       <div className="wizard-container" data-testid="wizard-loading" aria-busy="true">
         <div className="wizard-spinner" />
-        <p>Проверка авторизации...</p>
+        <p>{t('publishingWizard.checkingAuth')}</p>
       </div>
     )
   }
@@ -57,8 +59,8 @@ export function PublishingWizard() {
       <header className="wizard-header">
         <div className="wizard-header__row">
           <div>
-            <h1 className="wizard-title">Размещение объявления</h1>
-            <p className="wizard-caption">Публикация объекта в открытом каталоге BAZA</p>
+            <h1 className="wizard-title">{t('publishingWizard.title')}</h1>
+            <p className="wizard-caption">{t('publishingWizard.caption')}</p>
           </div>
           {isAuthenticated && (
             <button
@@ -67,7 +69,7 @@ export function PublishingWizard() {
               onClick={logout}
               data-testid="wizard-logout-btn"
             >
-              Выйти
+              {t('header.logout')}
             </button>
           )}
         </div>
@@ -76,7 +78,7 @@ export function PublishingWizard() {
         {isAuthenticated && state.step !== 'auth' && state.step !== 'published' && (
           <nav
             className="wizard-progress-nav"
-            aria-label="Прогресс заполнения объявления"
+            aria-label={t('publishingWizard.progressAria')}
             data-testid="wizard-progress-nav"
           >
             {STEPS_NAV.map((stepItem, index) => {
@@ -89,7 +91,7 @@ export function PublishingWizard() {
                   aria-current={isCurrent ? 'step' : undefined}
                 >
                   <span className="wizard-progress-nav__num">{index + 1}</span>
-                  <span className="wizard-progress-nav__label">{stepItem.label}</span>
+                  <span className="wizard-progress-nav__label">{t(stepItem.labelKey)}</span>
                 </div>
               )
             })}

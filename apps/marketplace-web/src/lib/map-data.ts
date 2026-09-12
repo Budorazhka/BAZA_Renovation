@@ -1,4 +1,5 @@
 import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketplace'
+import type { Translate } from '../i18n'
 import {
   developmentAddress,
   developmentTitle,
@@ -25,32 +26,46 @@ export function isListingCard(item: MarketplaceMapItem): item is PublicListingCa
   return 'dealType' in item
 }
 
-export function getMapItemTitle(item: MarketplaceMapItem): string {
+export function getMapItemTitle(item: MarketplaceMapItem, t?: Translate): string {
   if (isDevelopmentCard(item)) {
-    return developmentTitle(item)
+    return developmentTitle(item, t)
   }
-  return listingTitle(item)
+  return listingTitle(item, t)
 }
 
-export function getMapItemAddress(item: MarketplaceMapItem): string {
+export function getMapItemAddress(item: MarketplaceMapItem, t?: Translate): string {
   if (isDevelopmentCard(item)) {
-    return developmentAddress(item)
+    return developmentAddress(item, t)
   }
-  return listingAddress(item)
+  return listingAddress(item, t)
 }
 
-export function getMapItemPriceOrDate(item: MarketplaceMapItem): string | null {
+export function getMapItemPriceOrDate(item: MarketplaceMapItem, t?: Translate): string | null {
   if (isDevelopmentCard(item)) {
-    return completionLabel(item.completionDate)
+    return completionLabel(item.completionDate, t)
   }
-  return listingPrice(item)
+  return listingPrice(item, t)
 }
 
-export function getMapItemBadge(item: MarketplaceMapItem): string {
+/**
+ * `t` необязателен: тестам и вызовам вне React-дерева достаточно русского
+ * запасного варианта, компонент карты передаёт настоящий перевод.
+ */
+export function getMapItemBadge(item: MarketplaceMapItem, t?: Translate): string {
   if (isDevelopmentCard(item)) {
-    return item.classType ? `ЖК · ${item.classType}` : 'Жилой комплекс'
+    return item.classType
+      ? t
+        ? t('map.badgeDevWithClass', { class: item.classType })
+        : `ЖК · ${item.classType}`
+      : t
+        ? t('map.badgeDev')
+        : 'Жилой комплекс'
   }
-  return item.dealType === 'sale' ? '✦ Продажа' : `✦ ${listingDealTypeLabel(item.dealType)}`
+  if (item.dealType === 'sale') {
+    return t ? t('map.badgeSale') : '✦ Продажа'
+  }
+  const deal = listingDealTypeLabel(item.dealType, t)
+  return t ? t('map.badgeDeal', { deal }) : `✦ ${deal}`
 }
 
 export function getMapItemCoverUrl(item: MarketplaceMapItem): string | undefined {
@@ -69,14 +84,15 @@ export function getMapItemLink(item: MarketplaceMapItem): string | undefined {
   return `/listings/${encodeURIComponent(item.slug)}`
 }
 
-export function mapItemLabel(item: MarketplaceMapItem, index: number): string {
-  const title = getMapItemTitle(item)
-  const priceOrDate = getMapItemPriceOrDate(item)
-  const address = getMapItemAddress(item)
+export function mapItemLabel(item: MarketplaceMapItem, index: number, t?: Translate): string {
+  const title = getMapItemTitle(item, t)
+  const priceOrDate = getMapItemPriceOrDate(item, t)
+  const address = getMapItemAddress(item, t)
   if (priceOrDate) {
-    return `${title} — ${priceOrDate}, ${address}`
+    return t ? t('map.itemLabelWithPrice', { title, priceOrDate, address }) : `${title} — ${priceOrDate}, ${address}`
   }
-  return `${title || `Объект ${index + 1}`}, ${address}`
+  const safeTitle = title || (t ? t('map.itemFallbackTitle', { index: index + 1 }) : `Объект ${index + 1}`)
+  return t ? t('map.itemLabel', { title: safeTitle, address }) : `${safeTitle}, ${address}`
 }
 
 export function getMarketplaceMapPoints(items: MarketplaceMapItem[]): MarketplaceMapPoint[] {

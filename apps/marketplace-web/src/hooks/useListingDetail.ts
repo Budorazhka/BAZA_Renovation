@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
 import { isAbortError } from '../lib/async'
+import { useI18n } from '../i18n'
 import type { PublicListingCard } from '../types/marketplace'
 
 export type ListingDetailState =
@@ -10,6 +11,7 @@ export type ListingDetailState =
   | { status: 'error'; message: string; statusCode?: number; retry: () => void }
 
 export function useListingDetail(slug: string | undefined): ListingDetailState {
+  const { t } = useI18n()
   const [state, setState] = useState<ListingDetailState>({ status: 'loading' })
   const activeControllerRef = useRef<AbortController | null>(null)
 
@@ -32,15 +34,12 @@ export function useListingDetail(slug: string | undefined): ListingDetailState {
         return
       }
       const statusCode = cause instanceof MarketplaceApiError ? cause.status : undefined
-      const message =
-        cause instanceof Error
-          ? cause.message
-          : 'Не удалось загрузить карточку объекта. Пожалуйста, попробуйте снова.'
+      const message = cause instanceof Error ? cause.message : t('errors.listingDetail')
       setState({ status: 'error', message, statusCode, retry: () => void load() })
     } finally {
       if (activeControllerRef.current === controller) activeControllerRef.current = null
     }
-  }, [slug])
+  }, [slug, t])
 
   useEffect(() => {
     void load()

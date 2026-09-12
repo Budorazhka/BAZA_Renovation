@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
+import { useI18n } from '../i18n'
 
 export interface RealtorItem {
   id: string
@@ -85,12 +86,13 @@ export const MOCK_REALTORS: RealtorItem[] = [
  * RealtorsPage Component (Figma: Рейтинг риелторов v2 Node ID 3576:53108)
  */
 export function RealtorsPage() {
+  const { t } = useI18n()
   const [cityFilter, setCityFilter] = useState<'all' | 'Батуми' | 'Тбилиси'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
   useSeoMetadata({
-    title: 'Рейтинг риелторов и агентств недвижимости в Грузии',
-    description: 'Единый независимый рейтинг проверенных риелторов, агентств и брокеров в Батуми и Тбилиси на платформе BAZA.',
+    title: t('realtors.seoTitle'),
+    description: t('realtors.seoDescription'),
   })
 
   const filteredRealtors = MOCK_REALTORS.filter((r) => {
@@ -111,16 +113,14 @@ export function RealtorsPage() {
       <div className="demo-notice-banner" role="note">
         <span className="demo-notice-banner__icon" aria-hidden="true">ℹ️</span>
         <div className="demo-notice-banner__text">
-          <strong>Демонстрационный раздел:</strong> Реестр и рейтинг специалистов находятся на этапе подключения агентств недвижимости. Карточки, показатели сделок и отзывы сгенерированы для демонстрации интерфейса платформы.
+          <strong>{t('realtors.demoTitle')}</strong> {t('realtors.demoText')}
         </div>
       </div>
 
       <div className="figma-realtors-header">
-        <div className="figma-realtors-header__eyebrow">Экосистема BAZA (Демо)</div>
-        <h1 className="figma-realtors-header__title">Рейтинг риелторов в Грузии</h1>
-        <p className="figma-realtors-header__subtitle">
-          Проверенные эксперты по недвижимости с подтвержденными сделками, реальными отзывами покупателей и официальной аттестацией.
-        </p>
+        <div className="figma-realtors-header__eyebrow">{t('realtors.eyebrow')}</div>
+        <h1 className="figma-realtors-header__title">{t('realtors.title')}</h1>
+        <p className="figma-realtors-header__subtitle">{t('realtors.subtitle')}</p>
       </div>
 
       {/* Toolbar */}
@@ -132,14 +132,14 @@ export function RealtorsPage() {
           </svg>
           <input
             type="search"
-            placeholder="Поиск по имени риелтора, агентству или специализации..."
+            placeholder={t('realtors.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="Поиск по риелторам"
+            aria-label={t('realtors.searchAria')}
           />
         </div>
 
-        <div className="figma-realtors-toolbar__tabs" role="tablist" aria-label="Фильтр по городу">
+        <div className="figma-realtors-toolbar__tabs" role="tablist" aria-label={t('realtors.cityFilterAria')}>
           <button
             type="button"
             className={`figma-realtor-tab-btn${cityFilter === 'all' ? ' is-active' : ''}`}
@@ -147,7 +147,7 @@ export function RealtorsPage() {
             role="tab"
             aria-selected={cityFilter === 'all'}
           >
-            Все города
+            {t('filters.allCities')}
           </button>
           <button
             type="button"
@@ -156,7 +156,7 @@ export function RealtorsPage() {
             role="tab"
             aria-selected={cityFilter === 'Батуми'}
           >
-            Батуми
+            {t('header.cityBatumi')}
           </button>
           <button
             type="button"
@@ -165,13 +165,13 @@ export function RealtorsPage() {
             role="tab"
             aria-selected={cityFilter === 'Тбилиси'}
           >
-            Тбилиси
+            {t('header.cityTbilisi')}
           </button>
         </div>
       </div>
 
       {/* Grid */}
-      <div className="figma-realtors-grid" aria-label="Список риелторов">
+      <div className="figma-realtors-grid" aria-label={t('realtors.gridAria')}>
         {filteredRealtors.map((realtor) => (
           <article key={realtor.id} className="figma-realtor-card">
             <div className="figma-realtor-card__top">
@@ -183,13 +183,13 @@ export function RealtorsPage() {
                 <span className="figma-realtor-agency">{realtor.agency} · {realtor.city}</span>
                 <div className="figma-realtor-rating-row">
                   <span className="figma-realtor-stars" aria-hidden="true">★ {realtor.rating.toFixed(1)}</span>
-                  <span className="figma-realtor-reviews-count">({realtor.reviewsCount} отзывов)</span>
+                  <span className="figma-realtor-reviews-count">{t('realtors.reviewsCount', { count: realtor.reviewsCount })}</span>
                 </div>
               </div>
             </div>
 
             <div className="figma-realtor-badges">
-              <span className="figma-realtor-badge figma-realtor-badge--demo">Демо-профиль</span>
+              <span className="figma-realtor-badge figma-realtor-badge--demo">{t('realtors.demoProfile')}</span>
               {realtor.badges.map((b, i) => (
                 <span key={i} className={`figma-realtor-badge${b.includes('ТОП') ? ' figma-realtor-badge--top' : ''}`}>
                   {b}
@@ -200,11 +200,11 @@ export function RealtorsPage() {
             <div className="figma-realtor-metrics-row">
               <div>
                 <div className="figma-realtor-metric-value">{realtor.dealsCount}</div>
-                <div className="figma-realtor-metric-label">Сделок закрыто</div>
+                <div className="figma-realtor-metric-label">{t('realtors.dealsClosed')}</div>
               </div>
               <div>
-                <div className="figma-realtor-metric-value">{realtor.experienceYears} лет</div>
-                <div className="figma-realtor-metric-label">Опыт работы</div>
+                <div className="figma-realtor-metric-value">{t('realtors.experienceYears', { count: realtor.experienceYears })}</div>
+                <div className="figma-realtor-metric-label">{t('realtors.experience')}</div>
               </div>
             </div>
 
@@ -212,9 +212,9 @@ export function RealtorsPage() {
               <Link
                 to={`/realtors/${realtor.id}`}
                 className="figma-realtor-card__btn"
-                aria-label={`Профиль риелтора: ${realtor.name}`}
+                aria-label={t('realtors.profileAria', { name: realtor.name })}
               >
-                Профиль и отзывы →
+                {t('realtors.profileLink')}
               </Link>
             </div>
           </article>

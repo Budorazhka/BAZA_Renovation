@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n'
+
 export interface CardSkeletonProps {
   count?: number
   className?: string
@@ -9,6 +11,7 @@ export interface CardSkeletonProps {
  */
 export function CardSkeleton({ count = 1, className = '' }: CardSkeletonProps) {
   const items = Array.from({ length: count }, (_, idx) => idx)
+  const { t } = useI18n()
 
   return (
     <>
@@ -17,7 +20,7 @@ export function CardSkeleton({ count = 1, className = '' }: CardSkeletonProps) {
           key={idx}
           className={`figma-card-skeleton ${className}`.trim()}
           role="status"
-          aria-label="Загрузка карточки объекта..."
+          aria-label={t('common.loadingCard')}
         >
           {/* Shimmer cover */}
           <div className="figma-card-skeleton__cover figma-skeleton" />

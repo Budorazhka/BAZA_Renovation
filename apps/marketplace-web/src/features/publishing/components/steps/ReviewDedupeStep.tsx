@@ -7,6 +7,8 @@ import type {
   DuplicateCandidate,
   ActualityState,
 } from '../../model/types'
+import { useI18n } from '../../../../i18n'
+import { listingPropertyTypeLabel } from '../../../../lib/format'
 
 interface ReviewDedupeStepProps {
   location: LocationFormData
@@ -43,6 +45,7 @@ export function ReviewDedupeStep({
   isPublishing,
   error,
 }: ReviewDedupeStepProps) {
+  const { t } = useI18n()
   const [overrideError, setOverrideError] = useState<string | null>(null)
   const activeDuplicate = duplicateCandidates.find(
     (c) => c.status === 'detected' || c.status === 'confirmed_duplicate',
@@ -54,7 +57,7 @@ export function ReviewDedupeStep({
     setOverrideError(null)
 
     if (!overrideReason || overrideReason.trim().length < 10) {
-      setOverrideError('Укажите причину подтверждения (не менее 10 символов)')
+      setOverrideError(t('reviewDedupe.errorReason'))
       return
     }
 
@@ -64,10 +67,8 @@ export function ReviewDedupeStep({
   return (
     <section className="wizard-step wizard-step--review" data-testid="wizard-step-review" aria-labelledby="review-heading">
       <div className="wizard-step__header">
-        <h2 id="review-heading">Шаг 5: Проверка данных и публикация</h2>
-        <p className="wizard-step__subtitle">
-          Убедитесь в корректности параметров объявления перед отправкой в каталог маркетплейса
-        </p>
+        <h2 id="review-heading">{t('reviewDedupe.heading')}</h2>
+        <p className="wizard-step__subtitle">{t('reviewDedupe.subtitle')}</p>
       </div>
 
       {error && (
@@ -78,25 +79,23 @@ export function ReviewDedupeStep({
 
       {/* Duplicate detection warning card */}
       {hasDuplicateBlock && activeDuplicate && (
-        <div className="wizard-alert wizard-alert--warning" role="region" aria-label="Предупреждение о дубликате" data-testid="duplicate-warning-card">
-          <div className="wizard-alert__title">
-            ⚠️ Обнаружен возможный дубликат объекта
-          </div>
+        <div className="wizard-alert wizard-alert--warning" role="region" aria-label={t('reviewDedupe.duplicateWarningAria')} data-testid="duplicate-warning-card">
+          <div className="wizard-alert__title">{t('reviewDedupe.duplicateTitle')}</div>
           <p>
-            Система BAZA нашла совпадение по контактам или адресу ({activeDuplicate.signals.phoneMatch ? 'телефон совпадает' : ''}{' '}
-            {activeDuplicate.signals.addressMatch ? 'адрес совпадает' : ''}).
+            {t('reviewDedupe.duplicateText', {
+              phone: activeDuplicate.signals.phoneMatch ? t('reviewDedupe.phoneMatches') : '',
+              address: activeDuplicate.signals.addressMatch ? t('reviewDedupe.addressMatches') : '',
+            })}
           </p>
           {canOverride ? (
             <div className="wizard-override-box">
-              <label htmlFor="override-reason">
-                Если это отдельный объект или эксклюзивное право, подтвердите отсутствие дубликата (не менее 10 символов) *:
-              </label>
+              <label htmlFor="override-reason">{t('reviewDedupe.overrideLabel')}</label>
               <textarea
                 id="override-reason"
                 rows={3}
                 value={overrideReason}
                 onChange={(e) => onOverrideReasonChange(e.target.value)}
-                placeholder="Я подтверждаю, что являюсь официальным представителем и это реальный уникальный объект..."
+                placeholder={t('reviewDedupe.overridePlaceholder')}
                 disabled={isSubmittingOverride}
                 data-testid="override-reason-input"
               />
@@ -109,12 +108,12 @@ export function ReviewDedupeStep({
                 aria-busy={isSubmittingOverride}
                 data-testid="override-submit-btn"
               >
-                {isSubmittingOverride ? 'Отправка...' : 'Подтвердить, что это не дубль'}
+                {isSubmittingOverride ? t('reviewDedupe.overrideSending') : t('reviewDedupe.overrideSubmit')}
               </button>
             </div>
           ) : (
             <p className="wizard-field-hint" data-testid="duplicate-confirmed-hint">
-              Этот кандидат уже подтверждён системой как дубликат. Обратитесь к модератору для решения вопроса.
+              {t('reviewDedupe.confirmedHint')}
             </p>
           )}
         </div>
@@ -123,34 +122,34 @@ export function ReviewDedupeStep({
       {/* Summary Details */}
       <div className="wizard-summary-card">
         <div className="wizard-summary-row">
-          <span className="wizard-summary-label">Адрес:</span>
+          <span className="wizard-summary-label">{t('reviewDedupe.address')}</span>
           <strong>{location.city}, {location.address}</strong>
         </div>
         <div className="wizard-summary-row">
-          <span className="wizard-summary-label">Тип и параметры:</span>
+          <span className="wizard-summary-label">{t('reviewDedupe.typeAndParams')}</span>
           <strong>
-            {characteristics.propertyType} · {characteristics.area} м²
-            {characteristics.rooms ? `, ${characteristics.rooms} комн.` : ''}
+            {listingPropertyTypeLabel(characteristics.propertyType, characteristics.commercialSubtype, t)} · {t('card.area', { area: characteristics.area })}
+            {characteristics.rooms ? `, ${t('card.rooms', { count: characteristics.rooms })}` : ''}
           </strong>
         </div>
         <div className="wizard-summary-row">
-          <span className="wizard-summary-label">Условия сделки:</span>
+          <span className="wizard-summary-label">{t('reviewDedupe.dealTerms')}</span>
           <strong>
-            {deal.dealType === 'sale' ? 'Продажа' : 'Аренда'} — {deal.priceAmount} {deal.currency}
+            {deal.dealType === 'sale' ? t('format.dealSale') : t('editListing.rent')} — {deal.priceAmount} {deal.currency}
           </strong>
         </div>
         <div className="wizard-summary-row">
-          <span className="wizard-summary-label">Контакты:</span>
+          <span className="wizard-summary-label">{t('reviewDedupe.contacts')}</span>
           <strong>{characteristics.representativePhone}</strong>
         </div>
         <div className="wizard-summary-row">
-          <span className="wizard-summary-label">Загружено фото:</span>
-          <strong>{mediaItems.length} фото</strong>
+          <span className="wizard-summary-label">{t('reviewDedupe.uploadedPhotos')}</span>
+          <strong>{t('reviewDedupe.photoCount', { count: mediaItems.length })}</strong>
         </div>
         {actualityState && (
           <div className="wizard-summary-row">
-            <span className="wizard-summary-label">Актуальность:</span>
-            <span className="wizard-badge wizard-badge--success">Готово к подтверждению</span>
+            <span className="wizard-summary-label">{t('reviewDedupe.actuality')}</span>
+            <span className="wizard-badge wizard-badge--success">{t('reviewDedupe.readyToConfirm')}</span>
           </div>
         )}
       </div>
@@ -163,7 +162,7 @@ export function ReviewDedupeStep({
           disabled={isPublishing}
           data-testid="review-back-btn"
         >
-          ← Назад
+          {t('wizard.back')}
         </button>
         <button
           type="button"
@@ -173,7 +172,7 @@ export function ReviewDedupeStep({
           aria-busy={isPublishing}
           data-testid="publish-submit-btn"
         >
-          {isPublishing ? 'Отправка публикации...' : '🚀 Опубликовать объявление'}
+          {isPublishing ? t('reviewDedupe.publishing') : t('reviewDedupe.publish')}
         </button>
       </div>
     </section>

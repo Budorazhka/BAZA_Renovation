@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useI18n } from '../i18n'
 
 /**
  * MKT-SCR-027: страница «не найдено».
@@ -14,23 +15,24 @@ import { Link } from 'react-router-dom'
  * несуществующий URL.
  */
 export function NotFoundPage() {
+  const { t } = useI18n()
   return (
     <section className="not-found-page" aria-labelledby="not-found-title">
       <p className="not-found-page__code" aria-hidden="true">
         404
       </p>
       <h1 id="not-found-title" className="not-found-page__title">
-        Такой страницы нет
+        {t('notFound.title')}
       </h1>
       <p className="not-found-page__text">
-        Возможно, объект сняли с публикации или в адресе опечатка.
+        {t('notFound.text')}
       </p>
       <div className="not-found-page__actions">
         <Link to="/newconstructions" className="not-found-page__btn not-found-page__btn--primary">
-          Смотреть новостройки
+          {t('notFound.newConstructions')}
         </Link>
         <Link to="/" className="not-found-page__btn">
-          На главную
+          {t('notFound.home')}
         </Link>
       </div>
     </section>

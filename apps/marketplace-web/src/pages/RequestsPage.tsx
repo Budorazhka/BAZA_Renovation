@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
+import { useI18n } from '../i18n'
+import type { Language, Translate } from '../i18n'
 
 /*
  * Доска запросов клиентов — фрейм `search result (2 page)` (`2287:34150`):
@@ -10,6 +12,10 @@ import { useSeoMetadata } from '../hooks/useSeoMetadata'
  * Бэкенда у доски пока нет (очередь владельца, N-13), запросы ниже —
  * образцы для витрины. Даты считаются от сегодняшнего дня, иначе фильтр
  * «Актуальность» со временем опустошал бы список.
+ *
+ * Переводится только оболочка (заголовки, подписи, кнопки) — сами запросы
+ * образец пользовательского контента и на переключатель языка не должны
+ * реагировать, как не переводятся описания объектов из базы.
  */
 
 type DealType = 'buy' | 'rent'
@@ -38,37 +44,41 @@ export interface ClientRequestItem {
   daysAgo: number
 }
 
-/* Подписи переключателей — ровно те, что в макете (`2287:34200`…`2287:34214`). */
+/* Подписи переключателей — ключи словаря, порядок как в макете (`2287:34200`…`2287:34214`). */
 const RESIDENTIAL: Array<[PropertyKind, string]> = [
-  ['newbuild', 'Квартира в новостройке'],
-  ['secondary', 'Квартира во вторичке'],
-  ['house', 'Дом'],
-  ['land', 'Земельный участок'],
-  ['other', 'Другое'],
+  ['newbuild', 'requests.kind.newbuild'],
+  ['secondary', 'requests.kind.secondary'],
+  ['house', 'requests.kind.house'],
+  ['land', 'requests.kind.land'],
+  ['other', 'requests.kind.other'],
 ]
 
 const COMMERCIAL: Array<[PropertyKind, string]> = [
-  ['office', 'Офис'],
-  ['warehouse', 'Склад'],
-  ['retail', 'Торговая площадь'],
-  ['free', 'Помещение свободного назначения'],
+  ['office', 'requests.kind.office'],
+  ['warehouse', 'requests.kind.warehouse'],
+  ['retail', 'requests.kind.retail'],
+  ['free', 'requests.kind.free'],
 ]
 
 /* Короткие названия для низа карточки: там значение набрано 22px. */
-const KIND_SHORT: Record<PropertyKind, string> = {
-  newbuild: 'Новостройка',
-  secondary: 'Вторичка',
-  house: 'Дом',
-  land: 'Участок',
-  other: 'Другое',
-  office: 'Офис',
-  warehouse: 'Склад',
-  retail: 'Торговая площадь',
-  free: 'Свободное назначение',
+const KIND_SHORT_KEY: Record<PropertyKind, string> = {
+  newbuild: 'requests.kindShort.newbuild',
+  secondary: 'requests.kindShort.secondary',
+  house: 'requests.kindShort.house',
+  land: 'requests.kindShort.land',
+  other: 'requests.kindShort.other',
+  office: 'requests.kindShort.office',
+  warehouse: 'requests.kindShort.warehouse',
+  retail: 'requests.kindShort.retail',
+  free: 'requests.kindShort.free',
 }
 
-const DEAL_LABEL: Record<DealType, string> = { buy: 'Покупка', rent: 'Аренда' }
+const DEAL_LABEL_KEY: Record<DealType, string> = { buy: 'requests.category.buy', rent: 'requests.category.rent' }
 
+/*
+ * Сами запросы — образцы, стоят в очереди на backend (N-13), поэтому не
+ * переведены: это будущий контент с витрины, а не интерфейс.
+ */
 const REQUESTS: ClientRequestItem[] = [
   {
     id: 'req-1',
@@ -171,15 +181,16 @@ const FRESHNESS_DAYS: Record<Exclude<Freshness, 'all'>, number> = { week: 7, mon
 const MONEY = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
 const DAY_MS = 86_400_000
 
-function formatBudget(budget: ClientRequestItem['budget']): string {
-  return `до $${MONEY.format(budget.amount)}${budget.perMonth ? ' / мес' : ''}`
+function formatBudget(budget: ClientRequestItem['budget'], t: Translate): string {
+  const amount = `$${MONEY.format(budget.amount)}`
+  return budget.perMonth ? t('requests.budget.perMonth', { amount }) : t('requests.budget.total', { amount })
 }
 
 function postedAt(daysAgo: number): Date {
   return new Date(Date.now() - daysAgo * DAY_MS)
 }
 
-function plural(n: number, forms: [string, string, string]): string {
+function ruPlural(n: number, forms: [string, string, string]): string {
   const mod10 = n % 10
   const mod100 = n % 100
   if (mod10 === 1 && mod100 !== 11) return forms[0]
@@ -187,8 +198,30 @@ function plural(n: number, forms: [string, string, string]): string {
   return forms[2]
 }
 
-function requestsWord(n: number): string {
-  return plural(n, ['запрос', 'запроса', 'запросов'])
+/**
+ * Счётчик результатов согласуется по числу и роду только в русском —
+ * английский и грузинский этого не требуют (в грузинском существительное
+ * после числительного всегда в единственном числе).
+ */
+function countLabel(language: Language, count: number, t: Translate): string {
+  if (language === 'ru') {
+    const noun = ruPlural(count, ['запрос', 'запроса', 'запросов'])
+    const verb = count % 10 === 1 && count % 100 !== 11 ? 'найден' : 'найдено'
+    return `${count} ${noun} ${verb}`
+  }
+  if (language === 'ka') {
+    return t('requests.count.ka', { count })
+  }
+  return t('requests.count.en', { count, noun: count === 1 ? t('requests.count.enSingular') : t('requests.count.enPlural') })
+}
+
+function showButtonLabel(language: Language, count: number, t: Translate): string {
+  if (count === 0) return t('requests.filters.none')
+  if (language === 'ru') {
+    const noun = ruPlural(count, ['запрос', 'запроса', 'запросов'])
+    return `${t('requests.filters.showPrefix')} ${count} ${noun}`
+  }
+  return t('requests.filters.show', { count })
 }
 
 /** «+995 599 00 00 01» → видимое начало и скрытый хвост. */
@@ -198,6 +231,7 @@ function splitPhone(phone: string): [string, string] {
 }
 
 export function RequestsPage() {
+  const { t, language } = useI18n()
   const [deal, setDeal] = useState<'all' | DealType>('all')
   const [kinds, setKinds] = useState<Set<PropertyKind>>(() => new Set())
   const [city, setCity] = useState<'all' | City>('all')
@@ -210,9 +244,8 @@ export function RequestsPage() {
   const [createOpen, setCreateOpen] = useState(false)
 
   useSeoMetadata({
-    title: 'Запросы покупателей и арендаторов | BAZA',
-    description:
-      'Доска актуальных заявок на покупку и аренду недвижимости в Грузии. Предложите свой объект напрямую клиенту.',
+    title: t('requests.seo.title'),
+    description: t('requests.seo.description'),
   })
 
   const toggleKind = (kind: PropertyKind) => {
@@ -264,8 +297,8 @@ export function RequestsPage() {
     <div className="bz-requests">
       <header className="bz-requests__head">
         <div className="bz-requests__intro">
-          <h1>Запросы клиентов</h1>
-          <p>Что ищут покупатели и арендаторы. Подберите объект и напишите клиенту напрямую.</p>
+          <h1>{t('requests.title')}</h1>
+          <p>{t('requests.subtitle')}</p>
         </div>
         <button
           type="button"
@@ -274,7 +307,7 @@ export function RequestsPage() {
           data-testid="add-request-btn"
         >
           <PlusIcon />
-          Оставить запрос
+          {t('requests.cta')}
         </button>
       </header>
 
@@ -286,20 +319,20 @@ export function RequestsPage() {
         <aside
           id="requests-filters"
           className={`bz-rq-filters${filtersOpen ? ' is-open' : ''}`}
-          aria-label="Фильтры запросов"
+          aria-label={t('requests.filters.aria')}
         >
           <div className="bz-rq-filters__top">
-            <h2 className="bz-rq-filters__title">Фильтр</h2>
+            <h2 className="bz-rq-filters__title">{t('requests.filters.title')}</h2>
             {hasAnyFilter ? (
               <button type="button" className="bz-rq-filters__reset" onClick={resetFilters}>
-                Сбросить
+                {t('requests.filters.reset')}
               </button>
             ) : null}
             <button
               type="button"
               className="bz-rq-filters__close"
               onClick={() => setFiltersOpen(false)}
-              aria-label="Закрыть фильтр"
+              aria-label={t('requests.filters.close')}
             >
               <CloseIcon />
             </button>
@@ -311,21 +344,21 @@ export function RequestsPage() {
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Район, комплекс, пожелание"
-              aria-label="Поиск по запросам"
+              placeholder={t('requests.search.placeholder')}
+              aria-label={t('requests.search.aria')}
             />
           </label>
 
           <fieldset className="bz-rq-group">
-            <legend className="bz-rq-group__title">Категория</legend>
+            <legend className="bz-rq-group__title">{t('requests.category.legend')}</legend>
             <div className="bz-rq-radios">
               {(
                 [
-                  ['all', 'Все'],
-                  ['buy', 'Покупка'],
-                  ['rent', 'Аренда'],
+                  ['all', 'requests.category.all'],
+                  ['buy', 'requests.category.buy'],
+                  ['rent', 'requests.category.rent'],
                 ] as const
-              ).map(([value, label]) => (
+              ).map(([value, labelKey]) => (
                 <label key={value} className="bz-rq-radio">
                   <input
                     type="radio"
@@ -335,34 +368,34 @@ export function RequestsPage() {
                     onChange={() => setDeal(value)}
                   />
                   <span className="bz-rq-radio__mark" aria-hidden="true" />
-                  <span className="bz-rq-radio__label">{label}</span>
+                  <span className="bz-rq-radio__label">{t(labelKey)}</span>
                 </label>
               ))}
             </div>
           </fieldset>
 
           <fieldset className="bz-rq-group">
-            <legend className="bz-rq-group__title">Тип недвижимости</legend>
-            <KindSwitches title="Жилая" options={RESIDENTIAL} selected={kinds} onToggle={toggleKind} />
-            <KindSwitches title="Коммерческая" options={COMMERCIAL} selected={kinds} onToggle={toggleKind} />
+            <legend className="bz-rq-group__title">{t('requests.propertyType.legend')}</legend>
+            <KindSwitches titleKey="requests.propertyType.residential" options={RESIDENTIAL} selected={kinds} onToggle={toggleKind} t={t} />
+            <KindSwitches titleKey="requests.propertyType.commercial" options={COMMERCIAL} selected={kinds} onToggle={toggleKind} t={t} />
           </fieldset>
 
           <div className="bz-rq-group">
             <label className="bz-rq-group__title" htmlFor="rq-city">
-              Город
+              {t('requests.city.label')}
             </label>
             <div className="bz-rq-select">
               <select id="rq-city" value={city} onChange={(event) => setCity(event.target.value as 'all' | City)}>
-                <option value="all">Все города</option>
-                <option value="Батуми">Батуми</option>
-                <option value="Тбилиси">Тбилиси</option>
+                <option value="all">{t('requests.city.all')}</option>
+                <option value="Батуми">{t('requests.city.batumi')}</option>
+                <option value="Тбилиси">{t('requests.city.tbilisi')}</option>
               </select>
             </div>
           </div>
 
           <div className="bz-rq-group">
             <label className="bz-rq-group__title" htmlFor="rq-freshness">
-              Актуальность
+              {t('requests.freshness.label')}
             </label>
             <div className="bz-rq-select">
               <select
@@ -370,22 +403,22 @@ export function RequestsPage() {
                 value={freshness}
                 onChange={(event) => setFreshness(event.target.value as Freshness)}
               >
-                <option value="all">За всё время</option>
-                <option value="week">За последнюю неделю</option>
-                <option value="month">За последний месяц</option>
+                <option value="all">{t('requests.freshness.all')}</option>
+                <option value="week">{t('requests.freshness.week')}</option>
+                <option value="month">{t('requests.freshness.month')}</option>
               </select>
             </div>
           </div>
 
           <button type="button" className="bz-rq-btn bz-rq-btn--call bz-rq-filters__apply" onClick={() => setFiltersOpen(false)}>
-            {count > 0 ? `Показать ${count} ${requestsWord(count)}` : 'Запросов нет'}
+            {showButtonLabel(language, count, t)}
           </button>
         </aside>
 
         <section className="bz-rq-results" aria-labelledby="rq-count">
           <div className="bz-rq-bar">
             <p id="rq-count" className="bz-rq-bar__count" aria-live="polite">
-              <strong>{count}</strong> {requestsWord(count)} {count % 10 === 1 && count % 100 !== 11 ? 'найден' : 'найдено'}
+              {countLabel(language, count, t)}
             </p>
             <button
               type="button"
@@ -395,13 +428,13 @@ export function RequestsPage() {
               aria-expanded={filtersOpen}
             >
               <FilterIcon />
-              Фильтр
+              {t('requests.filters.title')}
               {activeFilters > 0 ? <span className="bz-rq-bar__badge">{activeFilters}</span> : null}
             </button>
             <div className="bz-rq-select bz-rq-select--ink">
-              <select value={sort} onChange={(event) => setSort(event.target.value as Sort)} aria-label="Порядок запросов">
-                <option value="new">Сначала новые</option>
-                <option value="old">Сначала старые</option>
+              <select value={sort} onChange={(event) => setSort(event.target.value as Sort)} aria-label={t('requests.sort.aria')}>
+                <option value="new">{t('requests.sort.new')}</option>
+                <option value="old">{t('requests.sort.old')}</option>
               </select>
             </div>
           </div>
@@ -415,47 +448,50 @@ export function RequestsPage() {
                     phoneShown={revealed.has(request.id)}
                     onRevealPhone={() => setRevealed((prev) => new Set(prev).add(request.id))}
                     onWrite={() => setWriteTo(request)}
+                    t={t}
                   />
                 </li>
               ))}
             </ol>
           ) : (
             <div className="bz-rq-empty">
-              <p className="bz-rq-empty__title">По этим условиям запросов нет</p>
-              <p>Ослабьте фильтры или оставьте свой запрос: риелторы увидят его и предложат варианты.</p>
+              <p className="bz-rq-empty__title">{t('requests.empty.title')}</p>
+              <p>{t('requests.empty.text')}</p>
               <button type="button" className="bz-rq-btn bz-rq-btn--outline" onClick={resetFilters}>
-                Сбросить фильтры
+                {t('requests.empty.reset')}
               </button>
             </div>
           )}
         </section>
       </div>
 
-      {writeTo ? <WriteDialog request={writeTo} onClose={() => setWriteTo(null)} /> : null}
-      {createOpen ? <CreateRequestDialog onClose={() => setCreateOpen(false)} /> : null}
+      {writeTo ? <WriteDialog request={writeTo} onClose={() => setWriteTo(null)} t={t} /> : null}
+      {createOpen ? <CreateRequestDialog onClose={() => setCreateOpen(false)} t={t} /> : null}
     </div>
   )
 }
 
 function KindSwitches({
-  title,
+  titleKey,
   options,
   selected,
   onToggle,
+  t,
 }: {
-  title: string
+  titleKey: string
   options: Array<[PropertyKind, string]>
   selected: Set<PropertyKind>
   onToggle: (kind: PropertyKind) => void
+  t: Translate
 }) {
   return (
     <div className="bz-rq-switches">
-      <p className="bz-rq-switches__title">{title}</p>
-      {options.map(([kind, label]) => (
+      <p className="bz-rq-switches__title">{t(titleKey)}</p>
+      {options.map(([kind, labelKey]) => (
         <label key={kind} className="bz-rq-switch">
           <input type="checkbox" role="switch" checked={selected.has(kind)} onChange={() => onToggle(kind)} />
           <span className="bz-rq-switch__track" aria-hidden="true" />
-          <span className="bz-rq-switch__label">{label}</span>
+          <span className="bz-rq-switch__label">{t(labelKey)}</span>
         </label>
       ))}
     </div>
@@ -473,11 +509,13 @@ function RequestCard({
   phoneShown,
   onRevealPhone,
   onWrite,
+  t,
 }: {
   request: ClientRequestItem
   phoneShown: boolean
   onRevealPhone: () => void
   onWrite: () => void
+  t: Translate
 }) {
   const titleId = `${request.id}-title`
   const date = postedAt(request.daysAgo)
@@ -490,7 +528,7 @@ function RequestCard({
           {request.title}
         </h3>
         <p className="bz-rq-card__date">
-          Дата размещения: <time dateTime={date.toISOString().slice(0, 10)}>{date.toLocaleDateString('ru-RU')}</time>
+          {t('requests.card.datePrefix')} <time dateTime={date.toISOString().slice(0, 10)}>{date.toLocaleDateString('ru-RU')}</time>
         </p>
       </div>
 
@@ -498,7 +536,7 @@ function RequestCard({
 
       <div className="bz-rq-card__contact">
         <PhoneIcon />
-        <span className="bz-rq-card__contact-label">Контакты:</span>
+        <span className="bz-rq-card__contact-label">{t('requests.card.contacts')}</span>
         <span className="bz-rq-card__author">{request.authorName}</span>
         <span className="bz-rq-card__phone">
           {phoneHead}{' '}
@@ -509,7 +547,7 @@ function RequestCard({
               <span className="bz-rq-card__phone-mask" aria-hidden="true">
                 {phoneTail}
               </span>
-              <span className="visually-hidden">номер скрыт</span>
+              <span className="visually-hidden">{t('requests.card.hiddenSr')}</span>
             </>
           )}
         </span>
@@ -518,10 +556,10 @@ function RequestCard({
             type="button"
             className="bz-rq-card__reveal"
             onClick={onRevealPhone}
-            aria-label={`Показать телефон: ${request.authorName}`}
+            aria-label={t('requests.card.revealAria', { name: request.authorName })}
           >
             <EyeIcon />
-            Показать
+            {t('requests.card.reveal')}
           </button>
         )}
       </div>
@@ -529,16 +567,16 @@ function RequestCard({
       <div className="bz-rq-card__foot">
         <dl className="bz-rq-card__facts">
           <div>
-            <dt>Категория</dt>
-            <dd>{DEAL_LABEL[request.dealType]}</dd>
+            <dt>{t('requests.card.categoryLabel')}</dt>
+            <dd>{t(DEAL_LABEL_KEY[request.dealType])}</dd>
           </div>
           <div>
-            <dt>Тип недвижимости</dt>
-            <dd>{KIND_SHORT[request.kind]}</dd>
+            <dt>{t('requests.card.propertyLabel')}</dt>
+            <dd>{t(KIND_SHORT_KEY[request.kind])}</dd>
           </div>
           <div>
-            <dt>Бюджет</dt>
-            <dd>{formatBudget(request.budget)}</dd>
+            <dt>{t('requests.card.budgetLabel')}</dt>
+            <dd>{formatBudget(request.budget, t)}</dd>
           </div>
         </dl>
         <div className="bz-rq-card__actions">
@@ -547,7 +585,7 @@ function RequestCard({
             href={`tel:${request.phone.replace(/\s/g, '')}`}
             onClick={onRevealPhone}
           >
-            Позвонить
+            {t('requests.card.call')}
           </a>
           <button
             type="button"
@@ -555,7 +593,7 @@ function RequestCard({
             onClick={onWrite}
             data-testid={`offer-btn-${request.id}`}
           >
-            Написать
+            {t('requests.card.write')}
           </button>
         </div>
       </div>
@@ -567,7 +605,19 @@ function RequestCard({
  * Модальное окно: фокус внутрь при открытии и назад при закрытии, Escape
  * и клик по затемнению закрывают, прокрутка страницы под окном стоит.
  */
-function Dialog({ title, subtitle, onClose, children }: { title: string; subtitle?: ReactNode; onClose: () => void; children: ReactNode }) {
+function Dialog({
+  title,
+  subtitle,
+  onClose,
+  t,
+  children,
+}: {
+  title: string
+  subtitle?: ReactNode
+  onClose: () => void
+  t: Translate
+  children: ReactNode
+}) {
   const titleId = useId()
   const panelRef = useRef<HTMLDivElement>(null)
   // Обработчик закрытия в ref: иначе эффект перезапускался бы при каждой
@@ -600,7 +650,7 @@ function Dialog({ title, subtitle, onClose, children }: { title: string; subtitl
       }}
     >
       <div ref={panelRef} className="bz-rq-dialog__panel" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <button type="button" className="bz-rq-dialog__close" onClick={onClose} aria-label="Закрыть окно">
+        <button type="button" className="bz-rq-dialog__close" onClick={onClose} aria-label={t('requests.dialog.close')}>
           <CloseIcon />
         </button>
         <h2 id={titleId} className="bz-rq-dialog__title">
@@ -613,7 +663,7 @@ function Dialog({ title, subtitle, onClose, children }: { title: string; subtitl
   )
 }
 
-function WriteDialog({ request, onClose }: { request: ClientRequestItem; onClose: () => void }) {
+function WriteDialog({ request, onClose, t }: { request: ClientRequestItem; onClose: () => void; t: Translate }) {
   const [sent, setSent] = useState(false)
 
   const handleSubmit = (event: FormEvent) => {
@@ -623,38 +673,38 @@ function WriteDialog({ request, onClose }: { request: ClientRequestItem; onClose
 
   return (
     <Dialog
-      title="Написать клиенту"
-      subtitle={
-        <>
-          {request.authorName} ищет: {request.title.charAt(0).toLowerCase() + request.title.slice(1)}
-        </>
-      }
+      title={t('requests.write.title')}
+      subtitle={t('requests.write.subtitle', {
+        author: request.authorName,
+        title: request.title.charAt(0).toLowerCase() + request.title.slice(1),
+      })}
       onClose={onClose}
+      t={t}
     >
       {sent ? (
         <div className="bz-rq-dialog__done" role="status">
-          <p className="bz-rq-dialog__done-title">Сообщение отправлено</p>
+          <p className="bz-rq-dialog__done-title">{t('requests.write.sentTitle')}</p>
           <button type="button" className="bz-rq-btn bz-rq-btn--outline" onClick={onClose}>
-            Закрыть
+            {t('requests.write.cancel')}
           </button>
         </div>
       ) : (
         <form className="bz-rq-form" onSubmit={handleSubmit}>
           <label className="bz-rq-field">
-            <span className="bz-rq-field__label">Объект</span>
-            <input type="url" placeholder="Ссылка на объект в BAZA" />
-            <span className="bz-rq-field__hint">Необязательно. Клиент увидит карточку объекта.</span>
+            <span className="bz-rq-field__label">{t('requests.write.objectLabel')}</span>
+            <input type="url" placeholder={t('requests.write.objectPlaceholder')} />
+            <span className="bz-rq-field__hint">{t('requests.write.objectHint')}</span>
           </label>
           <label className="bz-rq-field">
-            <span className="bz-rq-field__label">Сообщение</span>
-            <textarea rows={4} required placeholder="Цена, условия, когда можно посмотреть" />
+            <span className="bz-rq-field__label">{t('requests.write.messageLabel')}</span>
+            <textarea rows={4} required placeholder={t('requests.write.messagePlaceholder')} />
           </label>
           <div className="bz-rq-form__actions">
             <button type="button" className="bz-rq-btn bz-rq-btn--outline" onClick={onClose}>
-              Отмена
+              {t('requests.write.cancel')}
             </button>
             <button type="submit" className="bz-rq-btn bz-rq-btn--call">
-              Отправить
+              {t('requests.write.send')}
             </button>
           </div>
         </form>
@@ -663,7 +713,7 @@ function WriteDialog({ request, onClose }: { request: ClientRequestItem; onClose
   )
 }
 
-function CreateRequestDialog({ onClose }: { onClose: () => void }) {
+function CreateRequestDialog({ onClose, t }: { onClose: () => void; t: Translate }) {
   const [sent, setSent] = useState(false)
   const [deal, setDeal] = useState<DealType>('buy')
 
@@ -673,70 +723,70 @@ function CreateRequestDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Dialog title="Оставить запрос" subtitle="Опишите, что ищете. Риелторы предложат подходящие объекты." onClose={onClose}>
+    <Dialog title={t('requests.create.title')} subtitle={t('requests.create.subtitle')} onClose={onClose} t={t}>
       {sent ? (
         <div className="bz-rq-dialog__done" role="status">
-          <p className="bz-rq-dialog__done-title">Запрос принят</p>
-          <p>Он появится на доске после проверки модератором.</p>
+          <p className="bz-rq-dialog__done-title">{t('requests.create.sentTitle')}</p>
+          <p>{t('requests.create.sentText')}</p>
           <button type="button" className="bz-rq-btn bz-rq-btn--outline" onClick={onClose}>
-            Закрыть
+            {t('requests.create.close')}
           </button>
         </div>
       ) : (
         <form className="bz-rq-form" onSubmit={handleSubmit}>
           <fieldset className="bz-rq-field">
-            <legend className="bz-rq-field__label">Что нужно</legend>
+            <legend className="bz-rq-field__label">{t('requests.create.needLegend')}</legend>
             <div className="bz-rq-radios">
-              {(Object.keys(DEAL_LABEL) as DealType[]).map((value) => (
+              {(Object.keys(DEAL_LABEL_KEY) as DealType[]).map((value) => (
                 <label key={value} className="bz-rq-radio">
                   <input type="radio" name="rq-create-deal" checked={deal === value} onChange={() => setDeal(value)} />
                   <span className="bz-rq-radio__mark" aria-hidden="true" />
-                  <span className="bz-rq-radio__label">{value === 'buy' ? 'Купить' : 'Снять'}</span>
+                  <span className="bz-rq-radio__label">{value === 'buy' ? t('requests.create.buy') : t('requests.create.rent')}</span>
                 </label>
               ))}
             </div>
           </fieldset>
           <div className="bz-rq-form__row">
             <label className="bz-rq-field">
-              <span className="bz-rq-field__label">Тип недвижимости</span>
+              <span className="bz-rq-field__label">{t('requests.create.propertyType')}</span>
               <span className="bz-rq-select">
                 <select defaultValue="newbuild">
-                  {[...RESIDENTIAL, ...COMMERCIAL].map(([kind, label]) => (
+                  {[...RESIDENTIAL, ...COMMERCIAL].map(([kind, labelKey]) => (
                     <option key={kind} value={kind}>
-                      {label}
+                      {t(labelKey)}
                     </option>
                   ))}
                 </select>
               </span>
             </label>
             <label className="bz-rq-field">
-              <span className="bz-rq-field__label">Город</span>
+              <span className="bz-rq-field__label">{t('requests.create.city')}</span>
               <span className="bz-rq-select">
                 <select defaultValue="Батуми">
-                  <option>Батуми</option>
-                  <option>Тбилиси</option>
+                  <option>{t('requests.city.batumi')}</option>
+                  <option>{t('requests.city.tbilisi')}</option>
                 </select>
               </span>
             </label>
           </div>
           <label className="bz-rq-field">
-            <span className="bz-rq-field__label">{deal === 'buy' ? 'Бюджет, $' : 'Бюджет в месяц, $'}</span>
-            <input type="number" min={0} step={100} inputMode="numeric" placeholder={deal === 'buy' ? '90 000' : '800'} />
+            <span className="bz-rq-field__label">{deal === 'buy' ? t('requests.create.budgetBuy') : t('requests.create.budgetRent')}</span>
+            <input type="number" min={0} step={100} inputMode="numeric" placeholder={deal === 'buy' ? t('requests.create.budgetPlaceholderBuy') : t('requests.create.budgetPlaceholderRent')} />
           </label>
           <label className="bz-rq-field">
-            <span className="bz-rq-field__label">Что ищете</span>
-            <textarea rows={4} required placeholder="Район, площадь, этаж, ремонт, сроки" />
+            <span className="bz-rq-field__label">{t('requests.create.whatLabel')}</span>
+            <textarea rows={4} required placeholder={t('requests.create.whatPlaceholder')} />
           </label>
           <label className="bz-rq-field">
-            <span className="bz-rq-field__label">Телефон</span>
-            <input type="tel" required autoComplete="tel" placeholder="+995" />
+            <span className="bz-rq-field__label">{t('requests.create.phoneLabel')}</span>
+            <input type="tel" required autoComplete="tel" placeholder={t('requests.create.phonePlaceholder')} />
           </label>
           <div className="bz-rq-form__actions">
             <button type="button" className="bz-rq-btn bz-rq-btn--outline" onClick={onClose}>
-              Отмена
+              {t('requests.write.cancel')}
             </button>
             <button type="submit" className="bz-rq-btn bz-rq-btn--call">
-              Опубликовать запрос
+              {t('requests.create.submit')}
             </button>
           </div>
         </form>

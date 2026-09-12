@@ -1,5 +1,6 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
+import { useI18n } from '../../../../i18n'
 
 interface PublicationProgressStepProps {
   status?: 'publication_pending' | 'published' | 'build_failed' | 'unpublished'
@@ -16,15 +17,15 @@ export function PublicationProgressStep({
   onReset,
   error,
 }: PublicationProgressStepProps) {
+  const { t } = useI18n()
+
   if (status === 'published' && publishedSlug) {
     return (
       <section className="wizard-step wizard-step--published" data-testid="wizard-step-published" aria-labelledby="pub-success-heading">
         <div className="wizard-result-box wizard-result-box--success">
           <div className="wizard-result-icon">🎉</div>
-          <h2 id="pub-success-heading">Объявление успешно опубликовано!</h2>
-          <p className="wizard-step__subtitle">
-            Карточка объекта уже доступна в публичном каталоге маркетплейса BAZA.
-          </p>
+          <h2 id="pub-success-heading">{t('publicationProgress.successTitle')}</h2>
+          <p className="wizard-step__subtitle">{t('publicationProgress.successSubtitle')}</p>
 
           <div className="wizard-published-actions">
             <Link
@@ -32,7 +33,7 @@ export function PublicationProgressStep({
               className="wizard-btn wizard-btn--primary"
               data-testid="view-published-listing-btn"
             >
-              Открыть карточку объявления ↗
+              {t('publicationProgress.openListing')}
             </Link>
             <button
               type="button"
@@ -40,7 +41,7 @@ export function PublicationProgressStep({
               onClick={onReset}
               data-testid="publish-another-btn"
             >
-              Разместить ещё одно объявление
+              {t('publicationProgress.publishAnother')}
             </button>
           </div>
         </div>
@@ -53,10 +54,8 @@ export function PublicationProgressStep({
       <section className="wizard-step wizard-step--error" data-testid="wizard-step-error" aria-labelledby="pub-error-heading">
         <div className="wizard-result-box wizard-result-box--error">
           <div className="wizard-result-icon">⚠️</div>
-          <h2 id="pub-error-heading">Ошибка генерации публикации</h2>
-          <p className="wizard-step__subtitle">
-            {error || 'Не удалось завершить публикацию карточки объекта.'}
-          </p>
+          <h2 id="pub-error-heading">{t('publicationProgress.errorTitle')}</h2>
+          <p className="wizard-step__subtitle">{error || t('publicationProgress.errorSubtitle')}</p>
           <div className="wizard-published-actions">
             <button
               type="button"
@@ -64,7 +63,7 @@ export function PublicationProgressStep({
               onClick={onRetry}
               data-testid="publish-retry-btn"
             >
-              Попробовать снова
+              {t('common.tryAgain')}
             </button>
           </div>
         </div>
@@ -81,10 +80,8 @@ export function PublicationProgressStep({
     >
       <div className="wizard-result-box wizard-result-box--pending">
         <div className="wizard-spinner" aria-hidden="true" />
-        <h2 id="pub-pending-heading">Публикация объявления...</h2>
-        <p className="wizard-step__subtitle">
-          Пожалуйста, подождите. Система подготавливает поисковую проекцию и проверяет медиа-файлы.
-        </p>
+        <h2 id="pub-pending-heading">{t('publicationProgress.pendingTitle')}</h2>
+        <p className="wizard-step__subtitle">{t('publicationProgress.pendingSubtitle')}</p>
       </div>
     </section>
   )

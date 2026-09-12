@@ -1,5 +1,6 @@
 import React, { ChangeEvent, useState } from 'react'
 import type { WizardMediaItem } from '../../model/types'
+import { useI18n } from '../../../../i18n'
 
 interface MediaUploadStepProps {
   mediaItems: WizardMediaItem[]
@@ -24,6 +25,7 @@ export function MediaUploadStep({
   onNext,
   error,
 }: MediaUploadStepProps) {
+  const { t } = useI18n()
   const [fileError, setFileError] = useState<string | null>(null)
 
   const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -34,11 +36,11 @@ export function MediaUploadStep({
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-        setFileError('Поддерживаются только форматы JPEG, PNG и WebP')
+        setFileError(t('mediaUpload.errorFormat'))
         continue
       }
       if (file.size > 20 * 1024 * 1024) {
-        setFileError('Размер файла не должен превышать 20 МБ')
+        setFileError(t('mediaUpload.errorSize'))
         continue
       }
       await onUploadPhoto(file)
@@ -51,10 +53,8 @@ export function MediaUploadStep({
   return (
     <section className="wizard-step wizard-step--media" data-testid="wizard-step-media" aria-labelledby="media-heading">
       <div className="wizard-step__header">
-        <h2 id="media-heading">Шаг 4: Фотографии объекта</h2>
-        <p className="wizard-step__subtitle">
-          Загрузите реальные фотографии объекта (до 20 МБ, JPEG/PNG/WebP). Первое фото станет обложкой.
-        </p>
+        <h2 id="media-heading">{t('mediaUpload.heading')}</h2>
+        <p className="wizard-step__subtitle">{t('mediaUpload.subtitle')}</p>
       </div>
 
       {(fileError || error) && (
@@ -77,8 +77,8 @@ export function MediaUploadStep({
         />
         <label htmlFor="wizard-file-input" className="wizard-upload-dropzone__label">
           <span className="wizard-upload-dropzone__icon">📷</span>
-          <strong>{isUploading ? 'Загрузка...' : 'Нажмите для выбора фотографий'}</strong>
-          <span>или перетащите файлы сюда (JPEG, PNG, WebP до 20 МБ)</span>
+          <strong>{isUploading ? t('mediaUpload.uploading') : t('mediaUpload.clickToSelect')}</strong>
+          <span>{t('mediaUpload.dragHint')}</span>
         </label>
       </div>
 
@@ -93,22 +93,29 @@ export function MediaUploadStep({
             >
               <div className="wizard-media-card__preview">
                 {item.url ? (
-                  <img src={item.url} alt={item.alt || `Фото ${index + 1}`} loading="lazy" />
+                  <img src={item.url} alt={item.alt || t('mediaUpload.photoAlt', { index: index + 1 })} loading="lazy" />
                 ) : (
                   <div className="wizard-media-card__placeholder">
-                    {item.status === 'uploading' ? 'Загрузка...' : 'Фотография'}
+                    {item.status === 'uploading' ? t('mediaUpload.uploading') : t('mediaUpload.photo')}
                   </div>
                 )}
                 {item.role === 'cover' && (
                   <span className="wizard-media-card__badge" data-testid="media-cover-badge">
-                    Обложка
+                    {t('mediaUpload.cover')}
                   </span>
                 )}
               </div>
 
               {item.status === 'rejected' && (
                 <p className="wizard-field-error" role="alert" data-testid={`media-error-${item.id}`}>
-                  Не удалось загрузить фото{item.failedPhase === 'upload' ? ' (передача файла)' : item.failedPhase === 'confirm' ? ' (подтверждение)' : ''}.
+                  {t('mediaUpload.uploadFailed', {
+                    phase:
+                      item.failedPhase === 'upload'
+                        ? t('mediaUpload.phaseUpload')
+                        : item.failedPhase === 'confirm'
+                          ? t('mediaUpload.phaseConfirm')
+                          : '',
+                  })}
                 </p>
               )}
 
@@ -120,7 +127,7 @@ export function MediaUploadStep({
                     onClick={() => onSetCover(item.mediaAssetId)}
                     data-testid={`media-set-cover-${item.id}`}
                   >
-                    Сделать обложкой
+                    {t('mediaUpload.makeCover')}
                   </button>
                 )}
                 {item.status === 'rejected' && (
@@ -131,7 +138,7 @@ export function MediaUploadStep({
                     disabled={isUploading}
                     data-testid={`media-retry-${item.id}`}
                   >
-                    Повторить
+                    {t('common.tryAgain')}
                   </button>
                 )}
                 <button
@@ -140,7 +147,7 @@ export function MediaUploadStep({
                   onClick={() => onDeletePhoto(item.mediaAssetId)}
                   data-testid={`media-delete-${item.id}`}
                 >
-                  Удалить
+                  {t('mediaUpload.delete')}
                 </button>
               </div>
             </div>
@@ -148,7 +155,7 @@ export function MediaUploadStep({
         </div>
       ) : (
         <div className="wizard-empty-media" data-testid="media-empty-placeholder">
-          <p>Пока не загружено ни одной фотографии объекта.</p>
+          <p>{t('mediaUpload.empty')}</p>
         </div>
       )}
 
@@ -160,7 +167,7 @@ export function MediaUploadStep({
           disabled={isUploading}
           data-testid="media-back-btn"
         >
-          ← Назад
+          {t('wizard.back')}
         </button>
         <button
           type="button"
@@ -169,7 +176,7 @@ export function MediaUploadStep({
           disabled={isUploading}
           data-testid="media-next-btn"
         >
-          Далее: Проверка и публикация →
+          {t('mediaUpload.next')}
         </button>
       </div>
     </section>

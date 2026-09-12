@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
+import { useI18n } from '../i18n'
 import { MOCK_REALTORS, type RealtorItem } from './RealtorsPage'
 
 interface ReviewItem {
@@ -38,6 +39,7 @@ const MOCK_REVIEWS: Record<string, ReviewItem[]> = {
  */
 export function RealtorProfilePage() {
   const { id } = useParams<{ id: string }>()
+  const { t } = useI18n()
   const realtor: RealtorItem | undefined = MOCK_REALTORS.find((r) => r.id === id) || MOCK_REALTORS[0]
 
   const [reviews, setReviews] = useState<ReviewItem[]>(MOCK_REVIEWS[realtor.id] || MOCK_REVIEWS['realtor-1'])
@@ -46,8 +48,8 @@ export function RealtorProfilePage() {
   const [formSubmitted, setFormSubmitted] = useState(false)
 
   useSeoMetadata({
-    title: `${realtor.name} — отзывы и профиль риелтора в ${realtor.city}`,
-    description: `Профиль риелтора ${realtor.name} (${realtor.agency}). Рейтинг ${realtor.rating}, отзывы клиентов и контакты на BAZA.`,
+    title: t('realtorProfile.seoTitle', { name: realtor.name, city: realtor.city }),
+    description: t('realtorProfile.seoDescription', { name: realtor.name, agency: realtor.agency, rating: realtor.rating }),
   })
 
   const handleSubmitReview = (e: React.FormEvent) => {
@@ -57,9 +59,9 @@ export function RealtorProfilePage() {
     const newRev: ReviewItem = {
       id: `rev-${Date.now()}`,
       authorName: newAuthor.trim(),
-      date: 'Сегодня',
+      date: t('realtorProfile.today'),
       rating: 5,
-      dealType: 'Отзыв клиента',
+      dealType: t('realtorProfile.clientReview'),
       comment: newComment.trim(),
     }
 
@@ -74,12 +76,12 @@ export function RealtorProfilePage() {
       <div className="demo-notice-banner" role="note">
         <span className="demo-notice-banner__icon" aria-hidden="true">ℹ️</span>
         <div className="demo-notice-banner__text">
-          <strong>Демонстрационный профиль:</strong> Страница эксперта и отзывы отображаются в ознакомительном режиме. Сбор реальных отзывов станет доступен после официальной аттестации агентств.
+          <strong>{t('realtorProfile.demoTitle')}</strong> {t('realtorProfile.demoText')}
         </div>
       </div>
 
-      <Link className="back-link" to="/realtors" aria-label="Вернуться в рейтинг риелторов" style={{ display: 'inline-flex', marginBottom: '24px', color: '#757575', textDecoration: 'none' }}>
-        ← Все риелторы
+      <Link className="back-link" to="/realtors" aria-label={t('realtorProfile.backAria')} style={{ display: 'inline-flex', marginBottom: '24px', color: '#757575', textDecoration: 'none' }}>
+        {t('realtorProfile.backLabel')}
       </Link>
 
       {/* Hero Profile */}
@@ -89,18 +91,18 @@ export function RealtorProfilePage() {
         </div>
         <div>
           <div className="figma-realtor-badges" style={{ marginBottom: '8px' }}>
-            <span className="figma-realtor-badge figma-realtor-badge--demo">Демо-профиль</span>
+            <span className="figma-realtor-badge figma-realtor-badge--demo">{t('realtors.demoProfile')}</span>
             {realtor.badges.map((b, i) => (
               <span key={i} className="figma-realtor-badge figma-realtor-badge--top">{b}</span>
             ))}
           </div>
           <h1 style={{ fontFamily: 'Plus Jakarta Sans', fontSize: '28px', margin: '0 0 6px' }}>{realtor.name}</h1>
           <p style={{ margin: '0 0 10px', color: '#757575', fontSize: '15px' }}>
-            {realtor.agency} · {realtor.city} · Опыт {realtor.experienceYears} лет
+            {realtor.agency} · {realtor.city} · {t('realtorProfile.experience', { count: realtor.experienceYears })}
           </p>
           <div className="figma-realtor-rating-row" style={{ fontSize: '15px' }}>
             <span className="figma-realtor-stars">★ {realtor.rating.toFixed(1)}</span>
-            <span>({reviews.length} отзывов в демо-режиме)</span>
+            <span>{t('realtorProfile.reviewsDemo', { count: reviews.length })}</span>
           </div>
         </div>
 
@@ -110,7 +112,7 @@ export function RealtorProfilePage() {
             className="figma-realtor-card__btn"
             style={{ display: 'inline-block', textDecoration: 'none', padding: '12px 24px' }}
           >
-            Связаться: {realtor.phone}
+            {t('realtorProfile.contact', { phone: realtor.phone })}
           </a>
         </div>
       </div>
@@ -118,7 +120,7 @@ export function RealtorProfilePage() {
       {/* Reviews Section */}
       <section aria-labelledby="reviews-heading" style={{ marginBottom: '40px' }}>
         <h2 id="reviews-heading" style={{ fontFamily: 'Plus Jakarta Sans', fontSize: '22px', marginBottom: '20px' }}>
-          Отзывы клиентов ({reviews.length})
+          {t('realtorProfile.reviewsHeading', { count: reviews.length })}
         </h2>
 
         <div className="figma-reviews-list">
@@ -142,16 +144,16 @@ export function RealtorProfilePage() {
 
       {/* Add Review Form (Figma 3576:53923) */}
       <section className="figma-listing-section" aria-labelledby="add-review-heading">
-        <h2 id="add-review-heading" className="figma-listing-section-title">Оставить отзыв о риелторе</h2>
+        <h2 id="add-review-heading" className="figma-listing-section-title">{t('realtorProfile.addReviewHeading')}</h2>
         {formSubmitted ? (
           <div style={{ padding: '16px', background: '#F0FFF0', border: '1px solid #1BA800', borderRadius: '8px', color: '#1BA800', fontWeight: 600 }}>
-            ✓ Спасибо! Ваш отзыв успешно добавлен (демонстрационный режим).
+            {t('realtorProfile.reviewAdded')}
           </div>
         ) : (
           <form onSubmit={handleSubmitReview} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
               <label htmlFor="rev-author" style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                Ваше имя
+                {t('realtorProfile.yourName')}
               </label>
               <input
                 id="rev-author"
@@ -159,14 +161,14 @@ export function RealtorProfilePage() {
                 required
                 value={newAuthor}
                 onChange={(e) => setNewAuthor(e.target.value)}
-                placeholder="Например, Александр"
+                placeholder={t('realtorProfile.yourNamePlaceholder')}
                 style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #EAEAEA', fontSize: '14px', boxSizing: 'border-box' }}
               />
             </div>
 
             <div>
               <label htmlFor="rev-comment" style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>
-                Текст отзыва
+                {t('realtorProfile.reviewText')}
               </label>
               <textarea
                 id="rev-comment"
@@ -174,7 +176,7 @@ export function RealtorProfilePage() {
                 rows={4}
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Расскажите о вашем опыте работы с риелтором, проведенной сделке или подборе объекта..."
+                placeholder={t('realtorProfile.reviewTextPlaceholder')}
                 style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #EAEAEA', fontSize: '14px', boxSizing: 'border-box' }}
               />
             </div>
@@ -184,7 +186,7 @@ export function RealtorProfilePage() {
               className="figma-realtor-card__btn"
               style={{ maxWidth: '240px', padding: '12px 20px' }}
             >
-              Отправить отзыв
+              {t('realtorProfile.submitReview')}
             </button>
           </form>
         )}

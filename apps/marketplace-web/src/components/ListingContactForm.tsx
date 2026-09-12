@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { marketplaceApi, MarketplaceApiError } from '../api/marketplace-api'
+import { useI18n } from '../i18n'
 
 export interface ListingContactFormProps {
   slug: string
@@ -22,6 +23,7 @@ export function extractUtmParams(search: string): Record<string, string> | undef
 }
 
 export function ListingContactForm({ slug }: ListingContactFormProps) {
+  const { t } = useI18n()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
@@ -41,7 +43,7 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
     const trimmedPhone = phone.trim()
     if (!trimmedPhone) {
       setStatus('error')
-      setErrorMessage('Пожалуйста, укажите контактный телефон.')
+      setErrorMessage(t('listingContact.errorPhoneRequired'))
       setErrorStatus(400)
       return
     }
@@ -70,7 +72,7 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
         setErrorMessage(err.message)
       } else {
         setErrorStatus(500)
-        setErrorMessage('Не удалось отправить заявку. Пожалуйста, проверьте соединение и попробуйте ещё раз.')
+        setErrorMessage(t('listingContact.errorGeneric'))
       }
     } finally {
       isSubmittingRef.current = false
@@ -81,18 +83,16 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
     return (
       <section className="listing-lead-card listing-lead-card--success" aria-live="polite">
         <div className="listing-lead-card__header">
-          <span className="listing-lead-card__badge">✓ Заявка отправлена</span>
-          <h3>Контакты представителя</h3>
-          <p>Прямой телефон для связи и организации просмотра:</p>
+          <span className="listing-lead-card__badge">{t('listingContact.submitted')}</span>
+          <h3>{t('listingContact.repContacts')}</h3>
+          <p>{t('listingContact.directPhone')}</p>
         </div>
         <div className="listing-lead-card__revealed-box">
           <a className="listing-lead-card__phone-link" href={`tel:${revealedPhone}`}>
             {revealedPhone}
           </a>
         </div>
-        <p className="listing-lead-card__subtext">
-          Менеджер объекта также получил ваше обращение и свяжется с вами в ближайшее время.
-        </p>
+        <p className="listing-lead-card__subtext">{t('listingContact.managerNotified')}</p>
       </section>
     )
   }
@@ -107,7 +107,7 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
         разных элемента с одинаковым именем.
       */}
       <div className="listing-lead-card__header">
-        <p>Оставьте номер телефона, чтобы получить прямой контакт представителя объекта и назначить просмотр.</p>
+        <p>{t('listingContact.intro')}</p>
       </div>
 
       <form className="listing-lead-form" onSubmit={handleSubmit} noValidate>
@@ -123,14 +123,14 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
                   setErrorMessage(null)
                 }}
               >
-                Попробовать снова
+                {t('common.tryAgain')}
               </button>
             ) : null}
           </div>
         ) : null}
 
         <div className="listing-lead-form__field">
-          <label htmlFor="lead-phone">Телефон *</label>
+          <label htmlFor="lead-phone">{t('listingContact.phoneLabel')}</label>
           <input
             id="lead-phone"
             name="phone"
@@ -145,13 +145,13 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
         </div>
 
         <div className="listing-lead-form__field">
-          <label htmlFor="lead-name">Ваше имя</label>
+          <label htmlFor="lead-name">{t('listingContact.nameLabel')}</label>
           <input
             id="lead-name"
             name="name"
             type="text"
             autoComplete="name"
-            placeholder="Как к вам обращаться"
+            placeholder={t('listingContact.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={status === 'submitting'}
@@ -163,7 +163,7 @@ export function ListingContactForm({ slug }: ListingContactFormProps) {
           className="listing-lead-form__submit"
           disabled={status === 'submitting' || !phone.trim()}
         >
-          {status === 'submitting' ? 'Отправляем…' : 'Показать телефон'}
+          {status === 'submitting' ? t('listingContact.sending') : t('listingContact.submit')}
         </button>
       </form>
     </section>

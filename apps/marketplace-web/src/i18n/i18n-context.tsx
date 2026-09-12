@@ -34,7 +34,12 @@ function isLanguage(value: string | null): value is Language {
   return value === 'ru' || value === 'en' || value === 'ka'
 }
 
-function getStoredLanguage(): Language {
+/**
+ * Читает выбранный язык вне React-дерева — нужно плоским утилитам вроде
+ * useSeoMetadata, которые выставляют `document.title` ещё до первого рендера
+ * компонента и не могут дождаться `useI18n`.
+ */
+export function getStoredLanguage(): Language {
   if (typeof window === 'undefined') return 'ru'
   const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY)
   return isLanguage(stored) ? stored : 'ru'
@@ -56,6 +61,61 @@ function interpolate(text: string, params?: Record<string, string | number>): st
   })
 }
 
+function localeOf(language: Language): string {
+  return language === 'ka' ? 'ka-GE' : language === 'en' ? 'en-US' : 'ru-RU'
+}
+
+function translate(language: Language, key: string, paramsOrFallback?: Record<string, string | number> | string): string {
+  let params: Record<string, string | number> | undefined
+  let fallbackOverride: string | undefined
+
+  if (typeof paramsOrFallback === 'string') {
+    fallbackOverride = paramsOrFallback
+  } else {
+    params = paramsOrFallback
+  }
+
+  const translation = resolveTranslation(dictionaries[language], key)
+  if (translation !== undefined) return interpolate(translation, params)
+
+  const fallback = resolveTranslation(dictionaries.ru, key)
+  if (fallback !== undefined) return interpolate(fallback, params)
+
+  return interpolate(fallbackOverride ?? key, params)
+}
+
+/**
+ * Значение вне провайдера: язык по умолчанию «ru», переключение недоступно.
+ * Нужно юнит-тестам, которые рендерят один компонент или хук без всего
+ * дерева приложения, — бросать здесь было бы неверно: тест не про перевод,
+ * а `useI18n` вызывается транзитивно из десятков мест.
+ *
+ * Один и тот же объект на все вызовы, а не новый при каждом рендере: `t` и
+ * остальные поля стоят в зависимостях чужих `useCallback`/`useEffect`
+ * (например, автозагрузки каталога), и новая ссылка на каждый рендер
+ * запускала бы их заново по кругу.
+ */
+const FALLBACK_LANGUAGE: Language = 'ru'
+const FALLBACK_VALUE: I18nContextValue = {
+  language: FALLBACK_LANGUAGE,
+  setLanguage: () => {},
+  t: (key, paramsOrFallback) => translate(FALLBACK_LANGUAGE, key, paramsOrFallback),
+  formatDate: (date, options) => {
+    try {
+      return new Intl.DateTimeFormat(localeOf(FALLBACK_LANGUAGE), options).format(new Date(date))
+    } catch {
+      return String(date)
+    }
+  },
+  formatNumber: (value, options) => {
+    try {
+      return new Intl.NumberFormat(localeOf(FALLBACK_LANGUAGE), options).format(value)
+    } catch {
+      return String(value)
+    }
+  },
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [language, setLanguageState] = useState<Language>(getStoredLanguage)
 
@@ -70,31 +130,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [language])
 
   const t: Translate = useCallback(
-    (key, paramsOrFallback) => {
-      let params: Record<string, string | number> | undefined
-      let fallbackOverride: string | undefined
-
-      if (typeof paramsOrFallback === 'string') {
-        fallbackOverride = paramsOrFallback
-      } else {
-        params = paramsOrFallback
-      }
-
-      const translation = resolveTranslation(dictionaries[language], key)
-      if (translation !== undefined) return interpolate(translation, params)
-
-      const fallback = resolveTranslation(dictionaries['ru'], key)
-      if (fallback !== undefined) return interpolate(fallback, params)
-
-      return interpolate(fallbackOverride ?? key, params)
-    },
+    (key, paramsOrFallback) => translate(language, key, paramsOrFallback),
     [language],
   )
 
   const formatDate: FormatDate = useCallback(
     (date, options) => {
       try {
-        return new Intl.DateTimeFormat(language === 'ka' ? 'ka-GE' : language === 'en' ? 'en-US' : 'ru-RU', options).format(new Date(date))
+        return new Intl.DateTimeFormat(localeOf(language), options).format(new Date(date))
       } catch {
         return String(date)
       }
@@ -105,7 +148,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const formatNumber: FormatNumber = useCallback(
     (value, options) => {
       try {
-        return new Intl.NumberFormat(language === 'ka' ? 'ka-GE' : language === 'en' ? 'en-US' : 'ru-RU', options).format(value)
+        return new Intl.NumberFormat(localeOf(language), options).format(value)
       } catch {
         return String(value)
       }
@@ -127,10 +170,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
 
-export function useI18n() {
+export function useI18n(): I18nContextValue {
   const context = useContext(I18nContext)
-  if (!context) {
-    throw new Error('useI18n must be used within an I18nProvider')
-  }
-  return context
+  return context ?? FALLBACK_VALUE
 }

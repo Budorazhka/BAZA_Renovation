@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useI18n } from '../i18n'
 import type { ListingDealType, ListingPropertyType } from '../types/marketplace'
 
 export interface FacetFiltersProps {
@@ -43,6 +44,7 @@ export function FacetFilters({
 }: FacetFiltersProps) {
   const [localCity, setLocalCity] = useState(cityParam)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const { t } = useI18n()
 
   React.useEffect(() => {
     setLocalCity(cityParam)
@@ -57,38 +59,38 @@ export function FacetFilters({
   }
 
   const dealTypes: Array<[ListingDealType | undefined, string]> = [
-    [undefined, 'Все типы сделок'],
-    ['sale', 'Купить'],
-    ['rent_long', 'Снять длительно'],
-    ['rent_short', 'Посуточно'],
+    [undefined, t('filters.dealType.all')],
+    ['sale', t('filters.dealType.sale')],
+    ['rent_long', t('filters.dealType.rentLong')],
+    ['rent_short', t('filters.dealType.rentShort')],
   ]
 
   const propertyTypes: Array<[ListingPropertyType | undefined, string]> = [
-    [undefined, 'Все объекты'],
-    ['apartment', 'Квартиры'],
-    ['house', 'Дома и виллы'],
-    ['commercial', 'Коммерческая'],
-    ['land', 'Участки'],
+    [undefined, t('filters.propertyType.all')],
+    ['apartment', t('filters.propertyType.apartment')],
+    ['house', t('filters.propertyType.house')],
+    ['commercial', t('filters.propertyType.commercial')],
+    ['land', t('filters.propertyType.land')],
   ]
 
   const commercialSubtypes: Array<[string | undefined, string]> = [
-    [undefined, 'Вся коммерция'],
-    ['office', 'Офис'],
-    ['retail', 'Торговая площадь'],
-    ['warehouse', 'Склад'],
-    ['business', 'Готовый бизнес'],
-    ['free_purpose', 'Свободное назначение'],
+    [undefined, t('filters.commercial.all')],
+    ['office', t('filters.commercial.office')],
+    ['retail', t('filters.commercial.retail')],
+    ['warehouse', t('filters.commercial.warehouse')],
+    ['business', t('filters.commercial.business')],
+    ['free_purpose', t('filters.commercial.freePurpose')],
   ]
 
   return (
-    <section className="figma-filters" aria-label="Фильтры каталога">
+    <section className="figma-filters" aria-label={t('filters.ariaLabel')}>
       <div className="figma-filters__container">
         {/* Top Controls Bar */}
         <div className="figma-filters__bar">
           {/* City search form with semantic search role (rendered on listings/secondary tab) */}
           {!isDev && (
-            <form className="city-form figma-filters__search-form" role="search" onSubmit={handleCitySubmit} aria-label="Поиск по городу">
-              <label htmlFor="city" className="visually-hidden">Город</label>
+            <form className="city-form figma-filters__search-form" role="search" onSubmit={handleCitySubmit} aria-label={t('filters.searchAria')}>
+              <label htmlFor="city" className="visually-hidden">{t('filters.cityLabel')}</label>
               <svg
                 className="figma-filters__search-icon"
                 width="18"
@@ -112,44 +114,44 @@ export function FacetFilters({
                 className="figma-filters__search-input"
                 value={localCity}
                 onChange={(e) => setLocalCity(e.target.value)}
-                placeholder="Город"
-                aria-label="Город"
+                placeholder={t('filters.cityPlaceholder')}
+                aria-label={t('filters.cityLabel')}
               />
-              <button type="submit" className="figma-filters__search-submit" aria-label="Найти объекты в городе">
-                Найти
+              <button type="submit" className="figma-filters__search-submit" aria-label={t('filters.findAria')}>
+                {t('filters.findLabel')}
               </button>
             </form>
           )}
 
           {/* Right Controls: Sort, View Toggle, Clear */}
           <div className="figma-filters__controls-group">
-            <label className="sort-control figma-filters__sort" aria-label="Сортировка объектов">
-              <span className="visually-hidden">Сортировка объектов</span>
+            <label className="sort-control figma-filters__sort" aria-label={t('filters.sortAria')}>
+              <span className="visually-hidden">{t('filters.sortAria')}</span>
               <select
                 className="figma-filters__sort-select"
                 value={isDev ? 'newest' : sortParam}
                 onChange={(e) => onFilterChange({ sort: e.target.value })}
               >
-                <option value="newest">Сначала новые</option>
-                {!isDev && <option value="price_asc">Сначала дешевле</option>}
-                {!isDev && <option value="price_desc">Сначала дороже</option>}
-                {!isDev && <option value="area_asc">Меньше площадь</option>}
-                {!isDev && <option value="area_desc">Больше площадь</option>}
+                <option value="newest">{t('filters.sort.newest')}</option>
+                {!isDev && <option value="price_asc">{t('filters.sort.priceAsc')}</option>}
+                {!isDev && <option value="price_desc">{t('filters.sort.priceDesc')}</option>}
+                {!isDev && <option value="area_asc">{t('filters.sort.areaAsc')}</option>}
+                {!isDev && <option value="area_desc">{t('filters.sort.areaDesc')}</option>}
               </select>
             </label>
 
-            <div className="view-toggle figma-filters__view-toggle" role="group" aria-label="Вид каталога">
+            <div className="view-toggle figma-filters__view-toggle" role="group" aria-label={t('filters.viewToggleAria')}>
               <Link
                 className={`view-toggle__link figma-filters__view-btn${!isMapView ? ' is-active' : ''}`}
                 to={viewUrl('list')}
               >
-                Список
+                {t('filters.list')}
               </Link>
               <Link
                 className={`view-toggle__link figma-filters__view-btn${isMapView ? ' is-active' : ''}`}
                 to={viewUrl('map')}
               >
-                Карта
+                {t('filters.map')}
               </Link>
             </div>
 
@@ -159,7 +161,7 @@ export function FacetFilters({
                 className="clear-filter clear-filter--compact figma-filters__clear-btn"
                 onClick={onClearFilters}
               >
-                Сбросить
+                {t('filters.reset')}
               </button>
             )}
           </div>
@@ -168,9 +170,9 @@ export function FacetFilters({
         {/* Facet Chips for Listings (Deal Type & Property Type) */}
         {!isDev && (
           <details id="catalogue-filters" className="filters-drawer" open>
-            <summary>Фильтры и тип объекта</summary>
-            <div className="catalogue-filters-panel" aria-label="Фильтры объявлений">
-              <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label="Тип сделки">
+            <summary>{t('filters.drawerSummary')}</summary>
+            <div className="catalogue-filters-panel" aria-label={t('filters.panelAria')}>
+              <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label={t('filters.dealTypeAria')}>
                 {dealTypes.map(([value, label]) => (
                   <button
                     key={label}
@@ -183,7 +185,7 @@ export function FacetFilters({
                 ))}
               </div>
 
-              <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label="Тип недвижимости">
+              <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label={t('filters.propertyTypeAria')}>
                 {propertyTypes.map(([value, label]) => (
                   <button
                     key={label}
@@ -197,7 +199,7 @@ export function FacetFilters({
               </div>
 
               {propertyTypeParam === 'commercial' && (
-                <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label="Формат коммерции">
+                <div className="catalogue-subfilters figma-filters__chips-row" role="group" aria-label={t('filters.commercialAria')}>
                   {commercialSubtypes.map(([value, label]) => (
                     <button
                       key={label}
@@ -214,23 +216,28 @@ export function FacetFilters({
           </details>
         )}
 
-        {/* Facet Chips for Primary Developments (Figma 4747:75827) */}
+        {/*
+          Facet Chips for Primary Developments (Figma 4747:75827).
+          Значение фильтра — «Тбилиси»/«Батуми» как хранится в данных, а не
+          перевод текущего языка интерфейса: иначе переключение языка ломало
+          бы поиск по городу. Переводится только видимая подпись.
+        */}
         {isDev && (
-          <div className="figma-filters__chips-row" role="group" aria-label="Фильтры новостроек">
-            <span className="figma-filter-chip is-active">Все новостройки</span>
+          <div className="figma-filters__chips-row" role="group" aria-label={t('filters.devAria')}>
+            <span className="figma-filter-chip is-active">{t('filters.devAll')}</span>
             <button
               type="button"
               className="figma-filter-chip"
               onClick={() => onFilterChange({ city: 'Тбилиси' })}
             >
-              Тбилиси
+              {t('filters.cityTbilisi')}
             </button>
             <button
               type="button"
               className="figma-filter-chip"
               onClick={() => onFilterChange({ city: 'Батуми' })}
             >
-              Батуми
+              {t('filters.cityBatumi')}
             </button>
           </div>
         )}
@@ -238,28 +245,28 @@ export function FacetFilters({
 
       {/* Mobile Drawer (Figma 4747:75824) */}
       {mobileDrawerOpen && (
-        <div className="figma-drawer-overlay" role="dialog" aria-modal="true" aria-label="Все фильтры">
+        <div className="figma-drawer-overlay" role="dialog" aria-modal="true" aria-label={t('filters.mobileDrawerAria')}>
           <div className="figma-drawer">
             <div className="figma-drawer__header">
-              <h2 className="figma-drawer__title">Фильтры</h2>
+              <h2 className="figma-drawer__title">{t('filters.drawerTitle')}</h2>
               <button
                 type="button"
                 className="figma-drawer__close"
                 onClick={() => setMobileDrawerOpen(false)}
-                aria-label="Закрыть фильтры"
+                aria-label={t('filters.drawerClose')}
               >
                 ×
               </button>
             </div>
             <div className="figma-drawer__content">
               <div className="figma-drawer__section">
-                <h3 className="figma-drawer__section-title">Город</h3>
+                <h3 className="figma-drawer__section-title">{t('filters.drawerCityTitle')}</h3>
                 <input
                   type="text"
                   className="figma-filters__search-input"
                   value={localCity}
                   onChange={(e) => setLocalCity(e.target.value)}
-                  placeholder="Любой город"
+                  placeholder={t('filters.drawerCityPlaceholder')}
                 />
               </div>
             </div>
@@ -273,7 +280,7 @@ export function FacetFilters({
                   setMobileDrawerOpen(false)
                 }}
               >
-                Сбросить
+                {t('filters.reset')}
               </button>
               <button
                 type="button"
@@ -283,7 +290,7 @@ export function FacetFilters({
                   setMobileDrawerOpen(false)
                 }}
               >
-                Применить
+                {t('filters.apply')}
               </button>
             </div>
           </div>

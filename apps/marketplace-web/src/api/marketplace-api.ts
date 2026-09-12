@@ -7,6 +7,22 @@ import type {
   PublicListingCard,
   PublicListingList,
 } from '../types/marketplace'
+import { getStoredLanguage, en, ka, ru } from '../i18n'
+
+/**
+ * Этот слой — не React, `useI18n` здесь недоступен. Язык читается тем же
+ * способом, что в useSeoMetadata.ts: по ключу в localStorage, с запасным
+ * вариантом «ru».
+ */
+const API_ERROR_DICTS = {
+  ru: ru.apiErrors,
+  en: en.apiErrors,
+  ka: ka.apiErrors,
+}
+
+function apiErrors() {
+  return API_ERROR_DICTS[getStoredLanguage()]
+}
 
 type Fetcher = typeof fetch
 
@@ -39,9 +55,9 @@ function normalizedBaseUrl(baseUrl: string): string {
 }
 
 function toErrorMessage(status: number): string {
-  if (status === 404) return 'Объект не найден или больше не опубликован.'
-  if (status === 429) return 'Слишком много запросов. Пожалуйста, повторите попытку позже.'
-  return 'Не удалось загрузить данные. Попробуйте ещё раз.'
+  if (status === 404) return apiErrors().notFound
+  if (status === 429) return apiErrors().tooManyRequests
+  return apiErrors().loadFailed
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -62,25 +78,13 @@ async function parseResponse<T>(response: Response): Promise<T> {
     }
 
     if (response.status === 404) {
-      throw new MarketplaceApiError(
-        customMessage || 'Объект не найден или больше не опубликован.',
-        404,
-        errorCode,
-      )
+      throw new MarketplaceApiError(customMessage || apiErrors().notFound, 404, errorCode)
     }
     if (response.status === 429) {
-      throw new MarketplaceApiError(
-        'Слишком много запросов. Пожалуйста, повторите попытку позже.',
-        429,
-        errorCode,
-      )
+      throw new MarketplaceApiError(apiErrors().tooManyRequests, 429, errorCode)
     }
     if (response.status === 400 || response.status === 422) {
-      throw new MarketplaceApiError(
-        customMessage || 'Пожалуйста, проверьте введённый номер телефона.',
-        response.status,
-        errorCode,
-      )
+      throw new MarketplaceApiError(customMessage || apiErrors().checkPhone, response.status, errorCode)
     }
 
     throw new MarketplaceApiError(customMessage || toErrorMessage(response.status), response.status, errorCode)

@@ -2,6 +2,7 @@ import React, { FormEvent, useState } from 'react'
 import type { LocationFormData } from '../../model/types'
 import { PublishingMapPicker } from '../PublishingMapPicker'
 import { AddressAutocomplete, type AddressSuggestion } from '../AddressAutocomplete'
+import { useI18n } from '../../../../i18n'
 
 interface LocationStepProps {
   data: LocationFormData
@@ -10,12 +11,13 @@ interface LocationStepProps {
 }
 
 const CITY_PRESETS = [
-  { name: 'Batumi', label: 'Батуми', lon: 41.6367, lat: 41.6434 },
-  { name: 'Tbilisi', label: 'Тбилиси', lon: 44.7865, lat: 41.7151 },
-  { name: 'Kutaisi', label: 'Кутаиси', lon: 42.7058, lat: 42.2662 },
+  { name: 'Batumi', labelKey: 'header.cityBatumi', lon: 41.6367, lat: 41.6434 },
+  { name: 'Tbilisi', labelKey: 'header.cityTbilisi', lon: 44.7865, lat: 41.7151 },
+  { name: 'Kutaisi', labelKey: 'locationStep.cityKutaisi', lon: 42.7058, lat: 42.2662 },
 ]
 
 export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
+  const { t } = useI18n()
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleAddressSelect = (suggestion: AddressSuggestion) => {
@@ -35,12 +37,12 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
     setValidationError(null)
 
     if (!data.city.trim()) {
-      setValidationError('Укажите город объекта')
+      setValidationError(t('locationStep.errorCity'))
       return
     }
 
     if (!data.address.trim()) {
-      setValidationError('Укажите точный адрес (улицу и номер дома)')
+      setValidationError(t('locationStep.errorAddress'))
       return
     }
 
@@ -53,7 +55,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
       latitude < -90 ||
       latitude > 90
     ) {
-      setValidationError('Укажите корректную точку объекта на карте')
+      setValidationError(t('locationStep.errorPoint'))
       return
     }
 
@@ -73,10 +75,8 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
   return (
     <section className="wizard-step wizard-step--location" data-testid="wizard-step-location" aria-labelledby="location-heading">
       <div className="wizard-step__header">
-        <h2 id="location-heading">Шаг 1: Адрес и местоположение на карте</h2>
-        <p className="wizard-step__subtitle">
-          Укажите город, улицу и координаты объекта для точного отображения в поиске маркетплейса
-        </p>
+        <h2 id="location-heading">{t('locationStep.heading')}</h2>
+        <p className="wizard-step__subtitle">{t('locationStep.subtitle')}</p>
       </div>
 
       {validationError && (
@@ -87,8 +87,8 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
 
       <form onSubmit={handleSubmit} className="wizard-form" noValidate>
         <div className="wizard-field">
-          <label>Быстрый выбор города</label>
-          <div className="wizard-chips-group" role="group" aria-label="Города">
+          <label>{t('locationStep.quickCityLabel')}</label>
+          <div className="wizard-chips-group" role="group" aria-label={t('locationStep.citiesAria')}>
             {CITY_PRESETS.map((preset) => (
               <button
                 key={preset.name}
@@ -97,7 +97,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
                 onClick={() => handlePresetSelect(preset)}
                 data-testid={`city-preset-${preset.name.toLowerCase()}`}
               >
-                {preset.label}
+                {t(preset.labelKey)}
               </button>
             ))}
           </div>
@@ -105,20 +105,20 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
 
         <div className="wizard-form-grid">
           <div className="wizard-field">
-            <label htmlFor="loc-city">Город *</label>
+            <label htmlFor="loc-city">{t('locationStep.cityLabel')}</label>
             <input
               id="loc-city"
               type="text"
               value={data.city}
               onChange={(e) => onChange({ city: e.target.value })}
-              placeholder="Например, Batumi"
+              placeholder={t('locationStep.cityPlaceholder')}
               required
               data-testid="location-input-city"
             />
           </div>
 
           <div className="wizard-field">
-            <label htmlFor="loc-country">Страна</label>
+            <label htmlFor="loc-country">{t('locationStep.countryLabel')}</label>
             <input
               id="loc-country"
               type="text"
@@ -131,13 +131,12 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
         </div>
 
         <div className="wizard-field">
-          <label htmlFor="loc-address">Улица и номер дома *</label>
+          <label htmlFor="loc-address">{t('locationStep.addressLabel')}</label>
           <AddressAutocomplete
             value={data.address}
             cityContext={data.city}
             onChange={(address) => onChange({ address })}
             onSelect={handleAddressSelect}
-            placeholder="Например, ул. Руставели 15"
             required
             dataTestId="location-input-address"
           />
@@ -145,7 +144,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
 
         {/* Real MapLibre point picker; public catalogue markers are not ownership selectors. */}
         <div className="wizard-field" data-testid="map-point-picker">
-          <label id="map-coordinates-label">Точные координаты (Долгота и Широта)</label>
+          <label id="map-coordinates-label">{t('locationStep.coordinatesLabel')}</label>
           <PublishingMapPicker
             coordinates={data.geo.coordinates}
             onChange={(coordinates) => onChange({ geo: { type: 'Point', coordinates } })}
@@ -153,7 +152,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
           <div className="wizard-map-picker">
             <div className="wizard-form-grid">
               <div>
-                <label htmlFor="loc-lon" className="wizard-field-sub">Долгота (Longitude)</label>
+                <label htmlFor="loc-lon" className="wizard-field-sub">{t('locationStep.longitudeLabel')}</label>
                 <input
                   id="loc-lon"
                   type="number"
@@ -171,7 +170,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
                 />
               </div>
               <div>
-                <label htmlFor="loc-lat" className="wizard-field-sub">Широта (Latitude)</label>
+                <label htmlFor="loc-lat" className="wizard-field-sub">{t('locationStep.latitudeLabel')}</label>
                 <input
                   id="loc-lat"
                   type="number"
@@ -198,7 +197,7 @@ export function LocationStep({ data, onChange, onNext }: LocationStepProps) {
             className="wizard-btn wizard-btn--primary"
             data-testid="location-next-btn"
           >
-            Далее: Характеристики →
+            {t('locationStep.next')}
           </button>
         </div>
       </form>

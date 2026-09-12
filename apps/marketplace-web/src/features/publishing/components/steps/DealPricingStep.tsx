@@ -1,5 +1,6 @@
 import React, { FormEvent, useState } from 'react'
 import type { DealFormData, DealType, CurrencyCode } from '../../model/types'
+import { useI18n } from '../../../../i18n'
 
 interface DealPricingStepProps {
   data: DealFormData
@@ -10,10 +11,10 @@ interface DealPricingStepProps {
   error: string | null
 }
 
-const DEAL_TYPES: { type: DealType; label: string }[] = [
-  { type: 'sale', label: 'Продажа' },
-  { type: 'rent_long', label: 'Долгосрочная аренда' },
-  { type: 'rent_short', label: 'Посуточная аренда' },
+const DEAL_TYPES: { type: DealType; labelKey: string }[] = [
+  { type: 'sale', labelKey: 'format.dealSale' },
+  { type: 'rent_long', labelKey: 'format.dealRentLong' },
+  { type: 'rent_short', labelKey: 'format.dealRentShort' },
 ]
 
 const CURRENCIES: { code: CurrencyCode; label: string; symbol: string }[] = [
@@ -30,6 +31,7 @@ export function DealPricingStep({
   isLoading,
   error,
 }: DealPricingStepProps) {
+  const { t } = useI18n()
   const [validationError, setValidationError] = useState<string | null>(null)
 
   const handleSubmit = async (e: FormEvent) => {
@@ -37,7 +39,7 @@ export function DealPricingStep({
     setValidationError(null)
 
     if (!data.priceAmount || Number(data.priceAmount) <= 0) {
-      setValidationError('Укажите стоимость объекта')
+      setValidationError(t('dealPricing.errorPrice'))
       return
     }
 
@@ -52,10 +54,8 @@ export function DealPricingStep({
   return (
     <section className="wizard-step wizard-step--deal" data-testid="wizard-step-deal" aria-labelledby="deal-heading">
       <div className="wizard-step__header">
-        <h2 id="deal-heading">Шаг 3: Тип сделки и стоимость</h2>
-        <p className="wizard-step__subtitle">
-          Выберите формат предложения (продажа или аренда) и укажите цену
-        </p>
+        <h2 id="deal-heading">{t('dealPricing.heading')}</h2>
+        <p className="wizard-step__subtitle">{t('dealPricing.subtitle')}</p>
       </div>
 
       {(validationError || error) && (
@@ -66,9 +66,9 @@ export function DealPricingStep({
 
       <form onSubmit={handleSubmit} className="wizard-form" noValidate>
         <div className="wizard-field">
-          <label>Тип сделки *</label>
-          <div className="wizard-chips-group" role="group" aria-label="Тип сделки">
-            {DEAL_TYPES.map(({ type, label }) => (
+          <label>{t('dealPricing.dealTypeLabel')}</label>
+          <div className="wizard-chips-group" role="group" aria-label={t('filters.dealTypeAria')}>
+            {DEAL_TYPES.map(({ type, labelKey }) => (
               <button
                 key={type}
                 type="button"
@@ -76,7 +76,7 @@ export function DealPricingStep({
                 onClick={() => onChange({ dealType: type })}
                 data-testid={`deal-type-${type}`}
               >
-                {label}
+                {t(labelKey)}
               </button>
             ))}
           </div>
@@ -84,7 +84,7 @@ export function DealPricingStep({
 
         <div className="wizard-form-grid">
           <div className="wizard-field">
-            <label htmlFor="deal-price">Стоимость *</label>
+            <label htmlFor="deal-price">{t('dealPricing.priceLabel')}</label>
             <input
               id="deal-price"
               type="number"
@@ -94,14 +94,14 @@ export function DealPricingStep({
               onChange={(e) =>
                 onChange({ priceAmount: e.target.value === '' ? '' : parseFloat(e.target.value) })
               }
-              placeholder="Например, 85000"
+              placeholder={t('dealPricing.pricePlaceholder')}
               required
               data-testid="deal-input-price"
             />
           </div>
 
           <div className="wizard-field">
-            <label htmlFor="deal-currency">Валюта *</label>
+            <label htmlFor="deal-currency">{t('dealPricing.currencyLabel')}</label>
             <select
               id="deal-currency"
               value={data.currency}
@@ -119,7 +119,7 @@ export function DealPricingStep({
 
         {formattedPrice && (
           <div className="wizard-price-preview">
-            <span className="wizard-price-preview__label">Итоговая стоимость в объявлении:</span>
+            <span className="wizard-price-preview__label">{t('dealPricing.previewLabel')}</span>
             <span className="wizard-price-preview__val" data-testid="deal-price-preview">
               {formattedPrice}
             </span>
@@ -134,7 +134,7 @@ export function DealPricingStep({
             disabled={isLoading}
             data-testid="deal-back-btn"
           >
-            ← Назад
+            {t('wizard.back')}
           </button>
           <button
             type="submit"
@@ -143,7 +143,7 @@ export function DealPricingStep({
             aria-busy={isLoading}
             data-testid="deal-next-btn"
           >
-            {isLoading ? 'Создание предложения...' : 'Далее: Загрузка фото →'}
+            {isLoading ? t('dealPricing.saving') : t('dealPricing.next')}
           </button>
         </div>
       </form>

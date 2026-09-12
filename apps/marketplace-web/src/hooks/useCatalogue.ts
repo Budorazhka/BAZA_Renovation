@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
 import { isAbortError } from '../lib/async'
+import { useI18n } from '../i18n'
 import type { BoundingBox, PublicDevelopmentCard } from '../types/marketplace'
 
 export type CatalogueState =
@@ -30,6 +31,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
   loadMore: () => void
   retryLoadMore: () => void
 } {
+  const { t } = useI18n()
   const [state, setState] = useState<CatalogueState>({ status: 'loading' })
   const nextCursorRef = useRef<string | null>(null)
   const requestIdRef = useRef(0)
@@ -81,13 +83,10 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
       }
       nextCursorRef.current = null
       const statusCode = cause instanceof MarketplaceApiError ? cause.status : undefined
-      const message =
-        cause instanceof Error
-          ? cause.message
-          : 'Не удалось загрузить каталог новостроек. Проверьте соединение и попробуйте снова.'
+      const message = cause instanceof Error ? cause.message : t('errors.developmentsCatalogue')
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, bboxKey, publisher, limit, sort])
+  }, [city, bboxKey, publisher, limit, sort, t])
 
   useEffect(() => {
     void loadFirstPage()
@@ -139,8 +138,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
         },
         (cause: unknown) => {
           if (requestIdRef.current !== requestId || controller.signal.aborted || isAbortError(cause)) return
-          const message =
-            cause instanceof Error ? cause.message : 'Не удалось загрузить следующую страницу. Попробуйте ещё раз.'
+          const message = cause instanceof Error ? cause.message : t('errors.loadMore')
           setState((current) =>
             current.status === 'ready'
               ? {
@@ -152,7 +150,7 @@ export function useCatalogue(query: UseCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, bboxKey, publisher, limit, sort])
+  }, [city, bboxKey, publisher, limit, sort, t])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

@@ -1,4 +1,5 @@
 import React, { useState, type FormEvent } from 'react'
+import { useI18n } from '../../../i18n'
 // Разметка формы использует классы wizard-* — стили лежат в мастере публикации,
 // откуда форма и была вынесена. Импорт здесь, у самой разметки, а не у страницы:
 // иначе форма выглядела бы по-разному в зависимости от места вызова.
@@ -47,6 +48,7 @@ export function AuthForm({
   const [passwordInput, setPasswordInput] = useState('')
   const [confirmPasswordInput, setConfirmPasswordInput] = useState('')
   const [validationError, setValidationError] = useState<string | null>(null)
+  const { t } = useI18n()
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -54,17 +56,17 @@ export function AuthForm({
     onClearError()
 
     if (!loginInput.trim()) {
-      setValidationError('Укажите логин или email')
+      setValidationError(t('auth.errors.loginRequired'))
       return
     }
 
     if (passwordInput.length < 8) {
-      setValidationError('Пароль должен содержать не менее 8 символов')
+      setValidationError(t('auth.errors.passwordTooShort'))
       return
     }
 
     if (mode === 'register' && passwordInput !== confirmPasswordInput) {
-      setValidationError('Пароли не совпадают')
+      setValidationError(t('auth.errors.passwordsMismatch'))
       return
     }
 
@@ -81,14 +83,14 @@ export function AuthForm({
 
   const isWizard = variant === 'wizard'
   const submitLabel = isLoading
-    ? 'Пожалуйста, подождите...'
+    ? t('auth.submit.wait')
     : mode === 'login'
       ? isWizard
-        ? 'Войти и продолжить'
-        : 'Войти'
+        ? t('auth.submit.loginWizard')
+        : t('auth.submit.login')
       : isWizard
-        ? 'Зарегистрироваться и продолжить'
-        : 'Зарегистрироваться'
+        ? t('auth.submit.registerWizard')
+        : t('auth.submit.register')
 
   return (
     <section
@@ -99,19 +101,17 @@ export function AuthForm({
       <div className="wizard-step__header">
         <h1 id="auth-step-heading">
           {mode === 'login'
-            ? 'Вход в аккаунт BAZA'
+            ? t('auth.heading.login')
             : isWizard
-              ? 'Регистрация автора объявления'
-              : 'Регистрация в BAZA'}
+              ? t('auth.heading.registerWizard')
+              : t('auth.heading.register')}
         </h1>
         <p className="wizard-step__subtitle">
-          {mode === 'login'
-            ? 'Войдите, чтобы управлять объектами и публиковать объявления'
-            : 'Создайте аккаунт, чтобы разместить объект в каталоге маркетплейса'}
+          {mode === 'login' ? t('auth.subtitle.login') : t('auth.subtitle.register')}
         </p>
       </div>
 
-      <div className="wizard-auth-toggle" role="tablist" aria-label="Форма авторизации">
+      <div className="wizard-auth-toggle" role="tablist" aria-label={t('auth.tabsLabel')}>
         <button
           type="button"
           role="tab"
@@ -124,7 +124,7 @@ export function AuthForm({
           }}
           data-testid="auth-tab-login"
         >
-          Вход
+          {t('auth.tabs.login')}
         </button>
         <button
           type="button"
@@ -138,7 +138,7 @@ export function AuthForm({
           }}
           data-testid="auth-tab-register"
         >
-          Регистрация
+          {t('auth.tabs.register')}
         </button>
       </div>
 
@@ -150,7 +150,7 @@ export function AuthForm({
 
       <form onSubmit={handleSubmit} className="wizard-form" noValidate>
         <div className="wizard-field">
-          <label htmlFor="auth-login">Логин или Email *</label>
+          <label htmlFor="auth-login">{t('auth.fields.loginLabel')}</label>
           <input
             id="auth-login"
             type="text"
@@ -165,14 +165,14 @@ export function AuthForm({
         </div>
 
         <div className="wizard-field">
-          <label htmlFor="auth-password">Пароль *</label>
+          <label htmlFor="auth-password">{t('auth.fields.passwordLabel')}</label>
           <input
             id="auth-password"
             type="password"
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             value={passwordInput}
             onChange={(e) => setPasswordInput(e.target.value)}
-            placeholder="Не менее 8 символов"
+            placeholder={t('auth.fields.passwordPlaceholder')}
             disabled={isLoading}
             required
             data-testid="auth-input-password"
@@ -181,14 +181,14 @@ export function AuthForm({
 
         {mode === 'register' && (
           <div className="wizard-field">
-            <label htmlFor="auth-confirm-password">Подтверждение пароля *</label>
+            <label htmlFor="auth-confirm-password">{t('auth.fields.confirmPasswordLabel')}</label>
             <input
               id="auth-confirm-password"
               type="password"
               autoComplete="new-password"
               value={confirmPasswordInput}
               onChange={(e) => setConfirmPasswordInput(e.target.value)}
-              placeholder="Повторите пароль"
+              placeholder={t('auth.fields.confirmPasswordPlaceholder')}
               disabled={isLoading}
               required
               data-testid="auth-input-confirm-password"

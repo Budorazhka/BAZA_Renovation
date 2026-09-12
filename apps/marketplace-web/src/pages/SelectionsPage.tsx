@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import { BuildingPlaceholder } from '../components/DevelopmentCard'
+import { useI18n } from '../i18n'
 
 export interface CollectionItem {
   id: string
@@ -57,12 +58,13 @@ function saveCollections(items: CollectionItem[]) {
 }
 
 export function SelectionsPage() {
+  const { t } = useI18n()
   const [collections, setCollections] = useState<CollectionItem[]>(loadSavedCollections)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useSeoMetadata({
-    title: 'Мои подборки объектов | BAZA',
-    description: 'Управление клиентскими подборками недвижимости, создание персонализированных ссылок и витрин.',
+    title: t('selections.seoTitle'),
+    description: t('selections.seoDescription'),
   })
 
   const updateCollections = (updater: (prev: CollectionItem[]) => CollectionItem[]) => {
@@ -76,9 +78,9 @@ export function SelectionsPage() {
   const handleCreateNewCollection = () => {
     const newCol: CollectionItem = {
       id: `col-${Date.now()}`,
-      title: `Новая подборка (${collections.length + 1})`,
+      title: t('selections.newTitle', { count: collections.length + 1 }),
       slug: `selection-${Date.now()}`,
-      createdAt: 'Сегодня',
+      createdAt: t('realtorProfile.today'),
       properties: [],
     }
     updateCollections((prev) => [newCol, ...prev])
@@ -108,8 +110,8 @@ export function SelectionsPage() {
     <div className="figma-fav-page">
       <div className="figma-fav-header">
         <div className="figma-fav-header__title-group">
-          <h1 className="figma-fav-header__title">Мои подборки</h1>
-          <span className="figma-fav-header__badge">{collections.length} подборок</span>
+          <h1 className="figma-fav-header__title">{t('selections.title')}</h1>
+          <span className="figma-fav-header__badge">{t('selections.countBadge', { count: collections.length })}</span>
         </div>
 
         <button
@@ -118,26 +120,26 @@ export function SelectionsPage() {
           onClick={handleCreateNewCollection}
           data-testid="new-collection-btn"
         >
-          + Создать подборку
+          {t('selections.create')}
         </button>
       </div>
 
       {collections.length === 0 ? (
         <div className="state-panel" role="status" style={{ textAlign: 'center', padding: '48px 16px' }}>
           <p style={{ fontSize: '16px', color: 'var(--color-neutral-secondary, #555454)', marginBottom: '16px' }}>
-            У вас пока нет созданных подборок объектов.
+            {t('selections.emptyText')}
           </p>
           <button
             type="button"
             className="figma-fav-filter-btn figma-fav-filter-btn--active"
             onClick={handleCreateNewCollection}
           >
-            + Создать первую подборку
+            {t('selections.createFirst')}
           </button>
         </div>
       ) : null}
 
-      <div className="figma-collections-list" aria-label="Список клиентских подборок">
+      <div className="figma-collections-list" aria-label={t('selections.listAria')}>
         {collections.map((col) => (
           <div key={col.id} className="figma-collection-card">
             <div className="figma-collection-card__header">
@@ -147,10 +149,10 @@ export function SelectionsPage() {
                   value={col.title}
                   onChange={(e) => handleUpdateTitle(col.id, e.target.value)}
                   className="figma-collection-title-input"
-                  aria-label="Название подборки"
+                  aria-label={t('selections.titleInputAria')}
                 />
                 <div style={{ fontSize: '13px', color: '#757575', paddingLeft: '8px' }}>
-                  Создана: {col.createdAt} · {col.properties.length} объектов
+                  {t('selections.createdAt', { date: col.createdAt, count: col.properties.length })}
                 </div>
               </div>
 
@@ -161,19 +163,19 @@ export function SelectionsPage() {
                   onClick={() => handleCopyLink(col)}
                   data-testid={`copy-link-${col.id}`}
                 >
-                  {copiedId === col.id ? '✓ Ссылка скопирована' : '🔗 Ссылка для клиента'}
+                  {copiedId === col.id ? t('selections.linkCopied') : t('selections.clientLink')}
                 </button>
                 <Link
                   to={`/selections/${col.slug}`}
                   className="figma-collection-btn"
                 >
-                  Витрина ↗
+                  {t('selections.showcase')}
                 </Link>
                 <button
                   type="button"
                   className="figma-collection-btn figma-collection-btn--danger"
                   onClick={() => handleDeleteCollection(col.id)}
-                  title="Удалить подборку"
+                  title={t('selections.delete')}
                 >
                   ✕
                 </button>
@@ -194,15 +196,15 @@ export function SelectionsPage() {
                         📍 {p.city}, {p.address}
                       </p>
                       <div className="figma-fav-card__specs">
-                        <span>🛏 {p.rooms} комн.</span>
-                        <span>📐 {p.area} м²</span>
+                        <span>🛏 {t('card.rooms', { count: p.rooms })}</span>
+                        <span>📐 {t('card.area', { area: p.area })}</span>
                       </div>
                       <div className="figma-fav-card__actions">
                         <Link
                           to={`/listings/${p.slug}`}
                           className="figma-fav-card-btn figma-fav-card-btn--primary"
                         >
-                          Смотреть
+                          {t('favorites.view')}
                         </Link>
                       </div>
                     </div>
@@ -211,7 +213,7 @@ export function SelectionsPage() {
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '24px', color: '#757575', fontSize: '14px' }}>
-                В этой подборке пока нет объектов. Добавьте объекты из каталога или избранного.
+                {t('selections.emptyCollection')}
               </div>
             )}
           </div>

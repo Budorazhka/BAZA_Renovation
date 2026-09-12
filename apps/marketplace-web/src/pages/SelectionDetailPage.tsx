@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { useSeoMetadata } from '../hooks/useSeoMetadata'
 import { BuildingPlaceholder } from '../components/DevelopmentCard'
 import { marketplaceApi } from '../api/marketplace-api'
+import { useI18n } from '../i18n'
+import type { Translate } from '../i18n'
 import type { PublicSelection, PublicSelectionItem } from '../types/marketplace'
 import '../styles/favorites-selections.css'
 
@@ -21,12 +23,13 @@ import '../styles/favorites-selections.css'
  */
 export function SelectionDetailPage() {
   const { slug = '' } = useParams()
+  const { t } = useI18n()
   const [selection, setSelection] = useState<PublicSelection | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'not_found' | 'error'>('loading')
 
   useSeoMetadata({
-    title: selection ? `${selection.title} | BAZA` : 'Персональная подборка | BAZA',
-    description: 'Объекты, подобранные для вас риелтором BAZA.',
+    title: selection ? `${selection.title} | BAZA` : t('selectionDetail.seoTitle'),
+    description: t('selectionDetail.seoDescription'),
     // Подборка адресована одному человеку и открывается по ссылке: в поиске ей
     // делать нечего.
     noindex: true,
@@ -59,7 +62,7 @@ export function SelectionDetailPage() {
   if (status === 'loading') {
     return (
       <div className="state-panel" role="status" aria-busy="true">
-        <p>Загружаем подборку…</p>
+        <p>{t('selectionDetail.loading')}</p>
       </div>
     )
   }
@@ -67,9 +70,9 @@ export function SelectionDetailPage() {
   if (status === 'not_found') {
     return (
       <div className="state-panel state-panel--empty">
-        <p>Подборка не найдена. Возможно, ссылка устарела — попросите риелтора прислать новую.</p>
+        <p>{t('selectionDetail.notFound')}</p>
         <Link to="/newconstructions" className="clear-filter-btn">
-          Смотреть каталог
+          {t('selectionDetail.viewCatalogue')}
         </Link>
       </div>
     )
@@ -78,7 +81,7 @@ export function SelectionDetailPage() {
   if (status === 'error' || !selection) {
     return (
       <div className="state-panel state-panel--error" role="alert">
-        <p>Не удалось загрузить подборку. Обновите страницу.</p>
+        <p>{t('selectionDetail.loadFailed')}</p>
       </div>
     )
   }
@@ -90,19 +93,19 @@ export function SelectionDetailPage() {
           {selection.title}
         </h1>
         {selection.clientName && (
-          <p className="client-selection__client">Подобрано для: {selection.clientName}</p>
+          <p className="client-selection__client">{t('selectionDetail.pickedFor', { name: selection.clientName })}</p>
         )}
         {selection.agentNote && <p className="client-selection__note">{selection.agentNote}</p>}
       </header>
 
       {selection.items.length === 0 ? (
         <div className="state-panel state-panel--empty">
-          <p>В подборке пока нет объектов. Риелтор добавит их и пришлёт ссылку снова.</p>
+          <p>{t('selectionDetail.emptyItems')}</p>
         </div>
       ) : (
         <ul className="client-selection__grid">
           {selection.items.map((item) => (
-            <SelectionItemCard key={item.unitId} item={item} />
+            <SelectionItemCard key={item.unitId} item={item} t={t} />
           ))}
         </ul>
       )}
@@ -115,7 +118,7 @@ function formatPrice(price?: { amountMinorUnits: number; currency: string }): st
   return `${Math.round(price.amountMinorUnits / 100).toLocaleString('ru-RU')} ${price.currency}`
 }
 
-function SelectionItemCard({ item }: { item: PublicSelectionItem }) {
+function SelectionItemCard({ item, t }: { item: PublicSelectionItem; t: Translate }) {
   const price = formatPrice(item.unit?.price)
 
   return (
@@ -126,12 +129,12 @@ function SelectionItemCard({ item }: { item: PublicSelectionItem }) {
       <div className="client-selection__body">
         {item.unit ? (
           <>
-            <p className="client-selection__unit-number">Квартира №{item.unit.number}</p>
+            <p className="client-selection__unit-number">{t('devDetail.unitTitleNumbered', { number: item.unit.number })}</p>
             {price && <p className="client-selection__price">{price}</p>}
             <p className="client-selection__params">
               {[
-                item.unit.rooms !== undefined ? `${item.unit.rooms} комн.` : null,
-                `${item.unit.area} м²`,
+                item.unit.rooms !== undefined ? t('card.rooms', { count: item.unit.rooms }) : null,
+                t('card.area', { area: item.unit.area }),
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -142,7 +145,7 @@ function SelectionItemCard({ item }: { item: PublicSelectionItem }) {
             Объект пропал из базы после того, как агент собрал подборку. Честно
             говорим об этом, а не показываем пустую карточку без объяснения.
           */
-          <p className="client-selection__missing">Объект больше недоступен</p>
+          <p className="client-selection__missing">{t('selectionDetail.itemMissing')}</p>
         )}
 
         {item.agentNote && <p className="client-selection__agent-note">{item.agentNote}</p>}

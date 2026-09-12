@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthSession } from '../model/useAuthSession'
+import { useI18n } from '../../../i18n'
 
 /**
  * Пускает в раздел только вошедшего пользователя.
@@ -17,13 +18,14 @@ import { useAuthSession } from '../model/useAuthSession'
 export function RequireAuth({ children }: { children: ReactNode }) {
   const location = useLocation()
   const { isAuthenticated, isChecking } = useAuthSession()
+  const { t } = useI18n()
 
   // Пока сессия проверяется, ничего не решаем: иначе на каждую перезагрузку
   // вошедший пользователь моргал бы формой входа.
   if (isChecking) {
     return (
       <div className="state-panel" role="status" aria-busy="true">
-        <p>Проверяем доступ…</p>
+        <p>{t('requireAuth.checking')}</p>
       </div>
     )
   }

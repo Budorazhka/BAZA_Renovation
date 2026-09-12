@@ -17,6 +17,7 @@ import {
   type MarketplaceMapPoint,
 } from '../lib/map-data'
 import { resolveMapStyleUrl, DEFAULT_MAP_STYLE_URL } from '../lib/map-config'
+import { useI18n } from '../i18n'
 import type { BoundingBox, PublicListingCard } from '../types/marketplace'
 
 type MapLibreMap = InstanceType<typeof maplibregl.Map>
@@ -58,10 +59,11 @@ function MapPreviewCard({
   onNavigate?: (item: MarketplaceMapItem) => void
 }) {
   const [imgError, setImgError] = useState(false)
-  const title = getMapItemTitle(item)
-  const address = getMapItemAddress(item)
-  const priceOrDate = getMapItemPriceOrDate(item)
-  const badge = getMapItemBadge(item)
+  const { t } = useI18n()
+  const title = getMapItemTitle(item, t)
+  const address = getMapItemAddress(item, t)
+  const priceOrDate = getMapItemPriceOrDate(item, t)
+  const badge = getMapItemBadge(item, t)
   const coverUrl = getMapItemCoverUrl(item)
   const link = getMapItemLink(item)
   const isDev = isDevelopmentCard(item)
@@ -71,14 +73,14 @@ function MapPreviewCard({
     <div
       className="marketplace-map__preview-card"
       role="dialog"
-      aria-label={`Информация: ${title}`}
+      aria-label={t('map.infoAria', { title })}
       data-testid="marketplace-map-preview"
     >
       <button
         type="button"
         className="marketplace-map__preview-close"
         onClick={onClose}
-        aria-label="Закрыть карточку"
+        aria-label={t('map.closeCard')}
       >
         ✕
       </button>
@@ -108,24 +110,25 @@ function MapPreviewCard({
         <p className="marketplace-map__preview-address">{address}</p>
 
         {listingItem?.characteristics ? (
-          <div className="marketplace-map__preview-chips" aria-label="Характеристики">
+          <div className="marketplace-map__preview-chips" aria-label={t('map.characteristics')}>
             {listingItem.characteristics.rooms ? (
               <span className="marketplace-map__preview-chip">
-                {listingItem.characteristics.rooms} комн.
+                {t('card.rooms', { count: listingItem.characteristics.rooms })}
               </span>
             ) : null}
             {listingItem.characteristics.area ? (
               <span className="marketplace-map__preview-chip">
-                {listingItem.characteristics.area} м²
+                {t('card.area', { area: listingItem.characteristics.area })}
               </span>
             ) : null}
             {listingItem.characteristics.floor ? (
               <span className="marketplace-map__preview-chip">
-                {listingItem.characteristics.floor}
                 {listingItem.characteristics.totalFloors
-                  ? ` / ${listingItem.characteristics.totalFloors}`
-                  : ''}{' '}
-                эт.
+                  ? t('map.floorOfTotal', {
+                      floor: listingItem.characteristics.floor,
+                      total: listingItem.characteristics.totalFloors,
+                    })
+                  : t('card.floor', { floor: listingItem.characteristics.floor })}
               </span>
             ) : null}
           </div>
@@ -136,9 +139,9 @@ function MapPreviewCard({
             to={link}
             className="marketplace-map__preview-link"
             onClick={() => onNavigate?.(item)}
-            aria-label={`Перейти: ${title}`}
+            aria-label={t('map.goToAria', { title })}
           >
-            {isDev ? 'Смотреть ЖК' : 'Смотреть объявление'} <span aria-hidden="true">→</span>
+            {isDev ? t('map.viewDevelopment') : t('map.viewListing')} <span aria-hidden="true">→</span>
           </Link>
         ) : null}
       </div>
@@ -172,6 +175,7 @@ export function MarketplaceMap({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [selectedItem, setSelectedItem] = useState<MarketplaceMapItem | null>(null)
   const [mapError, setMapError] = useState<string | null>(null)
+  const { t } = useI18n()
   const isTest = import.meta.env.MODE === 'test'
   const styleUrl = resolveMapStyleUrl(import.meta.env.VITE_MAP_STYLE_URL) || (!isTest ? DEFAULT_MAP_STYLE_URL : undefined)
 
@@ -210,7 +214,7 @@ export function MarketplaceMap({
         zoom: 10,
       })
     } catch {
-      setMapError('Не удалось инициализировать карту. Проверьте VITE_MAP_STYLE_URL.')
+      setMapError(t('map.errorInit'))
       return
     }
 
@@ -227,7 +231,7 @@ export function MarketplaceMap({
         const element = document.createElement('button')
         element.type = 'button'
         element.className = 'marketplace-map__marker'
-        element.setAttribute('aria-label', mapItemLabel(item, index))
+        element.setAttribute('aria-label', mapItemLabel(item, index, t))
         element.tabIndex = 0
 
         const handleSelect = (e?: Event) => {
@@ -271,8 +275,7 @@ export function MarketplaceMap({
       syncMarkers()
     }
 
-    const handleError = () =>
-      setMapError('Не удалось загрузить слой карты. Проверьте VITE_MAP_STYLE_URL.')
+    const handleError = () => setMapError(t('map.errorLoad'))
 
     map.on('load', handleReady)
     // Some style providers (and browser runtimes) reach an idle, style-ready
@@ -324,7 +327,7 @@ export function MarketplaceMap({
       const element = document.createElement('button')
       element.type = 'button'
       element.className = `marketplace-map__marker${selectedItem?.slug === item.slug ? ' marketplace-map__marker--active' : ''}`
-      element.setAttribute('aria-label', mapItemLabel(item, index))
+      element.setAttribute('aria-label', mapItemLabel(item, index, t))
       element.setAttribute('aria-pressed', String(selectedItem?.slug === item.slug))
       element.tabIndex = 0
 
@@ -361,9 +364,9 @@ export function MarketplaceMap({
         role="status"
         data-testid="marketplace-map-unconfigured"
       >
-        <strong>Карта пока не подключена</strong>
-        <span>Задайте VITE_MAP_STYLE_URL для OSM-compatible провайдера в окружении marketplace-web.</span>
-        <small>Объектов с координатами в текущей выборке: {getMarketplaceMapPoints(items).length}</small>
+        <strong>{t('map.notConfigured')}</strong>
+        <span>{t('map.notConfiguredHint')}</span>
+        <small>{t('map.pointsCount', { count: getMarketplaceMapPoints(items).length })}</small>
       </div>
     )
   }
@@ -371,11 +374,11 @@ export function MarketplaceMap({
   const validPointsCount = getMarketplaceMapPoints(items).length
 
   return (
-    <div className="marketplace-map" aria-label="Карта объектов" data-testid="marketplace-map">
+    <div className="marketplace-map" aria-label={t('map.ariaLabel')} data-testid="marketplace-map">
       <div ref={containerRef} className="marketplace-map__canvas" />
       {validPointsCount === 0 && !mapError ? (
         <div className="marketplace-map__notice" role="status" aria-live="polite">
-          Нет объектов с точными координатами в текущей выборке
+          {t('map.noPreciseCoordinates')}
         </div>
       ) : null}
       {selectedItem ? (

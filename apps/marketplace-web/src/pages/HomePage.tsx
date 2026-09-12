@@ -4,6 +4,7 @@ import { marketplaceApi } from '../api/marketplace-api'
 import { DevelopmentCard } from '../components/DevelopmentCard'
 import { ListingCard } from '../components/ListingCard'
 import { ListingCardCompact } from '../components/ListingCardCompact'
+import { useI18n } from '../i18n'
 import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketplace'
 
 /**
@@ -29,7 +30,7 @@ import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketpl
  */
 
 interface CategorySpec {
-  title: string
+  titleKey: string
   to: string
   countKey: 'developments' | 'sale' | 'rent' | 'commercial'
   /** Ширина карточки в макете: 390/470/410/450/450 из ряда 1920. */
@@ -44,23 +45,23 @@ interface CategorySpec {
 
 const CATEGORIES: CategorySpec[] = [
   {
-    title: 'Новостройки',
+    titleKey: 'home.category.newBuild',
     to: '/newconstructions',
     countKey: 'developments',
     width: 390,
     photo: '/figma/category-new-buildings.webp',
   },
-  { title: 'Вторичка', to: '/secondary', countKey: 'sale', width: 470, photo: '/figma/category-secondary.webp' },
-  { title: 'Аренда', to: '/rent', countKey: 'rent', width: 410, photo: '/figma/category-rent.webp' },
+  { titleKey: 'home.category.secondary', to: '/secondary', countKey: 'sale', width: 470, photo: '/figma/category-secondary.webp' },
+  { titleKey: 'home.category.rent', to: '/rent', countKey: 'rent', width: 410, photo: '/figma/category-rent.webp' },
   {
-    title: 'Проекты',
+    titleKey: 'home.category.projects',
     to: '/newconstructions',
     countKey: 'developments',
     width: 450,
     photo: '/figma/category-projects.webp',
   },
   {
-    title: 'Коммерция',
+    titleKey: 'home.category.commercial',
     to: '/secondary?propertyType=commercial',
     countKey: 'commercial',
     width: 450,
@@ -78,18 +79,21 @@ const HERO_PHOTO = '/figma/hero-city.jpg'
  */
 const ADVANTAGES = [
   {
-    title: 'Большой выбор',
-    text: 'Объявления, которые регулярно обновляются',
+    key: 'choice',
+    titleKey: 'home.advantage.choice.title',
+    textKey: 'home.advantage.choice.text',
     icon: '/figma/advantage-choice.svg',
   },
   {
-    title: 'Проверенные агенты',
-    text: 'База проверенных риелторов с реальными отзывами',
+    key: 'agents',
+    titleKey: 'home.advantage.agents.title',
+    textKey: 'home.advantage.agents.text',
     icon: '/figma/advantage-agents.svg',
   },
   {
-    title: 'Удобный поиск',
-    text: 'Множество фильтров и карта объектов',
+    key: 'search',
+    titleKey: 'home.advantage.search.title',
+    textKey: 'home.advantage.search.text',
     icon: '/figma/advantage-search.svg',
   },
 ]
@@ -116,6 +120,7 @@ function coverOf(item: PublicListingCard | undefined): string | null {
 export function HomePage() {
   const [data, setData] = useState<HomeData>(EMPTY)
   const [loadError, setLoadError] = useState(false)
+  const { t } = useI18n()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -167,7 +172,7 @@ export function HomePage() {
             <img src="/figma/logo-mark.svg" alt="" width={100} height={100} />
             <span className="home-hero__logo-text">BAZA.sale</span>
           </p>
-          <h1 id="home-title" className="home-hero__slogan">Лучший способ найти недвижимость</h1>
+          <h1 id="home-title" className="home-hero__slogan">{t('home.slogan')}</h1>
         </div>
 
         <div className="home-hero__photo">
@@ -176,14 +181,14 @@ export function HomePage() {
       </section>
 
       {/* категории `3428:55271`: HORIZONTAL gap 19, карточки radius 30, border 3px, тень */}
-      <section className="home-categories" aria-label="Категории недвижимости">
+      <section className="home-categories" aria-label={t('home.categoriesAria')}>
         <div className="home-categories__row">
           {CATEGORIES.map((category) => {
             const count = data.counts[category.countKey]
             return (
-              <Link key={category.title} to={category.to} className="home-category">
+              <Link key={category.titleKey} to={category.to} className="home-category">
                 <span className="home-category__head">
-                  <span className="home-category__title">{category.title}</span>
+                  <span className="home-category__title">{t(category.titleKey)}</span>
                   {count !== undefined ? <span className="home-category__count">({count})</span> : null}
                 </span>
                 <span className="home-category__photo">
@@ -198,30 +203,28 @@ export function HomePage() {
       {/* «Почему выбирают» `3428:55292`: слева пилюля + заголовок 50px ExtraBold, справа три довода */}
       <section className="home-why" aria-labelledby="home-why-title">
         <div className="home-why__intro">
-          <p className="home-why__tag">Преимущества</p>
-          <h2 id="home-why-title" className="home-why__title">Почему выбирают BAZA.sale?</h2>
-          <p className="home-why__lead">Тысячи клиентов ежемесячно находят жильё на нашей платформе</p>
+          <p className="home-why__tag">{t('home.why.tag')}</p>
+          <h2 id="home-why-title" className="home-why__title">{t('home.why.title')}</h2>
+          <p className="home-why__lead">{t('home.why.lead')}</p>
         </div>
         <ul className="home-why__list">
           {ADVANTAGES.map((advantage) => (
-            <li key={advantage.title} className="home-advantage">
+            <li key={advantage.key} className="home-advantage">
               <img className="home-advantage__icon" src={advantage.icon} alt="" width={139} height={139} loading="lazy" />
-              <h3 className="home-advantage__title">{advantage.title}</h3>
-              <p className="home-advantage__text">{advantage.text}</p>
+              <h3 className="home-advantage__title">{t(advantage.titleKey)}</h3>
+              <p className="home-advantage__text">{t(advantage.textKey)}</p>
             </li>
           ))}
         </ul>
       </section>
 
       {/* промо `3428:55382`: зелёный блок 670x500 и баннер 1040x500, оба radius 30 */}
-      <section className="home-promo" aria-label="Разместить объявление и акции">
+      <section className="home-promo" aria-label={t('home.promoAria')}>
         <div className="home-promo__sell">
           <img className="home-promo__sell-art" src="/figma/promo-sell-art.svg" alt="" loading="lazy" />
-          <h2 className="home-promo__sell-title">Хотите продать квартиру, дом или участок?</h2>
-          <p className="home-promo__sell-text">
-            Бесплатно разместите своё объявление на BAZA, и вы быстро найдёте покупателей
-          </p>
-          <Link to="/publish" className="home-promo__sell-button">+ Разместить объявление</Link>
+          <h2 className="home-promo__sell-title">{t('home.promo.sellTitle')}</h2>
+          <p className="home-promo__sell-text">{t('home.promo.sellText')}</p>
+          <Link to="/publish" className="home-promo__sell-button">{t('home.promo.sellButton')}</Link>
         </div>
 
         {/*
@@ -232,9 +235,9 @@ export function HomePage() {
         <div className="home-promo__sale">
           <img className="home-promo__sale-art" src="/figma/promo-sale.svg" alt="" loading="lazy" />
           <div className="home-promo__sale-body">
-            <p className="home-promo__sale-kicker">Горячие предложения</p>
+            <p className="home-promo__sale-kicker">{t('home.promo.saleKicker')}</p>
             <p className="home-promo__sale-word">SALE</p>
-            <p className="home-promo__sale-value">до 30%</p>
+            <p className="home-promo__sale-value">{t('home.promo.saleValue')}</p>
           </div>
         </div>
       </section>
@@ -244,10 +247,10 @@ export function HomePage() {
         <div className="home-rail__head">
           <h2 id="home-hot-title" className="home-rail__title">
             <img className="home-rail__badge" src="/figma/rail-badge.svg" alt="" width={47} height={60} />
-            Горячие предложения
+            {t('home.rail.hotTitle')}
           </h2>
           <Link to="/newconstructions" className="home-rail__all">
-            Смотреть все
+            {t('home.rail.viewAll')}
             <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
               <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -261,7 +264,7 @@ export function HomePage() {
           </div>
         ) : (
           <p className="home-rail__empty">
-            {loadError ? 'Объекты сейчас не загрузились.' : 'Пока нет опубликованных жилых комплексов.'}
+            {loadError ? t('home.rail.emptyDevError') : t('home.rail.emptyDevNone')}
           </p>
         )}
       </section>
@@ -271,10 +274,10 @@ export function HomePage() {
         <div className="home-rail__head">
           <h2 id="home-new-title" className="home-rail__title">
             <img className="home-rail__badge" src="/figma/rail-badge.svg" alt="" width={47} height={60} />
-            Новые объявления квартир
+            {t('home.rail.newTitle')}
           </h2>
           <Link to="/secondary" className="home-rail__all">
-            Смотреть все
+            {t('home.rail.viewAll')}
             <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false">
               <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -288,7 +291,7 @@ export function HomePage() {
           </div>
         ) : (
           <p className="home-rail__empty">
-            {loadError ? 'Объявления сейчас не загрузились.' : 'Пока нет опубликованных объявлений.'}
+            {loadError ? t('home.rail.emptyListingsError') : t('home.rail.emptyListingsNone')}
           </p>
         )}
       </section>
@@ -305,58 +308,58 @@ export function HomePage() {
       <div className="home-mobile" aria-hidden={false}>
         <section className="home-mobile__block" aria-labelledby="m-new-title">
           <div className="home-mobile__head">
-            <h2 id="m-new-title" className="home-mobile__title">Новостройки</h2>
-            <Link to="/newconstructions" className="home-mobile__all">Смотреть</Link>
+            <h2 id="m-new-title" className="home-mobile__title">{t('home.mobile.newBuild')}</h2>
+            <Link to="/newconstructions" className="home-mobile__all">{t('home.mobile.viewShort')}</Link>
           </div>
           {data.developments.slice(0, 2).map((item) => (
             <DevelopmentCard key={item.slug} item={item} />
           ))}
           {data.developments.length === 0 ? (
-            <p className="home-rail__empty">Пока нет опубликованных жилых комплексов.</p>
+            <p className="home-rail__empty">{t('home.rail.emptyDevNone')}</p>
           ) : null}
         </section>
 
         {/* `1035:18130` hot cards: кнопка-контур и три компактные карточки */}
         <section className="home-mobile__hot" aria-labelledby="m-hot-title">
-          <h2 id="m-hot-title" className="home-mobile__pill">Горячие предложения</h2>
+          <h2 id="m-hot-title" className="home-mobile__pill">{t('home.mobile.hot')}</h2>
           <div className="home-mobile__compact">
             {data.listings.slice(0, 3).map((item) => (
               <ListingCardCompact key={item.slug} item={item} />
             ))}
             {data.listings.length === 0 ? (
-              <p className="home-rail__empty">Пока нет опубликованных объявлений.</p>
+              <p className="home-rail__empty">{t('home.rail.emptyListingsNone')}</p>
             ) : null}
           </div>
         </section>
 
         <section className="home-mobile__block" aria-labelledby="m-rent-title">
           <div className="home-mobile__head">
-            <h2 id="m-rent-title" className="home-mobile__title">Аренда</h2>
-            <Link to="/rent" className="home-mobile__all">Смотреть</Link>
+            <h2 id="m-rent-title" className="home-mobile__title">{t('home.mobile.rent')}</h2>
+            <Link to="/rent" className="home-mobile__all">{t('home.mobile.viewShort')}</Link>
           </div>
           {data.rentals.slice(0, 2).map((item) => (
             <ListingCard key={item.slug} item={item} />
           ))}
           {data.rentals.length === 0 ? (
-            <p className="home-rail__empty">Пока нет объявлений об аренде.</p>
+            <p className="home-rail__empty">{t('home.mobile.emptyRent')}</p>
           ) : null}
         </section>
 
         {/* `1035:18146` большая кнопка заявки */}
         <div className="home-mobile__cta">
-          <Link to="/publish" className="home-mobile__cta-button">Оставить заявку</Link>
+          <Link to="/publish" className="home-mobile__cta-button">{t('home.mobile.ctaLabel')}</Link>
         </div>
 
         {/* `215:7733` нижнее меню: зелёная панель со скруглением 40 сверху */}
-        <nav className="home-mobile__nav" aria-label="Основная навигация">
-          <Link to="/" aria-label="Главная"><img src="/figma/nav-home.svg" alt="" width={48} height={49} /></Link>
-          <Link to="/newconstructions" aria-label="Поиск объектов"><img src="/figma/nav-search.svg" alt="" width={48} height={49} /></Link>
+        <nav className="home-mobile__nav" aria-label={t('home.mobile.navAria')}>
+          <Link to="/" aria-label={t('home.mobile.navHome')}><img src="/figma/nav-home.svg" alt="" width={48} height={49} /></Link>
+          <Link to="/newconstructions" aria-label={t('home.mobile.navSearch')}><img src="/figma/nav-search.svg" alt="" width={48} height={49} /></Link>
           {/*
             * В макете третий пункт — шестерёнка настроек, но настроек в
             * продукте нет, а пункт ведёт в избранное: значок — сердце, в той
             * же обводке 1.5, что остальные значки панели.
             */}
-          <Link to="/favorites" aria-label="Избранное">
+          <Link to="/favorites" aria-label={t('home.mobile.navFavorites')}>
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path
                 d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21.3l7.8-7.8 1-1.1a5.5 5.5 0 0 0 0-7.8z"
@@ -367,7 +370,7 @@ export function HomePage() {
               />
             </svg>
           </Link>
-          <Link to="/account" aria-label="Кабинет"><img src="/figma/nav-account.svg" alt="" width={48} height={49} /></Link>
+          <Link to="/account" aria-label={t('home.mobile.navAccount')}><img src="/figma/nav-account.svg" alt="" width={48} height={49} /></Link>
         </nav>
       </div>
     </div>

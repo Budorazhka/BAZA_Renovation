@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { MarketplaceApiError, marketplaceApi } from '../api/marketplace-api'
 import { isAbortError } from '../lib/async'
+import { useI18n } from '../i18n'
 import type {
   BoundingBox,
   ListingDealType,
@@ -39,6 +40,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
   loadMore: () => void
   retryLoadMore: () => void
 } {
+  const { t } = useI18n()
   const [state, setState] = useState<ListingsCatalogueState>({ status: 'loading' })
   const nextCursorRef = useRef<string | null>(null)
   const requestIdRef = useRef(0)
@@ -99,13 +101,10 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
       }
       nextCursorRef.current = null
       const statusCode = cause instanceof MarketplaceApiError ? cause.status : undefined
-      const message =
-        cause instanceof Error
-          ? cause.message
-          : 'Не удалось загрузить каталог объявлений. Проверьте соединение и попробуйте снова.'
+      const message = cause instanceof Error ? cause.message : t('errors.listingsCatalogue')
       setState({ status: 'error', message, statusCode, retry: () => void loadFirstPage() })
     }
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort, t])
 
   useEffect(() => {
     void loadFirstPage()
@@ -164,8 +163,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
         },
         (cause: unknown) => {
           if (requestIdRef.current !== requestId || controller.signal.aborted || isAbortError(cause)) return
-          const message =
-            cause instanceof Error ? cause.message : 'Не удалось загрузить следующую страницу. Попробуйте ещё раз.'
+          const message = cause instanceof Error ? cause.message : t('errors.loadMore')
           setState((current) =>
             current.status === 'ready'
               ? {
@@ -177,7 +175,7 @@ export function useListingsCatalogue(query: UseListingsCatalogueQuery = {}): {
           )
         },
       )
-  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort])
+  }, [city, dealType, propertyType, commercialSubtype, bboxKey, publisher, limit, sort, t])
 
   return { state, loadMore: executeLoadMore, retryLoadMore: executeLoadMore }
 }

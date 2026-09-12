@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, KeyboardEvent } from 'react'
 import type { PublicMediaItem } from '../types/marketplace'
+import { useI18n } from '../i18n'
 
 interface ListingMediaGalleryProps {
   media?: PublicMediaItem[]
@@ -7,6 +8,7 @@ interface ListingMediaGalleryProps {
 }
 
 export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) {
+  const { t } = useI18n()
   const items = media ?? []
   const [activeIndex, setActiveIndex] = useState(0)
   const [loadedMap, setLoadedMap] = useState<Record<number, boolean>>({})
@@ -20,14 +22,14 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
 
   if (items.length === 0) {
     return (
-      <div className="listing-gallery listing-gallery--empty" data-testid="listing-gallery-empty" role="region" aria-label="Фотографии объекта">
+      <div className="listing-gallery listing-gallery--empty" data-testid="listing-gallery-empty" role="region" aria-label={t('gallery.photosAria')}>
         <div className="listing-gallery__empty-box">
           <svg className="listing-gallery__empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
             <circle cx="8.5" cy="8.5" r="1.5" />
             <polyline points="21 15 16 10 5 21" />
           </svg>
-          <p>Фотографии объекта не загружены</p>
+          <p>{t('gallery.noPhotos')}</p>
         </div>
       </div>
     )
@@ -63,7 +65,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
     }
   }
 
-  const altText = currentItem.alt || `${title} — фото ${activeIndex + 1}`
+  const altText = currentItem.alt || t('gallery.photoAlt', { title, index: activeIndex + 1 })
 
   return (
     <div
@@ -74,7 +76,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
       onKeyDown={handleKeyDown}
       role="region"
       aria-roledescription="carousel"
-      aria-label="Галерея фотографий объекта"
+      aria-label={t('gallery.carouselAria')}
     >
       <div className="listing-gallery__main" id="listing-gallery-main-slide">
         {!isLoaded && !hasError && (
@@ -87,7 +89,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
               <path d="M21 15l-5-5L5 21" />
               <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2" />
             </svg>
-            <p>Не удалось загрузить изображение</p>
+            <p>{t('gallery.imageFailed')}</p>
           </div>
         ) : (
           <img
@@ -107,8 +109,8 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
               type="button"
               className="listing-gallery__nav listing-gallery__nav--prev"
               onClick={handlePrev}
-              aria-label="Предыдущее фото"
-              title="Предыдущее фото (Стрелка влево)"
+              aria-label={t('gallery.prevAria')}
+              title={t('gallery.prevTitle')}
               data-testid="gallery-prev-btn"
             >
               <span aria-hidden="true">‹</span>
@@ -117,8 +119,8 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
               type="button"
               className="listing-gallery__nav listing-gallery__nav--next"
               onClick={handleNext}
-              aria-label="Следующее фото"
-              title="Следующее фото (Стрелка вправо)"
+              aria-label={t('gallery.nextAria')}
+              title={t('gallery.nextTitle')}
               data-testid="gallery-next-btn"
             >
               <span aria-hidden="true">›</span>
@@ -126,7 +128,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
             <div
               className="listing-gallery__counter"
               data-testid="gallery-counter"
-              aria-label={`Фото ${activeIndex + 1} из ${items.length}`}
+              aria-label={t('gallery.counterAria', { index: activeIndex + 1, total: items.length })}
               aria-live="polite"
             >
               {activeIndex + 1} / {items.length}
@@ -136,7 +138,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
       </div>
 
       {items.length > 1 && (
-        <div className="listing-gallery__thumbs" role="tablist" aria-label="Миниатюры фотографий">
+        <div className="listing-gallery__thumbs" role="tablist" aria-label={t('gallery.thumbsAria')}>
           {items.map((item, idx) => (
             <button
               key={item.url || idx}
@@ -144,8 +146,8 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
               role="tab"
               aria-selected={idx === activeIndex}
               aria-controls="listing-gallery-main-slide"
-              aria-label={`Перейти к фото ${idx + 1}`}
-              title={`Фото ${idx + 1}`}
+              aria-label={t('gallery.thumbAria', { index: idx + 1 })}
+              title={t('gallery.thumbTitle', { index: idx + 1 })}
               className={`listing-gallery__thumb${idx === activeIndex ? ' is-active' : ''}`}
               data-testid={`gallery-thumb-${idx}`}
               onClick={() => setActiveIndex(idx)}
@@ -158,7 +160,7 @@ export function ListingMediaGallery({ media, title }: ListingMediaGalleryProps) 
             >
               <img
                 src={item.url}
-                alt={item.alt || `Миниатюра ${idx + 1}`}
+                alt={item.alt || t('gallery.thumbAlt', { index: idx + 1 })}
                 loading="lazy"
                 onError={(e) => {
                   (e.target as HTMLElement).style.display = 'none'

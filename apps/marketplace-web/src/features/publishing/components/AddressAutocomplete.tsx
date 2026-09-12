@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useI18n } from '../../../i18n'
 
 export interface AddressSuggestion {
   id: string
@@ -25,10 +26,11 @@ export function AddressAutocomplete({
   onChange,
   onSelect,
   cityContext,
-  placeholder = 'Например, ул. Руставели 15',
+  placeholder,
   required = false,
   dataTestId = 'location-input-address',
 }: AddressAutocompleteProps) {
+  const { t } = useI18n()
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
@@ -192,7 +194,7 @@ export function AddressAutocomplete({
           onFocus={() => {
             if (suggestions.length > 0) setIsOpen(true)
           }}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('address.placeholder')}
           required={required}
           autoComplete="off"
           data-testid={dataTestId}
@@ -213,7 +215,7 @@ export function AddressAutocomplete({
           id="address-suggestions-list"
           className="address-autocomplete__dropdown"
           role="listbox"
-          aria-label="Подсказки адресов"
+          aria-label={t('address.suggestionsAria')}
         >
           {suggestions.map((item, index) => (
             <li

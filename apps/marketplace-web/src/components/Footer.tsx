@@ -1,59 +1,68 @@
 import { Link } from 'react-router-dom'
+import { useI18n } from '../i18n'
+import type { Translate } from '../i18n'
 
 interface FooterLink {
-  label: string
+  key: string
+  labelKey: string
   to: string
   badge?: string
 }
 
 interface FooterGroup {
-  title: string
+  key: string
+  titleKey: string
   links: FooterLink[]
 }
 
 /** Верхний ярус `footer 1` (`3067:73659`): пять разделов каталога. */
 const CATALOGUE_GROUPS: FooterGroup[] = [
   {
-    title: 'Новостройки',
+    key: 'newConstructions',
+    titleKey: 'footer.newConstructions.title',
     links: [
-      { label: 'Жилые комплексы', to: '/newconstructions' },
-      { label: 'Виллы', to: '/?type=villas' },
-      { label: 'Таунхаусы', to: '/?type=townhouses' },
-      { label: 'Акции и скидки', to: '/?promo=discounts' },
+      { key: 'complexes', labelKey: 'footer.newConstructions.complexes', to: '/newconstructions' },
+      { key: 'villas', labelKey: 'footer.newConstructions.villas', to: '/?type=villas' },
+      { key: 'townhouses', labelKey: 'footer.newConstructions.townhouses', to: '/?type=townhouses' },
+      { key: 'discounts', labelKey: 'footer.newConstructions.discounts', to: '/?promo=discounts' },
     ],
   },
   {
-    title: 'Вторичка',
+    key: 'secondary',
+    titleKey: 'footer.secondary.title',
     links: [
-      { label: 'Квартиры', to: '/secondary' },
-      { label: 'Дома и коттеджи', to: '/secondary?propertyType=house' },
-      { label: 'Земельные участки', to: '/secondary?propertyType=land' },
-      { label: 'Срочная продажа', to: '/secondary?urgent=true' },
+      { key: 'flats', labelKey: 'footer.secondary.flats', to: '/secondary' },
+      { key: 'houses', labelKey: 'footer.secondary.houses', to: '/secondary?propertyType=house' },
+      { key: 'land', labelKey: 'footer.secondary.land', to: '/secondary?propertyType=land' },
+      { key: 'urgent', labelKey: 'footer.secondary.urgent', to: '/secondary?urgent=true' },
     ],
   },
   {
-    title: 'Проекты',
+    key: 'projects',
+    titleKey: 'footer.projects.title',
     links: [
-      { label: 'На этапе проекта', to: '/newconstructions' },
-      { label: 'Строящиеся', to: '/newconstructions?stage=construction' },
-      { label: 'Готовые', to: '/newconstructions?stage=ready', badge: 'New' },
-      { label: 'Интересное', to: '/newconstructions?featured=true' },
+      { key: 'planning', labelKey: 'footer.projects.planning', to: '/newconstructions' },
+      { key: 'construction', labelKey: 'footer.projects.construction', to: '/newconstructions?stage=construction' },
+      { key: 'ready', labelKey: 'footer.projects.ready', to: '/newconstructions?stage=ready', badge: 'footer.badgeNew' },
+      { key: 'interesting', labelKey: 'footer.projects.interesting', to: '/newconstructions?featured=true' },
     ],
   },
   {
-    title: 'Аренда',
+    key: 'rent',
+    titleKey: 'footer.rent.title',
     links: [
-      { label: 'Долгосрочная', to: '/rent' },
-      { label: 'Посуточная', to: '/rent?dealType=rent_short' },
-      { label: 'Популярное', to: '/rent?popular=true' },
+      { key: 'longTerm', labelKey: 'footer.rent.longTerm', to: '/rent' },
+      { key: 'shortTerm', labelKey: 'footer.rent.shortTerm', to: '/rent?dealType=rent_short' },
+      { key: 'popular', labelKey: 'footer.rent.popular', to: '/rent?popular=true' },
     ],
   },
   {
-    title: 'Коммерция',
+    key: 'commercial',
+    titleKey: 'footer.commercial.title',
     links: [
-      { label: 'Продажа', to: '/secondary?propertyType=commercial' },
-      { label: 'Аренда', to: '/rent?propertyType=commercial' },
-      { label: 'Горячие предложения', to: '/secondary?propertyType=commercial&hot=true' },
+      { key: 'sale', labelKey: 'footer.commercial.sale', to: '/secondary?propertyType=commercial' },
+      { key: 'rent', labelKey: 'footer.commercial.rent', to: '/rent?propertyType=commercial' },
+      { key: 'hot', labelKey: 'footer.commercial.hot', to: '/secondary?propertyType=commercial&hot=true' },
     ],
   },
 ]
@@ -61,56 +70,81 @@ const CATALOGUE_GROUPS: FooterGroup[] = [
 /** Нижний ярус: сервисные разделы. */
 const SERVICE_GROUPS: FooterGroup[] = [
   {
-    title: 'Полезное',
+    key: 'useful',
+    titleKey: 'footer.useful.title',
     links: [
-      { label: 'Риелторы', to: '/realtors' },
-      { label: 'Разместить объект', to: '/publish' },
-      { label: 'Запросы', to: '/requests' },
+      { key: 'realtors', labelKey: 'footer.useful.realtors', to: '/realtors' },
+      { key: 'publish', labelKey: 'footer.useful.publish', to: '/publish' },
+      { key: 'requests', labelKey: 'footer.useful.requests', to: '/requests' },
     ],
   },
   {
-    title: 'Сервисы',
+    key: 'services',
+    titleKey: 'footer.services.title',
     links: [
-      { label: 'Банки и ипотека', to: '/banks' },
-      { label: 'Кредитный калькулятор', to: '/calculator' },
-      { label: 'Аналитика рынка', to: '/analytics' },
+      { key: 'banks', labelKey: 'footer.services.banks', to: '/banks' },
+      { key: 'calculator', labelKey: 'footer.services.calculator', to: '/calculator' },
+      { key: 'analytics', labelKey: 'footer.services.analytics', to: '/analytics' },
     ],
   },
   {
-    title: 'Поддержка',
+    key: 'support',
+    titleKey: 'footer.support.title',
     links: [
-      { label: 'Справочный центр', to: '/faq' },
-      { label: 'Контакты', to: '/contacts' },
-      { label: 'Написать нам', to: '/support' },
+      { key: 'faq', labelKey: 'footer.support.faq', to: '/faq' },
+      { key: 'contacts', labelKey: 'footer.support.contacts', to: '/contacts' },
+      { key: 'writeUs', labelKey: 'footer.support.writeUs', to: '/support' },
     ],
   },
   {
-    title: 'Правовая информация',
+    key: 'legal',
+    titleKey: 'footer.legal.title',
     links: [
-      { label: 'Политика конфиденциальности', to: '/privacy' },
-      { label: 'Пользовательское соглашение', to: '/terms' },
-      { label: 'Оферта', to: '/offer' },
+      { key: 'privacy', labelKey: 'footer.legal.privacy', to: '/privacy' },
+      { key: 'terms', labelKey: 'footer.legal.terms', to: '/terms' },
+      { key: 'offer', labelKey: 'footer.legal.offer', to: '/offer' },
     ],
   },
 ]
 
 const SOCIALS = [
   {
-    label: 'Telegram',
+    key: 'telegram',
+    labelKey: 'footer.socials.telegram',
     href: 'https://t.me/baza_sale',
     path: 'M21.4 4.1 18.3 19c-.2 1-.9 1.3-1.8.8l-4.6-3.4-2.2 2.1c-.3.3-.5.5-1 .5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L6.4 13 1.9 11.6c-1-.3-1-1 .2-1.5L20 3.2c.8-.3 1.6.2 1.4.9z',
   },
   {
-    label: 'WhatsApp',
+    key: 'whatsapp',
+    labelKey: 'footer.socials.whatsapp',
     href: 'https://wa.me/',
     path: 'M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm5.3 14.2c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .1-1.6-.1-.4-.1-.8-.3-1.4-.5-2.4-1-4-3.4-4.1-3.6-.1-.2-1-1.3-1-2.4 0-1.2.6-1.7.8-2 .2-.2.5-.3.6-.3h.5c.1 0 .4 0 .6.4l.8 2c.1.2.1.3 0 .5l-.3.4-.3.4c-.1.1-.2.3-.1.5.2.3.7 1.1 1.4 1.7 1 .9 1.8 1.1 2 1.2.3.1.4.1.6-.1l.8-1c.2-.2.4-.2.6-.1l1.9.9c.3.1.4.2.5.3.1.2.1.8-.1 1.4z',
   },
   {
-    label: 'Instagram',
+    key: 'instagram',
+    labelKey: 'footer.socials.instagram',
     href: 'https://instagram.com/',
     path: 'M12 7.3A4.7 4.7 0 1 0 16.7 12 4.7 4.7 0 0 0 12 7.3zm0 7.7a3 3 0 1 1 3-3 3 3 0 0 1-3 3zm6-7.9a1.1 1.1 0 1 1-1.1-1.1A1.1 1.1 0 0 1 18 7.1zM21.9 8a5.4 5.4 0 0 0-1.5-3.9A5.4 5.4 0 0 0 16.5 2.6C15 2.5 9 2.5 7.5 2.6a5.4 5.4 0 0 0-3.9 1.5A5.4 5.4 0 0 0 2.1 8C2 9.5 2 14.5 2.1 16a5.4 5.4 0 0 0 1.5 3.9 5.4 5.4 0 0 0 3.9 1.5c1.5.1 7.5.1 9 0a5.4 5.4 0 0 0 3.9-1.5 5.4 5.4 0 0 0 1.5-3.9c.1-1.5.1-6.5 0-8zm-2 9.6a3 3 0 0 1-1.7 1.7c-1.2.5-4 .4-5.2.4s-4 .1-5.2-.4a3 3 0 0 1-1.7-1.7c-.5-1.2-.4-4-.4-5.2s-.1-4 .4-5.2A3 3 0 0 1 7.8 5.6C9 5.1 11.8 5.2 13 5.2s4-.1 5.2.4a3 3 0 0 1 1.7 1.7c.5 1.2.4 4 .4 5.2s.1 4-.4 5.1z',
   },
 ]
+
+function renderGroup(group: FooterGroup, t: Translate) {
+  return (
+    <div key={group.key} className="bz-footer__group">
+      <h3 className="bz-footer__title">{t(group.titleKey)}</h3>
+      <ul className="bz-footer__links">
+        {group.links.map((link) => (
+          <li key={link.key}>
+            <Link to={link.to}>
+              {t(link.labelKey)}
+              {link.badge ? <span className="bz-footer__badge">{t(link.badge)}</span> : null}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 /**
  * Подвал по утверждённому единому `footer 1` (`3067:73634`, MKT-SCR-003).
@@ -124,13 +158,14 @@ const SOCIALS = [
  */
 export function Footer() {
   const year = new Date().getFullYear()
+  const { t } = useI18n()
 
   return (
     <footer className="bz-footer" role="contentinfo">
       <div className="bz-footer__inner">
         <div className="bz-footer__top">
           <div className="bz-footer__brand">
-            <Link to="/" className="bz-footer__logo" aria-label="BAZA, главная страница">
+            <Link to="/" className="bz-footer__logo" aria-label={t('footer.logoAria')}>
               <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
                 <path
                   transform="translate(6.25 12.55)"
@@ -145,13 +180,11 @@ export function Footer() {
                 BAZA<span className="bz-footer__logo-dot">.sale</span>
               </span>
             </Link>
-            <p className="bz-footer__tagline">
-              Экосистема для риелторов нового поколения: покупка, продажа, аренда недвижимости
-            </p>
-            <ul className="bz-footer__socials" aria-label="Мы в социальных сетях">
+            <p className="bz-footer__tagline">{t('footer.tagline')}</p>
+            <ul className="bz-footer__socials" aria-label={t('footer.socialsLabel')}>
               {SOCIALS.map((social) => (
-                <li key={social.label}>
-                  <a href={social.href} target="_blank" rel="noopener noreferrer" aria-label={social.label}>
+                <li key={social.key}>
+                  <a href={social.href} target="_blank" rel="noopener noreferrer" aria-label={t(social.labelKey)}>
                     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                       <path d={social.path} fill="currentColor" />
                     </svg>
@@ -161,43 +194,18 @@ export function Footer() {
             </ul>
           </div>
 
-          <nav className="bz-footer__catalogue" aria-label="Разделы каталога">
-            {CATALOGUE_GROUPS.map((group) => (
-              <div key={group.title} className="bz-footer__group">
-                <h3 className="bz-footer__title">{group.title}</h3>
-                <ul className="bz-footer__links">
-                  {group.links.map((link) => (
-                    <li key={link.label}>
-                      <Link to={link.to}>
-                        {link.label}
-                        {link.badge ? <span className="bz-footer__badge">{link.badge}</span> : null}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+          <nav className="bz-footer__catalogue" aria-label={t('footer.catalogueLabel')}>
+            {CATALOGUE_GROUPS.map((group) => renderGroup(group, t))}
           </nav>
         </div>
 
-        <nav className="bz-footer__services" aria-label="Сервисы и документы">
-          {SERVICE_GROUPS.map((group) => (
-            <div key={group.title} className="bz-footer__group">
-              <h3 className="bz-footer__title">{group.title}</h3>
-              <ul className="bz-footer__links">
-                {group.links.map((link) => (
-                  <li key={link.label}>
-                    <Link to={link.to}>{link.label}</Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <nav className="bz-footer__services" aria-label={t('footer.servicesLabel')}>
+          {SERVICE_GROUPS.map((group) => renderGroup(group, t))}
         </nav>
 
         <div className="bz-footer__bottom">
-          <p>© {year} Компания «BAZA SALE». Все права защищены. При использовании материалов гиперссылка обязательна.</p>
-          <p>Не является публичной офертой. Цены и планировки актуализируются из реестра.</p>
+          <p>{t('footer.copyright', { year })}</p>
+          <p>{t('footer.disclaimer')}</p>
         </div>
       </div>
     </footer>

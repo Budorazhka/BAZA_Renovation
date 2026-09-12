@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFavorites } from '../features/favorites/useFavorites'
 import { completionLabel, developmentAddress, developmentTitle } from '../lib/format'
+import { useI18n } from '../i18n'
 import type { PublicDevelopmentCard } from '../types/marketplace'
 
 export interface DevelopmentCardProps {
@@ -68,11 +69,12 @@ export function DevelopmentCard({
   const navigate = useNavigate()
   const favorites = useFavorites()
   const [copied, setCopied] = useState(false)
+  const { t } = useI18n()
 
   const slug = item.slug
-  const title = developmentTitle(item)
-  const address = developmentAddress(item)
-  const completionText = completionLabel(item.completionDate) ?? 'Срок сдачи уточняется'
+  const title = developmentTitle(item, t)
+  const address = developmentAddress(item, t)
+  const completionText = completionLabel(item.completionDate, t) ?? t('devCard.completionUnknown')
   const isCompleted = item.completionDate
     ? new Date(item.completionDate).getTime() < Date.now()
     : false
@@ -95,8 +97,8 @@ export function DevelopmentCard({
   const areaRange =
     areas.length > 0
       ? areas.length === 1 || Math.min(...areas) === Math.max(...areas)
-        ? `${AREA_FORMAT.format(areas[0]!)} m²`
-        : `от ${AREA_FORMAT.format(Math.min(...areas))} до ${AREA_FORMAT.format(Math.max(...areas))} m²`
+        ? t('devCard.areaSingle', { area: AREA_FORMAT.format(areas[0]!) })
+        : t('devCard.areaRange', { min: AREA_FORMAT.format(Math.min(...areas)), max: AREA_FORMAT.format(Math.max(...areas)) })
       : null
 
   const isFavorite = slug ? favorites.isFavorite({ targetType: 'development', slug }) : false
@@ -134,7 +136,7 @@ export function DevelopmentCard({
   const detailHref = slug ? `/developments/${slug}` : undefined
 
   return (
-    <article className={`dev-card dev-card--${size} ${className}`.trim()} aria-label={`Жилой комплекс ${title}`}>
+    <article className={`dev-card dev-card--${size} ${className}`.trim()} aria-label={t('devCard.ariaLabel', { title })}>
       {/* обложка `3428:55617` 424x300, radius 8 */}
       <div className="dev-card__cover">
         {detailHref ? (
@@ -148,7 +150,7 @@ export function DevelopmentCard({
         {/* пилюля `3428:55622`: зелёная, radius 100, Comfortaa 13, со значком */}
         <span className="dev-card__pill">
           <span className="dev-card__pill-icon" aria-hidden="true" />
-          {isCompleted ? 'Дом сдан' : 'Строится'}
+          {isCompleted ? t('devCard.completed') : t('devCard.underConstruction')}
         </span>
 
         {item.classType ? <span className="dev-card__class">{item.classType}</span> : null}
@@ -160,7 +162,7 @@ export function DevelopmentCard({
           */}
         {onQuickView && slug ? (
           <button type="button" className="dev-card__quick" onClick={handleQuickViewClick}>
-            Планировки
+            {t('devCard.plans')}
           </button>
         ) : null}
       </div>
@@ -176,8 +178,8 @@ export function DevelopmentCard({
               type="button"
               className="dev-card__icon-btn"
               onClick={handleShare}
-              aria-label={copied ? 'Ссылка скопирована' : 'Поделиться'}
-              title={copied ? 'Ссылка скопирована' : 'Поделиться'}
+              aria-label={copied ? t('devCard.linkCopied') : t('devCard.share')}
+              title={copied ? t('devCard.linkCopied') : t('devCard.share')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3" />
@@ -191,7 +193,7 @@ export function DevelopmentCard({
               type="button"
               className={`dev-card__icon-btn${isFavorite ? ' is-active' : ''}`}
               onClick={(event) => void handleFavorite(event)}
-              aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+              aria-label={isFavorite ? t('card.removeFromFavorites') : t('card.addToFavorites')}
               aria-pressed={isFavorite}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -205,9 +207,9 @@ export function DevelopmentCard({
         {item.priceFrom ? (
           <p className="dev-card__price">
             <span className="dev-card__price-main">
-              от {money(item.priceFrom.amountMinorUnits, item.priceFrom.currency)}
+              {t('devCard.priceFrom', { price: money(item.priceFrom.amountMinorUnits, item.priceFrom.currency) })}
             </span>
-            {pricePerSqm ? <span className="dev-card__price-sqm">{pricePerSqm} за m²</span> : null}
+            {pricePerSqm ? <span className="dev-card__price-sqm">{t('devCard.perSqm', { price: pricePerSqm })}</span> : null}
           </p>
         ) : null}
 
@@ -234,7 +236,7 @@ export function DevelopmentCard({
           {maxFloor !== null ? (
             <span className="dev-card__fact">
               <span className="dev-card__fact-icon dev-card__fact-icon--floors" aria-hidden="true" />
-              {maxFloor} этажей
+              {t('devCard.floors', { count: maxFloor })}
             </span>
           ) : null}
           {areaRange ? (
@@ -249,11 +251,11 @@ export function DevelopmentCard({
         <div className="dev-card__actions">
           {detailHref ? (
             <Link to={`${detailHref}#contact`} className="dev-card__btn dev-card__btn--call">
-              Позвонить
+              {t('card.call')}
             </Link>
           ) : (
             <button type="button" className="dev-card__btn dev-card__btn--call" disabled>
-              Позвонить
+              {t('card.call')}
             </button>
           )}
           {/*
@@ -264,11 +266,11 @@ export function DevelopmentCard({
             */}
           {detailHref ? (
             <Link to={detailHref} className="dev-card__btn dev-card__btn--outline">
-              Подробнее
+              {t('card.details')}
             </Link>
           ) : (
             <button type="button" className="dev-card__btn dev-card__btn--outline" disabled>
-              Подробнее
+              {t('card.details')}
             </button>
           )}
         </div>

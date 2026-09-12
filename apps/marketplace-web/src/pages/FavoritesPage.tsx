@@ -5,6 +5,8 @@ import { BuildingPlaceholder } from '../components/DevelopmentCard'
 import { publishingApi, PublishingApiError, type FavoriteEntry } from '../features/publishing/api/publishing-api'
 import { marketplaceApi } from '../api/marketplace-api'
 import { listingAddress, listingPrice, listingTitle, developmentAddress, developmentTitle } from '../lib/format'
+import { useI18n } from '../i18n'
+import type { Translate } from '../i18n'
 
 export interface FavoriteItem {
   id: string
@@ -31,7 +33,7 @@ export interface FavoriteItem {
  * хранит только ссылку, а не копию объекта, поэтому цена и адрес здесь всегда
  * те же, что в каталоге, и разойтись с ним не могут.
  */
-async function resolveFavorite(entry: FavoriteEntry): Promise<FavoriteItem | null> {
+async function resolveFavorite(entry: FavoriteEntry, t?: Translate): Promise<FavoriteItem | null> {
   try {
     if (entry.targetType === 'listing') {
       const card = await marketplaceApi.getListing(entry.slug)
@@ -39,11 +41,11 @@ async function resolveFavorite(entry: FavoriteEntry): Promise<FavoriteItem | nul
         id: `listing:${entry.slug}`,
         slug: entry.slug,
         targetType: 'listing',
-        title: listingTitle(card),
+        title: listingTitle(card, t),
         dealType: card.dealType ?? 'sale',
         propertyType: card.propertyType ?? '',
-        price: listingPrice(card),
-        address: listingAddress(card),
+        price: listingPrice(card, t),
+        address: listingAddress(card, t),
         city: card.location?.city ?? '',
         rooms: card.characteristics?.rooms ?? 0,
         area: card.characteristics?.area ?? 0,
@@ -55,11 +57,11 @@ async function resolveFavorite(entry: FavoriteEntry): Promise<FavoriteItem | nul
       id: `development:${entry.slug}`,
       slug: entry.slug,
       targetType: 'development',
-      title: developmentTitle(card),
+      title: developmentTitle(card, t),
       dealType: 'sale',
       propertyType: card.classType ?? '',
       price: '',
-      address: developmentAddress(card),
+      address: developmentAddress(card, t),
       city: card.location?.city ?? '',
       rooms: 0,
       area: 0,
@@ -73,6 +75,7 @@ async function resolveFavorite(entry: FavoriteEntry): Promise<FavoriteItem | nul
 }
 
 export function FavoritesPage() {
+  const { t } = useI18n()
   const [favorites, setFavorites] = useState<FavoriteItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [requiresAuth, setRequiresAuth] = useState(false)
@@ -82,15 +85,15 @@ export function FavoritesPage() {
   const [isCreatedSelectionOpen, setIsCreatedSelectionOpen] = useState(false)
 
   useSeoMetadata({
-    title: 'Избранное | BAZA',
-    description: 'Сохраненные объекты недвижимости, квартиры и апартаменты в Батуми и Тбилиси.',
+    title: t('favorites.seoTitle'),
+    description: t('favorites.seoDescription'),
   })
 
   const load = useCallback(async () => {
     setIsLoading(true)
     try {
       const entries = await publishingApi.listFavorites()
-      const resolved = await Promise.all(entries.map(resolveFavorite))
+      const resolved = await Promise.all(entries.map((entry) => resolveFavorite(entry, t)))
       setFavorites(resolved.filter((item): item is FavoriteItem => item !== null))
       setRequiresAuth(false)
     } catch (error) {
@@ -101,6 +104,7 @@ export function FavoritesPage() {
     } finally {
       setIsLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- перечитывать список при смене языка не нужно
   }, [])
 
   useEffect(() => {
@@ -145,9 +149,9 @@ export function FavoritesPage() {
   if (requiresAuth) {
     return (
       <div className="state-panel state-panel--empty">
-        <p>Избранное хранится в вашем аккаунте. Войдите, чтобы увидеть сохранённые объекты.</p>
+        <p>{t('favorites.requiresAuth')}</p>
         <Link to="/auth/login?next=%2Ffavorites" className="clear-filter-btn">
-          Войти
+          {t('header.login')}
         </Link>
       </div>
     )
@@ -158,7 +162,7 @@ export function FavoritesPage() {
   if (isLoading) {
     return (
       <div className="state-panel" role="status" aria-busy="true">
-        <p>Загружаем избранное…</p>
+        <p>{t('favorites.loading')}</p>
       </div>
     )
   }
@@ -167,9 +171,9 @@ export function FavoritesPage() {
     <div className="figma-fav-page">
       <div className="figma-fav-header">
         <div className="figma-fav-header__title-group">
-          <h1 className="figma-fav-header__title">Избранное</h1>
+          <h1 className="figma-fav-header__title">{t('favorites.title')}</h1>
           <span className="figma-fav-header__badge" data-testid="favorites-count-badge">
-            {favorites.length} объектов
+            {t('favorites.countBadge', { count: favorites.length })}
           </span>
         </div>
 
@@ -180,14 +184,14 @@ export function FavoritesPage() {
             onClick={handleCreateSelection}
             data-testid="create-selection-btn"
           >
-            {isCreatedSelectionOpen ? '✓ Подборка создана!' : '+ Создать подборку из избранного'}
+            {isCreatedSelectionOpen ? t('favorites.selectionCreated') : t('favorites.createSelection')}
           </button>
         )}
       </div>
 
       {favorites.length > 0 && (
         <div className="figma-fav-controls">
-          <div className="figma-fav-tabs" role="tablist" aria-label="Фильтрация сделок">
+          <div className="figma-fav-tabs" role="tablist" aria-label={t('favorites.dealFilterAria')}>
             <button
               type="button"
               className={`figma-fav-tab-btn${dealFilter === 'all' ? ' is-active' : ''}`}
@@ -195,7 +199,7 @@ export function FavoritesPage() {
               role="tab"
               aria-selected={dealFilter === 'all'}
             >
-              Все ({favorites.length})
+              {t('myProperties.tabAll', { count: favorites.length })}
             </button>
             <button
               type="button"
@@ -204,7 +208,7 @@ export function FavoritesPage() {
               role="tab"
               aria-selected={dealFilter === 'sale'}
             >
-              Покупка ({favorites.filter((f) => f.dealType === 'sale').length})
+              {t('favorites.tabBuy', { count: favorites.filter((f) => f.dealType === 'sale').length })}
             </button>
             <button
               type="button"
@@ -213,35 +217,35 @@ export function FavoritesPage() {
               role="tab"
               aria-selected={dealFilter === 'rent_long'}
             >
-              Долгосрок ({favorites.filter((f) => f.dealType === 'rent_long').length})
+              {t('favorites.tabLongTerm', { count: favorites.filter((f) => f.dealType === 'rent_long').length })}
             </button>
           </div>
 
           <div className="figma-fav-search-sort">
             <input
               type="search"
-              placeholder="Поиск по избранному..."
+              placeholder={t('favorites.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="figma-fav-search-input"
-              aria-label="Поиск по избранному"
+              aria-label={t('favorites.searchAria')}
             />
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as any)}
               className="figma-fav-select"
-              aria-label="Сортировка"
+              aria-label={t('favorites.sortAria')}
             >
-              <option value="default">По умолчанию</option>
-              <option value="price_asc">Сначала дешевле</option>
-              <option value="price_desc">Сначала дороже</option>
+              <option value="default">{t('favorites.sortDefault')}</option>
+              <option value="price_asc">{t('filters.sort.priceAsc')}</option>
+              <option value="price_desc">{t('filters.sort.priceDesc')}</option>
             </select>
           </div>
         </div>
       )}
 
       {filtered.length > 0 ? (
-        <div className="figma-fav-grid" aria-label="Список избранных объектов">
+        <div className="figma-fav-grid" aria-label={t('favorites.gridAria')}>
           {filtered.map((item) => (
             <article key={item.id} className="figma-fav-card">
               <div className="figma-fav-card__media">
@@ -254,8 +258,8 @@ export function FavoritesPage() {
                   type="button"
                   className="figma-fav-card__like-btn"
                   onClick={() => handleRemove(item.id)}
-                  title="Удалить из избранного"
-                  aria-label="Удалить из избранного"
+                  title={t('card.removeFromFavorites')}
+                  aria-label={t('card.removeFromFavorites')}
                 >
                   ♥
                 </button>
@@ -275,9 +279,9 @@ export function FavoritesPage() {
                 </p>
 
                 <div className="figma-fav-card__specs">
-                  <span>🛏 {item.rooms} комн.</span>
-                  <span>📐 {item.area} м²</span>
-                  <span>🏢 {item.floor} этаж</span>
+                  <span>🛏 {t('card.rooms', { count: item.rooms })}</span>
+                  <span>📐 {t('card.area', { area: item.area })}</span>
+                  <span>🏢 {t('card.floor', { floor: item.floor })}</span>
                 </div>
 
                 <div className="figma-fav-card__actions">
@@ -285,14 +289,14 @@ export function FavoritesPage() {
                     to={`/listings/${item.slug}`}
                     className="figma-fav-card-btn figma-fav-card-btn--primary"
                   >
-                    Смотреть
+                    {t('favorites.view')}
                   </Link>
                   <button
                     type="button"
                     className="figma-fav-card-btn"
                     onClick={() => handleRemove(item.id)}
                   >
-                    Удалить
+                    {t('favorites.remove')}
                   </button>
                 </div>
               </div>
@@ -302,12 +306,10 @@ export function FavoritesPage() {
       ) : (
         <div className="figma-fav-empty">
           <div className="figma-fav-empty__icon">♥</div>
-          <h2 className="figma-fav-empty__title">В избранном пока ничего нет</h2>
-          <p className="figma-fav-empty__desc">
-            Сохраняйте понравившиеся квартиры, апартаменты и дома, чтобы вернуться к ним позже или создать подборку для клиента.
-          </p>
+          <h2 className="figma-fav-empty__title">{t('favorites.emptyTitle')}</h2>
+          <p className="figma-fav-empty__desc">{t('favorites.emptyText')}</p>
           <Link to="/" className="figma-fav-create-btn">
-            Перейти в каталог
+            {t('favorites.goToCatalogue')}
           </Link>
         </div>
       )}

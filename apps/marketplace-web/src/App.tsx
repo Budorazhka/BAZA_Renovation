@@ -54,7 +54,7 @@ import './styles/home.css'
 // Шапка и подвал: подключаются последними, чтобы не проигрывать старым правилам.
 import './styles/chrome.css'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
-import { I18nProvider } from './i18n'
+import { I18nProvider, useI18n } from './i18n'
 import type {
   BoundingBox,
   PublicDevelopmentCard,
@@ -79,6 +79,7 @@ function listingSectionPath(dealType: unknown): string {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  const { t } = useI18n()
   // Плавающие кнопки фильтров и карты имеют смысл только в разделах каталога.
   // Раньше признаком был путь '/', но каталог переехал из корня в разделы.
   const isCatalogueRoute = CATALOGUE_ROUTES.includes(location.pathname)
@@ -93,19 +94,19 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-shell">
       <a href="#main-content" className="skip-link">
-        Перейти к основному содержанию
+        {t('shell.skipLink')}
       </a>
       <Header />
       <main id="main-content" tabIndex={-1}>
         {children}
       </main>
       {isCatalogueRoute ? (
-        <div className="floating-controls" aria-label="Инструменты каталога">
-          <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label="Открыть фильтры">☷<span>⌁</span></a>
+        <div className="floating-controls" aria-label={t('shell.catalogueToolsAria')}>
+          <a href="#catalogue-filters" className="floating-control floating-control--filters" aria-label={t('shell.openFiltersAria')}>☷<span>⌁</span></a>
           <Link
             to={`${location.pathname}?${isMapView ? listQuery.toString() : mapQuery.toString()}`}
             className="floating-control floating-control--map"
-            aria-label={isMapView ? 'Показать списком' : 'Показать на карте'}
+            aria-label={isMapView ? t('shell.showList') : t('shell.showMap')}
           >
             {isMapView ? '▤' : '♧'}
           </Link>
@@ -151,6 +152,7 @@ function CataloguePage({
   defaultDealType?: ListingDealType
 } = {}) {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [searchParams, setSearchParams] = useSearchParams()
   const [, startTransition] = useTransition()
 
@@ -266,8 +268,8 @@ function CataloguePage({
         <div className="section-heading">
           <h2 id="catalogue-results-heading">
             {cityParam
-              ? `${isDev ? 'ЖК' : 'Объекты'} в городе ${cityParam}`
-              : `Все опубликованные ${isDev ? 'ЖК' : 'объекты'}`}
+              ? t('catalogue.headingInCity', { kind: t(isDev ? 'catalogue.kindDev' : 'catalogue.kindListings'), city: cityParam })
+              : t('catalogue.headingAll', { kind: t(isDev ? 'catalogue.kindDev' : 'catalogue.kindListingsLower') })}
           </h2>
           {/*
             Счётчик выдачи. У него есть testid, потому что на него опирается
@@ -277,11 +279,11 @@ function CataloguePage({
           */}
           {state.status === 'ready' ? (
             <span data-testid="catalogue-count">
-              Показано: <strong>{state.items.length}</strong> из {state.total}
+              {t('catalogue.shownPrefix')} <strong>{state.items.length}</strong> {t('catalogue.shownOf')} {state.total}
             </span>
           ) : null}
           {state.status === 'empty' ? (
-            <span data-testid="catalogue-empty-note">Пока нет объектов</span>
+            <span data-testid="catalogue-empty-note">{t('catalogue.emptyNote')}</span>
           ) : null}
         </div>
 
@@ -294,20 +296,20 @@ function CataloguePage({
         {publisherParam ? (
           <div className="active-publisher-filter">
             <span>
-              Показаны объекты компании:{' '}
+              {t('catalogue.publisherFilterPrefix')}{' '}
               <strong>
-                {(state.status === 'ready' && state.items[0]?.publisher?.name) || 'выбранная компания'}
+                {(state.status === 'ready' && state.items[0]?.publisher?.name) || t('catalogue.publisherFilterFallback')}
               </strong>
             </span>
             <button type="button" className="clear-filter-btn" onClick={() => updateFilters({ publisher: undefined })}>
-              Показать все компании
+              {t('catalogue.publisherFilterClear')}
             </button>
           </div>
         ) : null}
 
         {state.status === 'loading' ? (
           <div className="state-panel" role="status" aria-busy="true">
-            <p>Загружаем каталог…</p>
+            <p>{t('catalogue.loading')}</p>
             <div className="development-grid figma-catalog-grid">
               <CardSkeleton count={6} />
             </div>
@@ -318,17 +320,17 @@ function CataloguePage({
           <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
             <button type="button" className="retry-btn" onClick={state.retry}>
-              Повторить попытку
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
 
         {state.status === 'empty' ? (
           <div className="state-panel state-panel--empty">
-            <p>По выбранным параметрам пока нет опубликованных объектов.</p>
+            <p>{t('catalogue.emptyState')}</p>
             {(cityParam || dealTypeParam || propertyTypeParam) && (
               <button type="button" className="clear-filter-btn" onClick={clearAllFilters}>
-                Сбросить фильтры
+                {t('catalogue.resetFilters')}
               </button>
             )}
           </div>
@@ -338,7 +340,7 @@ function CataloguePage({
           <>
             {isMapView ? (
               <div className="catalogue-split-view">
-                <aside className="catalogue-split-sidebar" aria-label="Список объектов на карте">
+                <aside className="catalogue-split-sidebar" aria-label={t('catalogue.mapSidebarAria')}>
                   <div className="catalogue-split-cards">
                     {isDev
                       ? (state.items as PublicDevelopmentCard[]).map((item, index) => (
@@ -380,7 +382,7 @@ function CataloguePage({
               <div className="pagination-error-panel" role="alert">
                 <p>{state.loadMoreError}</p>
                 <button type="button" className="retry-btn" onClick={retryLoadMore}>
-                  Попробовать снова
+                  {t('common.tryAgain')}
                 </button>
               </div>
             )}
@@ -394,12 +396,12 @@ function CataloguePage({
                   disabled={state.loadingMore}
                   aria-busy={state.loadingMore}
                 >
-                  {state.loadingMore ? 'Загружаем…' : 'Показать ещё'}
+                  {state.loadingMore ? t('catalogue.loadingMore') : t('catalogue.loadMore')}
                 </button>
               </div>
             ) : (
               <p className="catalogue-end-note" aria-live="polite">
-                Все доступные объекты показаны
+                {t('catalogue.allShown')}
               </p>
             )}
           </>
@@ -407,7 +409,7 @@ function CataloguePage({
       </section>
 
       <button className="visually-hidden" type="button" onClick={() => navigate('/')}>
-        Вернуться в начало каталога
+        {t('catalogue.backToStart')}
       </button>
     </Shell>
   )
@@ -417,19 +419,21 @@ function DevelopmentDetailPage() {
   const { slug } = useParams()
   const state = useDevelopmentDetail(slug)
   const [selectedUnit, setSelectedUnit] = useState<UnitInfo | null>(null)
+  const { t } = useI18n()
 
   useSeoMetadata(
     state.status === 'ready'
       ? {
-          title: developmentTitle(state.item),
-          description: state.item.description || `Жилой комплекс ${developmentTitle(state.item)}`,
+          title: developmentTitle(state.item, t),
+          description: state.item.description || t('devDetail.descriptionFallback', { title: developmentTitle(state.item, t) }),
           jsonLd: buildDevelopmentJsonLd(
             state.item,
-            typeof window !== 'undefined' ? window.location.origin : ''
+            typeof window !== 'undefined' ? window.location.origin : '',
+            t
           ),
         }
       : {
-          title: state.status === 'not-found' ? 'Объект не найден' : undefined,
+          title: state.status === 'not-found' ? t('devDetail.notFoundTitle') : undefined,
         }
   )
 
@@ -439,30 +443,34 @@ function DevelopmentDetailPage() {
    * ценами и площадями; если нет — честное сообщение об отсутствии опубликованных планировок.
    */
   const units: UnitInfo[] = (state.status === 'ready' && state.item.units ? state.item.units : []).map((u) => ({
-    title: u.number ? `Квартира №${u.number}` : (u.kind === 'apartment' ? 'Квартира' : 'Помещение'),
+    title: u.number
+      ? t('devDetail.unitTitleNumbered', { number: u.number })
+      : u.kind === 'apartment'
+        ? t('devDetail.unitTitleApartment')
+        : t('devDetail.unitTitleSpace'),
     area: u.area ?? 0,
     rooms: u.rooms,
     floor: u.floor,
-    price: formatMoneyAmount(u.price) ?? undefined,
+    price: formatMoneyAmount(u.price, t) ?? undefined,
     planImageUrl: u.planImageUrl,
   }))
 
   return (
     <Shell>
       <section className="detail-page figma-dev-detail" aria-labelledby="development-detail-title">
-        <Link className="back-link" to="/" aria-label="Вернуться в каталог объектов">
-          ← В каталог
+        <Link className="back-link" to="/" aria-label={t('devDetail.backAria')}>
+          {t('common.backArrow')}
         </Link>
         {state.status === 'loading' ? (
           <div className="state-panel" role="status" aria-busy="true">
-            Загружаем объект…
+            {t('common.loadingItem')}
           </div>
         ) : null}
         {state.status === 'not-found' ? (
           <div className="state-panel state-panel--error" role="alert">
-            <p>Жилой комплекс не найден или был снят с публикации.</p>
+            <p>{t('devDetail.notFoundBody')}</p>
             <Link to="/" className="back-to-catalogue-btn">
-              Вернуться в каталог
+              {t('common.backToCatalogue')}
             </Link>
           </div>
         ) : null}
@@ -470,7 +478,7 @@ function DevelopmentDetailPage() {
           <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
             <button type="button" className="retry-btn" onClick={state.retry}>
-              Повторить попытку
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
@@ -483,20 +491,20 @@ function DevelopmentDetailPage() {
               </div>
               <div className="detail-hero__copy figma-dev-summary">
                 <div className="figma-dev-badges">
-                  <span className="figma-badge figma-badge--completed">В продаже</span>
+                  <span className="figma-badge figma-badge--completed">{t('devDetail.onSale')}</span>
                   {state.item.classType ? (
                     <span className="figma-badge figma-badge--class">{state.item.classType}</span>
                   ) : null}
                 </div>
                 <h1 id="development-detail-title" className="figma-dev-title">
-                  {developmentTitle(state.item)}
+                  {developmentTitle(state.item, t)}
                 </h1>
                 <p className="address figma-dev-address">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
-                  <span>{developmentAddress(state.item)}</span>
+                  <span>{developmentAddress(state.item, t)}</span>
                 </p>
 
                 {/*
@@ -506,7 +514,7 @@ function DevelopmentDetailPage() {
                 */}
                 {state.item.publisher ? (
                   <p className="figma-dev-publisher">
-                    Застройщик:{' '}
+                    {t('devDetail.publisherPrefix')}{' '}
                     <Link to={`/newconstructions?publisher=${encodeURIComponent(state.item.publisher.id)}`}>
                       {state.item.publisher.name}
                     </Link>
@@ -515,9 +523,9 @@ function DevelopmentDetailPage() {
 
                 {state.item.priceFrom ? (
                   <div className="figma-dev-pricing-card">
-                    <span className="figma-dev-spec-label">Стоимость квартир</span>
+                    <span className="figma-dev-spec-label">{t('devDetail.priceLabel')}</span>
                     <div className="figma-dev-price-main">
-                      от {formatMoneyAmount(state.item.priceFrom)}
+                      {t('devDetail.priceFromPrefix')} {formatMoneyAmount(state.item.priceFrom, t)}
                     </div>
                   </div>
                 ) : null}
@@ -527,39 +535,39 @@ function DevelopmentDetailPage() {
             </div>
 
             {/* Specs Ribbon (Figma 3314:200845) */}
-            <div className="detail-facts figma-dev-ribbon" aria-label="Ключевые факты о комплексе">
+            <div className="detail-facts figma-dev-ribbon" aria-label={t('devDetail.factsAria')}>
               <div className="figma-dev-spec">
-                <span className="figma-dev-spec-label">Срок сдачи</span>
-                <strong className="figma-dev-spec-value">{completionLabel(state.item.completionDate) ?? 'Уточняется'}</strong>
+                <span className="figma-dev-spec-label">{t('devDetail.completionLabel')}</span>
+                <strong className="figma-dev-spec-value">{completionLabel(state.item.completionDate, t) ?? t('common.clarify')}</strong>
               </div>
               <div className="figma-dev-spec">
-                <span className="figma-dev-spec-label">Класс жилья</span>
-                <strong className="figma-dev-spec-value">{state.item.classType ?? 'Комфорт'}</strong>
+                <span className="figma-dev-spec-label">{t('devDetail.classLabel')}</span>
+                <strong className="figma-dev-spec-value">{state.item.classType ?? t('devDetail.classFallback')}</strong>
               </div>
               <div className="figma-dev-spec">
-                <span className="figma-dev-spec-label">Страна</span>
-                <strong className="figma-dev-spec-value">{state.item.location?.country ?? 'Грузия'}</strong>
+                <span className="figma-dev-spec-label">{t('common.country')}</span>
+                <strong className="figma-dev-spec-value">{state.item.location?.country ?? t('devDetail.countryFallback')}</strong>
               </div>
               <div className="figma-dev-spec">
-                <span className="figma-dev-spec-label">Город</span>
-                <strong className="figma-dev-spec-value">{state.item.location?.city ?? 'Батуми'}</strong>
+                <span className="figma-dev-spec-label">{t('common.city')}</span>
+                <strong className="figma-dev-spec-value">{state.item.location?.city ?? t('devDetail.cityFallback')}</strong>
               </div>
             </div>
 
             {/* About Project (Figma 3314:200866) */}
             <section className="detail-description figma-dev-section" aria-labelledby="about-project-heading">
-              <h2 id="about-project-heading" className="figma-dev-section-title">О проекте</h2>
+              <h2 id="about-project-heading" className="figma-dev-section-title">{t('devDetail.aboutHeading')}</h2>
               <p className="figma-dev-description">
-                {state.item.description?.trim() || 'Современный жилой комплекс с развитой инфраструктурой, подземным паркингом, панорамным остеклением и видами на море и горы.'}
+                {state.item.description?.trim() || t('devDetail.aboutFallback')}
               </p>
             </section>
 
             {/* Layouts and Units Matrix (Figma 3314:202465) */}
-            <section id="units" className="figma-dev-section" aria-label="Планировки и цены">
-              <h2 className="figma-dev-section-title">Планировки и цены</h2>
+            <section id="units" className="figma-dev-section" aria-label={t('devDetail.unitsHeading')}>
+              <h2 className="figma-dev-section-title">{t('devDetail.unitsHeading')}</h2>
               {units.length === 0 ? (
                 <p className="figma-dev-description">
-                  Планировки появятся, когда застройщик их опубликует.
+                  {t('devDetail.noUnits')}
                 </p>
               ) : null}
               <div className="figma-units-matrix">
@@ -567,8 +575,8 @@ function DevelopmentDetailPage() {
                   <div key={i} className="figma-unit-card">
                     <h3 className="figma-unit-card__title">{u.title}</h3>
                     <div className="figma-unit-card__meta">
-                      <span>Площадь: {u.area} м²</span>
-                      <span>{u.floor} этаж</span>
+                      <span>{t('devDetail.unitArea', { area: u.area })}</span>
+                      {u.floor !== undefined ? <span>{t('devDetail.unitFloor', { floor: u.floor })}</span> : null}
                     </div>
                     <div className="figma-unit-card__price">{u.price}</div>
                     <button
@@ -576,7 +584,7 @@ function DevelopmentDetailPage() {
                       className="figma-unit-card__btn"
                       onClick={() => setSelectedUnit(u)}
                     >
-                      Посмотреть планировку
+                      {t('devDetail.viewPlan')}
                     </button>
                   </div>
                 ))}
@@ -586,7 +594,7 @@ function DevelopmentDetailPage() {
             {/* Quick View Modal (Figma 3314:203298) */}
             <UnitQuickViewModal
               unit={selectedUnit}
-              developmentName={developmentTitle(state.item)}
+              developmentName={developmentTitle(state.item, t)}
               onClose={() => setSelectedUnit(null)}
             />
           </>
@@ -599,41 +607,43 @@ function DevelopmentDetailPage() {
 function ListingDetailPage() {
   const { slug } = useParams()
   const state = useListingDetail(slug)
+  const { t } = useI18n()
 
   useSeoMetadata(
     state.status === 'ready'
       ? {
-          title: state.item.seo?.title || listingTitle(state.item),
+          title: state.item.seo?.title || listingTitle(state.item, t),
           description:
             state.item.seo?.description ||
-            `${listingTitle(state.item)} по адресу ${listingAddress(state.item)}`,
+            t('listingDetail.descriptionFallback', { title: listingTitle(state.item, t), address: listingAddress(state.item, t) }),
           imageUrl: state.item.media?.find((m) => m.role === 'cover')?.url || state.item.media?.[0]?.url,
           jsonLd: buildListingJsonLd(
             state.item,
-            typeof window !== 'undefined' ? window.location.origin : ''
+            typeof window !== 'undefined' ? window.location.origin : '',
+            t
           ),
         }
       : {
-          title: state.status === 'not-found' ? 'Объявление не найдено' : undefined,
+          title: state.status === 'not-found' ? t('listingDetail.notFoundTitle') : undefined,
         }
   )
 
   return (
     <Shell>
       <section className="detail-page figma-listing-detail" aria-labelledby="listing-detail-title">
-        <Link className="back-link" to="/secondary" aria-label="Вернуться в каталог вторички и аренды">
-          ← В каталог
+        <Link className="back-link" to="/secondary" aria-label={t('listingDetail.backAria')}>
+          {t('common.backArrow')}
         </Link>
         {state.status === 'loading' ? (
           <div className="state-panel" role="status" aria-busy="true">
-            Загружаем объект…
+            {t('common.loadingItem')}
           </div>
         ) : null}
         {state.status === 'not-found' ? (
           <div className="state-panel state-panel--error" role="alert">
-            <p>Объявление не найдено или было снято с публикации.</p>
+            <p>{t('listingDetail.notFoundBody')}</p>
             <Link to="/secondary" className="back-to-catalogue-btn">
-              Вернуться в каталог
+              {t('common.backToCatalogue')}
             </Link>
           </div>
         ) : null}
@@ -641,7 +651,7 @@ function ListingDetailPage() {
           <div className="state-panel state-panel--error" role="alert">
             <p>{state.message}</p>
             <button type="button" className="retry-btn" onClick={state.retry}>
-              Повторить попытку
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
@@ -650,28 +660,28 @@ function ListingDetailPage() {
             {/* Top Hero: Gallery & Details (Figma 3314:206822) */}
             <div className="detail-hero detail-hero--listing figma-listing-hero">
               <div className="figma-listing-gallery">
-                <ListingMediaGallery media={state.item.media} title={listingTitle(state.item)} />
+                <ListingMediaGallery media={state.item.media} title={listingTitle(state.item, t)} />
               </div>
               <div className="detail-hero__copy figma-listing-summary">
                 <div className="figma-listing-summary__badges">
                   <span className="listing-badge figma-listing-card__badge figma-listing-card__badge--deal">
-                    {listingDealTypeLabel(state.item.dealType)}
+                    {listingDealTypeLabel(state.item.dealType, t)}
                   </span>
                   {state.item.isVerified ? (
                     <span className="figma-listing-card__badge figma-listing-card__badge--verified">
-                      ✓ Проверено
+                      {t('listingDetail.verified')}
                     </span>
                   ) : null}
                 </div>
                 <h1 id="listing-detail-title" className="figma-listing-title">
-                  {listingTitle(state.item)}
+                  {listingTitle(state.item, t)}
                 </h1>
                 <p className="address figma-listing-address">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                     <circle cx="12" cy="10" r="3" />
                   </svg>
-                  <span>{listingAddress(state.item)}</span>
+                  <span>{listingAddress(state.item, t)}</span>
                 </p>
 
                 {/*
@@ -681,7 +691,7 @@ function ListingDetailPage() {
                 */}
                 {state.item.publisher ? (
                   <p className="figma-listing-publisher">
-                    Компания:{' '}
+                    {t('listingDetail.publisherPrefix')}{' '}
                     <Link to={`${listingSectionPath(state.item.dealType)}?publisher=${encodeURIComponent(state.item.publisher.id)}`}>
                       {state.item.publisher.name}
                     </Link>
@@ -690,15 +700,15 @@ function ListingDetailPage() {
 
                 <div className="detail-price-box figma-listing-pricing-card">
                   <p className="detail-price-main figma-listing-price-main">
-                    {listingPrice(state.item)}
+                    {listingPrice(state.item, t)}
                     {state.item.dealType === 'rent_short' ? (
-                      <span className="figma-listing-price-sub"> / сутки</span>
+                      <span className="figma-listing-price-sub">{t('card.perDay')}</span>
                     ) : state.item.dealType === 'rent_long' ? (
-                      <span className="figma-listing-price-sub"> / мес</span>
+                      <span className="figma-listing-price-sub">{t('card.perMonth')}</span>
                     ) : null}
                   </p>
                   <p className="meta figma-listing-price-sub">
-                    {listingPropertyTypeLabel(state.item.propertyType, state.item.commercialSubtype)}
+                    {listingPropertyTypeLabel(state.item.propertyType, state.item.commercialSubtype, t)}
                   </p>
                 </div>
                 {slug ? <RevealContactCTA slug={slug} type="listing" /> : null}
@@ -706,23 +716,23 @@ function ListingDetailPage() {
             </div>
 
             {/* Facts / Specifications Ribbon */}
-            <div className="detail-facts figma-listing-ribbon" aria-label="Характеристики объекта">
+            <div className="detail-facts figma-listing-ribbon" aria-label={t('listingDetail.factsAria')}>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Тип сделки</span>
-                <strong className="figma-listing-spec-value">{listingDealTypeLabel(state.item.dealType)}</strong>
+                <span className="figma-listing-spec-label">{t('listingDetail.dealTypeLabel')}</span>
+                <strong className="figma-listing-spec-value">{listingDealTypeLabel(state.item.dealType, t)}</strong>
               </div>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Площадь</span>
+                <span className="figma-listing-spec-label">{t('listingDetail.areaLabel')}</span>
                 <strong className="figma-listing-spec-value">
-                  {state.item.characteristics?.area ? `${state.item.characteristics.area} м²` : '—'}
+                  {state.item.characteristics?.area ? t('card.area', { area: state.item.characteristics.area }) : '—'}
                 </strong>
               </div>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Комнат</span>
+                <span className="figma-listing-spec-label">{t('listingDetail.roomsLabel')}</span>
                 <strong className="figma-listing-spec-value">{state.item.characteristics?.rooms ?? '—'}</strong>
               </div>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Этаж</span>
+                <span className="figma-listing-spec-label">{t('listingDetail.floorLabel')}</span>
                 <strong className="figma-listing-spec-value">
                   {state.item.characteristics?.floor
                     ? `${state.item.characteristics.floor}${state.item.characteristics.totalFloors ? ` / ${state.item.characteristics.totalFloors}` : ''}`
@@ -730,27 +740,26 @@ function ListingDetailPage() {
                 </strong>
               </div>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Город</span>
-                <strong className="figma-listing-spec-value">{state.item.location?.city ?? 'Уточняется'}</strong>
+                <span className="figma-listing-spec-label">{t('common.city')}</span>
+                <strong className="figma-listing-spec-value">{state.item.location?.city ?? t('common.clarify')}</strong>
               </div>
               <div className="figma-listing-spec">
-                <span className="figma-listing-spec-label">Страна</span>
-                <strong className="figma-listing-spec-value">{state.item.location?.country ?? 'Уточняется'}</strong>
+                <span className="figma-listing-spec-label">{t('common.country')}</span>
+                <strong className="figma-listing-spec-value">{state.item.location?.country ?? t('common.clarify')}</strong>
               </div>
             </div>
 
             {/* Description Section */}
             <section className="detail-description figma-listing-section" aria-labelledby="listing-description-heading">
-              <h2 id="listing-description-heading" className="figma-listing-section-title">Описание</h2>
+              <h2 id="listing-description-heading" className="figma-listing-section-title">{t('listingDetail.descriptionHeading')}</h2>
               <p className="figma-listing-description">
-                {state.item.seo?.description?.trim() ||
-                  'Объект проверен и опубликован через систему управления недвижимостью BAZA.'}
+                {state.item.seo?.description?.trim() || t('listingDetail.descriptionFallbackText')}
               </p>
             </section>
 
             {/* Contacts & Lead Generation Section (Figma 3304:57919) */}
             <section className="figma-listing-contacts" id="contacts" aria-labelledby="contacts-heading">
-              <h2 id="contacts-heading" className="figma-listing-section-title">Связаться с риелтором</h2>
+              <h2 id="contacts-heading" className="figma-listing-section-title">{t('listingDetail.contactsHeading')}</h2>
               <ListingContactForm slug={slug!} />
             </section>
           </>
@@ -761,9 +770,10 @@ function ListingDetailPage() {
 }
 
 function PublishingWizardPage() {
+  const { t } = useI18n()
   useSeoMetadata({
-    title: 'Разместить объявление',
-    description: 'Публикация объявления о продаже или аренде недвижимости в каталоге BAZA.sale',
+    title: t('publishPage.title'),
+    description: t('publishPage.description'),
     canonicalUrl: `${window.location.origin}/publish`,
   })
 

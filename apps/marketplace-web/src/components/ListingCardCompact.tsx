@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listingAddress, listingPrice, listingTitle } from '../lib/format'
+import { useI18n } from '../i18n'
 import type { PublicListingCard } from '../types/marketplace'
 
 export interface ListingCardCompactProps {
@@ -21,6 +22,7 @@ export function ListingCardCompact({ item }: ListingCardCompactProps) {
   // Битая ссылка на фотографию не должна оставлять в карточке значок
   // сломанного изображения: показываем ту же заглушку, что и без фото.
   const [imgError, setImgError] = useState(false)
+  const { t } = useI18n()
   const slug = item.slug
   const source = item.media?.find((m) => m.role === 'cover')?.url ?? item.media?.[0]?.url ?? null
   const cover = imgError ? null : source
@@ -37,15 +39,19 @@ export function ListingCardCompact({ item }: ListingCardCompactProps) {
         )}
       </span>
       <span className="compact-card__body">
-        <span className="compact-card__price">{listingPrice(item)}</span>
-        <span className="compact-card__title">{listingTitle(item)}</span>
-        <span className="compact-card__address">{listingAddress(item)}</span>
+        <span className="compact-card__price">{listingPrice(item, t)}</span>
+        <span className="compact-card__title">{listingTitle(item, t)}</span>
+        <span className="compact-card__address">{listingAddress(item, t)}</span>
         <span className="compact-card__facts">
-          {typeof rooms === 'number' ? <span>{rooms} комн.</span> : null}
+          {typeof rooms === 'number' ? <span>{t('card.rooms', { count: rooms })}</span> : null}
           {typeof floor === 'number' ? (
-            <span>{typeof totalFloors === 'number' ? `${floor}/${totalFloors} эт.` : `${floor} эт.`}</span>
+            <span>
+              {typeof totalFloors === 'number'
+                ? t('card.floorOfTotal', { floor, total: totalFloors })
+                : t('card.floor', { floor })}
+            </span>
           ) : null}
-          {typeof area === 'number' ? <span>{AREA_FORMAT.format(area)} m²</span> : null}
+          {typeof area === 'number' ? <span>{t('card.area', { area: AREA_FORMAT.format(area) })}</span> : null}
         </span>
       </span>
     </Link>

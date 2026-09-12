@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFavorites } from '../features/favorites/useFavorites'
 import { listingAddress, listingPrice, listingTitle } from '../lib/format'
+import { useI18n } from '../i18n'
 import type { PublicListingCard } from '../types/marketplace'
 import { BuildingPlaceholder } from './DevelopmentCard'
 
@@ -33,10 +34,11 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
   const favorites = useFavorites()
   const [imgError, setImgError] = useState(false)
   const [copied, setCopied] = useState(false)
+  const { t } = useI18n()
 
   const slug = item.slug
-  const title = listingTitle(item)
-  const address = listingAddress(item)
+  const title = listingTitle(item, t)
+  const address = listingAddress(item, t)
   const coverItem = item.media?.find((m) => m.role === 'cover') ?? item.media?.[0]
   const cover = coverItem && !imgError ? coverItem.url : null
 
@@ -44,14 +46,16 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
   const { rooms, floor, totalFloors, area } = characteristics
 
   const price = item.price
-  const priceText = listingPrice(item)
+  const priceText = listingPrice(item, t)
   // Цена и валюта в проекции необязательны, поэтому цена за метр считается
   // только когда есть оба поля и площадь.
   const pricePerSqm =
     typeof price?.amountMinorUnits === 'number' && price.currency && typeof area === 'number' && area > 0
-      ? `${CURRENCY_SIGN[price.currency] ?? price.currency}${MONEY_FORMAT.format(
-          Math.round(price.amountMinorUnits / 100 / area),
-        )} за m²`
+      ? t('card.pricePerSqm', {
+          price: `${CURRENCY_SIGN[price.currency] ?? price.currency}${MONEY_FORMAT.format(
+            Math.round(price.amountMinorUnits / 100 / area),
+          )}`,
+        })
       : null
 
   const placeholderKind =
@@ -99,8 +103,8 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
           <BuildingPlaceholder kind={placeholderKind} />
         )}
 
-        {item.isMls ? <span className="listing-card__pill" data-testid="badge-mls">MLS</span> : null}
-        {item.isVerified ? <span className="listing-card__verified">Проверено</span> : null}
+        {item.isMls ? <span className="listing-card__pill" data-testid="badge-mls">{t('badges.mls')}</span> : null}
+        {item.isVerified ? <span className="listing-card__verified">{t('badges.verified')}</span> : null}
       </div>
 
       {/* сведения `3428:55861`: padding 10, gap 20 */}
@@ -115,8 +119,8 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
               type="button"
               className="listing-card__icon-btn"
               onClick={handleShare}
-              aria-label={copied ? 'Ссылка скопирована' : 'Поделиться'}
-              title={copied ? 'Ссылка скопирована' : 'Поделиться'}
+              aria-label={copied ? t('devCard.linkCopied') : t('devCard.share')}
+              title={copied ? t('devCard.linkCopied') : t('devCard.share')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="18" cy="5" r="3" />
@@ -130,7 +134,7 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
               type="button"
               className={`listing-card__icon-btn${isFavorite ? ' is-active' : ''}`}
               onClick={(event) => void handleFavorite(event)}
-              aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+              aria-label={isFavorite ? t('card.removeFromFavorites') : t('card.addToFavorites')}
               aria-pressed={isFavorite}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -172,13 +176,15 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
           {typeof floor === 'number' ? (
             <span className="listing-card__fact">
               <span className="listing-card__fact-icon listing-card__fact-icon--floor" aria-hidden="true" />
-              {typeof totalFloors === 'number' ? `${floor} из ${totalFloors}` : `${floor} этаж`}
+              {typeof totalFloors === 'number'
+                ? t('card.floorOf', { floor, total: totalFloors })
+                : t('card.floorSingle', { floor })}
             </span>
           ) : null}
           {typeof area === 'number' ? (
             <span className="listing-card__fact">
               <span className="listing-card__fact-icon listing-card__fact-icon--area" aria-hidden="true" />
-              {AREA_FORMAT.format(area)} m²
+              {t('card.area', { area: AREA_FORMAT.format(area) })}
             </span>
           ) : null}
         </div>
@@ -187,20 +193,20 @@ export function ListingCard({ item, size = 'default', className = '' }: ListingC
         <div className="listing-card__actions">
           {detailHref ? (
             <Link to={`${detailHref}#contact`} className="listing-card__btn listing-card__btn--call">
-              Позвонить
+              {t('card.call')}
             </Link>
           ) : (
             <button type="button" className="listing-card__btn listing-card__btn--call" disabled>
-              Позвонить
+              {t('card.call')}
             </button>
           )}
           {detailHref ? (
             <Link to={detailHref} className="listing-card__btn listing-card__btn--outline">
-              Подробнее
+              {t('card.details')}
             </Link>
           ) : (
             <button type="button" className="listing-card__btn listing-card__btn--outline" disabled>
-              Подробнее
+              {t('card.details')}
             </button>
           )}
         </div>
