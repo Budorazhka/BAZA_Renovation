@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { marketplaceApi } from '../api/marketplace-api'
 import { DevelopmentCard } from '../components/DevelopmentCard'
 import { ListingCard } from '../components/ListingCard'
+import { ListingCardCompact } from '../components/ListingCardCompact'
 import type { PublicDevelopmentCard, PublicListingCard } from '../types/marketplace'
 
 /**
@@ -98,10 +99,11 @@ const ADVANTAGES = [
 interface HomeData {
   developments: PublicDevelopmentCard[]
   listings: PublicListingCard[]
+  rentals: PublicListingCard[]
   counts: Partial<Record<CategorySpec['countKey'], number>>
 }
 
-const EMPTY: HomeData = { developments: [], listings: [], counts: {} }
+const EMPTY: HomeData = { developments: [], listings: [], rentals: [], counts: {} }
 
 /**
  * Обложка объявления. У публичной карточки ЖК фотографий нет вовсе
@@ -125,12 +127,13 @@ export function HomePage() {
         const [developments, sale, rent, commercial] = await Promise.all([
           marketplaceApi.listDevelopments({ limit: 4 }, { signal: controller.signal }),
           marketplaceApi.listListings({ limit: 4, dealType: 'sale' }, { signal: controller.signal }),
-          marketplaceApi.listListings({ limit: 1, dealType: 'rent_long' }, { signal: controller.signal }),
+          marketplaceApi.listListings({ limit: 2, dealType: 'rent_long' }, { signal: controller.signal }),
           marketplaceApi.listListings({ limit: 1, propertyType: 'commercial' }, { signal: controller.signal }),
         ])
         setData({
           developments: developments.items,
           listings: sale.items,
+          rentals: rent.items,
           // Счётчик в скобках у категории — `total` из того же ответа,
           // отдельный запрос ради цифры не нужен.
           counts: {
@@ -162,15 +165,8 @@ export function HomePage() {
       <section className="home-hero" aria-labelledby="home-title">
         <div className="home-hero__head">
           <p className="home-hero__logo">
-            <svg viewBox="0 0 100 100" width="100" height="100" aria-hidden="true" focusable="false">
-              <path
-                d="M50 12 14 42v46h26V62h20v26h26V42z"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="8"
-                strokeLinejoin="round"
-              />
-            </svg>
+            {/* Знак из макета (`3851:56178`), а не нарисованный по памяти домик. */}
+            <img src="/figma/logo-mark.svg" alt="" width={100} height={100} />
             <span className="home-hero__logo-text">BAZA.sale</span>
           </p>
           <h1 id="home-title" className="home-hero__slogan">Лучший способ найти недвижимость</h1>
@@ -227,6 +223,7 @@ export function HomePage() {
       {/* промо `3428:55382`: зелёный блок 670x500 и баннер 1040x500, оба radius 30 */}
       <section className="home-promo" aria-label="Разместить объявление и акции">
         <div className="home-promo__sell">
+          <img className="home-promo__sell-art" src="/figma/promo-sell-art.svg" alt="" loading="lazy" />
           <h2 className="home-promo__sell-title">Хотите продать квартиру, дом или участок?</h2>
           <p className="home-promo__sell-text">
             Бесплатно разместите своё объявление на BAZA, и вы быстро найдёте покупателей
@@ -302,6 +299,69 @@ export function HomePage() {
           </p>
         )}
       </section>
+
+      {/*
+        * Мобильная главная — отдельный фрейм `mob_home` (`1035:18101`,
+        * 375x3461), и она не сводится к десктопной в одну колонку: там нет
+        * ни фотополотна, ни категорий, ни блока «Почему выбирают», ни
+        * промо. Есть два списка объектов по две карточки, между ними
+        * подборка горячих предложений компактными карточками, внизу
+        * кнопка заявки и зелёное меню. Поэтому разметка своя, а видимость
+        * переключается по ширине.
+        */}
+      <div className="home-mobile" aria-hidden={false}>
+        <section className="home-mobile__block" aria-labelledby="m-new-title">
+          <div className="home-mobile__head">
+            <h2 id="m-new-title" className="home-mobile__title">Новостройки</h2>
+            <Link to="/newconstructions" className="home-mobile__all">Смотреть</Link>
+          </div>
+          {data.developments.slice(0, 2).map((item) => (
+            <DevelopmentCard key={item.slug} item={item} />
+          ))}
+          {data.developments.length === 0 ? (
+            <p className="home-rail__empty">Пока нет опубликованных жилых комплексов.</p>
+          ) : null}
+        </section>
+
+        {/* `1035:18130` hot cards: кнопка-контур и три компактные карточки */}
+        <section className="home-mobile__hot" aria-labelledby="m-hot-title">
+          <h2 id="m-hot-title" className="home-mobile__pill">Горячие предложения</h2>
+          <div className="home-mobile__compact">
+            {data.listings.slice(0, 3).map((item) => (
+              <ListingCardCompact key={item.slug} item={item} />
+            ))}
+            {data.listings.length === 0 ? (
+              <p className="home-rail__empty">Пока нет опубликованных объявлений.</p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="home-mobile__block" aria-labelledby="m-rent-title">
+          <div className="home-mobile__head">
+            <h2 id="m-rent-title" className="home-mobile__title">Аренда</h2>
+            <Link to="/rent" className="home-mobile__all">Смотреть</Link>
+          </div>
+          {data.rentals.slice(0, 2).map((item) => (
+            <ListingCard key={item.slug} item={item} />
+          ))}
+          {data.rentals.length === 0 ? (
+            <p className="home-rail__empty">Пока нет объявлений об аренде.</p>
+          ) : null}
+        </section>
+
+        {/* `1035:18146` большая кнопка заявки */}
+        <div className="home-mobile__cta">
+          <Link to="/publish" className="home-mobile__cta-button">Оставить заявку</Link>
+        </div>
+
+        {/* `215:7733` нижнее меню: зелёная панель со скруглением 40 сверху */}
+        <nav className="home-mobile__nav" aria-label="Основная навигация">
+          <Link to="/" aria-label="Главная"><img src="/figma/nav-home.svg" alt="" width={48} height={49} /></Link>
+          <Link to="/newconstructions" aria-label="Поиск объектов"><img src="/figma/nav-search.svg" alt="" width={48} height={49} /></Link>
+          <Link to="/favorites" aria-label="Избранное"><img src="/figma/nav-favorites.svg" alt="" width={48} height={49} /></Link>
+          <Link to="/account" aria-label="Кабинет"><img src="/figma/nav-account.svg" alt="" width={48} height={49} /></Link>
+        </nav>
+      </div>
     </div>
   )
 }
