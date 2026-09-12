@@ -1,15 +1,1054 @@
-/* ==========================================================================
-   BUYER & TENANT REQUESTS (Figma: 2287:34150, 2287:34226, 2287:34370)
-   ========================================================================== */
+/*
+ * Доска запросов клиентов (RequestsPage.tsx), собрана заново 12.09.2026
+ * по фрейму `search result (2 page)` (`2287:34150`). Выгрузка
+ * analysis_tools/dump_spec.js:
+ *
+ *   панель «Фильтр»  `2287:34177`: 360 шириной, белая, radius 10,
+ *                    тень 0 4 30 #169600/15%, поля 20, между блоками 30;
+ *                    заголовки групп Plus Jakarta Sans Bold 24, подгруппы 18,
+ *                    подписи Comfortaa Bold 18, невыбранные на 50%
+ *   радиокнопка      `890:12565`: круг 15, обводка #169600, точка 9
+ *   переключатель    `752:19693`: 42x23 и подпись через 10
+ *   выбор            `2287:33680`: пилюля 34, обводка 2 #169600, текст зелёный
+ *   строка счётчика  `2287:34221`: градиент #fff → #e9f8e3, radius 10,
+ *                    число Plus Jakarta Sans Bold 28, подпись Comfortaa 18 #555454
+ *   карточка         `2287:34226`: белая, обводка 1 #169600, radius 10,
+ *                    тень 0 4 50 #169600/15%, поля 30; заголовок 24 и дата
+ *                    Comfortaa 16 на 50% справа; текст Comfortaa Medium 14;
+ *                    линия #f1f7eb 1.5; внизу подпись 16 на 50% и значение
+ *                    Plus Jakarta Sans Bold 22 зелёное; кнопки-пилюли 42
+ *
+ * Намеренные отступления: переключатели в макете сиреневые (#c0c0f2),
+ * здесь фирменный зелёный, как и у «Позвонить»; обводка карточки мягче и
+ * наливается полным зелёным при наведении; «на 50%» заменено сплошным
+ * тёмно-серым, иначе контраст подписей ниже 4.5:1. Карты справа нет:
+ * у запросов нет координат.
+ *
+ * Файл подключается раньше app.css, где есть общие `button { фон }` и
+ * `button:hover { фон; translateY(-1px) }`, поэтому селекторы кнопок здесь
+ * с префиксом `.bz-requests` и весомее тех правил.
+ */
 
-.figma-requests-page {
-  max-width: 1440px;
+.bz-requests {
+  --rq-green: var(--color-brand-green, #169600);
+  --rq-green-hover: var(--color-brand-green-hover, #107d07);
+  --rq-soft: var(--color-accent-soft, #f1f7eb);
+  --rq-line: #e3eedb;
+  --rq-ink: var(--color-ink, #151515);
+  --rq-muted: #62665f;
+  --rq-shadow: 0 4px 30px rgba(22, 150, 0, 0.13);
+
+  width: min(100%, 1480px);
   margin: 0 auto;
-  padding: 32px 24px 80px;
-  font-family: var(--font-primary, system-ui, -apple-system, sans-serif);
+  padding-block: 12px 40px;
+  color: var(--rq-ink);
+  font-family: var(--font-body);
 }
 
-/* Demo Notice Banner */
+.bz-requests h1,
+.bz-requests h2,
+.bz-requests h3 {
+  max-width: none;
+  margin: 0;
+  letter-spacing: normal;
+  overflow-wrap: normal;
+}
+
+.bz-requests p {
+  margin: 0;
+}
+
+.bz-requests button:hover:not(:disabled),
+.bz-requests button:active:not(:disabled) {
+  transform: none;
+}
+
+.bz-rq-icon {
+  flex: none;
+}
+
+/* ── заголовок страницы ──────────────────────────────────────────────── */
+
+.bz-requests__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  margin-bottom: 28px;
+}
+
+.bz-requests .bz-requests__intro h1 {
+  font-family: var(--font-display);
+  font-size: clamp(30px, 2.6vw, 40px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.bz-requests .bz-requests__intro p {
+  max-width: 60ch;
+  margin-top: 10px;
+  color: var(--rq-muted);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* ── кнопки ──────────────────────────────────────────────────────────── */
+
+.bz-requests .bz-rq-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 28px;
+  border: 2px solid transparent;
+  border-radius: 100px;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.bz-requests .bz-rq-btn--call {
+  background: var(--rq-green);
+  color: #ffffff;
+  box-shadow:
+    0 2px 5px rgba(22, 150, 0, 0.1),
+    0 9px 9px rgba(22, 150, 0, 0.09);
+}
+
+.bz-requests .bz-rq-btn--call:hover:not(:disabled) {
+  background: var(--rq-green-hover);
+}
+
+.bz-requests .bz-rq-btn--outline {
+  background: transparent;
+  border-color: var(--rq-green);
+  color: var(--rq-green);
+}
+
+.bz-requests .bz-rq-btn--outline:hover:not(:disabled) {
+  background: var(--rq-soft);
+}
+
+.bz-requests .bz-rq-btn:focus-visible {
+  outline: 2px solid var(--rq-green);
+  outline-offset: 3px;
+}
+
+/* ── раскладка ───────────────────────────────────────────────────────── */
+
+.bz-requests__layout {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+/* ── панель фильтров `2287:34177` ────────────────────────────────────── */
+
+.bz-rq-filters {
+  position: sticky;
+  top: 94px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-height: calc(100dvh - 110px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: var(--rq-shadow);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rq-line) transparent;
+}
+
+.bz-rq-filters__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bz-requests .bz-rq-filters__title {
+  margin-right: auto;
+  font-family: var(--font-body);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.bz-requests .bz-rq-filters__reset {
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rq-green);
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.bz-requests .bz-rq-filters__reset:hover:not(:disabled) {
+  background: transparent;
+  color: var(--rq-green-hover);
+}
+
+.bz-requests .bz-rq-filters__close,
+.bz-requests .bz-rq-dialog__close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 100px;
+  background: var(--rq-soft);
+  color: var(--rq-green);
+  cursor: pointer;
+  transition: background-color 160ms ease;
+}
+
+.bz-requests .bz-rq-filters__close:hover:not(:disabled),
+.bz-requests .bz-rq-dialog__close:hover:not(:disabled) {
+  background: #e2efd8;
+}
+
+.bz-requests .bz-rq-filters__close,
+.bz-requests .bz-rq-filters__apply {
+  display: none;
+}
+
+/* Поиск `Search` (`2287:34180`): поле на мягком зелёном, обводка #a5e1a5. */
+.bz-rq-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 2px solid #cfe9c4;
+  border-radius: 30px;
+  background: var(--rq-soft);
+  color: var(--rq-green);
+  transition: border-color 160ms ease;
+}
+
+.bz-rq-search:focus-within {
+  border-color: var(--rq-green);
+}
+
+.bz-requests .bz-rq-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--rq-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  outline: none;
+}
+
+.bz-rq-search input::placeholder {
+  color: #7d8479;
+  font-weight: 400;
+}
+
+.bz-rq-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.bz-rq-group__title {
+  padding: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--rq-ink);
+}
+
+/* legend не участвует во flex-зазоре, отступ задаётся явно. */
+legend.bz-rq-group__title {
+  margin-bottom: 16px;
+}
+
+/* Радиокнопки `radio selector` (`2287:34189`). */
+.bz-rq-radios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.bz-rq-radio,
+.bz-rq-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.bz-rq-radio input,
+.bz-rq-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bz-rq-radio__mark {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--rq-green);
+  border-radius: 50%;
+  background: #ffffff;
+  transition: box-shadow 160ms ease;
+}
+
+.bz-rq-radio input:checked + .bz-rq-radio__mark {
+  box-shadow: inset 0 0 0 3.5px #ffffff;
+  background: var(--rq-green);
+}
+
+.bz-rq-radio__label,
+.bz-rq-switch__label {
+  color: var(--rq-muted);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  transition: color 160ms ease;
+}
+
+.bz-rq-radio input:checked ~ .bz-rq-radio__label,
+.bz-rq-switch input:checked ~ .bz-rq-switch__label,
+.bz-rq-radio:hover .bz-rq-radio__label,
+.bz-rq-switch:hover .bz-rq-switch__label {
+  color: var(--rq-ink);
+}
+
+/* Переключатели `toggle` (`752:19693`). */
+.bz-rq-switches {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bz-rq-switches + .bz-rq-switches {
+  margin-top: 22px;
+}
+
+.bz-requests .bz-rq-switches__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.bz-rq-switch {
+  align-items: flex-start;
+}
+
+.bz-rq-switch__track {
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  border-radius: 100px;
+  background: #dde8d5;
+  transition: background-color 180ms ease;
+}
+
+.bz-rq-switch__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(21, 21, 21, 0.2);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-rq-switch:hover .bz-rq-switch__track {
+  background: #cfdfc4;
+}
+
+.bz-rq-switch input:checked + .bz-rq-switch__track {
+  background: var(--rq-green);
+}
+
+.bz-rq-switch input:checked + .bz-rq-switch__track::after {
+  transform: translateX(18px);
+}
+
+.bz-rq-radio input:focus-visible + .bz-rq-radio__mark,
+.bz-rq-switch input:focus-visible + .bz-rq-switch__track {
+  outline: 2px solid var(--rq-green);
+  outline-offset: 2px;
+}
+
+/* Выбор `select` (`2287:33680`): пилюля с обводкой и стрелкой. */
+.bz-rq-select {
+  position: relative;
+  display: block;
+  color: var(--rq-green);
+}
+
+.bz-rq-select::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 20px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+}
+
+.bz-rq-select select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 46px 0 18px;
+  border: 2px solid currentColor;
+  border-radius: 100px;
+  background: #ffffff;
+  color: inherit;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 160ms ease;
+}
+
+.bz-rq-select select:hover {
+  background: var(--rq-soft);
+}
+
+.bz-rq-select select:focus-visible {
+  outline: 2px solid var(--rq-green);
+  outline-offset: 3px;
+}
+
+.bz-rq-select--ink {
+  color: var(--rq-ink);
+}
+
+/* ── результаты ──────────────────────────────────────────────────────── */
+
+.bz-rq-results {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Строка счётчика `2287:34221`. */
+.bz-rq-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  min-height: 62px;
+  padding: 10px 12px 10px 22px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #ffffff 0%, #e9f8e3 100%);
+}
+
+.bz-requests .bz-rq-bar__count {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-right: auto;
+  color: #555454;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.bz-rq-bar__count strong {
+  color: var(--rq-ink);
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.bz-rq-bar .bz-rq-select select {
+  width: auto;
+  min-width: 210px;
+}
+
+.bz-requests .bz-rq-bar__filters {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 2px solid var(--rq-green);
+  border-radius: 100px;
+  background: #ffffff;
+  color: var(--rq-green);
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bz-requests .bz-rq-bar__filters:hover:not(:disabled) {
+  background: var(--rq-soft);
+}
+
+.bz-rq-bar__badge {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 100px;
+  background: var(--rq-green);
+  color: #ffffff;
+  font-size: 12px;
+}
+
+.bz-rq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ── карточка `card Запрос` (`2287:34226`) ───────────────────────────── */
+
+.bz-rq-card {
+  padding: 28px 30px;
+  border: 1px solid rgba(22, 150, 0, 0.3);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 4px 50px rgba(22, 150, 0, 0.1);
+  transition: border-color 200ms ease;
+}
+
+.bz-rq-card:hover,
+.bz-rq-card:focus-within {
+  border-color: var(--rq-green);
+}
+
+.bz-rq-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 24px;
+}
+
+.bz-requests .bz-rq-card__title {
+  flex: 1 1 420px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.bz-requests .bz-rq-card__date {
+  color: var(--rq-muted);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bz-requests .bz-rq-card__text {
+  max-width: 86ch;
+  margin-top: 14px;
+  color: #2c2e2b;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.75;
+  text-wrap: pretty;
+}
+
+/* Контакты `label` (`2287:34238`): трубка, подпись, номер под размытием. */
+.bz-rq-card__contact {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 18px;
+}
+
+.bz-rq-card__contact-icon {
+  color: var(--rq-green);
+}
+
+.bz-rq-card__contact-label {
+  margin-left: -4px;
+  color: var(--rq-muted);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.bz-rq-card__author {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.bz-rq-card__phone {
+  color: #555454;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bz-rq-card__phone-mask {
+  display: inline-block;
+  filter: blur(5px);
+  user-select: none;
+}
+
+.bz-requests .bz-rq-card__reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rq-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.bz-requests .bz-rq-card__reveal:hover:not(:disabled) {
+  background: transparent;
+  color: var(--rq-green);
+}
+
+/* Низ карточки `2287:34257`: линия, пары «подпись — значение», кнопки. */
+.bz-rq-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px 32px;
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1.5px solid var(--rq-line);
+}
+
+.bz-rq-card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 40px;
+  margin: 0;
+}
+
+.bz-rq-card__facts dt {
+  color: var(--rq-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.bz-rq-card__facts dd {
+  margin: 8px 0 0;
+  color: var(--rq-green);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bz-rq-card__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.bz-requests .bz-rq-card__actions .bz-rq-btn {
+  min-width: 170px;
+}
+
+/* ── пустой результат ────────────────────────────────────────────────── */
+
+.bz-rq-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 36px 30px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: var(--rq-shadow);
+  color: var(--rq-muted);
+  line-height: 1.6;
+}
+
+.bz-requests .bz-rq-empty__title {
+  color: var(--rq-ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.bz-requests .bz-rq-empty .bz-rq-btn {
+  margin-top: 8px;
+}
+
+/* ── модальные окна ──────────────────────────────────────────────────── */
+
+.bz-rq-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(21, 21, 21, 0.45);
+  animation: bz-rq-fade 180ms ease-out;
+}
+
+.bz-rq-dialog__panel {
+  position: relative;
+  width: min(540px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 32px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 24px 60px rgba(21, 21, 21, 0.18);
+  animation: bz-rq-rise 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.bz-requests .bz-rq-dialog__close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+}
+
+.bz-requests .bz-rq-dialog__title {
+  padding-right: 48px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.bz-requests .bz-rq-dialog__subtitle {
+  margin-top: 10px;
+  color: var(--rq-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.bz-rq-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.bz-rq-form__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.bz-rq-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.bz-rq-field__label {
+  padding: 0;
+  color: var(--rq-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+legend.bz-rq-field__label {
+  margin-bottom: 10px;
+}
+
+.bz-requests .bz-rq-field input,
+.bz-requests .bz-rq-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px solid #d6e5cc;
+  border-radius: 12px;
+  background: #fbfdf9;
+  color: var(--rq-ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.bz-rq-field textarea {
+  resize: vertical;
+}
+
+.bz-rq-field input::placeholder,
+.bz-rq-field textarea::placeholder {
+  color: #858b81;
+}
+
+.bz-requests .bz-rq-field input:focus,
+.bz-requests .bz-rq-field textarea:focus {
+  border-color: var(--rq-green);
+  box-shadow: 0 0 0 3px rgba(22, 150, 0, 0.14);
+  outline: none;
+}
+
+.bz-rq-field__hint {
+  color: var(--rq-muted);
+  font-size: 13px;
+}
+
+.bz-rq-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.bz-rq-dialog__done {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 24px;
+  color: var(--rq-muted);
+  line-height: 1.6;
+}
+
+.bz-requests .bz-rq-dialog__done-title {
+  color: var(--rq-green);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.bz-requests .bz-rq-dialog__done .bz-rq-btn {
+  margin-top: 10px;
+}
+
+@keyframes bz-rq-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes bz-rq-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+/* ── узкие экраны: фильтр уезжает в выдвижную панель ─────────────────── */
+
+.bz-rq-scrim {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .bz-requests__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .bz-rq-filters {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 85;
+    width: min(380px, 92vw);
+    max-height: none;
+    border-radius: 0 16px 16px 0;
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 260ms;
+  }
+
+  .bz-rq-filters.is-open {
+    transform: none;
+    visibility: visible;
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .bz-rq-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 84;
+    background: rgba(21, 21, 21, 0.4);
+  }
+
+  .bz-requests .bz-rq-filters__close {
+    display: grid;
+  }
+
+  .bz-requests .bz-rq-filters__apply {
+    display: inline-flex;
+    position: sticky;
+    bottom: 0;
+    flex: none;
+    margin-top: auto;
+    box-shadow: 0 -12px 16px #ffffff;
+  }
+
+  .bz-requests .bz-rq-bar__filters {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 640px) {
+  .bz-requests {
+    padding-block: 4px 48px;
+  }
+
+  .bz-requests__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .bz-rq-bar {
+    gap: 12px 10px;
+    padding: 12px 14px;
+  }
+
+  .bz-requests .bz-rq-bar__filters {
+    padding: 0 14px;
+  }
+
+  .bz-rq-bar .bz-rq-select::after {
+    right: 16px;
+  }
+
+  .bz-requests .bz-rq-bar__count {
+    flex-basis: 100%;
+  }
+
+  .bz-rq-bar .bz-rq-select {
+    flex: 1;
+  }
+
+  .bz-rq-bar .bz-rq-select select {
+    width: 100%;
+    min-width: 0;
+    padding: 0 36px 0 14px;
+  }
+
+  .bz-rq-card {
+    padding: 20px 18px;
+  }
+
+  .bz-requests .bz-rq-card__title {
+    flex-basis: 100%;
+    font-size: 20px;
+  }
+
+  .bz-requests .bz-rq-card__text {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .bz-rq-card__facts {
+    gap: 14px 28px;
+  }
+
+  .bz-rq-card__facts dd {
+    font-size: 18px;
+  }
+
+  .bz-rq-card__actions {
+    width: 100%;
+  }
+
+  .bz-requests .bz-rq-card__actions .bz-rq-btn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .bz-rq-dialog__panel {
+    padding: 24px 20px;
+  }
+
+  .bz-rq-form__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Главное действие сверху и во всю ширину — под большой палец. */
+  .bz-rq-form__actions {
+    flex-direction: column-reverse;
+  }
+
+  .bz-requests .bz-rq-form__actions .bz-rq-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bz-rq-dialog,
+  .bz-rq-dialog__panel {
+    animation: none;
+  }
+
+  .bz-rq-filters,
+  .bz-rq-filters.is-open,
+  .bz-rq-switch__track::after {
+    transition: none;
+  }
+}
+
+/* ── плашка демонстрационного раздела (страницы риелторов) ──────────── */
+
 .demo-notice-banner {
   display: flex;
   align-items: center;
@@ -32,265 +1071,4 @@
 .demo-notice-banner__text strong {
   font-weight: 700;
   color: #78350F;
-}
-
-.figma-requests-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 32px;
-}
-
-.figma-requests-header__title {
-  font-size: 32px;
-  font-weight: 700;
-  color: #111111;
-  margin: 0 0 6px 0;
-  letter-spacing: -0.5px;
-}
-
-.figma-requests-header__desc {
-  font-size: 15px;
-  color: #757575;
-  margin: 0;
-}
-
-.figma-requests-add-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: #1BA800;
-  color: #FFFFFF;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 14px 24px;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  text-decoration: none;
-  transition: background 0.15s ease, transform 0.1s ease;
-}
-
-.figma-requests-add-btn:hover {
-  background: #169600;
-  transform: translateY(-1px);
-}
-
-/* 2-Column Layout (Left Filters + Cards) */
-.figma-requests-layout {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 32px;
-  align-items: start;
-}
-
-@media (max-width: 900px) {
-  .figma-requests-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Left Filter Panel (Figma 2287:34370 / 2287:34413) */
-.figma-requests-filters {
-  background: #FFFFFF;
-  border: 1px solid #EAEAEA;
-  border-radius: 16px;
-  padding: 24px;
-}
-
-.figma-requests-filter-group {
-  margin-bottom: 24px;
-}
-
-.figma-requests-filter-group:last-child {
-  margin-bottom: 0;
-}
-
-.figma-requests-filter-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #111111;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.figma-requests-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.figma-requests-chip {
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  background: #F8F8F8;
-  border: 1px solid #EAEAEA;
-  color: #555555;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.figma-requests-chip:hover {
-  background: #EEEEEE;
-  color: #111111;
-}
-
-.figma-requests-chip.is-active {
-  background: #111111;
-  color: #FFFFFF;
-  border-color: #111111;
-}
-
-.figma-requests-input {
-  width: 100%;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #EAEAEA;
-  font-size: 14px;
-  outline: none;
-  box-sizing: border-box;
-}
-
-.figma-requests-input:focus {
-  border-color: #1BA800;
-}
-
-/* Request Cards List */
-.figma-requests-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-/* Card Запрос (Figma 2287:34226, 1080x359) */
-.figma-request-card {
-  background: #FFFFFF;
-  border: 1px solid #EAEAEA;
-  border-radius: 16px;
-  padding: 24px;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.figma-request-card:hover {
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06);
-  transform: translateY(-2px);
-}
-
-.figma-request-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.figma-request-author {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.figma-request-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: #E8F5E9;
-  color: #1BA800;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 16px;
-}
-
-.figma-request-author-name {
-  font-size: 15px;
-  font-weight: 700;
-  color: #111111;
-}
-
-.figma-request-date {
-  font-size: 12px;
-  color: #9E9E9E;
-}
-
-.figma-request-budget {
-  font-size: 20px;
-  font-weight: 700;
-  color: #1BA800;
-  background: #E8F5E9;
-  padding: 6px 14px;
-  border-radius: 10px;
-}
-
-.figma-request-card__title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111111;
-  margin: 0 0 10px 0;
-  line-height: 1.35;
-}
-
-.figma-request-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
-
-.figma-request-tag {
-  background: #F4F4F4;
-  color: #424242;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-}
-
-.figma-request-card__comment {
-  font-size: 14px;
-  color: #555555;
-  line-height: 1.5;
-  margin: 0 0 20px 0;
-}
-
-.figma-request-card__actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding-top: 16px;
-  border-top: 1px solid #F0F0F0;
-}
-
-.figma-request-action-btn {
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  border: 1px solid #EAEAEA;
-  background: #F8F8F8;
-  color: #111111;
-  transition: all 0.15s ease;
-}
-
-.figma-request-action-btn:hover {
-  background: #EEEEEE;
-}
-
-.figma-request-action-btn--primary {
-  background: #111111;
-  color: #FFFFFF;
-  border-color: #111111;
-}
-
-.figma-request-action-btn--primary:hover {
-  background: #333333;
 }
