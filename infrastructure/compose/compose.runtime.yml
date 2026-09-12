@@ -37,7 +37,7 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     mem_limit: 0.5g
@@ -56,11 +56,14 @@ services:
       retries: 20
 
   minio-init:
-    # Утилита mc входит в образ сервера MinIO. Отдельный образ minio/mc
-    # Docker Hub перестал отдавать («pull access denied»), и 12.09.2026 на
-    # этом падал runtime-гейт ещё до запуска стека. Тот же образ, что у
-    # сервера, уже скачан к этому шагу — лишней загрузки нет.
-    image: minio/minio:latest
+    # Утилита mc входит в образ сервера MinIO, поэтому отдельный образ
+    # клиента не нужен: тот же образ уже скачан для сервера.
+    #
+    # Образы берутся из официального реестра MinIO на quay.io. На Docker Hub
+    # 12.09.2026 перестали отдаваться сначала minio/mc, затем и minio/minio
+    # («pull access denied»), и runtime-гейт падал ещё до запуска стека.
+    # Локально это не проявлялось: старые образы лежали в кэше Docker.
+    image: quay.io/minio/minio:latest
     restart: "no"
     depends_on:
       minio:
