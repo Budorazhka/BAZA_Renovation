@@ -140,7 +140,13 @@ describe('MarketplacePublicationRepository', () => {
       const repository = new MarketplacePublicationRepository(mockModel as never);
       await repository.findBySlug('test-slug');
 
-      expect(findOneSpy).toHaveBeenCalledWith({ slug: 'test-slug', status: 'published' });
+      // С 12.09.2026 публичная видимость — это ещё и незамороженный издатель
+      // (PUBLICLY_VISIBLE, решение владельца о заморозке организации).
+      expect(findOneSpy).toHaveBeenCalledWith({
+        slug: 'test-slug',
+        status: 'published',
+        publisherFrozen: { $ne: true },
+      });
     });
   });
 
@@ -159,7 +165,11 @@ describe('MarketplacePublicationRepository', () => {
       // publication mapper silently mixing unit cards into this list —
       // status alone isn't a complete filter now that PublicationSourceType
       // has three values, not one.
-      expect(findSpy).toHaveBeenCalledWith({ status: 'published', sourceType: 'development' });
+      expect(findSpy).toHaveBeenCalledWith({
+        status: 'published',
+        publisherFrozen: { $ne: true },
+        sourceType: 'development',
+      });
     });
 
     it('с bbox добавляет $geoWithin/$box фильтр', async () => {
@@ -253,8 +263,11 @@ describe('MarketplacePublicationRepository', () => {
         }),
       );
       expect(sortSpy).toHaveBeenCalledWith({ 'searchProjection.priceAmountMinorUnits': 1, _id: 1 });
+      // Счётчик считается по тому же фильтру видимости, что и страница:
+      // замороженные объявления не должны попадать ни в выдачу, ни в total.
       expect(countDocumentsSpy).toHaveBeenCalledWith({
         status: 'published',
+        publisherFrozen: { $ne: true },
         sourceType: 'listing',
         'searchProjection.city': 'Batumi',
       });

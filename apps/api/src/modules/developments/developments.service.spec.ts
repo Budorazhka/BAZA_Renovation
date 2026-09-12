@@ -42,11 +42,24 @@ function makeService(overrides: {
   return new DevelopmentsService(
     makeMockConnection() as never,
     (overrides.developmentRepository ?? {}) as DevelopmentRepository,
-    (overrides.buildingRepository ?? {}) as BuildingRepository,
+    // Дефолты для проверки «одна валюта на ЖК» (12.09.2026): она ищет
+    // корпус, его ЖК и валюты уже заведённых юнитов. Тестам не про валюту
+    // незачем это описывать, поэтому по умолчанию ЖК пустой, и любая
+    // валюта проходит; сама проверка покрыта интеграционным тестом
+    // development-single-currency. Явные переопределения теста побеждают.
+    {
+      findByIdForOrganization: jest.fn().mockResolvedValue({ developmentId: new Types.ObjectId() }),
+      listByDevelopmentId: jest.fn().mockResolvedValue([]),
+      ...overrides.buildingRepository,
+    } as unknown as BuildingRepository,
     (overrides.sectionRepository ?? {}) as SectionRepository,
     (overrides.floorRepository ?? {}) as FloorRepository,
     (overrides.floorPlanRepository ?? {}) as FloorPlanRepository,
-    (overrides.unitRepository ?? {}) as UnitRepository,
+    {
+      findByIdForOrganization: jest.fn().mockResolvedValue({ buildingId: new Types.ObjectId() }),
+      listDistinctCurrenciesForBuildings: jest.fn().mockResolvedValue([]),
+      ...overrides.unitRepository,
+    } as unknown as UnitRepository,
     (overrides.auditService ?? { append: jest.fn().mockResolvedValue(undefined) }) as AuditService,
     (overrides.outboxService ?? { publish: jest.fn().mockResolvedValue(undefined) }) as OutboxService,
     (overrides.publicationService ?? {}) as PublicationService,

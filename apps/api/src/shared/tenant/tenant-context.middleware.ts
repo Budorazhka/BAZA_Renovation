@@ -3,7 +3,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { Types } from 'mongoose';
 import { SessionService } from '../../modules/identity/session.service';
 import { PositionAssignmentService } from '../../modules/organizations/position-assignment.service';
-import { OrganizationRepository } from '../../modules/organizations/repository/organization.repository';
+import { OrganizationsService } from '../../modules/organizations/organizations.service';
 import type { TenantContext, VerifiedTenantContext } from './tenant-context';
 
 declare module 'fastify' {
@@ -45,7 +45,7 @@ export class TenantContextMiddleware implements NestMiddleware {
   constructor(
     private readonly sessionService: SessionService,
     private readonly positionAssignmentService: PositionAssignmentService,
-    private readonly organizationRepository: OrganizationRepository,
+    private readonly organizationsService: OrganizationsService,
   ) {}
 
   async use(req: FastifyRequest, _res: FastifyReply, next: () => void): Promise<void> {
@@ -72,7 +72,12 @@ export class TenantContextMiddleware implements NestMiddleware {
     // после их истечения: проверка на каждом запросе, а не только на входе.
     // Отзыв сессий сотрудников такого эффекта не даёт — заново войти они
     // смогли бы тем же паролем.
-    const organization = await this.organizationRepository.findById(new Types.ObjectId(assignment.organizationId));
+    // Через публичный сервис модуля, а не его репозиторий: репозиторий
+    // OrganizationsModule не экспортирует, и прямая зависимость на него
+    // не давала собраться AppModule — API не поднимался вовсе.
+    const organization = await this.organizationsService.getOrganizationById(
+      new Types.ObjectId(assignment.organizationId),
+    );
     if (!organization || organization.status !== 'active') {
       req.organizationFrozen = true;
       next();
