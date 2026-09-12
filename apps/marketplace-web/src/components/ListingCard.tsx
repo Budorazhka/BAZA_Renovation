@@ -1,13 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFavorites } from '../features/favorites/useFavorites'
-import {
-  listingAddress,
-  listingDealTypeLabel,
-  listingPrice,
-  listingPropertyTypeLabel,
-  listingTitle,
-} from '../lib/format'
+import { listingAddress, listingPrice, listingTitle } from '../lib/format'
 import type { PublicListingCard } from '../types/marketplace'
 import { BuildingPlaceholder } from './DevelopmentCard'
 
@@ -17,45 +11,63 @@ export interface ListingCardProps {
   className?: string
 }
 
+const MONEY_FORMAT = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 })
+const AREA_FORMAT = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 })
+const CURRENCY_SIGN: Record<string, string> = { USD: '$', GEL: '₾', RUB: '₽' }
+
 /**
- * ListingCard Component (Figma: card квартира вторичка 4934:69469 & Квартира аренда 4942:79685)
- * Implements Figma variants:
- * - standard (4934:69468)
- * - discount / urgent sale (4934:69467)
- * - small (4934:69466 / 4942:79829)
- * - rent long / rent short (4942:79684, 4942:79683)
+ * Карточка объявления по узлу `card/квартира во вторичке` (`3428:55856`,
+ * 424x663) фрейма главной.
+ *
+ * Состав по макету: обложка 424x281 (radius 8), цена 28px и цена за м²
+ * рядом с парой круглых кнопок, название 24px в две строки, адрес,
+ * город, разделитель, три характеристики (комнаты, этаж, площадь),
+ * разделитель, кнопки «Позвонить» и «Написать».
+ *
+ * Значка «Premium» из макета нет: в проекции публикации нет признака
+ * платного размещения. Бейдж срочной продажи показывается по реальному
+ * полю, а не рисуется всегда.
  */
-export function ListingCard({
-  item,
-  size = 'default',
-  className = '',
-}: ListingCardProps) {
+export function ListingCard({ item, size = 'default', className = '' }: ListingCardProps) {
+  const navigate = useNavigate()
+  const favorites = useFavorites()
+  const [imgError, setImgError] = useState(false)
+  const [copied, setCopied] = useState(false)
+
   const slug = item.slug
   const title = listingTitle(item)
   const address = listingAddress(item)
-  const coverItem = item.media?.find((m) => m.role === 'cover') || item.media?.[0]
-  const [imgError, setImgError] = useState(false)
-  const navigate = useNavigate()
-  // Избранное на сервере, см. комментарий в DevelopmentCard.
-  const favorites = useFavorites()
-  const [copied, setCopied] = useState(false)
+  const coverItem = item.media?.find((m) => m.role === 'cover') ?? item.media?.[0]
+  const cover = coverItem && !imgError ? coverItem.url : null
 
-  const isRent = item.dealType === 'rent_long' || item.dealType === 'rent_short'
-  const isDaily = item.dealType === 'rent_short'
+  const characteristics = item.characteristics ?? {}
+  const { rooms, floor, totalFloors, area } = characteristics
+
+  const price = item.price
+  const priceText = listingPrice(item)
+  // Цена и валюта в проекции необязательны, поэтому цена за метр считается
+  // только когда есть оба поля и площадь.
+  const pricePerSqm =
+    typeof price?.amountMinorUnits === 'number' && price.currency && typeof area === 'number' && area > 0
+      ? `${CURRENCY_SIGN[price.currency] ?? price.currency}${MONEY_FORMAT.format(
+          Math.round(price.amountMinorUnits / 100 / area),
+        )} за m²`
+      : null
+
+  const isFavorite = slug ? favorites.isFavorite({ targetType: 'listing', slug }) : false
+  const detailHref = slug ? `/listings/${slug}` : undefined
 
   const handleShare = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     const url = slug ? `${window.location.origin}/listings/${slug}` : window.location.href
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(() => {
+      void navigator.clipboard.writeText(url).then(() => {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       })
     }
   }
-
-  const isFavorite = slug ? favorites.isFavorite({ targetType: 'listing', slug }) : false
 
   const handleFavorite = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -67,179 +79,130 @@ export function ListingCard({
     }
   }
 
-  const cardContent = (
-    <>
-      {/* Media Box with Badges & Actions */}
-      <div className="figma-listing-card__media">
-        {coverItem && !imgError ? (
-          <img
-            src={coverItem.url}
-            alt={coverItem.alt || title}
-            className="figma-listing-card__img"
-            loading="lazy"
-            onError={() => setImgError(true)}
-          />
+  return (
+    <article className={`listing-card listing-card--${size} ${className}`.trim()} aria-label={title}>
+      {/* обложка `3428:55857` 424x281, radius 8 */}
+      <div className="listing-card__cover">
+        {detailHref ? (
+          <Link to={detailHref} className="listing-card__cover-link" tabIndex={-1} aria-hidden="true">
+            {cover ? (
+              <img src={cover} alt="" loading="lazy" onError={() => setImgError(true)} />
+            ) : (
+              <BuildingPlaceholder />
+            )}
+          </Link>
+        ) : cover ? (
+          <img src={cover} alt="" loading="lazy" onError={() => setImgError(true)} />
         ) : (
           <BuildingPlaceholder />
         )}
 
-        {/* Top Badges */}
-        <div className="figma-listing-card__badges-top">
-          {item.dealType === 'sale' ? (
-            <span className="figma-listing-card__badge figma-listing-card__badge--urgent">
-              <span aria-hidden="true">🔥</span> Срочно
-            </span>
-          ) : isDaily ? (
-            <span className="figma-listing-card__badge figma-listing-card__badge--deal">
-              Посуточно
-            </span>
-          ) : (
-            <span className="figma-listing-card__badge figma-listing-card__badge--deal">
-              Долгосрок
-            </span>
-          )}
-
-          {item.isVerified ? (
-            <span className="figma-listing-card__badge figma-listing-card__badge--verified">
-              <span aria-hidden="true">✓</span> Проверено
-            </span>
-          ) : null}
-
-          {item.isMls ? (
-            <span className="figma-listing-card__badge figma-listing-card__badge--mls" data-testid="badge-mls">
-              MLS
-            </span>
-          ) : null}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="figma-listing-card__actions">
-          <button
-            type="button"
-            className="figma-listing-card__action-btn"
-            onClick={handleShare}
-            aria-label={copied ? 'Ссылка скопирована' : 'Поделиться объявлением'}
-            title={copied ? 'Скопировано!' : 'Поделиться'}
-          >
-            {copied ? '✓' : '↗'}
-          </button>
-          <button
-            type="button"
-            className="figma-listing-card__action-btn"
-            onClick={(event) => void handleFavorite(event)}
-            aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
-            style={{ color: isFavorite ? '#E53935' : undefined }}
-          >
-            {isFavorite ? '♥' : '♡'}
-          </button>
-        </div>
+        {item.isMls ? <span className="listing-card__pill" data-testid="badge-mls">MLS</span> : null}
+        {item.isVerified ? <span className="listing-card__verified">Проверено</span> : null}
       </div>
 
-      {/* Body */}
-      <div className="figma-listing-card__body">
-        {/* Pricing */}
-        <div className="figma-listing-card__price-row">
-          <div className="figma-listing-card__price-main">
-            {listingPrice(item)}
-            {isRent ? (
-              <span className="figma-listing-card__price-period">
-                {isDaily ? ' / сутки' : ' / мес'}
-              </span>
-            ) : null}
+      {/* сведения `3428:55861`: padding 10, gap 20 */}
+      <div className="listing-card__body">
+        <div className="listing-card__head">
+          <p className="listing-card__price">
+            <span className="listing-card__price-main">{priceText}</span>
+            {pricePerSqm ? <span className="listing-card__price-sqm">{pricePerSqm}</span> : null}
+          </p>
+          <div className="listing-card__head-actions">
+            <button
+              type="button"
+              className="listing-card__icon-btn"
+              onClick={handleShare}
+              aria-label={copied ? 'Ссылка скопирована' : 'Поделиться'}
+              title={copied ? 'Ссылка скопирована' : 'Поделиться'}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`listing-card__icon-btn${isFavorite ? ' is-active' : ''}`}
+              onClick={(event) => void handleFavorite(event)}
+              aria-label={isFavorite ? 'Удалить из избранного' : 'Добавить в избранное'}
+              aria-pressed={isFavorite}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+            </button>
           </div>
         </div>
 
-        {/* Title */}
-        <h2 className="figma-listing-card__title">{title}</h2>
+        {/* название `3428:55881`: Plus Jakarta Sans Bold 24, две строки */}
+        <h2 className="listing-card__title">
+          {detailHref ? <Link to={detailHref}>{title}</Link> : title}
+        </h2>
 
-        {/* Address */}
-        <p className="figma-listing-card__address">
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
+        <p className="listing-card__address">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
             <circle cx="12" cy="10" r="3" />
           </svg>
           <span>{address}</span>
         </p>
 
-        {/*
-          Агентство или застройщик ведёт в каталог, отфильтрованный по нему.
-          Раздел выбран по типу сделки: у аренды свой раздел, иначе вторичка —
-          иначе ссылка увела бы в раздел, где этих объектов заведомо нет.
-          У объявлений частных собственников публикатора нет.
-        */}
         {item.publisher ? (
-          <p className="figma-listing-card__publisher">
-            <Link
-              to={`${isRent ? '/rent' : '/secondary'}?publisher=${encodeURIComponent(item.publisher.id)}`}
-            >
+          <p className="listing-card__publisher">
+            <Link to={`/secondary?publisher=${encodeURIComponent(item.publisher.id)}`}>
               {item.publisher.name}
             </Link>
           </p>
         ) : null}
 
-        {/* Parameter Chips */}
-        <div className="figma-listing-card__chips" aria-label="Параметры объекта">
-          {item.characteristics?.rooms ? (
-            <span className="listing-chip figma-listing-card__chip">
-              <span aria-hidden="true">🛏</span> {item.characteristics.rooms} комн.
+        {/* характеристики `3428:55889`: комнаты, этаж, площадь, Comfortaa Bold 18 */}
+        <div className="listing-card__facts">
+          {typeof rooms === 'number' ? (
+            <span className="listing-card__fact">
+              <span className="listing-card__fact-icon listing-card__fact-icon--rooms" aria-hidden="true" />
+              {rooms}
             </span>
           ) : null}
-          {item.characteristics?.area ? (
-            <span className="listing-chip figma-listing-card__chip">
-              <span aria-hidden="true">📐</span> {item.characteristics.area} м²
+          {typeof floor === 'number' ? (
+            <span className="listing-card__fact">
+              <span className="listing-card__fact-icon listing-card__fact-icon--floor" aria-hidden="true" />
+              {typeof totalFloors === 'number' ? `${floor} из ${totalFloors}` : `${floor} этаж`}
             </span>
           ) : null}
-          {item.characteristics?.floor ? (
-            <span className="listing-chip figma-listing-card__chip">
-              <span aria-hidden="true">🏢</span> {item.characteristics.floor}
-              {item.characteristics.totalFloors ? `/${item.characteristics.totalFloors}` : ''} эт.
+          {typeof area === 'number' ? (
+            <span className="listing-card__fact">
+              <span className="listing-card__fact-icon listing-card__fact-icon--area" aria-hidden="true" />
+              {AREA_FORMAT.format(area)} m²
             </span>
           ) : null}
         </div>
 
-        {/* Action buttons preview */}
-        <div className="figma-listing-card__contact-row">
-          <span className="figma-listing-card__btn-call">Подробнее</span>
-          <span className="figma-listing-card__btn-chat">Контакты</span>
-        </div>
-
-        {/* Footer */}
-        <div className="figma-listing-card__footer">
-          <span>{listingPropertyTypeLabel(item.propertyType, item.commercialSubtype)}</span>
-          <span className="figma-listing-card__arrow" aria-hidden="true">→</span>
+        {/* кнопки `3428:55907` / `3428:55908` */}
+        <div className="listing-card__actions">
+          {detailHref ? (
+            <Link to={`${detailHref}#contact`} className="listing-card__btn listing-card__btn--call">
+              Позвонить
+            </Link>
+          ) : (
+            <button type="button" className="listing-card__btn listing-card__btn--call" disabled>
+              Позвонить
+            </button>
+          )}
+          {detailHref ? (
+            <Link to={detailHref} className="listing-card__btn listing-card__btn--outline">
+              Подробнее
+            </Link>
+          ) : (
+            <button type="button" className="listing-card__btn listing-card__btn--outline" disabled>
+              Подробнее
+            </button>
+          )}
         </div>
       </div>
-    </>
-  )
-
-  const cardClasses = [
-    'figma-listing-card',
-    'listing-card',
-    size === 'small' ? 'figma-listing-card--small' : '',
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ')
-
-  return slug ? (
-    <Link
-      className={cardClasses}
-      to={`/listings/${slug}`}
-      aria-label={`Объявление: ${title}`}
-    >
-      {cardContent}
-    </Link>
-  ) : (
-    <article className={cardClasses}>{cardContent}</article>
+    </article>
   )
 }

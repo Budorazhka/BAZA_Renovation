@@ -159,7 +159,10 @@ describe('Marketplace i18n & Localization', () => {
     const mlsBadge = screen.getByTestId('badge-mls')
     expect(mlsBadge).not.toBeNull()
     expect(mlsBadge.textContent?.trim()).toBe('MLS')
-    expect(mlsBadge.className).toContain('figma-listing-card__badge--mls')
+    // Класс переименован 12.09.2026 вместе с пересборкой карточки по узлу
+    // `card/квартира во вторичке` (`3428:55856`); проверяется то же самое —
+    // что бейдж отрисован как бейдж карточки, а не как произвольный текст.
+    expect(mlsBadge.className).toContain('listing-card__pill')
   })
 
   it('does not render MLS badge on ListingCard when isMls is false or undefined', () => {

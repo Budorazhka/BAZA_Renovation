@@ -1,88 +1,96 @@
 /*
- * Главная страница — вёрстка по утверждённому фрейму Figma `Home page` v4 long
- * (`3428:55239`, 1920x5544). Размеры ниже взяты из узлов фрейма, а не подобраны
- * на глаз: контейнер 1760 (`похожие` 1760x626), карточка ЖК 424x626, карточка
- * вторички 424x663, hero 1920x905 с фотополотном 1920x596, категории 1920x523,
- * промо 670+1040 из 1920.
+ * Главная — вёрстка по узлам фрейма `Home page` v4 long (`3428:55239`).
  *
- * Раскладка резиновая: фиксированные ширины макета переведены в пропорции,
- * чтобы страница держалась и на 1440, и на 375. Брейкпоинты — те же, что
- * объявлены в DESIGN.md (680px и ниже).
+ * Каждое число ниже снято с макета выгрузкой analysis_tools/dump_spec.js:
+ * автолэйаут (направление, gap, padding, выравнивание), кегли и начертания,
+ * радиусы, обводки, тени. Где стоит clamp — это тот же макетный размер,
+ * пропорционально уменьшенный к узким экранам: базовая ширина макета 1920,
+ * нижняя граница подобрана так, чтобы блок оставался читаемым на 375.
+ *
+ * Общее для секций: внешние поля 80px при 1920 (`pad:0/80/0/80`),
+ * рабочая ширина 1760.
  */
+
+:root {
+  --home-gutter: clamp(16px, 4.17vw, 80px);
+  --home-content: 1760px;
+}
 
 .home {
   display: flex;
   flex-direction: column;
-  gap: clamp(48px, 5vw, 96px);
-  padding-bottom: clamp(56px, 6vw, 112px);
+  /* Между секциями макет не задаёт зазора: секции сами несут свою высоту. */
+  gap: 0;
 }
 
-/* ============================================================ hero 3851:56175 */
+/* ═════════════════════════════ hero `3851:56175` 1920x905
+   VERTICAL, gap 62, main/cross CENTER */
 
 .home-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(28px, 3.5vw, 62px);
-  padding-top: clamp(32px, 4vw, 64px);
+  justify-content: center;
+  gap: clamp(24px, 3.23vw, 62px);
+  padding-block: clamp(24px, 2.5vw, 48px) 0;
 }
 
+/* `3851:56176` 1363x247: VERTICAL, gap 30, cross CENTER */
 .home-hero__head {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(12px, 1.5vw, 24px);
-  padding-inline: 16px;
+  gap: clamp(14px, 1.56vw, 30px);
+  width: min(1363px, 100% - 2 * var(--home-gutter));
   text-align: center;
 }
 
-/* Логотип в hero — `logo` 557x180: иконка 100x100 и надпись 100px. */
-.home-hero__wordmark {
+/* `3851:56177` logo 557x180: HORIZONTAL, gap 10, padding 40, белая плашка */
+.home-hero__logo {
   display: flex;
   align-items: center;
-  gap: clamp(8px, 1vw, 18px);
+  gap: clamp(6px, 0.52vw, 10px);
   margin: 0;
+  padding: clamp(16px, 2.08vw, 40px);
+  background: var(--color-paper-raised);
   color: var(--color-brand-green);
+}
+
+.home-hero__logo svg {
+  width: clamp(40px, 5.21vw, 100px);
+  height: clamp(40px, 5.21vw, 100px);
+  flex: none;
+}
+
+/* `3851:56181` BAZA.sale: Plus Jakarta Sans Bold 100px, #169600 */
+.home-hero__logo-text {
   font-family: var(--font-display);
-  font-size: clamp(40px, 5.2vw, 100px);
+  font-size: clamp(40px, 5.21vw, 100px);
   font-weight: 700;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
-.home-hero__wordmark svg {
-  width: clamp(32px, 3.8vw, 72px);
-  height: auto;
-}
-
-.home-hero__wordmark-dot {
-  font-weight: 500;
-}
-
-/* Слоган — `Заголовок` 50px, #151515, в макете капсом. */
+/* `3851:56182` слоган: Plus Jakarta Sans Bold 50px, line-height 100%, #151515 */
 .home-hero__slogan {
   margin: 0;
   color: var(--color-ink);
   font-family: var(--font-display);
   font-size: clamp(22px, 2.6vw, 50px);
-  font-weight: 600;
-  line-height: 1.15;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  line-height: 1;
   text-transform: uppercase;
   text-wrap: balance;
 }
 
-/* Фотополотно — `2851 1` 1920x596: во всю ширину, пропорция 1920:596. */
-.home-hero__canvas {
+/* `3851:56183` фотополотно 1920x596 */
+.home-hero__photo {
   width: 100%;
   aspect-ratio: 1920 / 596;
-  max-height: 596px;
   overflow: hidden;
-  border-radius: 0;
-  background: var(--color-paper);
 }
 
-.home-hero__canvas img {
+.home-hero__photo img {
   display: block;
   width: 100%;
   height: 100%;
@@ -90,75 +98,86 @@
   object-fit: cover;
 }
 
-/* ====================================================== категории 3428:55271 */
+/* ═════════════════════════════ категории `3428:55271` 1920x523
+   HORIZONTAL, gap 19, padding 0/80, cross CENTER.
+   Сумма карточек (390+470+410+450+450) шире полотна — ряд прокручивается. */
 
 .home-categories {
-  width: min(1760px, 100% - 32px);
-  margin-inline: auto;
+  padding: clamp(32px, 3.5vw, 64px) var(--home-gutter);
+}
+
+.home-categories__row {
+  display: flex;
+  gap: clamp(10px, 0.99vw, 19px);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  /* Тень карточек 20px по радиусу не должна срезаться контейнером прокрутки. */
+  padding: 12px 2px 24px;
+  margin: -12px -2px -24px;
 }
 
 /*
- * В макете пять карточек разной ширины (390/470/410/450/450) — суммарно шире
- * полотна, то есть ряд задуман прокручиваемым. Здесь то же поведение: на
- * широком экране пропорции макета сохраняются через flex-grow, на узком ряд
- * прокручивается по горизонтали, а не ломает страницу.
+ * `3428:55272` и соседние: белая карточка, radius 30, обводка 3px #dbdbdb,
+ * тень 0 4 20 #5c5c5c/15%, padding 30, VERTICAL gap 30, cross CENTER.
+ * flex-basis приходит из разметки: у каждой категории своя ширина макета.
  */
-.home-categories__row {
-  display: flex;
-  gap: clamp(12px, 1.2vw, 24px);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  padding-bottom: 8px;
-}
-
 .home-category {
   scroll-snap-align: start;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  flex: 1 1 calc((100% - 4 * clamp(12px, 1.2vw, 24px)) / 5);
-  min-width: 240px;
-  min-width: 0;
-  padding: 20px;
-  border-radius: 8px;
+  align-items: center;
+  gap: clamp(16px, 1.56vw, 30px);
+  flex: 0 0 auto;
+  max-width: 100%;
+  padding: clamp(16px, 1.56vw, 30px);
+  border: 3px solid #dbdbdb;
+  border-radius: 30px;
   background: var(--color-paper-raised);
+  box-shadow: 0 4px 20px rgba(92, 92, 92, 0.15);
   color: var(--color-ink);
   text-decoration: none;
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .home-category:hover,
 .home-category:focus-visible {
-  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(22, 150, 0, 0.22);
 }
 
+/* `3428:55273` 211x83: VERTICAL, gap 20, cross CENTER */
 .home-category__head {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 1.04vw, 20px);
+  text-align: center;
 }
 
-/* Название категории 30px, счётчик 22px — `3428:55274` / `3428:55275`. */
+/* `3428:55274`: Plus Jakarta Sans Bold 30px, line-height 100% */
 .home-category__title {
   font-family: var(--font-display);
-  font-size: clamp(20px, 1.7vw, 30px);
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: clamp(20px, 1.56vw, 30px);
+  font-weight: 700;
+  line-height: 1;
 }
 
+/* `3428:55275`: Comfortaa Bold 22px, тот же #151515, не приглушённый */
 .home-category__count {
-  color: var(--color-ink-muted);
-  font-size: clamp(16px, 1.2vw, 22px);
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.15vw, 22px);
+  font-weight: 700;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
+/* Фотография категории: 330x311 … 369x350 — пропорция близка к 350/311 */
 .home-category__photo {
   display: block;
-  flex: 1;
+  width: 100%;
   aspect-ratio: 350 / 311;
   overflow: hidden;
-  border-radius: 8px;
-  background: var(--color-paper);
+  border-radius: 20px;
+  background: var(--color-accent-soft);
 }
 
 .home-category__photo img {
@@ -169,7 +188,6 @@
   object-fit: cover;
 }
 
-/* Категория без фотографии: тот же силуэт дома, что на карточках объектов. */
 .home-category__photo--empty {
   display: grid;
   place-items: center;
@@ -178,193 +196,300 @@
 .home-category__photo--empty::after {
   content: '';
   display: block;
-  width: 48px;
-  height: 48px;
+  width: clamp(40px, 3.1vw, 60px);
+  height: clamp(40px, 3.1vw, 60px);
   background: var(--color-accent);
   opacity: 0.28;
   -webkit-mask: var(--placeholder-house) center / contain no-repeat;
   mask: var(--placeholder-house) center / contain no-repeat;
 }
 
-/* =================================================== почему выбирают 3428:55292 */
+/* ═════════════════════════════ «Почему выбирают» `3428:55292` 1920x352
+   HORIZONTAL, gap 249, padding 40/80, cross CENTER */
 
 .home-why {
-  width: min(1760px, 100% - 32px);
-  margin-inline: auto;
   display: grid;
   grid-template-columns: minmax(280px, 493px) minmax(0, 978px);
-  gap: clamp(24px, 4vw, 96px);
-  align-items: start;
+  gap: clamp(32px, 12.97vw, 249px);
+  align-items: center;
+  padding: clamp(24px, 2.08vw, 40px) var(--home-gutter);
 }
 
-.home-section__title {
-  margin: 0 0 12px;
+/* `3428:55293` 493x272: VERTICAL, gap 59 */
+.home-why__intro {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(20px, 3.07vw, 59px);
+}
+
+/* `3428:55295` пилюля 228x50: зелёная, radius 100, padding 10/20, текст 22px */
+.home-why__tag {
+  align-self: flex-start;
+  margin: 0;
+  padding: 10px 20px;
+  border-radius: 100px;
+  background: var(--color-brand-green);
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.15vw, 22px);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/*
+ * `3428:55294` держит пилюлю и заголовок с gap 25, а подзаголовок отстоит
+ * на 59 (gap внешнего блока). Поэтому заголовок прижат к пилюле
+ * отрицательной частью потока: он идёт сразу за ней в том же столбце.
+ */
+.home-why__title {
+  margin: calc(-1 * clamp(20px, 3.07vw, 59px) + clamp(12px, 1.3vw, 25px)) 0 0;
   font-family: var(--font-display);
   font-size: clamp(26px, 2.6vw, 50px);
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.01em;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-ink);
   text-wrap: balance;
 }
 
-.home-section__lead {
+/* `3428:55297`: Comfortaa Regular 20px, #000000 */
+.home-why__lead {
   margin: 0;
-  color: var(--color-ink-muted);
-  font-size: clamp(16px, 1.05vw, 20px);
-  line-height: 1.5;
+  color: #000000;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.04vw, 20px);
+  font-weight: 400;
+  line-height: 1.35;
   max-width: 65ch;
 }
 
+/* `3428:55298` 978x268: HORIZONTAL, gap 99, cross CENTER */
 .home-why__list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: clamp(20px, 2vw, 40px);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: clamp(24px, 5.16vw, 99px);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.home-why__list h3 {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: clamp(18px, 1.2vw, 20px);
-  font-weight: 600;
+/* `3428:55299` 258x262: VERTICAL, gap 27, иконка 139x139 */
+.home-advantage {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.41vw, 27px);
 }
 
-.home-why__list p {
+.home-advantage__icon {
+  display: block;
+  width: clamp(72px, 7.24vw, 139px);
+  height: clamp(72px, 7.24vw, 139px);
+  background: var(--color-accent);
+  opacity: 0.9;
+  -webkit-mask: var(--placeholder-house) center / contain no-repeat;
+  mask: var(--placeholder-house) center / contain no-repeat;
+}
+
+/* `3428:55324`: Plus Jakarta Sans Bold 20px */
+.home-advantage__title {
   margin: 0;
-  color: var(--color-ink-muted);
-  font-size: clamp(15px, 1.05vw, 20px);
+  font-family: var(--font-display);
+  font-size: clamp(17px, 1.04vw, 20px);
+  font-weight: 700;
+  line-height: 1;
+  color: #000000;
+}
+
+/* `3428:55325`: Comfortaa 20px */
+.home-advantage__text {
+  margin: 0;
+  color: #000000;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.04vw, 20px);
+  font-weight: 400;
   line-height: 1.5;
 }
 
-/* ========================================================= промо 3428:55382 */
+/* ═════════════════════════════ промо `3428:55382` 1920x500
+   HORIZONTAL, gap 50, padding 0/80, cross CENTER */
 
 .home-promo {
-  width: min(1760px, 100% - 32px);
-  margin-inline: auto;
   display: grid;
   grid-template-columns: minmax(280px, 670fr) minmax(0, 1040fr);
-  gap: clamp(16px, 1.6vw, 32px);
+  gap: clamp(20px, 2.6vw, 50px);
+  padding: clamp(32px, 3.5vw, 64px) var(--home-gutter);
 }
 
-.home-promo__sell,
-.home-promo__sale {
-  border-radius: 8px;
-  padding: clamp(24px, 2.4vw, 48px);
+/* `3428:55384` 670x500: зелёный, radius 30, padding 40/60 */
+.home-promo__sell {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 16px;
-  min-height: clamp(240px, 26vw, 500px);
-}
-
-.home-promo__sell {
+  gap: clamp(16px, 1.56vw, 30px);
+  min-height: clamp(300px, 26.04vw, 500px);
+  padding: clamp(24px, 2.08vw, 40px) clamp(24px, 3.13vw, 60px);
+  border-radius: 30px;
   background: var(--color-brand-green);
   color: #ffffff;
 }
 
-.home-promo__sell h2 {
+/* `3428:55405`: Plus Jakarta Sans Bold 30px, tracking -1% */
+.home-promo__sell-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(22px, 1.7vw, 30px);
+  font-size: clamp(22px, 1.56vw, 30px);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   text-wrap: balance;
 }
 
-.home-promo__sell p {
+/* `3428:55406`: Comfortaa Bold 24px */
+.home-promo__sell-text {
   margin: 0;
+  font-family: var(--font-body);
   font-size: clamp(16px, 1.25vw, 24px);
-  line-height: 1.45;
-  max-width: 40ch;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
 }
 
-.home-promo__button {
+/* `3428:55407` кнопка 394x64: белая пилюля, padding 15/30, зелёные тени */
+.home-promo__sell-button {
   align-self: flex-start;
-  padding: 14px 28px;
-  border-radius: 8px;
+  padding: 15px 30px;
+  border-radius: 100px;
   background: #ffffff;
   color: var(--color-brand-green);
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.15vw, 22px);
+  font-weight: 700;
+  line-height: 1.5;
   text-decoration: none;
+  box-shadow:
+    0 2px 5px rgba(22, 150, 0, 0.1),
+    0 9px 9px rgba(22, 150, 0, 0.09),
+    0 20px 15px rgba(22, 150, 0, 0.05);
 }
 
-.home-promo__button:hover,
-.home-promo__button:focus-visible {
+.home-promo__sell-button:hover,
+.home-promo__sell-button:focus-visible {
   background: var(--color-paper);
 }
 
+/*
+ * `3428:55408` 1040x500: белая карта, radius 30, тень 4 10 40 #169600/20%.
+ * Внутри `3428:55412` — зелёная фигура справа, на которой лежат тексты.
+ * Иллюстрация макета здесь векторная и в репозиторий не переносилась:
+ * воспроизведена заливкой правой половины тем же зелёным.
+ */
 .home-promo__sale {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  align-items: flex-start;
-  gap: 8px;
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: clamp(300px, 26.04vw, 500px);
+  padding: clamp(24px, 2.08vw, 40px);
+  border-radius: 30px;
+  background:
+    linear-gradient(90deg, var(--color-paper-raised) 0 38%, var(--color-brand-green) 38% 100%);
+  box-shadow: 4px 10px 40px rgba(22, 150, 0, 0.2);
+  overflow: hidden;
 }
 
+.home-promo__sale-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(6px, 0.78vw, 15px);
+  width: min(329px, 55%);
+  color: #ffffff;
+}
+
+/* `3428:55601`: Comfortaa Medium 27px, белый */
 .home-promo__sale-kicker {
   margin: 0;
-  color: var(--color-ink-muted);
-  font-size: clamp(15px, 1.05vw, 20px);
-  line-height: 1.45;
-  max-width: 45ch;
+  font-family: var(--font-body);
+  font-size: clamp(16px, 1.41vw, 27px);
+  font-weight: 500;
+  line-height: 1.1;
 }
 
-.home-promo__sale-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(20px, 1.5vw, 27px);
-  font-weight: 600;
-}
-
-/* `SALE` 131px и `до 30%` 60px — самые крупные знаки макета. */
+/* `3428:55602` SALE: Plus Jakarta Sans ExtraBold 131px, белый */
 .home-promo__sale-word {
   margin: 0;
-  color: var(--color-brand-green);
   font-family: var(--font-display);
-  font-size: clamp(56px, 7vw, 131px);
+  font-size: clamp(56px, 6.82vw, 131px);
   font-weight: 800;
-  line-height: 0.9;
-  letter-spacing: -0.03em;
+  line-height: 1;
+  letter-spacing: -0.01em;
 }
 
+/* `3428:55604` «до 30%»: Comfortaa Bold 60px, зелёный на белой плашке radius 10 */
 .home-promo__sale-value {
   margin: 0;
-  font-family: var(--font-display);
-  font-size: clamp(28px, 3.2vw, 60px);
+  padding: clamp(6px, 0.78vw, 15px) clamp(14px, 1.56vw, 30px);
+  border-radius: 10px;
+  background: var(--color-paper-raised);
+  color: var(--color-brand-green);
+  font-family: var(--font-body);
+  font-size: clamp(28px, 3.13vw, 60px);
   font-weight: 700;
   line-height: 1;
 }
 
-/* ============================== рельсы объектов 3428:55605 и 3428:55845 */
+/* ═════════════════════════════ рельсы `3428:55605` и `3428:55845`
+   VERTICAL, gap 20, padding 20/80; шапка 1760x60; ряд карточек gap 21 */
 
 .home-rail {
-  width: min(1760px, 100% - 32px);
-  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.04vw, 20px);
+  padding: clamp(20px, 1.04vw, 20px) var(--home-gutter) clamp(32px, 3vw, 56px);
 }
 
 .home-rail__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: clamp(16px, 1.6vw, 32px);
+  min-height: 60px;
 }
 
-/* Заголовок рельсы 28px, ссылка «Смотреть все» 22px — `3428:55609` / `3428:55611`. */
+/* `3428:55609`: Plus Jakarta Sans Bold 28px, tracking -1%, слева значок 47x60 */
 .home-rail__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(20px, 1.6vw, 28px);
+  font-size: clamp(20px, 1.46vw, 28px);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--color-ink);
 }
 
+.home-rail__badge {
+  display: block;
+  width: clamp(28px, 2.45vw, 47px);
+  height: clamp(28px, 2.45vw, 47px);
+  flex: none;
+  background: var(--color-accent);
+  -webkit-mask: var(--rail-badge-flame) center / contain no-repeat;
+  mask: var(--rail-badge-flame) center / contain no-repeat;
+}
+
+/* `3428:55611`: Comfortaa Bold 22px, зелёный, со стрелкой 24x24 */
 .home-rail__all {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--color-brand-green);
-  font-size: clamp(16px, 1.15vw, 22px);
+  font-family: var(--font-body);
+  font-size: clamp(15px, 1.15vw, 22px);
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -374,34 +499,69 @@
   text-decoration: underline;
 }
 
-/* Четыре карточки 424px в ряд — ровно как `похожие` 1760x626 в макете. */
+/*
+ * `3428:55615` ряд: HORIZONTAL gap 21, четыре карточки 424.25 при полотне
+ * 1760. Колонок ровно четыре, как в макете: auto-fill с минимумом 424
+ * срывался на три, стоило полосе прокрутки съесть несколько пикселей.
+ */
 .home-rail__items {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: clamp(16px, 1.4vw, 24px);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(14px, 1.09vw, 21px);
+}
+
+@media (max-width: 1400px) {
+  .home-rail__items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1024px) {
+  .home-rail__items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .home-rail__items {
+    grid-template-columns: 1fr;
+  }
 }
 
 .home-rail__empty {
   margin: 0;
   padding: 32px;
-  border-radius: 8px;
-  background: var(--color-paper);
+  border-radius: 10px;
+  background: var(--color-accent-soft);
   color: var(--color-ink-muted);
+  font-family: var(--font-body);
   font-size: 16px;
 }
 
-/* ================================================================ адаптив */
+/* ═════════════════════════════ узкие экраны */
 
-@media (max-width: 680px) {
+@media (max-width: 900px) {
   .home-why {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
 
   .home-promo {
     grid-template-columns: 1fr;
   }
 
-  .home-hero__canvas {
+  .home-promo__sale {
+    background: var(--color-brand-green);
+    justify-content: flex-start;
+  }
+
+  .home-promo__sale-body {
+    width: 100%;
+  }
+}
+
+@media (max-width: 680px) {
+  .home-hero__photo {
     aspect-ratio: 4 / 3;
   }
 }
@@ -409,10 +569,5 @@
 @media (prefers-reduced-motion: reduce) {
   .home-category {
     transition: none;
-  }
-
-  .home-category:hover,
-  .home-category:focus-visible {
-    transform: none;
   }
 }
