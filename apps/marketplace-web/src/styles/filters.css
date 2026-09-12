@@ -323,3 +323,51 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+/*
+ * Чипы фильтров: наведение меняет только цвет, ничего не срезано.
+ *
+ * Было три дефекта сразу. Общее правило на кнопки поднимало чип на пиксель
+ * при наведении. Ряд с overflow-x: auto заодно срезал всё, что выходит за
+ * него по вертикали, и приподнятая рамка, и кольцо фокуса обрезались по
+ * краю ряда. А выбранный чип при наведении бледнел до вида невыбранного:
+ * правило наведения из app.css весомее правила выбранного состояния.
+ *
+ * Этот файл подключается раньше app.css, поэтому селекторы здесь намеренно
+ * весомее тех, что они перебивают.
+ */
+
+/* В панели фильтров ряды переносятся, прокрутка им не нужна. */
+.catalogue-subfilters.figma-filters__chips-row {
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+/* Одиночный ряд новостроек прокручивается; поля дают место кольцу фокуса. */
+.figma-filters__chips-row:not(.catalogue-subfilters) {
+  padding: 5px;
+  margin: -5px;
+}
+
+.figma-filters__chips-row .figma-filter-chip {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.figma-filters__chips-row .figma-filter-chip:hover:not(:disabled),
+.figma-filters__chips-row .figma-filter-chip:active:not(:disabled) {
+  transform: none;
+}
+
+.figma-filters__chips-row .figma-filter-chip.is-active:hover:not(:disabled) {
+  border-color: var(--color-brand-green-hover);
+  background: var(--color-brand-green-hover);
+  color: #ffffff;
+}
+
+.figma-filters__chips-row .figma-filter-chip:focus-visible {
+  outline: 2px solid var(--color-brand-green);
+  outline-offset: 2px;
+}
